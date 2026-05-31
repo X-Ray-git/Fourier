@@ -369,6 +369,7 @@ HTML：
     debugPrint('[Translation] 🧩 ${article.entryId}: 切分为 ${chunks.length} 块');
 
     final llmConfig = LlmConfig.loadTranslate();
+    String? lastFailureSummary;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       final result = await _translateChunkBatch(
         article: article,
@@ -378,13 +379,16 @@ HTML：
         llmConfig: llmConfig,
         attempt: attempt,
       );
-      if (result != null) {
-        _writeRecord(article.entryId, result);
-        return result;
+      if (result.record != null) {
+        _writeRecord(article.entryId, result.record!);
+        return result.record!;
       }
+      lastFailureSummary = result.failureSummary;
     }
 
-    const errorMessage = '分块翻译失败，已重试5次';
+    final errorMessage = lastFailureSummary == null
+        ? '分块翻译失败，已重试5次'
+        : '分块翻译失败，已重试5次；最后一次失败：$lastFailureSummary';
     _restoreAfterFailure(article.entryId, previous, errorMessage);
     return TranslationRecord(
       status: TranslationStatus.error,
@@ -393,7 +397,7 @@ HTML：
     );
   }
 
-  static Future<TranslationRecord?> _translateChunkBatch({
+  static Future<_ChunkBatchResult> _translateChunkBatch({
     required ArticleModel article,
     required String targetLang,
     required List<String> chunks,
@@ -421,7 +425,9 @@ HTML：
           '[Translation] 🧩 第 $attempt 次，第 ${r.index + 1}/${chunks.length} 块失败：${r.error}',
         );
       }
-      return null;
+      return _ChunkBatchResult.failure(
+        _formatChunkFailures(failed, chunks.length),
+      );
     }
 
     final parts = <String>[];
@@ -434,13 +440,15 @@ HTML：
     final translatedTitle = titleParts.isEmpty
         ? null
         : titleParts.join(' ').trim();
-    return TranslationRecord(
-      status: TranslationStatus.done,
-      translatedTitle: (translatedTitle?.isNotEmpty == true)
-          ? translatedTitle
-          : null,
-      translatedContent: _cleanTranslatedContent(parts.join('')),
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    return _ChunkBatchResult.success(
+      TranslationRecord(
+        status: TranslationStatus.done,
+        translatedTitle: (translatedTitle?.isNotEmpty == true)
+            ? translatedTitle
+            : null,
+        translatedContent: _cleanTranslatedContent(parts.join('')),
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
     );
   }
 
@@ -514,12 +522,16 @@ HTML：
       try {
         parsed =
             jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
-      } on FormatException {
+      } on FormatException catch (e) {
         final recovered = _extractJsonObject(content);
         if (recovered != null) {
           parsed = recovered;
         } else {
-          return _ChunkResult(i, error: 'JSON 解析失败');
+          final finishReason = _extractFinishReason(response.data);
+          final reason = finishReason == 'length'
+              ? '响应被截断'
+              : 'JSON 解析失败：${_compactFormatException(e)}';
+          return _ChunkResult(i, error: reason);
         }
       }
 
@@ -654,6 +666,19 @@ HTML：
     }
   }
 
+  static String _compactFormatException(FormatException e) {
+    final message = e.message.trim();
+    if (message.isEmpty) return '格式不合法';
+    return message.length <= 80 ? message : '${message.substring(0, 80)}...';
+  }
+
+  static String _formatChunkFailures(List<_ChunkResult> failed, int total) {
+    return failed
+        .take(3)
+        .map((r) => '第 ${r.index + 1}/$total 块 ${r.error ?? '失败'}')
+        .join('；');
+  }
+
   static String? _extractMessageContent(dynamic data) {
     final choices = data is Map<String, dynamic> ? data['choices'] : null;
     if (choices is List && choices.isNotEmpty) {
@@ -670,9 +695,36 @@ HTML：
     }
     return null;
   }
+
+  static String? _extractFinishReason(dynamic data) {
+    final choices = data is Map<String, dynamic> ? data['choices'] : null;
+    if (choices is List && choices.isNotEmpty) {
+      final first = choices.first;
+      if (first is Map<String, dynamic>) {
+        final reason = first['finish_reason'];
+        if (reason is String) return reason;
+      }
+    }
+    return null;
+  }
 }
 
 // ─── 分块翻译结果 ─────────────────────────────
+
+final class _ChunkBatchResult {
+  final TranslationRecord? record;
+  final String? failureSummary;
+
+  const _ChunkBatchResult._({this.record, this.failureSummary});
+
+  factory _ChunkBatchResult.success(TranslationRecord record) {
+    return _ChunkBatchResult._(record: record);
+  }
+
+  factory _ChunkBatchResult.failure(String failureSummary) {
+    return _ChunkBatchResult._(failureSummary: failureSummary);
+  }
+}
 
 final class _ChunkResult {
   final int index;

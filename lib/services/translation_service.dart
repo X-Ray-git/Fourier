@@ -74,12 +74,14 @@ abstract final class TranslationService {
   static const String _apiBase = 'https://api.deepseek.com';
   static const Duration _timeout = Duration(seconds: 300);
 
-  static final Dio _dio = Dio(BaseOptions(
-    baseUrl: _apiBase,
-    connectTimeout: _timeout,
-    receiveTimeout: _timeout,
-    sendTimeout: _timeout,
-  ));
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: _apiBase,
+      connectTimeout: _timeout,
+      receiveTimeout: _timeout,
+      sendTimeout: _timeout,
+    ),
+  );
 
   static final RxMap<String, TranslationRecord> _records =
       <String, TranslationRecord>{}.obs;
@@ -106,9 +108,7 @@ abstract final class TranslationService {
         if (record.status == TranslationStatus.pending) {
           staleCount++;
           box.delete(key); // 从磁盘移除旧版残留，后续 pending 不再落盘
-          _records[key] = record.copyWith(
-            status: TranslationStatus.idle,
-          );
+          _records[key] = record.copyWith(status: TranslationStatus.idle);
         } else {
           _records[key] = record;
         }
@@ -177,7 +177,11 @@ abstract final class TranslationService {
     final existing = _inFlight[article.entryId];
     if (existing != null) return existing;
 
-    final future = _translateArticleInternal(article, targetLang, overrideContent);
+    final future = _translateArticleInternal(
+      article,
+      targetLang,
+      overrideContent,
+    );
     _inFlight[article.entryId] = future;
     future.whenComplete(() {
       _inFlight.remove(article.entryId);
@@ -197,16 +201,17 @@ abstract final class TranslationService {
 
     final previous = recordOf(article.entryId);
     // pending 只写内存，不落盘
-    _records[article.entryId] = (previous ??
-            TranslationRecord(
-              status: TranslationStatus.idle,
+    _records[article.entryId] =
+        (previous ??
+                TranslationRecord(
+                  status: TranslationStatus.idle,
+                  updatedAt: DateTime.now().millisecondsSinceEpoch,
+                ))
+            .copyWith(
+              status: TranslationStatus.pending,
+              errorMessage: null,
               updatedAt: DateTime.now().millisecondsSinceEpoch,
-            ))
-        .copyWith(
-          status: TranslationStatus.pending,
-          errorMessage: null,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        );
+            );
 
     final htmlContent = ArticleContentUtils.normalizeHtmlForEntry(
       article.entryId,
@@ -215,7 +220,7 @@ abstract final class TranslationService {
     // 正文过大时分块翻译，避免 LLM 输出畸形 JSON
     const chunkThreshold = 35 * 1024;
     if (htmlContent.length > chunkThreshold) {
-      return _translateInChunks(article, targetLang, htmlContent);
+      return _translateInChunks(article, targetLang, htmlContent, previous);
     }
     if (htmlContent.isEmpty) {
       final record = TranslationRecord(
@@ -259,10 +264,7 @@ HTML：
         ...llmConfig.toRequestBody(),
       };
 
-      final response = await _dio.post(
-        '/chat/completions',
-        data: requestBody,
-      );
+      final response = await _dio.post('/chat/completions', data: requestBody);
 
       final content = _extractMessageContent(response.data);
       if (content == null || content.trim().isEmpty) {
@@ -271,8 +273,8 @@ HTML：
 
       Map<String, dynamic> parsed;
       try {
-        parsed = jsonDecode(_normalizeJsonPayload(content))
-            as Map<String, dynamic>;
+        parsed =
+            jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
       } on FormatException {
         final recovered = _extractJsonObject(content);
         if (recovered != null) {
@@ -343,12 +345,46 @@ HTML：
     ArticleModel article,
     String targetLang,
     String htmlContent,
+    TranslationRecord? previous,
   ) async {
     final apiKey = getApiKey()!;
     final chunks = _splitHtmlIntoChunks(htmlContent);
+    const maxAttempts = 5;
     debugPrint('[Translation] 🧩 ${article.entryId}: 切分为 ${chunks.length} 块');
 
     final llmConfig = LlmConfig.loadTranslate();
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      final result = await _translateChunkBatch(
+        article: article,
+        targetLang: targetLang,
+        chunks: chunks,
+        apiKey: apiKey,
+        llmConfig: llmConfig,
+        attempt: attempt,
+      );
+      if (result != null) {
+        _writeRecord(article.entryId, result);
+        return result;
+      }
+    }
+
+    const errorMessage = '分块翻译失败，已重试5次';
+    _restoreAfterFailure(article.entryId, previous, errorMessage);
+    return TranslationRecord(
+      status: TranslationStatus.error,
+      errorMessage: errorMessage,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  static Future<TranslationRecord?> _translateChunkBatch({
+    required ArticleModel article,
+    required String targetLang,
+    required List<String> chunks,
+    required String apiKey,
+    required LlmConfig llmConfig,
+    required int attempt,
+  }) async {
     final futures = List<Future<_ChunkResult>>.generate(chunks.length, (i) {
       return _translateOneChunk(
         i: i,
@@ -362,45 +398,34 @@ HTML：
     });
 
     final results = await Future.wait(futures);
+    final failed = results.where((r) => r.error != null).toList();
+    if (failed.isNotEmpty) {
+      for (final r in failed) {
+        debugPrint(
+          '[Translation] 🧩 第 $attempt 次，第 ${r.index + 1}/${chunks.length} 块失败：${r.error}',
+        );
+      }
+      return null;
+    }
 
     final parts = <String>[];
     final titleParts = <String>[];
-    var hasError = false;
     for (final r in results) {
-      if (r.error != null) {
-        debugPrint('[Translation] 🧩 块 ${r.index}/${chunks.length} ❌ ${r.error}');
-        hasError = true;
-        parts.add('');
-      } else {
-        parts.add(r.html!);
-        if (r.title != null) titleParts.add(r.title!);
-      }
+      parts.add(r.html!);
+      if (r.title != null) titleParts.add(r.title!);
     }
 
-    final translatedTitle = titleParts.isEmpty ? null : titleParts.join(' ').trim();
-
-    if (hasError) {
-      final record = TranslationRecord(
-        status: TranslationStatus.error,
-        errorMessage: '分块翻译部分失败',
-        translatedContent: parts.join(''),
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      _writeRecord(article.entryId, record);
-      return record;
-    }
-
-    final combinedHtml = parts.join('');
-    final record = TranslationRecord(
+    final translatedTitle = titleParts.isEmpty
+        ? null
+        : titleParts.join(' ').trim();
+    return TranslationRecord(
       status: TranslationStatus.done,
       translatedTitle: (translatedTitle?.isNotEmpty == true)
           ? translatedTitle
           : null,
-      translatedContent: _cleanTranslatedContent(combinedHtml),
+      translatedContent: _cleanTranslatedContent(parts.join('')),
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
-    _writeRecord(article.entryId, record);
-    return record;
   }
 
   static Future<_ChunkResult> _translateOneChunk({
@@ -454,7 +479,9 @@ HTML：
       final response = await _dio.post(
         '/chat/completions',
         data: {
-          'messages': [{'role': 'user', 'content': prompt}],
+          'messages': [
+            {'role': 'user', 'content': prompt},
+          ],
           'response_format': {'type': 'json_object'},
           'stream': false,
           ...llmConfig.toRequestBody(),
@@ -469,8 +496,8 @@ HTML：
 
       Map<String, dynamic> parsed;
       try {
-        parsed = jsonDecode(_normalizeJsonPayload(content))
-            as Map<String, dynamic>;
+        parsed =
+            jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
       } on FormatException {
         final recovered = _extractJsonObject(content);
         if (recovered != null) {
@@ -487,7 +514,11 @@ HTML：
       if (html.isEmpty) {
         return _ChunkResult(i, error: '缺少 translated_html');
       }
-      return _ChunkResult(i, title: (title?.isNotEmpty == true) ? title : null, html: html);
+      return _ChunkResult(
+        i,
+        title: (title?.isNotEmpty == true) ? title : null,
+        html: html,
+      );
     } catch (e) {
       return _ChunkResult(i, error: e.toString());
     }
@@ -517,7 +548,9 @@ HTML：
     return chunks;
   }
 
-  static final _blockTagRe = RegExp(r'<(p|h[1-6]|li|blockquote|div|ul|ol|table)\b[^>]*>');
+  static final _blockTagRe = RegExp(
+    r'<(p|h[1-6]|li|blockquote|div|ul|ol|table)\b[^>]*>',
+  );
 
   static int _findNextBlockTag(String html, int from) {
     // 匹配 from 之后下一个块级标签的起始位置
@@ -599,8 +632,7 @@ HTML：
     final last = raw.lastIndexOf('}');
     if (first < 0 || last <= first) return null;
     try {
-      return jsonDecode(raw.substring(first, last + 1))
-          as Map<String, dynamic>;
+      return jsonDecode(raw.substring(first, last + 1)) as Map<String, dynamic>;
     } catch (_) {
       return null;
     }

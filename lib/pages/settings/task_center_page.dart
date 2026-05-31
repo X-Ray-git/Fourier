@@ -23,6 +23,8 @@ class TaskCenterPage extends StatefulWidget {
   State<TaskCenterPage> createState() => _TaskCenterPageState();
 }
 
+enum _AiTaskType { translation, summary }
+
 class _TaskCenterPageState extends State<TaskCenterPage> {
   Timer? _refreshTimer;
   bool _syncingReads = false;
@@ -129,7 +131,18 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
             queued: AutoTranslationWorker.queueSize,
             processing: AutoTranslationWorker.processingCount.value,
             failed: TranslationService.countByStatus(TranslationStatus.error),
-            failureHint: '失败文章不会显示半截译文。打开对应文章后，可点击“翻译”重新生成。',
+            failureHint: '失败文章不会显示半截译文。点“查看失败”可按文章排查并单篇重试。',
+            actionLabel:
+                TranslationService.countByStatus(TranslationStatus.error) > 0
+                ? '查看失败'
+                : null,
+            onAction:
+                TranslationService.countByStatus(TranslationStatus.error) > 0
+                ? () => Get.to(
+                    () =>
+                        const _AiFailureListPage(type: _AiTaskType.translation),
+                  )
+                : null,
           ),
           const SizedBox(height: 8),
           _TaskStatusCard(
@@ -139,11 +152,308 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
             queued: AutoSummaryWorker.queueSize,
             processing: AutoSummaryWorker.processingCount.value,
             failed: SummaryService.countByStatus(SummaryStatus.error),
-            failureHint: '失败文章不会影响阅读。打开对应文章后，可点击“摘要”重新生成。',
+            failureHint: '失败文章不会影响阅读。点“查看失败”可按文章排查并单篇重试。',
+            actionLabel: SummaryService.countByStatus(SummaryStatus.error) > 0
+                ? '查看失败'
+                : null,
+            onAction: SummaryService.countByStatus(SummaryStatus.error) > 0
+                ? () => Get.to(
+                    () => const _AiFailureListPage(type: _AiTaskType.summary),
+                  )
+                : null,
           ),
         ],
       ),
     );
+  }
+}
+
+class _AiFailureListPage extends StatefulWidget {
+  final _AiTaskType type;
+
+  const _AiFailureListPage({required this.type});
+
+  @override
+  State<_AiFailureListPage> createState() => _AiFailureListPageState();
+}
+
+class _AiFailureListPageState extends State<_AiFailureListPage> {
+  final Set<String> _retrying = {};
+
+  bool get _isTranslation => widget.type == _AiTaskType.translation;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final failures = _failureItems();
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(
+          _isTranslation ? '翻译失败文章' : '摘要失败文章',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(color: cs.surface.withValues(alpha: 0.50)),
+          ),
+        ),
+      ),
+      body: failures.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 48,
+                      color: cs.primary,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '没有失败文章',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView.separated(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                MediaQuery.paddingOf(context).top + kToolbarHeight + 16,
+                16,
+                MediaQuery.paddingOf(context).bottom + 24,
+              ),
+              itemBuilder: (context, index) {
+                final item = failures[index];
+                final article = item.article;
+                final retrying =
+                    article != null && _retrying.contains(article.entryId);
+                return _FailureArticleCard(
+                  item: item,
+                  type: widget.type,
+                  retrying: retrying,
+                  onRetry: retrying || article == null
+                      ? null
+                      : () => _retry(article),
+                  onOpen: article == null ? null : () => _openArticle(article),
+                );
+              },
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemCount: failures.length,
+            ),
+    );
+  }
+
+  List<_AiFailureItem> _failureItems() {
+    final articleById = {
+      for (final article in LocalArticleDbService.readAllArticles())
+        article.entryId: article,
+    };
+    final records = _isTranslation
+        ? TranslationService.recordsByStatus(TranslationStatus.error).map(
+            (entryId, record) => MapEntry(
+              entryId,
+              _AiFailureRecord(record.errorMessage, record.updatedAt),
+            ),
+          )
+        : SummaryService.recordsByStatus(SummaryStatus.error).map(
+            (entryId, record) => MapEntry(
+              entryId,
+              _AiFailureRecord(record.errorMessage, record.updatedAt),
+            ),
+          );
+
+    final items = <_AiFailureItem>[];
+    for (final entry in records.entries) {
+      items.add(
+        _AiFailureItem(
+          entryId: entry.key,
+          article: articleById[entry.key],
+          record: entry.value,
+        ),
+      );
+    }
+    items.sort((a, b) => b.record.updatedAt.compareTo(a.record.updatedAt));
+    return items;
+  }
+
+  Future<void> _retry(ArticleModel article) async {
+    setState(() => _retrying.add(article.entryId));
+    try {
+      if (_isTranslation) {
+        final record = await TranslationService.translateArticle(article);
+        if (record.status == TranslationStatus.done) {
+          AppFeedback.success('翻译完成', article.title);
+        } else {
+          AppFeedback.error('翻译失败', record.errorMessage ?? '请稍后再试');
+        }
+      } else {
+        final record = await SummaryService.summarizeArticle(article);
+        if (record.status == SummaryStatus.done) {
+          AppFeedback.success('摘要完成', article.title);
+        } else {
+          AppFeedback.error('摘要失败', record.errorMessage ?? '请稍后再试');
+        }
+      }
+    } catch (e) {
+      AppFeedback.error(_isTranslation ? '翻译失败' : '摘要失败', e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _retrying.remove(article.entryId));
+      }
+    }
+  }
+
+  void _openArticle(ArticleModel article) {
+    Get.toNamed(Routes.article, arguments: article);
+  }
+}
+
+class _AiFailureRecord {
+  final String? errorMessage;
+  final int updatedAt;
+
+  const _AiFailureRecord(this.errorMessage, this.updatedAt);
+}
+
+class _AiFailureItem {
+  final String entryId;
+  final ArticleModel? article;
+  final _AiFailureRecord record;
+
+  const _AiFailureItem({
+    required this.entryId,
+    required this.article,
+    required this.record,
+  });
+}
+
+class _FailureArticleCard extends StatelessWidget {
+  final _AiFailureItem item;
+  final _AiTaskType type;
+  final bool retrying;
+  final VoidCallback? onRetry;
+  final VoidCallback? onOpen;
+
+  const _FailureArticleCard({
+    required this.item,
+    required this.type,
+    required this.retrying,
+    required this.onRetry,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final article = item.article;
+    final canOpen = article != null;
+    final retryBlockedReason = _retryBlockedReason(article);
+    final canRetry = onRetry != null && retryBlockedReason == null;
+    final error = item.record.errorMessage?.trim();
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              article?.title ?? '本地文章已清理',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              article?.feedTitle ?? item.entryId,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.errorContainer.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                error == null || error.isEmpty ? '未记录失败原因' : error,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: cs.onErrorContainer,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  _formatTime(item.record.updatedAt),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: canOpen ? onOpen : null,
+                  child: const Text('打开'),
+                ),
+                const SizedBox(width: 6),
+                FilledButton.icon(
+                  onPressed: canRetry ? onRetry : null,
+                  icon: retrying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          type == _AiTaskType.translation
+                              ? Icons.translate
+                              : Icons.summarize,
+                          size: 16,
+                        ),
+                  label: Text(retrying ? '重试中' : retryBlockedReason ?? '重试'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _retryBlockedReason(ArticleModel? article) {
+    if (article == null) return '无法重试';
+    return null;
   }
 }
 

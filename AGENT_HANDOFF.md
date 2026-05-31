@@ -2270,10 +2270,13 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - 手动触发“同步已读”。
 - 查看 AI 过滤、自动翻译、自动摘要的排队数、处理中数和失败数。
 - AI 过滤区只提供“去审核”跳转，不展示审核列表，不替代 `FilterReviewPage`。
+- 自动翻译/自动摘要失败时，可从任务中心进入失败文章列表，逐篇查看失败原因，并对单篇文章执行“打开”或“重试”。
 
 ### 64.3 有意不做
 
 第一版不做暂停/继续、清空队列、批量重试、详细日志和批量审核。原因是这些操作会改变后台行为，容易引入误操作和更复杂的状态恢复；当前阶段只解决“用户能看懂后台是否在工作”的问题。
+
+这里的“单篇重试”不是批量操作：用户明确希望能在 AI 任务下排查“是哪篇文章失败了”，并对具体文章手动处理。因此任务中心允许查看失败明细和单篇重试，但仍不提供“一键全部重试”。
 
 ### 64.4 影响文件
 
@@ -2282,4 +2285,4 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - `lib/router/app_pages.dart` — 新增任务中心路由。
 - `lib/services/read_sync_service.dart` — 记录最近已读同步时间。
 - `lib/services/auto_translation_worker.dart` / `auto_summary_worker.dart` — 暴露当前处理中数量。
-- `lib/services/translation_service.dart` / `summary_service.dart` — 提供按状态计数，用于失败数量展示。
+- `lib/services/translation_service.dart` / `summary_service.dart` — 提供按状态计数和失败记录查询，用于失败数量展示和失败明细页。

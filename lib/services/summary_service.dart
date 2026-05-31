@@ -125,6 +125,15 @@ abstract final class SummaryService {
     return _records.values.where((record) => record.status == status).length;
   }
 
+  static Map<String, SummaryRecord> recordsByStatus(SummaryStatus status) {
+    ensureHydrated();
+    return Map.unmodifiable(
+      Map.fromEntries(
+        _records.entries.where((entry) => entry.value.status == status),
+      ),
+    );
+  }
+
   static String? summaryFor(String entryId) {
     final record = recordOf(entryId);
     return record?.summaryText;

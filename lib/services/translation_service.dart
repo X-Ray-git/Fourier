@@ -146,6 +146,17 @@ abstract final class TranslationService {
     return _records.values.where((record) => record.status == status).length;
   }
 
+  static Map<String, TranslationRecord> recordsByStatus(
+    TranslationStatus status,
+  ) {
+    ensureHydrated();
+    return Map.unmodifiable(
+      Map.fromEntries(
+        _records.entries.where((entry) => entry.value.status == status),
+      ),
+    );
+  }
+
   /// 标记为 pending（自动翻译入队时用，让卡片立即显示翻译中）
   static void markPending(String entryId) {
     ensureHydrated();

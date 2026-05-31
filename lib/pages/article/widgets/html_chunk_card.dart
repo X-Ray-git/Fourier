@@ -19,21 +19,24 @@ class HtmlChunkCard extends StatefulWidget {
   final HtmlChunk chunk;
   final double maxWidth;
   final void Function(String imageUrl)? onImageTap;
+  final bool keepAlive;
 
   const HtmlChunkCard({
     super.key,
     required this.chunk,
     required this.maxWidth,
     this.onImageTap,
+    this.keepAlive = true,
   });
 
   @override
   State<HtmlChunkCard> createState() => _HtmlChunkCardState();
 }
 
-class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveClientMixin {
+class _HtmlChunkCardState extends State<HtmlChunkCard>
+    with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => true; // 保持渲染状态存活，避免滑出屏幕后销毁重新解析
+  bool get wantKeepAlive => widget.keepAlive; // 长文虚拟列表可关闭，降低内存峰值
 
   // 缓存：避免每次父级重建时重新解析 HTML。
   // flutter_html 的 Html() 调用是 CPU 密集操作（HTML 字符串 → Widget 树）。
@@ -91,7 +94,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
     };
   }
 
-  Future<void> _handleLinkTap(String? url, Map<String, String> attributes, dynamic element) async {
+  Future<void> _handleLinkTap(
+    String? url,
+    Map<String, String> attributes,
+    dynamic element,
+  ) async {
     if (url != null && url.isNotEmpty) {
       final uri = Uri.tryParse(url);
       if (uri != null && await canLaunchUrl(uri)) {
@@ -152,10 +159,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
           padding: HtmlPaddings.zero,
           textAlign: TextAlign.start,
         ),
-        'p': Style(
-          margin: Margins.zero,
-          padding: HtmlPaddings.zero,
-        ),
+        'p': Style(margin: Margins.zero, padding: HtmlPaddings.zero),
         'a': Style(color: cs.primary),
         'strong': Style(fontWeight: FontWeight.w700),
         'em': Style(fontStyle: FontStyle.italic),
@@ -226,7 +230,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
       ),
       child: Html(
         data: Theme.of(context).brightness == Brightness.dark
-            ? HtmlContrastUtils.adjustHtmlContrast(widget.chunk.content, cs.surface)
+            ? HtmlContrastUtils.adjustHtmlContrast(
+                widget.chunk.content,
+                cs.surface,
+              )
             : widget.chunk.content,
         onLinkTap: _handleLinkTap,
         style: {
@@ -252,7 +259,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
       scrollDirection: Axis.horizontal,
       child: Html(
         data: Theme.of(context).brightness == Brightness.dark
-            ? HtmlContrastUtils.adjustHtmlContrast(widget.chunk.content, cs.surface)
+            ? HtmlContrastUtils.adjustHtmlContrast(
+                widget.chunk.content,
+                cs.surface,
+              )
             : widget.chunk.content,
         onLinkTap: _handleLinkTap,
         style: {
@@ -300,14 +310,8 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
           fontFamily: 'monospace',
           fontSize: FontSize(14),
         ),
-        'ul': Style(
-          padding: HtmlPaddings.only(left: 20),
-          margin: Margins.zero,
-        ),
-        'ol': Style(
-          padding: HtmlPaddings.only(left: 20),
-          margin: Margins.zero,
-        ),
+        'ul': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
+        'ol': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
       },
       extensions: [_imageExtension(context), TableHtmlExtension()],
     );
@@ -327,7 +331,8 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
     final posterUrl = widget.chunk.posterSrc != null
         ? ArticleImageService.toProxiedUrl(widget.chunk.posterSrc)
         : null;
-    final aspectRatio = (widget.chunk.imageWidth != null &&
+    final aspectRatio =
+        (widget.chunk.imageWidth != null &&
             widget.chunk.imageHeight != null &&
             widget.chunk.imageHeight! > 0)
         ? widget.chunk.imageWidth! / widget.chunk.imageHeight!
@@ -349,7 +354,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
     return _buildIframePlaceholder(context, cs, aspectRatio);
   }
 
-  Widget _buildIframePlaceholder(BuildContext context, ColorScheme cs, double aspectRatio) {
+  Widget _buildIframePlaceholder(
+    BuildContext context,
+    ColorScheme cs,
+    double aspectRatio,
+  ) {
     final url = widget.chunk.imageSrc;
     final posterUrl = widget.chunk.posterSrc != null
         ? ArticleImageService.toProxiedUrl(widget.chunk.posterSrc)
@@ -394,7 +403,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
                   ),
                 ),
               ),
-              
+
               // 居中毛玻璃按钮
               Center(
                 child: ClipOval(
@@ -405,8 +414,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
                         if (url != null && url.isNotEmpty) {
                           final uri = Uri.tryParse(url);
                           if (uri != null && await canLaunchUrl(uri)) {
-                            await launchUrl(uri,
-                                mode: LaunchMode.externalApplication);
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
                           }
                         }
                       },
@@ -441,7 +452,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
                         border: Border.all(
@@ -452,7 +466,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.open_in_new, size: 12, color: Colors.white),
+                          Icon(
+                            Icons.open_in_new,
+                            size: 12,
+                            color: Colors.white,
+                          ),
                           SizedBox(width: 4),
                           Text(
                             '外部网页',
@@ -480,7 +498,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
   Widget _buildRawHtml(BuildContext context, ColorScheme cs) {
     return Html(
       data: Theme.of(context).brightness == Brightness.dark
-          ? HtmlContrastUtils.adjustHtmlContrast(widget.chunk.content, cs.surface)
+          ? HtmlContrastUtils.adjustHtmlContrast(
+              widget.chunk.content,
+              cs.surface,
+            )
           : widget.chunk.content,
       onLinkTap: _handleLinkTap,
       style: {
@@ -515,14 +536,19 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
         double? explicitHeight;
 
         if (attrs['width'] != null) {
-          explicitWidth = double.tryParse(attrs['width']!.replaceAll(RegExp(r'[^0-9.]'), ''));
+          explicitWidth = double.tryParse(
+            attrs['width']!.replaceAll(RegExp(r'[^0-9.]'), ''),
+          );
         }
         if (attrs['height'] != null) {
-          explicitHeight = double.tryParse(attrs['height']!.replaceAll(RegExp(r'[^0-9.]'), ''));
+          explicitHeight = double.tryParse(
+            attrs['height']!.replaceAll(RegExp(r'[^0-9.]'), ''),
+          );
         }
 
         // 针对常见的 WordPress emoji 等内联小图做默认尺寸约束
-        if (imageUrl.contains('s.w.org/images/core/emoji') || attrs['class'] == 'emoji') {
+        if (imageUrl.contains('s.w.org/images/core/emoji') ||
+            attrs['class'] == 'emoji') {
           explicitWidth ??= 20.0;
           explicitHeight ??= 20.0;
         }
@@ -546,10 +572,9 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
             placeholder: (context, url) => Container(
               width: explicitWidth ?? 60,
               height: explicitHeight ?? explicitWidth ?? 60,
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withValues(alpha: 0.35),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
               child: const Center(
                 child: SizedBox(
                   width: 16,
@@ -561,10 +586,9 @@ class _HtmlChunkCardState extends State<HtmlChunkCard> with AutomaticKeepAliveCl
             errorWidget: (context, url, error) => Container(
               width: explicitWidth ?? 60,
               height: explicitHeight ?? explicitWidth ?? 60,
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withValues(alpha: 0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
               child: const Center(
                 child: Icon(Icons.broken_image_outlined, size: 20),
               ),
@@ -609,7 +633,8 @@ class _ArticleInlineImage extends StatefulWidget {
   State<_ArticleInlineImage> createState() => _ArticleInlineImageState();
 }
 
-class _ArticleInlineImageState extends State<_ArticleInlineImage> with AutomaticKeepAliveClientMixin {
+class _ArticleInlineImageState extends State<_ArticleInlineImage>
+    with AutomaticKeepAliveClientMixin {
   int _retryCount = 0;
 
   @override
@@ -622,18 +647,21 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage> with Automatic
     final cs = Theme.of(context).colorScheme;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cacheWidth = (widget.maxWidth * dpr).round();
-    final hasHeightStyle =
-        RegExp(r'max-height\s*:|height\s*:').hasMatch(widget.style ?? '');
+    final hasHeightStyle = RegExp(
+      r'max-height\s*:|height\s*:',
+    ).hasMatch(widget.style ?? '');
     final isCutOff =
         (widget.className ?? '').contains('cut-off') || hasHeightStyle;
 
     // 仅在有可靠像素尺寸时约束比例；否则让图片自适应
-    final hasRealDimensions = widget.imageWidth != null &&
+    final hasRealDimensions =
+        widget.imageWidth != null &&
         widget.imageHeight != null &&
         widget.imageHeight! > 0 &&
         widget.imageWidth! > 0;
-    final aspectRatio =
-        hasRealDimensions ? widget.imageWidth! / widget.imageHeight! : null;
+    final aspectRatio = hasRealDimensions
+        ? widget.imageWidth! / widget.imageHeight!
+        : null;
 
     final canTap = widget.onTap != null;
     final imageUrl = ArticleImageService.appendRetryStamp(
@@ -661,7 +689,9 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage> with Automatic
           width: widget.maxWidth,
           height: hasRealDimensions
               ? (widget.maxWidth / aspectRatio!).clamp(40.0, 420.0)
-              : (isCutOff ? 220.0 : widget.maxWidth * 0.6), // 为未知高度的图片设置一个更合理的默认高度，减少突兀跳动
+              : (isCutOff
+                    ? 220.0
+                    : widget.maxWidth * 0.6), // 为未知高度的图片设置一个更合理的默认高度，减少突兀跳动
           child: const Center(
             child: SizedBox(
               width: 24,

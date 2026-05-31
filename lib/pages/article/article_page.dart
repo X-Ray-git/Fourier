@@ -560,6 +560,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   int _lastActiveChunkCount = 0;
   bool? _lastShowTranslation;
   bool _progressiveBuildScheduled = false;
+  bool _usesVirtualizedBody = false;
+  double _estimatedBodyExtent = 0;
+  final Map<int, double> _measuredChunkHeights = {};
 
   static int get _initialBuildCount {
     final raw = GStorage.setting.get(
@@ -571,6 +574,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   }
 
   static const int _buildBatchSize = 10; // 每批多构建 10 个块
+  static const int _virtualChunkThreshold = 80;
+  static const double _virtualExtentThreshold = 10000;
+  static const double _metadataExtentEstimate = 280;
+  static const double _bottomExtent = 80;
 
   @override
   void initState() {
@@ -631,6 +638,82 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       });
     } else {
       _progressiveBuildScheduled = false;
+    }
+  }
+
+  bool _shouldUseVirtualizedBody(List<HtmlChunk> chunks) {
+    if (chunks.length >= _virtualChunkThreshold) return true;
+    return _rawEstimatedExtentFor(chunks) >= _virtualExtentThreshold;
+  }
+
+  double _estimatedExtentFor(List<HtmlChunk> chunks) {
+    var total = 0.0;
+    for (var i = 0; i < chunks.length; i++) {
+      total += _measuredChunkHeights[i] ?? chunks[i].estimatedHeight;
+    }
+    return total;
+  }
+
+  double _rawEstimatedExtentFor(List<HtmlChunk> chunks) {
+    var total = 0.0;
+    for (final chunk in chunks) {
+      total += chunk.estimatedHeight;
+    }
+    return total;
+  }
+
+  void _updateMeasuredChunkHeight(
+    int index,
+    Size size,
+    double estimatedHeight,
+  ) {
+    final height = size.height;
+    if (height <= 0) return;
+
+    final previous = _measuredChunkHeights[index];
+    if (previous != null && (previous - height).abs() < 1) return;
+    _measuredChunkHeights[index] = height;
+    if (_usesVirtualizedBody) {
+      _estimatedBodyExtent =
+          (_estimatedBodyExtent - (previous ?? estimatedHeight)) + height;
+    }
+  }
+
+  void _updateScrollProgress(ScrollMetrics metrics) {
+    if (metrics.axis != Axis.vertical) return;
+
+    if (_usesVirtualizedBody && _estimatedBodyExtent > 0) {
+      if (metrics.extentAfter <= 8) {
+        _scrollProgress.value = 1.0;
+        return;
+      }
+      if (metrics.pixels <= 0) {
+        _scrollProgress.value = 0.0;
+        return;
+      }
+
+      final estimatedContentExtent =
+          _metadataExtentEstimate + _estimatedBodyExtent + _bottomExtent;
+      final estimatedMaxScroll =
+          estimatedContentExtent - metrics.viewportDimension;
+      if (estimatedMaxScroll <= 0) {
+        _scrollProgress.value = 1.0;
+        return;
+      }
+
+      _scrollProgress.value = (metrics.pixels / estimatedMaxScroll).clamp(
+        0.0,
+        1.0,
+      );
+      return;
+    }
+
+    final maxScroll = metrics.maxScrollExtent;
+    final currentScroll = metrics.pixels;
+    if (maxScroll > 0) {
+      _scrollProgress.value = (currentScroll / maxScroll).clamp(0.0, 1.0);
+    } else if (metrics.hasContentDimensions) {
+      _scrollProgress.value = 1.0;
     }
   }
 
@@ -704,18 +787,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       body: SelectionArea(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
-            if (notification.metrics.axis == Axis.vertical) {
-              final maxScroll = notification.metrics.maxScrollExtent;
-              final currentScroll = notification.metrics.pixels;
-              if (maxScroll > 0) {
-                _scrollProgress.value = (currentScroll / maxScroll).clamp(
-                  0.0,
-                  1.0,
-                );
-              } else if (notification.metrics.hasContentDimensions) {
-                _scrollProgress.value = 1.0;
-              }
-            }
+            _updateScrollProgress(notification.metrics);
             return false;
           },
           child: CustomScrollView(
@@ -890,14 +962,49 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   // 补全后不回收（保持 Column 架构不变，进度条准确）。
                   final totalChunks = activeChunks.length;
                   final showTrans = controller.showTranslation.value;
+                  final contentChanged =
+                      _lastShowTranslation != showTrans ||
+                      _lastActiveChunkCount != totalChunks;
 
                   // 翻译切换 → 重置构建计数（内容变了，缓存失效）
-                  if (_lastShowTranslation != showTrans) {
+                  if (contentChanged) {
                     _lastShowTranslation = showTrans;
                     _builtCount = _initialBuildCount.clamp(0, totalChunks);
                     _progressiveBuildScheduled = false;
+                    _measuredChunkHeights.clear();
                   }
                   _lastActiveChunkCount = totalChunks;
+                  _estimatedBodyExtent = _estimatedExtentFor(activeChunks);
+                  final useVirtualizedBody = _shouldUseVirtualizedBody(
+                    activeChunks,
+                  );
+                  _usesVirtualizedBody = useVirtualizedBody;
+
+                  if (useVirtualizedBody) {
+                    return SliverList.builder(
+                      itemCount: totalChunks,
+                      itemBuilder: (context, idx) {
+                        final chunk = activeChunks[idx];
+                        return _MeasuredSize(
+                          onChange: (size) => _updateMeasuredChunkHeight(
+                            idx,
+                            size,
+                            chunk.estimatedHeight,
+                          ),
+                          child: HtmlChunkCard(
+                            key: ValueKey(
+                              'virtual_${showTrans ? "trans" : "orig"}_$idx',
+                            ),
+                            chunk: chunk,
+                            maxWidth: maxWidth,
+                            keepAlive: false,
+                            onImageTap: (url) =>
+                                controller.openImagePreview(url, context),
+                          ),
+                        );
+                      },
+                    );
+                  }
 
                   // 存在未构建的占位块 → 安排渐进构建
                   if (_builtCount < totalChunks) {
@@ -939,6 +1046,36 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ),
       ),
     );
+  }
+}
+
+class _MeasuredSize extends StatefulWidget {
+  final Widget child;
+  final ValueChanged<Size> onChange;
+
+  const _MeasuredSize({required this.child, required this.onChange});
+
+  @override
+  State<_MeasuredSize> createState() => _MeasuredSizeState();
+}
+
+class _MeasuredSizeState extends State<_MeasuredSize> {
+  Size? _oldSize;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final renderObject = context.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) return;
+
+      final newSize = renderObject.size;
+      if (_oldSize == newSize) return;
+      _oldSize = newSize;
+      widget.onChange(newSize);
+    });
+
+    return widget.child;
   }
 }
 

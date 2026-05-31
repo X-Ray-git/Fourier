@@ -2196,3 +2196,54 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
   1. **Push Notifications (推荐)**：集成 Firebase Cloud Messaging (FCM) 或极光推送。服务端有新文章产生时，向设备发送一条静默推送（Silent Push / Data Message），唤醒客户端一小段后台执行时间，由客户端计算未读数并调用 `flutter_app_badger` 更新角标。
   2. **Background Fetch**：使用 `workmanager` 或类似插件，每隔一段时间在后台拉取一次数据更新角标。缺点是实时性差且受各大 Android 定制系统（如 MIUI, OriginOS, ColorOS）的后台纯净机制严格限制。
 - **优先级**：中 (根据用户对通知实时性的需求而定)。
+
+---
+
+## 63. 长文阅读页自适应虚拟渲染（2026-05-31）
+
+### 63.1 背景
+
+第 61 节的 `Column + 渐进挂载 + widget 缓存` 已经让大多数文章打开和滚动足够流畅，但它的代价是：文章全部补齐后，所有 `HtmlChunkCard` 都常驻页面树。对普通文章这是可接受的；对极长 newsletter、多图长文、超大代码块文章，会推高内存占用。
+
+### 63.2 本次决策
+
+保留普通文章的现有路径，不回退它的体验；只对长文启用虚拟渲染：
+
+- 普通文章：继续使用 `SliverToBoxAdapter + Column + 渐进挂载`，保持精确进度条和已验证的流畅度。
+- 长文章：切换为 `SliverList.builder`，只构建视口附近的 chunk。
+- 长文模式下 `HtmlChunkCard.keepAlive=false`，滑出屏幕的复杂 HTML widget 可释放，降低内存峰值。
+
+长文判定条件：
+
+- `HtmlChunk` 数量 >= 80；或
+- 原始预估正文高度 >= 10000 px。
+
+### 63.3 进度条策略
+
+以前直接使用 `ScrollMetrics.maxScrollExtent`，在 `SliverList` 懒加载下会因列表动态估算而跳动。本次长文模式改为稳定估算：
+
+- 初始用 `HtmlChunk.estimatedHeight` 计算正文总高度。
+- 已构建过的 chunk 通过 `_MeasuredSize` 回填真实高度。
+- 进度条用“元数据区预估高度 + 正文估算/实测高度 + 底部间距”计算，不直接依赖动态变化的 `maxScrollExtent`。
+- 滚动到底部时通过 `metrics.extentAfter <= 8` 强制归 100%。
+
+这不是像普通文章一样绝对精确，但目标是“不乱跳、接近准确、长文更稳”。
+
+### 63.4 影响文件
+
+- `lib/pages/article/article_page.dart`
+  - 新增长文判定；
+  - 新增虚拟正文渲染分支；
+  - 新增 `_MeasuredSize` 记录 chunk 实际高度；
+  - 长文模式使用自维护高度估算更新阅读进度条。
+- `lib/pages/article/widgets/html_chunk_card.dart`
+  - 新增 `keepAlive` 参数；
+  - 普通模式默认保持缓存；
+  - 长文虚拟列表传入 `keepAlive: false`。
+
+### 63.5 验收要点
+
+1. 普通文章仍走原路径，打开、滚动、进度条表现不应变差。
+2. 极长文不会一次性常驻所有复杂 HTML widget。
+3. 长文阅读进度条应稳定，不再因虚拟列表动态布局明显乱跳。
+4. 图片预览、链接点击、翻译切换、摘要卡片不应受影响。

@@ -70,12 +70,15 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     // 更新 TimelineController 内存状态，使文章立即可见（清除 AI 拦截标记）
     if (Get.isRegistered<TimelineController>()) {
       final tc = Get.find<TimelineController>();
-      final idx = tc.allArticles.indexWhere((a) => a.entryId == article.entryId);
+      final idx = tc.allArticles.indexWhere(
+        (a) => a.entryId == article.entryId,
+      );
       if (idx >= 0) {
         final raw = GStorage.articleDb.get(article.entryId);
         if (raw is Map) {
-          tc.allArticles[idx] =
-              ArticleModel.fromCache(Map<String, dynamic>.from(raw));
+          tc.allArticles[idx] = ArticleModel.fromCache(
+            Map<String, dynamic>.from(raw),
+          );
           tc.allArticles.refresh();
         }
       }
@@ -84,32 +87,36 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _reject(ArticleModel article) {
-    LocalArticleDbService.upsertOne(ArticleModel(
-      entryId: article.entryId,
-      feedId: article.feedId,
-      feedTitle: article.feedTitle,
-      feedImage: article.feedImage,
-      title: article.title,
-      url: article.url,
-      content: article.content,
-      publishedAt: article.publishedAt,
-      isRead: article.isRead,
-      category: article.category,
-      subscriptionCategory: article.subscriptionCategory,
-      author: article.author,
-      imageUrl: article.imageUrl,
-      isRejectedByAi: article.isRejectedByAi,
-      filterReason: article.filterReason,
-      filterReviewed: true,
-    ));
+    LocalArticleDbService.upsertOne(
+      ArticleModel(
+        entryId: article.entryId,
+        feedId: article.feedId,
+        feedTitle: article.feedTitle,
+        feedImage: article.feedImage,
+        title: article.title,
+        url: article.url,
+        content: article.content,
+        publishedAt: article.publishedAt,
+        isRead: article.isRead,
+        category: article.category,
+        subscriptionCategory: article.subscriptionCategory,
+        author: article.author,
+        imageUrl: article.imageUrl,
+        isRejectedByAi: article.isRejectedByAi,
+        filterReason: article.filterReason,
+        filterReviewed: true,
+      ),
+    );
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);
     } else {
       GStorage.readStatus.put(article.entryId, true);
       LocalArticleDbService.setReadState(article.entryId, true);
     }
-    ReadSyncService.enqueue(article.entryId,
-        isInbox: article.category == 'inbox');
+    ReadSyncService.enqueue(
+      article.entryId,
+      isInbox: article.category == 'inbox',
+    );
     ArticleStateNotifier.tick(article.entryId);
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
   }
@@ -138,45 +145,68 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('垃圾拦截',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                '垃圾拦截',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (humanCount == 0 && !llmActive) ...[
-                      Icon(Icons.check_circle, size: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+                      Icon(
+                        Icons.check_circle,
+                        size: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
                       const SizedBox(width: 4),
-                      Text('全部处理完毕',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+                      Text(
+                        '全部处理完毕',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                        ),
+                      ),
                     ] else ...[
                       if (humanCount > 0) ...[
                         Icon(Icons.touch_app, size: 12, color: cs.primary),
                         const SizedBox(width: 4),
-                        Text('$humanCount 篇待处理',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: cs.primary)),
+                        Text(
+                          '$humanCount 篇待处理',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: cs.primary,
+                          ),
+                        ),
                       ],
                       if (humanCount > 0 && llmActive)
-                        Text('  ·  ',
-                            style: TextStyle(
-                                fontSize: 12, color: cs.onSurfaceVariant)),
+                        Text(
+                          '  ·  ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
                       if (llmActive) ...[
                         SizedBox(
-                            width: 10,
-                            height: 10,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: cs.onSurfaceVariant)),
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
                         const SizedBox(width: 4),
-                        Text('$llmCount 篇判定中',
-                            style: TextStyle(
-                                fontSize: 12, color: cs.onSurfaceVariant)),
+                        Text(
+                          '$llmCount 篇判定中',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ],
                   ],
@@ -187,7 +217,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         }),
       ),
       body: Obx(() {
-        final humanCount = _articles.length;
         final q = AutoFilterWorker.queuedCount.value;
         final p = AutoFilterWorker.processingCount.value;
         final llmActive = q > 0 || p > 0;
@@ -222,29 +251,39 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                           },
                           background: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(16),
                               child: Container(
                                 color: const Color(0xFF10B981),
                                 alignment: Alignment.centerLeft,
                                 padding: const EdgeInsets.only(left: 24),
-                                child: const Icon(Icons.restore_rounded,
-                                    color: Colors.white, size: 28),
+                                child: const Icon(
+                                  Icons.restore_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
                             ),
                           ),
                           secondaryBackground: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(16),
                               child: Container(
                                 color: cs.error,
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.only(right: 24),
-                                child: const Icon(Icons.delete_sweep_rounded,
-                                    color: Colors.white, size: 28),
+                                child: const Icon(
+                                  Icons.delete_sweep_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
                             ),
                           ),
@@ -253,11 +292,14 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                             showFeedTitle: true,
                             showSummary: true,
                             onTap: () {
-                              Get.toNamed(Routes.article, arguments: {
-                                'article': article,
-                                'sequence': _articles,
-                                'index': index,
-                              });
+                              Get.toNamed(
+                                Routes.article,
+                                arguments: {
+                                  'article': article,
+                                  'sequence': _articles,
+                                  'index': index,
+                                },
+                              );
                             },
                           ),
                         );
@@ -270,47 +312,56 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     );
   }
 
-  Widget _buildEmptyState(ColorScheme cs,
-      {required bool llmActive, required int llmCount}) {
+  Widget _buildEmptyState(
+    ColorScheme cs, {
+    required bool llmActive,
+    required int llmCount,
+  }) {
     final bool allDone = !llmActive;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: allDone
-                  ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                  : cs.primaryContainer.withValues(alpha: 0.5),
-              shape: BoxShape.circle,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: allDone
+                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                    : cs.primaryContainer.withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                allDone ? Icons.check_circle_outline : Icons.shield_outlined,
+                size: 56,
+                color: allDone ? const Color(0xFF10B981) : cs.primary,
+              ),
             ),
-            child: Icon(
-              allDone ? Icons.check_circle_outline : Icons.shield_outlined,
-              size: 56,
-              color: allDone ? const Color(0xFF10B981) : cs.primary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(allDone ? '处理完毕' : '暂无待处理内容',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface)),
-          const SizedBox(height: 8),
-          if (llmActive)
-            _LlmPill(cs: cs, count: llmCount)
-          else
+            const SizedBox(height: 24),
             Text(
-                allDone
-                    ? '所有文章已审核，阅读流保持清爽'
-                    : 'AI 过滤系统正在默默守护你的阅读流',
+              allDone ? '处理完毕' : '暂无待处理内容',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (llmActive)
+              _LlmPill(cs: cs, count: llmCount)
+            else
+              Text(
+                allDone ? '所有文章已审核，阅读流保持清爽' : 'AI 过滤系统正在默默守护你的阅读流',
                 style: TextStyle(
-                    fontSize: 14,
-                    color: cs.onSurfaceVariant,
-                    height: 1.6),
-                textAlign: TextAlign.center),
-        ]),
+                  fontSize: 14,
+                  color: cs.onSurfaceVariant,
+                  height: 1.6,
+                ),
+                textAlign: TextAlign.center,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -331,19 +382,28 @@ class _LlmPill extends StatelessWidget {
         color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        SizedBox(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
             width: 10,
             height: 10,
             child: CircularProgressIndicator(
-                strokeWidth: 2, color: cs.onSurfaceVariant)),
-        const SizedBox(width: 6),
-        Text('$count 篇判定中',
+              strokeWidth: 2,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$count 篇判定中',
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant)),
-      ]),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

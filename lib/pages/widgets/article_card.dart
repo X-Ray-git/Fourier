@@ -118,10 +118,7 @@ class _ArticleCardContent extends StatelessWidget {
               decoration: article.isRejectedByAi
                   ? BoxDecoration(
                       border: Border(
-                        left: BorderSide(
-                          color: colorScheme.primary,
-                          width: 4,
-                        ),
+                        left: BorderSide(color: colorScheme.primary, width: 4),
                       ),
                     )
                   : null,
@@ -135,9 +132,13 @@ class _ArticleCardContent extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          color: colorScheme.primaryContainer.withValues(
+                            alpha: 0.4,
+                          ),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: colorScheme.primary.withValues(alpha: 0.15),
@@ -200,8 +201,9 @@ class _ArticleCardContent extends StatelessWidget {
                                       ? FontWeight.w400
                                       : FontWeight.w600,
                                   color: article.isRead
-                                      ? colorScheme.onSurface
-                                          .withValues(alpha: 0.7)
+                                      ? colorScheme.onSurface.withValues(
+                                          alpha: 0.7,
+                                        )
                                       : colorScheme.onSurface,
                                 ),
                               ),
@@ -251,7 +253,9 @@ class _ArticleCardContent extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                            color: colorScheme.primaryContainer.withValues(
+                              alpha: 0.4,
+                            ),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Tooltip(
@@ -343,10 +347,7 @@ class _ArticleCardContent extends StatelessWidget {
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        _FeedIcon(
-                          imageUrl: article.feedImage,
-                          size: 14,
-                        ),
+                        _FeedIcon(imageUrl: article.feedImage, size: 14),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -354,8 +355,9 @@ class _ArticleCardContent extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.8),
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.8,
+                              ),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -411,7 +413,10 @@ class _ArticleCardContent extends StatelessWidget {
             Icon(icon, size: 16, color: textColor),
             const SizedBox(width: 4),
             Expanded(
-              child: status == SummaryStatus.done && text != null && text.isNotEmpty
+              child:
+                  status == SummaryStatus.done &&
+                      text != null &&
+                      text.isNotEmpty
                   ? Html(
                       data: displayContent,
                       style: {
@@ -429,11 +434,14 @@ class _ArticleCardContent extends StatelessWidget {
                           textDecoration: TextDecoration.none,
                         ),
                       },
-                      onLinkTap: (url, _, __) async {
+                      onLinkTap: (url, attributes, element) async {
                         if (url != null && url.isNotEmpty) {
                           final uri = Uri.tryParse(url);
                           if (uri != null && await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
                           }
                         }
                       },
@@ -507,10 +515,7 @@ class _ArticleCardContent extends StatelessWidget {
               ),
               if (isTranslated) ...[
                 ListTile(
-                  leading: Icon(
-                    Icons.delete_outline,
-                    color: colorScheme.error,
-                  ),
+                  leading: Icon(Icons.delete_outline, color: colorScheme.error),
                   title: Text(
                     '删除翻译',
                     style: TextStyle(color: colorScheme.error),
@@ -563,13 +568,19 @@ class _FeedIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     if (imageUrl == null || imageUrl!.isEmpty) {
-      return Icon(Icons.rss_feed,
-          size: size, color: cs.onSurfaceVariant.withValues(alpha: 0.6));
+      return Icon(
+        Icons.rss_feed,
+        size: size,
+        color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+      );
     }
     final proxyUrl = ArticleImageService.toProxiedUrl(imageUrl);
     if (proxyUrl == null) {
-      return Icon(Icons.rss_feed,
-          size: size, color: cs.onSurfaceVariant.withValues(alpha: 0.6));
+      return Icon(
+        Icons.rss_feed,
+        size: size,
+        color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+      );
     }
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cacheWidth = (size * dpr).round();

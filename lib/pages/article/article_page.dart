@@ -52,7 +52,6 @@ class ArticleController extends GetxController {
 
   ArticleController(this.article);
 
-
   @override
   void onInit() {
     super.onInit();
@@ -75,23 +74,25 @@ class ArticleController extends GetxController {
 
   Future<void> _initContent({String? overrideContent}) async {
     isParsingContent.value = true;
-    
+
     final rawHtml = overrideContent ?? article.content ?? '';
     final entryId = article.entryId;
     final hasTranslation = TranslationService.hasTranslation(entryId);
-    final tContent = hasTranslation ? (TranslationService.translatedContentFor(entryId) ?? '') : '';
+    final tContent = hasTranslation
+        ? (TranslationService.translatedContentFor(entryId) ?? '')
+        : '';
 
     try {
       final result = await Isolate.run(() {
         final normalized = ArticleContentUtils.normalizeHtml(rawHtml);
         final urls = ArticleContentUtils.extractImageUrls(normalized);
         final parsedChunks = HtmlChunkParser.parseSync(normalized);
-        
+
         List<HtmlChunk> tParsedChunks = const [];
         if (hasTranslation && tContent.isNotEmpty) {
           tParsedChunks = HtmlChunkParser.parseSync(tContent);
         }
-        
+
         return (
           normalizedContent: normalized,
           imageUrls: urls,
@@ -103,7 +104,7 @@ class ArticleController extends GetxController {
       normalizedContent = result.normalizedContent;
       imageUrls = result.imageUrls;
       chunks.value = result.chunks;
-      
+
       if (hasTranslation) {
         isTranslated.value = true;
         translationContent.value = tContent;
@@ -112,7 +113,7 @@ class ArticleController extends GetxController {
         }
         showTranslation.value = true;
       }
-      
+
       if (SummaryService.hasSummary(entryId)) {
         isSummarized.value = true;
         summaryText.value = SummaryService.summaryFor(entryId) ?? '';
@@ -123,29 +124,29 @@ class ArticleController extends GetxController {
   }
 
   Future<void> _fetchInboxContent() async {
-    final result = await FeedHttp.getInboxEntryDetail(
-      entryId: article.entryId,
-    );
+    final result = await FeedHttp.getInboxEntryDetail(entryId: article.entryId);
     if (result is Success<String> && result.response.isNotEmpty) {
       _initContent(overrideContent: result.response);
       // 持久化到本地，下次打开无需重复拉取
-      LocalArticleDbService.upsertOne(ArticleModel(
-        entryId: article.entryId,
-        feedId: article.feedId,
-        feedTitle: article.feedTitle,
-        feedImage: article.feedImage,
-        title: article.title,
-        url: article.url,
-        content: result.response,
-        publishedAt: article.publishedAt,
-        category: article.category,
-        subscriptionCategory: article.subscriptionCategory,
-        author: article.author,
-        imageUrl: article.imageUrl,
-        isRejectedByAi: article.isRejectedByAi,
-        filterReason: article.filterReason,
-        filterReviewed: article.filterReviewed,
-      ));
+      LocalArticleDbService.upsertOne(
+        ArticleModel(
+          entryId: article.entryId,
+          feedId: article.feedId,
+          feedTitle: article.feedTitle,
+          feedImage: article.feedImage,
+          title: article.title,
+          url: article.url,
+          content: result.response,
+          publishedAt: article.publishedAt,
+          category: article.category,
+          subscriptionCategory: article.subscriptionCategory,
+          author: article.author,
+          imageUrl: article.imageUrl,
+          isRejectedByAi: article.isRejectedByAi,
+          filterReason: article.filterReason,
+          filterReviewed: article.filterReviewed,
+        ),
+      );
       update(); // 通知 UI 重建
     }
     isFetchingContent.value = false;
@@ -153,7 +154,7 @@ class ArticleController extends GetxController {
 
   Future<void> fetchReadabilityContent() async {
     if (article.url.isEmpty) return;
-    
+
     // We shouldn't block initialization, run async
     Future.microtask(() async {
       isFetchingReadability.value = true;
@@ -165,23 +166,25 @@ class ArticleController extends GetxController {
         if (articleNode != null) {
           _initContent(overrideContent: articleNode.outerHtml);
           // 持久化抓取结果，下次打开无需重复抓
-          LocalArticleDbService.upsertOne(ArticleModel(
-            entryId: article.entryId,
-            feedId: article.feedId,
-            feedTitle: article.feedTitle,
-            feedImage: article.feedImage,
-            title: article.title,
-            url: article.url,
-            content: articleNode.outerHtml,
-            publishedAt: article.publishedAt,
-            category: article.category,
-            subscriptionCategory: article.subscriptionCategory,
-            author: article.author,
-            imageUrl: article.imageUrl,
-            isRejectedByAi: article.isRejectedByAi,
-            filterReason: article.filterReason,
-            filterReviewed: article.filterReviewed,
-          ));
+          LocalArticleDbService.upsertOne(
+            ArticleModel(
+              entryId: article.entryId,
+              feedId: article.feedId,
+              feedTitle: article.feedTitle,
+              feedImage: article.feedImage,
+              title: article.title,
+              url: article.url,
+              content: articleNode.outerHtml,
+              publishedAt: article.publishedAt,
+              category: article.category,
+              subscriptionCategory: article.subscriptionCategory,
+              author: article.author,
+              imageUrl: article.imageUrl,
+              isRejectedByAi: article.isRejectedByAi,
+              filterReason: article.filterReason,
+              filterReviewed: article.filterReviewed,
+            ),
+          );
         }
       } catch (e) {
         // silently fail on auto-fetch
@@ -200,23 +203,25 @@ class ArticleController extends GetxController {
     isUpdatingReadState.value = true;
     // 标已读时清除 AI 过滤标记
     if (article.isRejectedByAi) {
-      LocalArticleDbService.upsertOne(ArticleModel(
-        entryId: article.entryId,
-        feedId: article.feedId,
-        feedTitle: article.feedTitle,
-        feedImage: article.feedImage,
-        title: article.title,
-        url: article.url,
-        content: article.content,
-        publishedAt: article.publishedAt,
-        isRead: true,
-        category: article.category,
-        subscriptionCategory: article.subscriptionCategory,
-        author: article.author,
-        imageUrl: article.imageUrl,
-        isRejectedByAi: false,
-        filterReviewed: true,
-      ));
+      LocalArticleDbService.upsertOne(
+        ArticleModel(
+          entryId: article.entryId,
+          feedId: article.feedId,
+          feedTitle: article.feedTitle,
+          feedImage: article.feedImage,
+          title: article.title,
+          url: article.url,
+          content: article.content,
+          publishedAt: article.publishedAt,
+          isRead: true,
+          category: article.category,
+          subscriptionCategory: article.subscriptionCategory,
+          author: article.author,
+          imageUrl: article.imageUrl,
+          isRejectedByAi: false,
+          filterReviewed: true,
+        ),
+      );
     }
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);
@@ -230,15 +235,14 @@ class ArticleController extends GetxController {
     ArticleStateNotifier.tick(article.entryId);
 
     final ok = await _retrySync(
-      action: () => FeedHttp.markRead(
-        entryIds: [article.entryId],
-        isInbox: isInbox,
-      ),
+      action: () =>
+          FeedHttp.markRead(entryIds: [article.entryId], isInbox: isInbox),
       successMsg: '已标记已读',
       maxRetries: 5,
     );
 
-    // 同步结束（无论成败），释放临时保护锁
+    // 同步结束（无论成败），清理本次乐观更新留下的临时状态。
+    ReadSyncService.removeMany([article.entryId]);
     GStorage.readStatus.delete(article.entryId);
 
     if (!ok) {
@@ -419,7 +423,9 @@ class ArticleController extends GetxController {
       HeroDialogRoute(
         builder: (context) => ImageGalleryPage(
           imageUrls: imageUrls,
-          initialIndex: imageUrls.indexOf(imageUrl).clamp(0, imageUrls.length - 1),
+          initialIndex: imageUrls
+              .indexOf(imageUrl)
+              .clamp(0, imageUrls.length - 1),
         ),
       ),
     );
@@ -595,7 +601,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       if (!mounted) return;
 
       // 等待页面转场动画结束（约 300ms），避免在动画期间主线程排版 HTML 导致掉帧
-      final elapsed = DateTime.now().difference(controller._initTime).inMilliseconds;
+      final elapsed = DateTime.now()
+          .difference(controller._initTime)
+          .inMilliseconds;
       if (elapsed < 350) {
         await Future.delayed(Duration(milliseconds: 350 - elapsed));
       }
@@ -668,7 +676,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                           value: value,
                           minHeight: 1.0,
                           backgroundColor: Colors.transparent,
-                          valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            colorScheme.primary,
+                          ),
                         );
                       },
                     )
@@ -683,7 +693,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         return Opacity(
           opacity: 0.85,
           child: FloatingActionButton(
-            onPressed: isUpdating ? null
+            onPressed: isUpdating
+                ? null
                 : (isRead ? controller.markAsUnread : controller.markAsRead),
             tooltip: isRead ? '恢复未读' : '标为已读',
             child: Icon(isRead ? Icons.undo : Icons.check),
@@ -697,7 +708,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               final maxScroll = notification.metrics.maxScrollExtent;
               final currentScroll = notification.metrics.pixels;
               if (maxScroll > 0) {
-                _scrollProgress.value = (currentScroll / maxScroll).clamp(0.0, 1.0);
+                _scrollProgress.value = (currentScroll / maxScroll).clamp(
+                  0.0,
+                  1.0,
+                );
               } else if (notification.metrics.hasContentDimensions) {
                 _scrollProgress.value = 1.0;
               }
@@ -706,189 +720,224 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           },
           child: CustomScrollView(
             controller: _scrollController,
-          slivers: [
-          // ─── 元数据区域 ──────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  InkWell(
-                    onTap: controller.openInBrowser,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            controller.article.title,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              height: 1.35,
-                            ),
+            slivers: [
+              // ─── 元数据区域 ──────────────────────
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        onTap: controller.openInBrowser,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 4,
+                            horizontal: 2,
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 元数据
-                  _MetadataSection(controller: controller, cs: colorScheme),
-                  const SizedBox(height: 8),
-
-                  if (controller.article.publishedAt.isNotEmpty)
-                    Text(
-                      '发布于: ${controller.article.publishedAt}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurfaceVariant
-                            .withValues(alpha: 0.7),
-                      ),
-                    ),
-
-                  const Divider(height: 24),
-
-                  _ToolbarRow(controller: controller, cs: colorScheme),
-                  _SummaryCard(controller: controller),
-                ],
-              ),
-            ),
-          ),
-
-          // （已删除：高度为 0 的隐藏预加载栈代码）
-
-          // ─── 正文区域：逐块渲染 ──────────────
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: Obx(() {
-              if (controller.isParsingContent.value) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 64),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 24, height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: colorScheme.primary.withValues(alpha: 0.6)
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text('正在排版内容…',
-                              style: TextStyle(
-                                  color: colorScheme.onSurfaceVariant,
-                                  fontSize: 14)),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              final activeChunks = controller.showTranslation.value &&
-                      controller.translatedChunks.isNotEmpty
-                  ? controller.translatedChunks
-                  : controller.chunks;
-
-              if (activeChunks.isEmpty) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: controller.isFetchingContent.value
-                        ? Column(children: [
-                            const SizedBox(height: 32),
-                            SizedBox(
-                              width: 24, height: 24,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: colorScheme.primary.withValues(alpha: 0.6)),
-                            ),
-                            const SizedBox(height: 16),
-                            Text('正在加载正文…',
-                                style: TextStyle(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontSize: 14)),
-                          ])
-                        : Column(children: [
-                            Icon(Icons.article_outlined,
-                                size: 48,
-                                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                            const SizedBox(height: 12),
-                            Text('暂无正文内容',
-                                style: TextStyle(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500)),
-                            if (controller.article.url.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              TextButton.icon(
-                                icon: const Icon(Icons.open_in_browser, size: 18),
-                                label: const Text('在浏览器中查看原文'),
-                                onPressed: () => controller.openInBrowser(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                controller.article.title,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.35,
+                                ),
                               ),
                             ],
-                          ]),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 元数据
+                      _MetadataSection(controller: controller, cs: colorScheme),
+                      const SizedBox(height: 8),
+
+                      if (controller.article.publishedAt.isNotEmpty)
+                        Text(
+                          '发布于: ${controller.article.publishedAt}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                        ),
+
+                      const Divider(height: 24),
+
+                      _ToolbarRow(controller: controller, cs: colorScheme),
+                      _SummaryCard(controller: controller),
+                    ],
                   ),
-                );
-              }
-
-              // 延迟 build：首帧只真正构建前 _builtCount 个 HtmlChunkCard，
-              // 其余用 estimatedHeight 的 SizedBox 占位。首帧提交后分批补全，
-              // 补全后不回收（保持 Column 架构不变，进度条准确）。
-              final totalChunks = activeChunks.length;
-              final showTrans = controller.showTranslation.value;
-
-              // 翻译切换 → 重置构建计数（内容变了，缓存失效）
-              if (_lastShowTranslation != showTrans) {
-                _lastShowTranslation = showTrans;
-                _builtCount = _initialBuildCount.clamp(0, totalChunks);
-                _progressiveBuildScheduled = false;
-              }
-              _lastActiveChunkCount = totalChunks;
-
-              // 存在未构建的占位块 → 安排渐进构建
-              if (_builtCount < totalChunks) {
-                _scheduleProgressiveBuild();
-              }
-
-              return SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: List.generate(totalChunks, (idx) {
-                    final chunk = activeChunks[idx];
-                    if (idx < _builtCount) {
-                      return HtmlChunkCard(
-                        key: ValueKey(
-                            '${showTrans ? "trans" : "orig"}_$idx'),
-                        chunk: chunk,
-                        maxWidth: maxWidth,
-                        onImageTap: (url) =>
-                            controller.openImagePreview(url, context),
-                      );
-                    }
-                    // 占位：用预估高度撑开 Column，避免后续替换时大幅跳布局
-                    return SizedBox(
-                      key: ValueKey('placeholder_$idx'),
-                      height: chunk.estimatedHeight,
-                      child: const Center(),
-                    );
-                  }),
                 ),
-              );
-            }),
-          ),
+              ),
 
-          // 底部间距
-          const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
-        ],
-      ))),
+              // （已删除：高度为 0 的隐藏预加载栈代码）
+
+              // ─── 正文区域：逐块渲染 ──────────────
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: Obx(() {
+                  if (controller.isParsingContent.value) {
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 64),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                '正在排版内容…',
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  final activeChunks =
+                      controller.showTranslation.value &&
+                          controller.translatedChunks.isNotEmpty
+                      ? controller.translatedChunks
+                      : controller.chunks;
+
+                  if (activeChunks.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: controller.isFetchingContent.value
+                            ? Column(
+                                children: [
+                                  const SizedBox(height: 32),
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: colorScheme.primary.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    '正在加载正文…',
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  Icon(
+                                    Icons.article_outlined,
+                                    size: 48,
+                                    color: colorScheme.onSurfaceVariant
+                                        .withValues(alpha: 0.5),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    '暂无正文内容',
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (controller.article.url.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    TextButton.icon(
+                                      icon: const Icon(
+                                        Icons.open_in_browser,
+                                        size: 18,
+                                      ),
+                                      label: const Text('在浏览器中查看原文'),
+                                      onPressed: () =>
+                                          controller.openInBrowser(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                      ),
+                    );
+                  }
+
+                  // 延迟 build：首帧只真正构建前 _builtCount 个 HtmlChunkCard，
+                  // 其余用 estimatedHeight 的 SizedBox 占位。首帧提交后分批补全，
+                  // 补全后不回收（保持 Column 架构不变，进度条准确）。
+                  final totalChunks = activeChunks.length;
+                  final showTrans = controller.showTranslation.value;
+
+                  // 翻译切换 → 重置构建计数（内容变了，缓存失效）
+                  if (_lastShowTranslation != showTrans) {
+                    _lastShowTranslation = showTrans;
+                    _builtCount = _initialBuildCount.clamp(0, totalChunks);
+                    _progressiveBuildScheduled = false;
+                  }
+                  _lastActiveChunkCount = totalChunks;
+
+                  // 存在未构建的占位块 → 安排渐进构建
+                  if (_builtCount < totalChunks) {
+                    _scheduleProgressiveBuild();
+                  }
+
+                  return SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: List.generate(totalChunks, (idx) {
+                        final chunk = activeChunks[idx];
+                        if (idx < _builtCount) {
+                          return HtmlChunkCard(
+                            key: ValueKey(
+                              '${showTrans ? "trans" : "orig"}_$idx',
+                            ),
+                            chunk: chunk,
+                            maxWidth: maxWidth,
+                            onImageTap: (url) =>
+                                controller.openImagePreview(url, context),
+                          );
+                        }
+                        // 占位：用预估高度撑开 Column，避免后续替换时大幅跳布局
+                        return SizedBox(
+                          key: ValueKey('placeholder_$idx'),
+                          height: chunk.estimatedHeight,
+                          child: const Center(),
+                        );
+                      }),
+                    ),
+                  );
+                }),
+              ),
+
+              // 底部间距
+              const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -912,29 +961,45 @@ class _MetadataSection extends StatelessWidget {
           color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (imageUrl != null && imageUrl.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: Image(
-                  image: CachedNetworkImageProvider(
-                    ArticleImageService.toProxiedUrl(imageUrl) ?? imageUrl,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: Image(
+                    image: CachedNetworkImageProvider(
+                      ArticleImageService.toProxiedUrl(imageUrl) ?? imageUrl,
+                    ),
+                    width: 16,
+                    height: 16,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      Icons.rss_feed,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
-                  width: 16, height: 16, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      Icon(Icons.rss_feed, size: 14, color: cs.onSurfaceVariant),
                 ),
               ),
+            Flexible(
+              child: Text(
+                controller.article.feedTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              ),
             ),
-          Flexible(child: Text(controller.article.feedTitle,
-              maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant))),
-          const SizedBox(width: 6),
-          Icon(Icons.chevron_right, size: 14,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
-        ]),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.chevron_right,
+              size: 14,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -949,7 +1014,8 @@ class _ToolbarRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final rec = TranslationService.recordOf(controller.article.entryId);
-      final isPending = (rec?.isPending ?? false) || controller.isTranslating.value;
+      final isPending =
+          (rec?.isPending ?? false) || controller.isTranslating.value;
       final hasTranslation = controller.isTranslated.value;
       final isSummarizing = controller.isSummarizing.value;
       final hasSummary = controller.isSummarized.value;
@@ -958,24 +1024,51 @@ class _ToolbarRow extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 8),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            _Chip(cs: cs, icon: controller.showTranslation.value ? Icons.translate : Icons.translate_outlined,
-              label: isPending ? '翻译…' : hasTranslation ? '已译' : '翻译',
-              active: controller.showTranslation.value || isPending,
-              onTap: isPending ? null : hasTranslation ? () => controller.showTranslation.toggle() : () => controller.translateArticle()),
-            const SizedBox(width: 8),
-            _Chip(cs: cs, icon: hasSummary ? Icons.summarize : Icons.summarize_outlined,
-              label: isSummarizing ? '摘要…' : hasSummary ? '已摘要' : '摘要',
-              active: hasSummary || isSummarizing,
-              onTap: isSummarizing ? null : () => controller.summarizeArticle()),
-            if (isFetchingReadability) ...[
+          child: Row(
+            children: [
+              _Chip(
+                cs: cs,
+                icon: controller.showTranslation.value
+                    ? Icons.translate
+                    : Icons.translate_outlined,
+                label: isPending
+                    ? '翻译…'
+                    : hasTranslation
+                    ? '已译'
+                    : '翻译',
+                active: controller.showTranslation.value || isPending,
+                onTap: isPending
+                    ? null
+                    : hasTranslation
+                    ? () => controller.showTranslation.toggle()
+                    : () => controller.translateArticle(),
+              ),
               const SizedBox(width: 8),
-              _Chip(cs: cs, icon: Icons.sync,
-                label: '加载长文中…',
-                active: true,
-                onTap: null),
-            ]
-          ]),
+              _Chip(
+                cs: cs,
+                icon: hasSummary ? Icons.summarize : Icons.summarize_outlined,
+                label: isSummarizing
+                    ? '摘要…'
+                    : hasSummary
+                    ? '已摘要'
+                    : '摘要',
+                active: hasSummary || isSummarizing,
+                onTap: isSummarizing
+                    ? null
+                    : () => controller.summarizeArticle(),
+              ),
+              if (isFetchingReadability) ...[
+                const SizedBox(width: 8),
+                _Chip(
+                  cs: cs,
+                  icon: Icons.sync,
+                  label: '加载长文中…',
+                  active: true,
+                  onTap: null,
+                ),
+              ],
+            ],
+          ),
         ),
       );
     });
@@ -983,25 +1076,51 @@ class _ToolbarRow extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  final ColorScheme cs; final IconData icon; final String label;
-  final bool active; final VoidCallback? onTap;
-  const _Chip({required this.cs, required this.icon, required this.label,
-    required this.active, this.onTap});
+  final ColorScheme cs;
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+  const _Chip({
+    required this.cs,
+    required this.icon,
+    required this.label,
+    required this.active,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(8),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? cs.primary.withValues(alpha: 0.12) : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 16, color: active ? cs.primary : cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500,
-              color: active ? cs.primary : cs.onSurfaceVariant)),
-        ]),
+          color: active
+              ? cs.primary.withValues(alpha: 0.12)
+              : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: active ? cs.primary : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: active ? cs.primary : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1015,8 +1134,8 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final record = SummaryService.recordOf(controller.article.entryId);
-      final summary =
-          (record?.summaryText ?? controller.summaryText.value).trim();
+      final summary = (record?.summaryText ?? controller.summaryText.value)
+          .trim();
       if (summary.isEmpty) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
@@ -1024,21 +1143,35 @@ class _SummaryCard extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.light
-                ? Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.10)
-                : Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.15),
+                ? Theme.of(
+                    context,
+                  ).colorScheme.secondaryContainer.withValues(alpha: 0.10)
+                : Theme.of(
+                    context,
+                  ).colorScheme.secondaryContainer.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Icon(Icons.summarize, size: 16,
-                    color: Theme.of(context).colorScheme.secondary),
-                const SizedBox(width: 8),
-                Text('文章摘要', style: TextStyle(fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.secondary)),
-              ]),
+              Row(
+                children: [
+                  Icon(
+                    Icons.summarize,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '文章摘要',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               Html(
                 data: summary,
@@ -1054,11 +1187,14 @@ class _SummaryCard extends StatelessWidget {
                     textDecoration: TextDecoration.none,
                   ),
                 },
-                onLinkTap: (url, _, __) async {
+                onLinkTap: (url, attributes, element) async {
                   if (url != null && url.isNotEmpty) {
                     final uri = Uri.tryParse(url);
                     if (uri != null && await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
                     }
                   }
                 },

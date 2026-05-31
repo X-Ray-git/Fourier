@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 import 'dart:convert';
 
 import 'package:autofolo/utils/html_chunk_parser.dart';
@@ -11,7 +10,7 @@ void main() {
   final List reports = [];
 
   if (!dir.existsSync()) {
-    print('NO_HTML_DIR');
+    stdout.writeln('NO_HTML_DIR');
     return;
   }
 
@@ -26,10 +25,14 @@ void main() {
         if (preview.length > 160) preview = preview.substring(0, 160);
         return {'type': type, 'preview': preview};
       }).toList();
-      reports.add({'file': ent.path.split('/').last, 'count': chunkInfos.length, 'chunks': chunkInfos});
+      reports.add({
+        'file': ent.path.split('/').last,
+        'count': chunkInfos.length,
+        'chunks': chunkInfos,
+      });
     }
   }
 
   out.writeAsStringSync(json.encode(reports), mode: FileMode.write);
-  print('WROTE ${out.path}');
+  stdout.writeln('WROTE ${out.path}');
 }

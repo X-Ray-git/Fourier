@@ -1,7 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
@@ -56,8 +55,7 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
   }
 
   void _animationListener() {
-    _transformationController.value =
-        _animation?.value ?? Matrix4.identity();
+    _transformationController.value = _animation?.value ?? Matrix4.identity();
   }
 
   @override
@@ -125,10 +123,22 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
     final offSetY = targetScale == 1.0 ? 0.0 : -fp.dy * (targetScale - 1);
 
     final targetMatrix = Matrix4.fromList([
-      targetScale, matrix.row1.x, matrix.row2.x, matrix.row3.x,
-      matrix.row0.y, targetScale, matrix.row2.y, matrix.row3.y,
-      matrix.row0.z, matrix.row1.z, targetScale, matrix.row3.z,
-      offSetX, offSetY, matrix.row2.w, matrix.row3.w,
+      targetScale,
+      matrix.row1.x,
+      matrix.row2.x,
+      matrix.row3.x,
+      matrix.row0.y,
+      targetScale,
+      matrix.row2.y,
+      matrix.row3.y,
+      matrix.row0.z,
+      matrix.row1.z,
+      targetScale,
+      matrix.row3.z,
+      offSetX,
+      offSetY,
+      matrix.row2.w,
+      matrix.row3.w,
     ]);
 
     _animation = _animationController.drive(
@@ -159,11 +169,14 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading:
-                    const Icon(Icons.share_rounded, color: Colors.white),
-                title: const Text('分享图片',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w500)),
+                leading: const Icon(Icons.share_rounded, color: Colors.white),
+                title: const Text(
+                  '分享图片',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _shareImage(imageUrl);
@@ -171,11 +184,17 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
               ),
               const Divider(height: 1, color: Colors.white12),
               ListTile(
-                leading: const Icon(Icons.save_alt_rounded,
-                    color: Colors.white),
-                title: const Text('保存到相册',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w500)),
+                leading: const Icon(
+                  Icons.save_alt_rounded,
+                  color: Colors.white,
+                ),
+                title: const Text(
+                  '保存到相册',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _saveImage(imageUrl);
@@ -183,11 +202,14 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
               ),
               const Divider(height: 1, color: Colors.white12),
               ListTile(
-                leading:
-                    const Icon(Icons.link_rounded, color: Colors.white),
-                title: const Text('复制链接',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w500)),
+                leading: const Icon(Icons.link_rounded, color: Colors.white),
+                title: const Text(
+                  '复制链接',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   Clipboard.setData(ClipboardData(text: imageUrl));
@@ -251,10 +273,12 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
 
   Future<Uint8List?> _downloadBytes(String url) async {
     try {
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-      ));
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
       final response = await dio.get<List<int>>(
         url,
         options: Options(responseType: ResponseType.bytes),
@@ -307,8 +331,8 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                 itemBuilder: (context, index) {
                   final url = widget.imageUrls[index];
                   final dpr = MediaQuery.of(context).devicePixelRatio;
-                  final cacheWidth =
-                      (MediaQuery.of(context).size.width * dpr).round();
+                  final cacheWidth = (MediaQuery.of(context).size.width * dpr)
+                      .round();
 
                   return GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -326,32 +350,39 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                             cacheKey: 'v2_$url',
                             imageUrl: url,
                             fit: BoxFit.contain,
-                          httpHeaders: ArticleImageService.httpHeaders,
-                          memCacheWidth: cacheWidth,
-                          maxWidthDiskCache: cacheWidth * 2,
-                          fadeInDuration: const Duration(milliseconds: 250),
-                          fadeOutDuration: const Duration(milliseconds: 80),
-                          placeholder: (context, url) => const SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white70),
-                          ),
-                          errorWidget: (context, url, error) => const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.broken_image_rounded,
-                                  color: Colors.white70, size: 42),
-                              SizedBox(height: 8),
-                              Text('加载失败',
-                                  style: TextStyle(color: Colors.white70)),
-                            ],
+                            httpHeaders: ArticleImageService.httpHeaders,
+                            memCacheWidth: cacheWidth,
+                            maxWidthDiskCache: cacheWidth * 2,
+                            fadeInDuration: const Duration(milliseconds: 250),
+                            fadeOutDuration: const Duration(milliseconds: 80),
+                            placeholder: (context, url) => const SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.broken_image_rounded,
+                                  color: Colors.white70,
+                                  size: 42,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  '加载失败',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
+                  );
                 },
               ),
             ),
@@ -372,7 +403,9 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                       if (widget.imageUrls.length > 1)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 6),
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(16),
@@ -398,8 +431,11 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                               color: Colors.white.withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close_rounded,
-                                color: Colors.white, size: 20),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ),

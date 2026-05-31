@@ -151,7 +151,9 @@ class _SettingsPageState extends State<SettingsPage> {
           16,
           MediaQuery.paddingOf(context).top + 8,
           16,
-          MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 32,
+          MediaQuery.paddingOf(context).bottom +
+              kBottomNavigationBarHeight +
+              32,
         ),
         children: [
           // 登录状态
@@ -273,8 +275,11 @@ class _SettingsPageState extends State<SettingsPage> {
           // 通知与角标
           Text(
             '通知与角标',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-                color: colorScheme.onSurface),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -284,7 +289,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 16),
 
           DropdownButtonFormField<String>(
-            value: _badgeStrategy,
+            initialValue: _badgeStrategy,
             decoration: const InputDecoration(
               labelText: '桌面角标显示规则',
               border: OutlineInputBorder(),
@@ -373,7 +378,6 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 48),
 
           // ─── LLM 参数配置 ─────────────────────
-
           _LlmConfigCard(
             title: '翻译 LLM 参数',
             defaultConfig: LlmConfig.translateDefault,
@@ -505,8 +509,10 @@ class _FilterPromptCardState extends State<_FilterPromptCard> {
 
     return Card(
       child: ExpansionTile(
-        title: const Text('AI 过滤 Prompt',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text(
+          'AI 过滤 Prompt',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         subtitle: const Text('自定义文章过滤规则（LLM 判定）'),
         children: [
           Padding(
@@ -520,9 +526,11 @@ class _FilterPromptCardState extends State<_FilterPromptCard> {
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     hintText: '输入过滤规则...',
-                    helperText:
-                        '${_controller.text.split('\n').length} 行',
-                    helperStyle: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                    helperText: '${_controller.text.split('\n').length} 行',
+                    helperStyle: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
                   style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 ),
@@ -536,10 +544,7 @@ class _FilterPromptCardState extends State<_FilterPromptCard> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    OutlinedButton(
-                      onPressed: _reset,
-                      child: const Text('默认'),
-                    ),
+                    OutlinedButton(onPressed: _reset, child: const Text('默认')),
                   ],
                 ),
               ],
@@ -582,7 +587,16 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
 
   static const _models = ['deepseek-v4-flash', 'deepseek-v4-pro'];
   static const _efforts = ['high', 'max'];
-  static const _maxTokenOptions = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+  static const _maxTokenOptions = [
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+  ];
 
   @override
   void initState() {
@@ -614,14 +628,16 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
       }
       return;
     }
-    await widget.saveConfig(LlmConfig(
-      model: _model,
-      thinking: _thinking,
-      reasoningEffort: _reasoningEffort,
-      temperature: temp,
-      maxTokens: _maxTokens,
-      concurrency: _concurrency,
-    ));
+    await widget.saveConfig(
+      LlmConfig(
+        model: _model,
+        thinking: _thinking,
+        reasoningEffort: _reasoningEffort,
+        temperature: temp,
+        maxTokens: _maxTokens,
+        concurrency: _concurrency,
+      ),
+    );
     if (mounted) {
       AppFeedback.success('${widget.title}已保存', '新翻译将从下一次请求生效');
     }
@@ -633,8 +649,10 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
 
     return Card(
       child: ExpansionTile(
-        title: Text(widget.title,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         subtitle: Text('$_model  |  并发 $_concurrency'),
         children: [
           Padding(
@@ -682,8 +700,12 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
                       isDense: true,
                     ),
                     items: _efforts
-                        .map((e) => DropdownMenuItem(value: e,
-                            child: Text(e == 'high' ? '标准 (high)' : '最大 (max)')))
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e == 'high' ? '标准 (high)' : '最大 (max)'),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) => setState(() => _reasoningEffort = v!),
                   ),
@@ -699,7 +721,9 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
                     helperText: _thinking ? '思考模式下此参数不生效' : null,
                     helperStyle: TextStyle(color: cs.onSurfaceVariant),
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   enabled: true, // 允许输入，但提示不生效
                   onChanged: (v) => _temperature = v,
                 ),
@@ -716,11 +740,14 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
                     isDense: true,
                   ),
                   items: _maxTokenOptions
-                      .map((t) => DropdownMenuItem(
+                      .map(
+                        (t) => DropdownMenuItem(
                           value: t,
-                          child: Text(t >= 1024
-                              ? '${t ~/ 1024}K'
-                              : t.toString())))
+                          child: Text(
+                            t >= 1024 ? '${t ~/ 1024}K' : t.toString(),
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => _maxTokens = v!),
                 ),

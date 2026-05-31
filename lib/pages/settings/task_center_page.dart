@@ -69,15 +69,18 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('后台任务与同步'),
+        title: const Text(
+          '后台任务与同步',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
         centerTitle: true,
-        backgroundColor: cs.surface.withValues(alpha: 0.72),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(color: Colors.transparent),
+            child: Container(color: cs.surface.withValues(alpha: 0.50)),
           ),
         ),
       ),
@@ -89,12 +92,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
           MediaQuery.paddingOf(context).bottom + 24,
         ),
         children: [
-          _OverviewCard(
-            articles: articles,
-            pendingReads: pendingReads,
-            rejectedCount: rejected,
-          ),
-          const SizedBox(height: 12),
+          _OverviewCard(articles: articles, rejectedCount: rejected),
+          const SizedBox(height: 24),
           _SectionTitle(title: '同步', subtitle: '查看已读同步队列和本地文章库'),
           const SizedBox(height: 8),
           _SyncCard(
@@ -130,6 +129,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
             queued: AutoTranslationWorker.queueSize,
             processing: AutoTranslationWorker.processingCount.value,
             failed: TranslationService.countByStatus(TranslationStatus.error),
+            failureHint: '失败文章不会显示半截译文。打开对应文章后，可点击“翻译”重新生成。',
           ),
           const SizedBox(height: 8),
           _TaskStatusCard(
@@ -139,6 +139,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
             queued: AutoSummaryWorker.queueSize,
             processing: AutoSummaryWorker.processingCount.value,
             failed: SummaryService.countByStatus(SummaryStatus.error),
+            failureHint: '失败文章不会影响阅读。打开对应文章后，可点击“摘要”重新生成。',
           ),
         ],
       ),
@@ -148,25 +149,29 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
 
 class _OverviewCard extends StatelessWidget {
   final List<ArticleModel> articles;
-  final int pendingReads;
   final int rejectedCount;
 
-  const _OverviewCard({
-    required this.articles,
-    required this.pendingReads,
-    required this.rejectedCount,
-  });
+  const _OverviewCard({required this.articles, required this.rejectedCount});
 
   @override
   Widget build(BuildContext context) {
     final unread = articles.where((a) => !a.isRead).length;
     final working =
-        pendingReads +
-        AutoFilterWorker.queueSize +
+        ReadSyncService.pendingReadItems.length +
+        AutoFilterWorker.queuedCount.value +
+        AutoFilterWorker.processingCount.value +
         AutoTranslationWorker.queueSize +
-        AutoSummaryWorker.queueSize;
+        AutoTranslationWorker.processingCount.value +
+        AutoSummaryWorker.queueSize +
+        AutoSummaryWorker.processingCount.value;
+    final cs = Theme.of(context).colorScheme;
 
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -176,14 +181,15 @@ class _OverviewCard extends StatelessWidget {
               children: [
                 Icon(
                   working > 0 ? Icons.sync : Icons.check_circle_outline,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: cs.primary,
                 ),
                 const SizedBox(width: 10),
                 Text(
                   working > 0 ? '后台处理中' : '后台空闲',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
                   ),
                 ),
               ],
@@ -226,6 +232,11 @@ class _SyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -282,6 +293,7 @@ class _TaskStatusCard extends StatelessWidget {
   final int failed;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? failureHint;
 
   const _TaskStatusCard({
     required this.icon,
@@ -292,13 +304,20 @@ class _TaskStatusCard extends StatelessWidget {
     required this.failed,
     this.actionLabel,
     this.onAction,
+    this.failureHint,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final active = queued > 0 || processing > 0;
+    final hasFailure = failed > 0 && failureHint != null;
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -344,10 +363,43 @@ class _TaskStatusCard extends StatelessWidget {
                   child: _MetricTile(label: '处理中', value: processing),
                 ),
                 Expanded(
-                  child: _MetricTile(label: '失败', value: failed),
+                  child: _MetricTile(
+                    label: '失败',
+                    value: failed,
+                    tone: failed > 0 ? _MetricTone.warning : _MetricTone.normal,
+                  ),
                 ),
               ],
             ),
+            if (hasFailure) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cs.errorContainer.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: cs.error.withValues(alpha: 0.18)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: cs.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        failureHint!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.45,
+                          color: cs.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -358,12 +410,22 @@ class _TaskStatusCard extends StatelessWidget {
 class _MetricTile extends StatelessWidget {
   final String label;
   final int value;
+  final _MetricTone tone;
 
-  const _MetricTile({required this.label, required this.value});
+  const _MetricTile({
+    required this.label,
+    required this.value,
+    this.tone = _MetricTone.normal,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final valueColor = switch (tone) {
+      _MetricTone.warning when value > 0 => cs.error,
+      _ when value > 0 => cs.primary,
+      _ => cs.onSurface,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -372,7 +434,7 @@ class _MetricTile extends StatelessWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: value > 0 ? cs.primary : cs.onSurface,
+            color: valueColor,
           ),
         ),
         const SizedBox(height: 2),
@@ -381,6 +443,8 @@ class _MetricTile extends StatelessWidget {
     );
   }
 }
+
+enum _MetricTone { normal, warning }
 
 class _SectionTitle extends StatelessWidget {
   final String title;

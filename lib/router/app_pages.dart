@@ -4,6 +4,7 @@ import '../pages/main/main_page.dart';
 import '../pages/article/article_page.dart';
 import '../pages/feed_detail/feed_detail_page.dart';
 import '../pages/settings/settings_page.dart';
+import '../pages/settings/task_center_page.dart';
 import '../pages/timeline/filter_review_page.dart';
 
 class Routes {
@@ -13,6 +14,7 @@ class Routes {
   static const String article = '/article';
   static const String feedDetail = '/feed-detail';
   static const String settings = '/settings';
+  static const String taskCenter = '/task-center';
   static const String filterReview = '/filter-review';
 }
 
@@ -31,6 +33,11 @@ List<GetPage> get appPages => [
   GetPage(
     name: Routes.settings,
     page: () => const SettingsPage(),
+    transition: Transition.rightToLeft,
+  ),
+  GetPage(
+    name: Routes.taskCenter,
+    page: () => const TaskCenterPage(),
     transition: Transition.rightToLeft,
   ),
   GetPage(

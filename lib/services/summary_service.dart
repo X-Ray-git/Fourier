@@ -67,12 +67,14 @@ abstract final class SummaryService {
   static const String _apiBase = 'https://api.deepseek.com';
   static const Duration _timeout = Duration(seconds: 300);
 
-  static final Dio _dio = Dio(BaseOptions(
-    baseUrl: _apiBase,
-    connectTimeout: _timeout,
-    receiveTimeout: _timeout,
-    sendTimeout: _timeout,
-  ));
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: _apiBase,
+      connectTimeout: _timeout,
+      receiveTimeout: _timeout,
+      sendTimeout: _timeout,
+    ),
+  );
 
   static final RxMap<String, SummaryRecord> _records =
       <String, SummaryRecord>{}.obs;
@@ -118,6 +120,11 @@ abstract final class SummaryService {
   static bool hasSummary(String entryId) =>
       statusOf(entryId) == SummaryStatus.done;
 
+  static int countByStatus(SummaryStatus status) {
+    ensureHydrated();
+    return _records.values.where((record) => record.status == status).length;
+  }
+
   static String? summaryFor(String entryId) {
     final record = recordOf(entryId);
     return record?.summaryText;
@@ -132,7 +139,11 @@ abstract final class SummaryService {
     final existing = _inFlight[article.entryId];
     if (existing != null) return existing;
 
-    final future = _summarizeArticleInternal(article, targetLang, overrideContent);
+    final future = _summarizeArticleInternal(
+      article,
+      targetLang,
+      overrideContent,
+    );
     _inFlight[article.entryId] = future;
     future.whenComplete(() {
       _inFlight.remove(article.entryId);
@@ -152,16 +163,17 @@ abstract final class SummaryService {
 
     final previous = recordOf(article.entryId);
     // pending 只写内存，不落盘
-    _records[article.entryId] = (previous ??
-            SummaryRecord(
-              status: SummaryStatus.idle,
+    _records[article.entryId] =
+        (previous ??
+                SummaryRecord(
+                  status: SummaryStatus.idle,
+                  updatedAt: DateTime.now().millisecondsSinceEpoch,
+                ))
+            .copyWith(
+              status: SummaryStatus.pending,
+              errorMessage: null,
               updatedAt: DateTime.now().millisecondsSinceEpoch,
-            ))
-        .copyWith(
-          status: SummaryStatus.pending,
-          errorMessage: null,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        );
+            );
 
     final htmlContent = ArticleContentUtils.normalizeHtmlForEntry(
       article.entryId,
@@ -208,10 +220,7 @@ HTML：
         ...llmConfig.toRequestBody(),
       };
 
-      final response = await _dio.post(
-        '/chat/completions',
-        data: requestBody,
-      );
+      final response = await _dio.post('/chat/completions', data: requestBody);
 
       final content = _extractMessageContent(response.data);
       if (content == null || content.trim().isEmpty) {
@@ -220,8 +229,8 @@ HTML：
 
       Map<String, dynamic> parsed;
       try {
-        parsed = jsonDecode(_normalizeJsonPayload(content))
-            as Map<String, dynamic>;
+        parsed =
+            jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
       } on FormatException {
         final recovered = _extractJsonObject(content);
         if (recovered != null) {
@@ -341,8 +350,7 @@ HTML：
     final last = raw.lastIndexOf('}');
     if (first < 0 || last <= first) return null;
     try {
-      return jsonDecode(raw.substring(first, last + 1))
-          as Map<String, dynamic>;
+      return jsonDecode(raw.substring(first, last + 1)) as Map<String, dynamic>;
     } catch (_) {
       return null;
     }

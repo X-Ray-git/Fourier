@@ -141,6 +141,11 @@ abstract final class TranslationService {
   static bool hasTranslation(String entryId) =>
       statusOf(entryId) == TranslationStatus.done;
 
+  static int countByStatus(TranslationStatus status) {
+    ensureHydrated();
+    return _records.values.where((record) => record.status == status).length;
+  }
+
   /// 标记为 pending（自动翻译入队时用，让卡片立即显示翻译中）
   static void markPending(String entryId) {
     ensureHydrated();

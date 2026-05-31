@@ -31,6 +31,7 @@ class PendingReadSyncItem {
 /// 管理本地待同步的已读队列
 abstract final class ReadSyncService {
   static const String _pendingReadIdsKey = 'pending_read_items';
+  static const String _lastReadSyncAtKey = 'last_read_sync_at';
   static Future<void>? _syncInFlight;
 
   static List<PendingReadSyncItem> get pendingReadItems {
@@ -108,9 +109,20 @@ abstract final class ReadSyncService {
     GStorage.localCache.delete(_pendingReadIdsKey);
   }
 
+  static int? get lastReadSyncAt {
+    final raw = GStorage.localCache.get(_lastReadSyncAtKey);
+    return raw is int ? raw : null;
+  }
+
   static Future<void> _syncPendingReadsInternal() async {
     final items = pendingReadItems;
-    if (items.isEmpty) return;
+    if (items.isEmpty) {
+      GStorage.localCache.put(
+        _lastReadSyncAtKey,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      return;
+    }
 
     final grouped = <bool, List<PendingReadSyncItem>>{};
     for (final item in items) {
@@ -138,5 +150,9 @@ abstract final class ReadSyncService {
         if (ok) removeMany(chunk);
       }
     }
+    GStorage.localCache.put(
+      _lastReadSyncAtKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 }

@@ -9,6 +9,7 @@ import '../../services/account_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/llm_config.dart';
 import '../../services/translation_service.dart';
+import '../../router/app_pages.dart';
 import '../../utils/security_utils.dart';
 import '../../utils/storage.dart';
 
@@ -187,6 +188,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.hub_outlined, color: colorScheme.primary),
+              title: const Text('后台任务与同步'),
+              subtitle: const Text('查看同步队列、AI 任务和本地文章状态'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Get.toNamed(Routes.taskCenter),
             ),
           ),
 

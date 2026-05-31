@@ -2247,3 +2247,39 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 2. 极长文不会一次性常驻所有复杂 HTML widget。
 3. 长文阅读进度条应稳定，不再因虚拟列表动态布局明显乱跳。
 4. 图片预览、链接点击、翻译切换、摘要卡片不应受影响。
+
+---
+
+## 64. 设置页任务中心（2026-05-31）
+
+### 64.1 产品定位
+
+用户明确希望审核页的高频交互和入口保持不变，因此任务中心不承载逐篇审核流程。任务中心定位为设置页内的低频诊断入口，用于查看后台同步和 AI 队列是否正常。
+
+### 64.2 第一版范围
+
+入口：
+
+- 设置页新增“后台任务与同步”卡片。
+- 路由：`Routes.taskCenter` / `/task-center`。
+
+页面能力：
+
+- 总览本地文章数、未读数、待人工审核数。
+- 查看已读待同步数量和最近已读同步时间。
+- 手动触发“同步已读”。
+- 查看 AI 过滤、自动翻译、自动摘要的排队数、处理中数和失败数。
+- AI 过滤区只提供“去审核”跳转，不展示审核列表，不替代 `FilterReviewPage`。
+
+### 64.3 有意不做
+
+第一版不做暂停/继续、清空队列、批量重试、详细日志和批量审核。原因是这些操作会改变后台行为，容易引入误操作和更复杂的状态恢复；当前阶段只解决“用户能看懂后台是否在工作”的问题。
+
+### 64.4 影响文件
+
+- `lib/pages/settings/task_center_page.dart` — 新增任务中心页面。
+- `lib/pages/settings/settings_page.dart` — 设置页入口卡片。
+- `lib/router/app_pages.dart` — 新增任务中心路由。
+- `lib/services/read_sync_service.dart` — 记录最近已读同步时间。
+- `lib/services/auto_translation_worker.dart` / `auto_summary_worker.dart` — 暴露当前处理中数量。
+- `lib/services/translation_service.dart` / `summary_service.dart` — 提供按状态计数，用于失败数量展示。

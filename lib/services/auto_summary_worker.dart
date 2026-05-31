@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:get/get.dart';
 
 import '../models/article.dart';
 import 'llm_config.dart';
@@ -10,6 +11,7 @@ abstract final class AutoSummaryWorker {
   static Timer? _processingTimer;
   static bool _isProcessing = false;
   static const Duration _processingInterval = Duration(milliseconds: 500);
+  static final processingCount = 0.obs;
 
   static int get _concurrency => LlmConfig.loadSummary().concurrency;
 
@@ -51,12 +53,12 @@ abstract final class AutoSummaryWorker {
       for (int i = 0; i < _concurrency && _queue.isNotEmpty; i++) {
         batch.add(_queue.removeAt(0));
       }
+      processingCount.value = batch.length;
 
-      await Future.wait(
-        batch.map((article) => _summarizeArticle(article)),
-      );
+      await Future.wait(batch.map((article) => _summarizeArticle(article)));
     } finally {
       _isProcessing = false;
+      processingCount.value = 0;
 
       if (_queue.isEmpty) {
         _processingTimer?.cancel();
@@ -80,5 +82,6 @@ abstract final class AutoSummaryWorker {
     _processingTimer = null;
     _queue.clear();
     _isProcessing = false;
+    processingCount.value = 0;
   }
 }

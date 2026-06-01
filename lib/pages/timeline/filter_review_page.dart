@@ -9,6 +9,7 @@ import '../../services/auto_filter_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
+import '../../services/summary_service.dart';
 import '../../utils/storage.dart';
 import '../article/article_page.dart';
 import '../timeline/timeline_controller.dart';
@@ -64,6 +65,18 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       _seenIds.add(a.entryId);
     }
     _articles.value = all;
+  }
+
+  void _selectRelativeArticle(int delta) {
+    if (_articles.isEmpty) return;
+
+    final selected = _selectedArticle.value;
+    final currentIndex = selected == null
+        ? -1
+        : _articles.indexWhere((a) => a.entryId == selected.entryId);
+    final nextIndex = (currentIndex + delta).clamp(0, _articles.length - 1);
+    if (nextIndex < 0 || nextIndex >= _articles.length) return;
+    _selectedArticle.value = _articles[nextIndex];
   }
 
   void _keep(ArticleModel article) {
@@ -416,6 +429,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 key: ValueKey(selected.entryId),
                 article: selected,
                 isSplitView: true,
+                onClose: () => _selectedArticle.value = null,
+                onPrevious: () => _selectRelativeArticle(-1),
+                onNext: () => _selectRelativeArticle(1),
               );
             }),
           ),
@@ -576,9 +592,14 @@ class _MacReviewRow extends StatelessWidget {
 
     return Material(
       color: selected
-          ? cs.primaryContainer.withValues(alpha: 0.58)
+          ? cs.primaryContainer.withValues(alpha: 0.5)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: selected
+            ? BorderSide(color: cs.primary.withValues(alpha: 0.5), width: 1)
+            : BorderSide.none,
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -614,19 +635,42 @@ class _MacReviewRow extends StatelessWidget {
                         color: cs.onSurfaceVariant,
                       ),
                     ),
-                    if (reason != null && reason.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      Text(
-                        reason,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.35,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.82),
-                        ),
-                      ),
-                    ],
+                    Obx(() {
+                      final summaryRecord = SummaryService.recordOf(
+                        article.entryId,
+                      );
+                      final summaryStatus =
+                          summaryRecord?.status ?? SummaryStatus.idle;
+                      final summaryText = _summaryTextFor(summaryRecord);
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (reason != null && reason.isNotEmpty) ...[
+                            const SizedBox(height: 7),
+                            _ReviewInfoBlock(
+                              icon: Icons.auto_awesome,
+                              label: '拒绝理由',
+                              text: reason,
+                              color: const Color(0xFFD97706),
+                              maxLines: 2,
+                            ),
+                          ],
+                          if (summaryText.isNotEmpty) ...[
+                            const SizedBox(height: 7),
+                            _ReviewInfoBlock(
+                              icon: _summaryIconFor(summaryStatus),
+                              label: '摘要',
+                              text: summaryText,
+                              color: _summaryColorFor(cs, summaryStatus),
+                              maxLines: summaryStatus == SummaryStatus.done
+                                  ? 3
+                                  : 1,
+                            ),
+                          ],
+                        ],
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -657,6 +701,101 @@ class _MacReviewRow extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  String _summaryTextFor(SummaryRecord? record) {
+    final status = record?.status ?? SummaryStatus.idle;
+    final text = record?.summaryText?.trim();
+    if (status == SummaryStatus.done && text != null && text.isNotEmpty) {
+      return text;
+    }
+    if (status == SummaryStatus.pending) return '摘要生成中...';
+    if (status == SummaryStatus.error) {
+      final message = record?.errorMessage?.trim();
+      if (message != null && message.isNotEmpty) return '摘要生成失败：$message';
+      return '摘要生成失败';
+    }
+    return '排队等待摘要...';
+  }
+
+  IconData _summaryIconFor(SummaryStatus status) {
+    return switch (status) {
+      SummaryStatus.done => Icons.format_quote_rounded,
+      SummaryStatus.pending => Icons.sync_rounded,
+      SummaryStatus.error => Icons.error_outline_rounded,
+      SummaryStatus.idle => Icons.hourglass_empty_rounded,
+    };
+  }
+
+  Color _summaryColorFor(ColorScheme cs, SummaryStatus status) {
+    return switch (status) {
+      SummaryStatus.done => const Color(0xFF0F766E),
+      SummaryStatus.pending => cs.primary,
+      SummaryStatus.error => cs.error,
+      SummaryStatus.idle => cs.onSurfaceVariant,
+    };
+  }
+}
+
+class _ReviewInfoBlock extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String text;
+  final Color color;
+  final int maxLines;
+
+  const _ReviewInfoBlock({
+    required this.icon,
+    required this.label,
+    required this.text,
+    required this.color,
+    required this.maxLines,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.16), width: 0.6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              text,
+              maxLines: maxLines,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: cs.onSurface.withValues(alpha: 0.82),
+              ),
+            ),
+          ],
         ),
       ),
     );

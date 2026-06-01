@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -71,6 +72,18 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
+        leadingWidth: Platform.isMacOS ? 88 : null,
+        leading: Platform.isMacOS
+            ? Padding(
+                padding: const EdgeInsets.only(left: 66),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                  iconSize: 17,
+                  tooltip: '返回',
+                  onPressed: Get.back,
+                ),
+              )
+            : null,
         title: const Text(
           '后台任务与同步',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
@@ -190,6 +203,18 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
+        leadingWidth: Platform.isMacOS ? 88 : null,
+        leading: Platform.isMacOS
+            ? Padding(
+                padding: const EdgeInsets.only(left: 66),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                  iconSize: 17,
+                  tooltip: '返回',
+                  onPressed: Get.back,
+                ),
+              )
+            : null,
         title: Text(
           _isTranslation ? '翻译失败文章' : '摘要失败文章',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),

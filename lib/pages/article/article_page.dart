@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:isolate';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -539,8 +541,14 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
 class ArticlePageView extends StatefulWidget {
   final ArticleModel article;
   final String? pageLabel;
+  final bool isSplitView;
 
-  const ArticlePageView({super.key, required this.article, this.pageLabel});
+  const ArticlePageView({
+    super.key,
+    required this.article,
+    this.pageLabel,
+    this.isSplitView = false,
+  });
 
   @override
   State<ArticlePageView> createState() => _ArticlePageViewState();
@@ -720,9 +728,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final maxWidth = MediaQuery.of(context).size.width - 32;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxWidth = widget.isSplitView ? 800.0 : screenWidth - 32;
 
-    return Scaffold(
+    Widget scaffold = Scaffold(
       appBar: AppBar(
         title: Text(
           widget.pageLabel ?? '文章详情',
@@ -743,7 +752,29 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             child: Container(color: Colors.transparent),
           ),
         ),
-        actions: const [],
+        actions: Platform.isMacOS
+            ? [
+                Obx(() {
+                  final isRead = controller.isRead.value;
+                  final isUpdating = controller.isUpdatingReadState.value;
+                  return IconButton(
+                    icon: Icon(
+                      isRead ? Icons.undo : Icons.check_circle_outline,
+                    ),
+                    tooltip: isRead ? '恢复未读' : '标为已读 (M)',
+                    color: isRead
+                        ? colorScheme.onSurfaceVariant
+                        : colorScheme.primary,
+                    onPressed: isUpdating
+                        ? null
+                        : (isRead
+                              ? controller.markAsUnread
+                              : controller.markAsRead),
+                  );
+                }),
+                const SizedBox(width: 8),
+              ]
+            : const [],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
           child: ValueListenableBuilder<double>(
@@ -770,20 +801,24 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           ),
         ),
       ),
-      floatingActionButton: Obx(() {
-        final isRead = controller.isRead.value;
-        final isUpdating = controller.isUpdatingReadState.value;
-        return Opacity(
-          opacity: 0.85,
-          child: FloatingActionButton(
-            onPressed: isUpdating
-                ? null
-                : (isRead ? controller.markAsUnread : controller.markAsRead),
-            tooltip: isRead ? '恢复未读' : '标为已读',
-            child: Icon(isRead ? Icons.undo : Icons.check),
-          ),
-        );
-      }),
+      floatingActionButton: Platform.isMacOS
+          ? null
+          : Obx(() {
+              final isRead = controller.isRead.value;
+              final isUpdating = controller.isUpdatingReadState.value;
+              return Opacity(
+                opacity: 0.85,
+                child: FloatingActionButton(
+                  onPressed: isUpdating
+                      ? null
+                      : (isRead
+                            ? controller.markAsUnread
+                            : controller.markAsRead),
+                  tooltip: isRead ? '恢复未读' : '标为已读',
+                  child: Icon(isRead ? Icons.undo : Icons.check),
+                ),
+              );
+            }),
       body: SelectionArea(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -1046,6 +1081,27 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ),
       ),
     );
+
+    return Platform.isMacOS
+        ? Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.keyM) {
+                if (!controller.isUpdatingReadState.value) {
+                  if (controller.isRead.value) {
+                    controller.markAsUnread();
+                  } else {
+                    controller.markAsRead();
+                  }
+                }
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: scaffold,
+          )
+        : scaffold;
   }
 }
 

@@ -7,6 +7,7 @@ import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'common/constants/constants.dart';
 import 'common/widgets/loading_widget.dart';
@@ -49,6 +50,23 @@ void main() async {
     } catch (e) {
       debugPrint('Error setting high refresh rate: $e');
     }
+  }
+
+  // macOS 窗口设置
+  if (Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(1000, 750),
+      minimumSize: Size(600, 500),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.hidden,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
   }
 
   runApp(const FoloReaderApp());
@@ -219,7 +237,7 @@ class _CustomToast extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // 背景色：采用与当前亮度适配的半透明基色，以衬托毛玻璃效果
     final bgColor = isDark
         ? const Color(0xFF1C1C1E).withValues(alpha: 0.85)

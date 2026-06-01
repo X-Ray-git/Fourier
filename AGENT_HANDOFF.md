@@ -2287,3 +2287,315 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - `lib/services/read_sync_service.dart` — 记录最近已读同步时间。
 - `lib/services/auto_translation_worker.dart` / `auto_summary_worker.dart` — 暴露当前处理中数量。
 - `lib/services/translation_service.dart` / `summary_service.dart` — 提供按状态计数和失败记录查询，用于失败数量展示和失败明细页。
+
+---
+
+## 65. macOS 桌面端深度适配（2026-05-31，进行中）
+
+### 65.1 核心需求与设计
+在原有跨平台代码基础上，全面提升 macOS 端的原生交互体验，使其具备真正的桌面级应用质感。设计上严格对标原始 `folo` 桌面端的“三栏布局”，同时保留 Android 端的原有形态。
+
+### 65.2 当前实现要点
+1. **三栏经典布局与毛玻璃侧边栏**：
+   - 在 `lib/pages/main/main_page.dart` 中，移除了原有的移动端底导和基础侧边导航，彻底重构为 `MacOSSidebar | VerticalDivider | 核心内容区` 的三栏布局。
+   - 新增 `lib/pages/main/widgets/macos_sidebar.dart`，使用 `BackdropFilter(sigmaX: 20, sigmaY: 20)` 实现 macOS 标志性的高强度毛玻璃（Vibrancy）效果。
+   - 订阅树（包含“全部文章”、“垃圾拦截”、各种分类与特定源）被直接展现在最左侧边栏中。
+
+2. **底层路由与状态联动**：
+   - 左侧侧边栏通过 `SubscriptionsController` 渲染数据树，并将点击事件传递给 `TimelineController`。
+   - 修改 `TimelineController`，使其能够支持 `selectedCategory` 与 `selectedFeedId` 的响应式过滤更新。实现侧边栏点击后，中间时间线列表立刻精准切换内容的单页无缝体验。
+
+3. **原生快捷键补齐**：
+   - 在 `MainPage` 外层增加 `Focus` 监听键盘事件。
+   - 实现 `Cmd + W` 隐藏当前窗口（调用 `windowManager.hide()`）。
+   - 实现 `Cmd + Q` 彻底退出应用程序（调用 `exit(0)`）。
+
+4. **macOS Dock 动态原生角标**：
+   - 在 `macos/Runner/AppDelegate.swift` 中通过 `MethodChannel("com.autofolo/badge")` 接管了原生层的 `NSApp.dockTile.badgeLabel` 渲染逻辑。
+   - 使得未读文章的数字可以实时且精准地以红底白字显示在 Mac 底部的 Dock 栏图标右上角。
+
+5. **独立的高清应用图标**：
+   - 通过原生 `sips` 脚本对原始 Folo 高清图标进行自动重采样，生成了符合 macOS 标准的全尺寸 `.appiconset` 集合，完全替代了 Flutter 的默认模板图标。
+
+### 65.3 关键设计讨论与决策留档
+在本次迭代中，通过与用户的讨论，明确了以下几项关键的设计理念和未来规划：
+1. **摒弃侧边导航栏，回归三栏沉浸布局**：
+   - 用户明确指出原始 folo 项目的界面设计非常优秀，因此决定放弃初版使用 `NavigationRail`（带 3 个按钮）的生硬方案。
+   - 最终确立了将“订阅源选择”直接做到最左侧的模式，当点击空白时不进行任何选择，最大程度复刻了桌面端原汁原味的体验。
+2. **关于“已读”行为的交互讨论**：
+   - 用户不希望像原始 folo 工程那样“点击列表项就自动标为已读”，而是希望保留类似 Android 端那种“需要明确的确认步骤”。
+   - **已决定的方案**：一方面在详情页保留明确的“已读”按钮，另一方面为 macOS 专门增加了快捷键（计划使用 `M` 键作为标为已读的快捷键，后续实现）。
+   - **状态刷新逻辑**：讨论了阅读后文章是否立刻消失的问题。目前保持现状，后续可以结合状态管理平滑处理列表内的隐藏动画。
+3. **未来的键盘导航扩展**：
+   - 用户提出未来可以通过设置其他快捷键（如左右方向键）来阅读上一篇/下一篇，以此来对标安卓端的左右滑动切页手势。该需求已记录，留待后续版本实现。
+
+---
+
+## 66. macOS 适配复盘与当前权威上下文（2026-06-01）
+
+> 重要：第 65 节是早期记录，其中关于 `Cmd+W/Cmd+Q` 和毛玻璃的实现描述已经不完全准确。后续接手请以本节为准。
+
+### 66.1 工作区与分支约束
+
+- 当前工作目录：`<historical-macos-worktree>`
+- 当前分支：`migrate-software-macos-adaptation`
+- 用户明确要求：所有 macOS 适配、同步和实验都不要改动核心工作区 `~/dev` 那边。
+- 本轮操作均在当前 worktree 内完成，没有直接操作 `~/dev` 工作区。
+- 曾从另一个 worktree `<historical-codex-worktree>` 同步 7 个提交到当前分支顶部，避免 macOS 适配与 Android/通用功能更新长期分叉：
+  - `83f6b7a Fix read sync cleanup and readability queue dedupe`
+  - `a4b5777 Retry chunked translations without partial results`
+  - `ea8f494 Add adaptive virtual rendering for long articles`
+  - `7e05db4 Add settings task center`
+  - `d5f67f3 Polish task center status UI`
+  - `ce869f3 Add AI failure detail retries`
+  - `8e41518 Improve chunk translation failure details`
+- 同步前创建过备份 stash：`stash@{0}: On migrate-software-macos-adaptation: pre-sync-macos-adaptation`。如确认当前工作无误，可后续手动清理；当前不要随意删除。
+
+### 66.2 用户目标与设计参考
+
+用户当前主线目标是 macOS 端精细化适配，方向是参考 `reference/Folo` 的桌面端视觉和交互，而不是照搬内部实现。核心要求：
+
+1. macOS 设计不要破坏现有移动端设计。
+2. 左侧订阅源的 category/folder 必须支持折叠；整条订阅栏是否可收起是附带能力。
+3. 关闭窗口应隐藏窗口但保留 app 运行；`Cmd+Q` 才是真正退出。
+4. macOS 三栏设计参考 Folo 原生桌面工程：左侧订阅栏、中间列表、右侧阅读/详情。
+5. Folo 左侧订阅栏的材质感、毛玻璃、视觉密度可以参考，但内部业务逻辑继续用本项目自己的 GetX/Hive/Folo API 逻辑。
+6. 审核页是高频入口，任务中心只是低频诊断入口，不能替代审核页。
+
+### 66.3 当前 macOS 主布局
+
+核心文件：
+
+- `lib/pages/main/main_page.dart`
+- `lib/pages/main/widgets/macos_sidebar.dart`
+- `lib/pages/timeline/timeline_page.dart`
+- `lib/pages/timeline/filter_review_page.dart`
+
+当前形态：
+
+- 移动端继续使用 AppBar + bottom `NavigationBar`，对应 `_mobilePages`：
+  - `TimelinePage(showAppBar: false)`
+  - `SubscriptionsPage()`
+  - `SettingsPage(showAppBar: false)`
+- macOS 走单独分支，不使用移动端底导，对应三栏布局：
+  - 左侧：`MacOSSidebar` / `MacOSCollapsedSidebar`
+  - 中间/右侧主内容：`IndexedStack`
+  - macOS pages：
+    - `TimelinePage(showAppBar: false, onOpenFilterReview: () => _onDestinationSelected(1))`
+    - `FilterReviewPage()`
+    - `SettingsPage(showAppBar: false)`
+- `TimelinePage` 在 macOS 内部继续拆成“列表栏 + 阅读栏”，因此整体视觉是：
+  - 最左侧订阅/导航栏
+  - 中间文章列表
+  - 右侧文章内容
+- macOS 主内容切换已从淡入淡出改为直接 `IndexedStack`，避免点侧栏“垃圾拦截”等页面时出现两页叠加的过渡感。
+
+### 66.4 左侧订阅栏与折叠逻辑
+
+`lib/pages/main/widgets/macos_sidebar.dart` 当前新增并承载 macOS 左栏。
+
+已实现能力：
+
+- 顶部 `Auto Folo` 标题和收起按钮。
+- 左栏可整体收起为窄 rail，窄 rail 包含展开、全部文章、垃圾拦截、设置。
+- 全部文章、垃圾拦截、设置作为固定入口。
+- 订阅源按照 `SubscriptionsController.filteredNodes` 渲染 view/category/feed 树。
+- category/folder 支持折叠：
+  - key 形如 `cat:${viewNode.name}:${category.name}`
+  - 状态走 `SubscriptionsController.isExpanded/setExpanded`
+  - 搜索时或当前选中 feed 属于该 category 时强制展开
+  - category row 的 chevron 可展开/收起，双击 row 也可切换
+- feed row 显示 favicon、标题、未读角标。
+- category 和 feed 的未读数来自 `SubscriptionsController.unreadForCategory/unreadFor`。
+
+### 66.5 审核页入口与桌面交互
+
+问题背景：
+
+- 早期实现中，左侧栏点击“垃圾拦截”会进入 `IndexedStack` 里的审核 pane；
+- 时间线顶部的“AI 智能过滤”卡片仍然 `Get.toNamed(Routes.filterReview)` push 单独页面；
+- 用户指出这造成两个审核页面入口不一致，而且从卡片进入的独立页面没有桌面语境下的返回方式。
+
+当前决策与实现：
+
+- macOS 只保留“侧边栏审核 pane”这一种桌面审核 surface。
+- 移动端继续保留原有路由跳转，不影响手机端。
+- `TimelinePage` 新增 `onOpenFilterReview` 回调：
+  - macOS 且回调存在时，点击过滤卡片只调用回调切到 `_currentIndex=1`
+  - 否则仍 `Get.toNamed(Routes.filterReview)`
+- `MainPage._macPages` 通过 `onOpenFilterReview: () => _onDestinationSelected(1)` 合流入口。
+
+`FilterReviewPage` macOS 端也已改为桌面专用布局：
+
+- 移动端仍保留原来的 `Scaffold + AppBar + Dismissible + ArticleCard`。
+- macOS 不再把移动端页面嵌进桌面分栏。
+- macOS 审核页当前是：
+  - 左侧固定宽度审核队列（约 392px）
+  - 右侧文章预览 `ArticlePageView(isSplitView: true)`
+  - 顶部 header 显示“垃圾拦截”和待处理/判定中数量
+  - 行内显示标题、来源、过滤原因
+  - 右侧两个按钮：保留、移除
+- 审核按钮 tooltip 不能上下弹出，否则会遮挡另一个按钮。当前已改为自定义 `_SideTooltip`，悬停时优先在按钮右侧显示；空间不够时才回退到左侧。
+
+### 66.6 macOS 关闭行为与菜单
+
+当前权威实现不再依赖 Flutter 层用 `Focus` 抢 `Cmd+W/Cmd+Q`。
+
+原生侧文件：
+
+- `macos/Runner/AppDelegate.swift`
+- `macos/Runner/Base.lproj/MainMenu.xib`
+
+已实现：
+
+- `applicationShouldTerminateAfterLastWindowClosed` 返回 `false`：最后一个窗口关闭后 app 不退出。
+- `AppDelegate` 实现 `NSWindowDelegate`。
+- `windowShouldClose`：
+  - 如果正在 `Cmd+Q` / terminate，则允许关闭并退出；
+  - 否则 `sender.orderOut(nil)` 隐藏窗口，返回 `false`。
+- `applicationShouldHandleReopen`：点击 Dock 图标且没有可见窗口时，重新显示主窗口。
+- `MainMenu.xib` 里 Window 菜单新增 `Close`，快捷键 `Cmd+W`，selector 为 `performClose:`。
+- App 菜单原有 `Quit` 仍走 `terminate:`，快捷键 `Cmd+Q`，两者语义已经区分。
+
+### 66.7 Dock 角标与 AppIcon
+
+Dock 未读角标：
+
+- Dart 侧：`lib/common/widgets/app_badger.dart`
+- macOS 原生侧：`macos/Runner/AppDelegate.swift`
+- `TimelineController._updateAppBadge()` 中对 macOS 单独分支：
+  - macOS 固定显示所有未读文章数量；
+  - 不再受设置页原来的 `badge_strategy`（关闭/只红点/数字）影响；
+  - 未读数为 0 时清除角标。
+- Android 仍保留原来的 badge strategy，不受 macOS 改动影响。
+
+AppIcon：
+
+- 用户发现 macOS 图标和 Android 图标不一致。
+- Android 使用 `android/app/src/main/res/mipmap-*/ic_launcher.png`，视觉上有右下角翻页和蓝色元素。
+- macOS 初始 `app_icon_1024.png` 只是橙底白色 Folo 标志。
+- 已用项目内 `assets/icon.png` 作为源图，重新生成 macOS `AppIcon.appiconset` 全尺寸：
+  - `app_icon_16.png`
+  - `app_icon_32.png`
+  - `app_icon_64.png`
+  - `app_icon_128.png`
+  - `app_icon_256.png`
+  - `app_icon_512.png`
+  - `app_icon_1024.png`
+- 若 `flutter run -d macos` 仍显示旧图，优先判断为 macOS Dock/LaunchServices 图标缓存；构建产物 `Contents/Resources/AppIcon.icns` 已经验证为新图。
+
+### 66.8 macOS 左栏毛玻璃问题（未解决，后续重点）
+
+这是当前最重要的未解决 UI 问题之一。
+
+讨论与尝试：
+
+1. Flutter `BackdropFilter` 只能模糊 Flutter 自己绘制在其背后的内容，不能真正透出 macOS 桌面/后方窗口。
+2. Folo 桌面端是 Electron，它在 macOS 窗口配置中使用：
+   - `titleBarStyle: "hiddenInset"`
+   - `vibrancy: ...`
+   - `visualEffectState: ...`
+   - `transparent: true`
+   - renderer 层使用 `WindowUnderBlur` 和 `bg-material-*` 轻材质 token
+3. 我们尝试在 Flutter 左栏加更强 `BackdropFilter` 和灰色 tint，结果只是大块灰色，不是用户想要的透明/透背效果。
+4. 随后尝试在 `macos/Runner/MainFlutterWindow.swift` 插入 `NSVisualEffectView(material: .sidebar, blendingMode: .behindWindow)`，并设置窗口透明：
+   - `self.isOpaque = false`
+   - `self.backgroundColor = NSColor.clear`
+   - `self.titlebarAppearsTransparent = true`
+   - `self.styleMask.insert(.fullSizeContentView)`
+   - 将 `NSVisualEffectView` 放到 `FlutterViewController.view` 下层
+5. 但用户实测左侧仍是黑色，看不到透明效果。
+
+当前状态：
+
+- 该问题已明确记录，暂时不要继续盲改。
+- 后续需要系统排查：
+  - Flutter macOS view 是否仍以不透明 layer 覆盖 `NSVisualEffectView`
+  - `NSVisualEffectView` 是否插入在正确的 native view 层级
+  - `window_manager` 的 `backgroundColor: Colors.transparent` 是否与 `NSWindow` 透明设置冲突
+  - 是否需要改 `FlutterViewController.backgroundColor` / `FlutterView` layer opacity
+  - 是否需要把 `NSVisualEffectView` 作为 `contentView` 的底层 sibling，而不是加在 Flutter view 内部
+  - `NSVisualEffectView.material` 是否应换成 `.underWindowBackground`、`.hudWindow`、`.menu`、`.popover` 等
+  - 是否需要只让 Flutter 左侧区域完全透明，右侧内容区用实色容器遮住 native vibrancy
+- 用户说“先记录这个问题，晚点再考虑解决”，因此后续 agent 不要在没有明确要求时继续消耗时间。
+
+### 66.9 macOS 构建日志与 warning 处理
+
+用户贴过 `flutter clean && flutter run -d macos --release` 日志，结论：
+
+- 构建成功：`✓ Built build/macos/Build/Products/Release/autofolo.app`
+- 不是源码错误。
+
+已处理：
+
+- `dynamic_color` pod 报 `MACOSX_DEPLOYMENT_TARGET = 10.11`，但当前工具链支持 10.13+。
+- 已在 `macos/Podfile` 的 `post_install` 中给所有 pod target 强制：
+  - `config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.15'`
+- 重新 `flutter build macos --debug` 后该 warning 消失。
+
+仍可忽略/暂不处理：
+
+- `27 packages have newer versions incompatible with dependency constraints`
+  - 只是依赖有新版本。不要顺手全升；如果要升级，单独开依赖升级任务并做回归。
+- `video_player_avfoundation` 的 warning：
+  - `AVKeyValueStatus is deprecated`
+  - `createArgsCodec() has different optionality than expected by protocol`
+  - 这是第三方插件在新 Xcode/macOS SDK 下的 warning，不影响构建运行。
+  - 不建议修改 `.pub-cache`，等待插件更新或后续专门升级 video_player 相关依赖。
+- `Run script build phase 'Run Script' will be run during every build...`
+  - Flutter/Xcode 常见脚本阶段 warning，不影响运行。
+- `Running with merged UI and platform thread. Experimental.`
+  - Flutter macOS 运行时提示，不是错误。
+- `Waiting for another flutter command to release the startup lock...`
+  - Flutter 正在等待另一个命令释放锁。只要没有长期卡住即可。
+- 如出现 `build.db database is locked`：
+  - 说明同一 worktree 的 Xcode build database 被另一个 `flutter run/build` 或 `xcodebuild/SWBBuildService` 持有；
+  - 先 `Ctrl+C` 停掉旧命令；
+  - 必要时查 `lsof build/macos/Build/Intermediates.noindex/XCBuildData/build.db`；
+  - 不要误判为代码错误。
+
+### 66.10 当前验证记录
+
+本轮 macOS 适配过程中反复验证过：
+
+- `dart analyze lib test`：通过
+- `flutter test test/widget_test.dart`：通过
+- `flutter build macos --debug`：通过
+- `flutter run -d macos --release`：用户本地运行成功，release app 可启动
+
+注意：
+
+- 如果正在运行旧 app，重建后需要退出旧 app 再重新运行，UI 才会更新。
+- macOS Dock 图标可能受系统缓存影响，产物内 `AppIcon.icns` 才是判断资源是否正确的第一依据。
+
+### 66.11 当前改动涉及的主要文件
+
+macOS 原生：
+
+- `macos/Runner/AppDelegate.swift`
+- `macos/Runner/MainFlutterWindow.swift`
+- `macos/Runner/Base.lproj/MainMenu.xib`
+- `macos/Runner/Assets.xcassets/AppIcon.appiconset/*`
+- `macos/Podfile`
+- 以及 Flutter 自动生成/补齐的 macOS 工程文件。
+
+Flutter 侧：
+
+- `lib/main.dart`
+- `lib/pages/main/main_page.dart`
+- `lib/pages/main/widgets/macos_sidebar.dart`
+- `lib/pages/timeline/timeline_page.dart`
+- `lib/pages/timeline/timeline_controller.dart`
+- `lib/pages/timeline/filter_review_page.dart`
+- `lib/pages/widgets/article_card.dart`
+- `lib/pages/article/article_page.dart`
+- `lib/pages/article/widgets/image_gallery_page.dart`
+- `test/widget_test.dart`
+
+### 66.12 后续接手建议
+
+1. 若继续 macOS 左栏毛玻璃，先从原生 view 层级做最小实验，不要继续只调 Flutter `BackdropFilter` 颜色。
+2. 若整理代码质量，优先把 macOS-only UI 封装边界再收紧，避免 `Platform.isMacOS` 分支污染移动端。
+3. 若要提交，请先确认哪些 staged 改动来自同步/历史，哪些来自本轮 macOS 适配；当前 worktree 存在 staged + unstaged 混合状态。
+4. 不要随意清理 `stash@{0}`，除非用户确认当前状态已安全。
+5. 不要改 `~/dev` 主工作区。

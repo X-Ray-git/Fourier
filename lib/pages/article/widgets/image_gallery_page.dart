@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../common/widgets/feedback_toast.dart';
@@ -238,13 +239,33 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
 
   Future<void> _saveImage(String url) async {
     try {
-      final status = await Permission.storage.request();
-      if (!status.isGranted) {
-        AppFeedback.warning('权限不足', '请授予存储权限后重试');
+      final bytes = await _downloadBytes(url);
+      if (bytes == null) {
+        AppFeedback.error('保存失败', '无法下载图片数据');
         return;
       }
-      final bytes = await _downloadBytes(url);
-      if (bytes != null) {
+
+      if (Platform.isMacOS) {
+        final ext = url.split('.').last.split('?').first;
+        final extension = ext.isEmpty || ext.length > 4 ? 'jpg' : ext;
+        final fileName =
+            'folo_image_${DateTime.now().millisecondsSinceEpoch}.$extension';
+
+        final FileSaveLocation? result = await getSaveLocation(
+          suggestedName: fileName,
+        );
+        if (result != null) {
+          final file = File(result.path);
+          await file.writeAsBytes(bytes);
+          AppFeedback.success('已保存', '图片已保存到本地');
+        }
+      } else {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          AppFeedback.warning('权限不足', '请授予存储权限后重试');
+          return;
+        }
+
         final result = await ImageGallerySaverPlus.saveImage(bytes);
         if (result != null && result['isSuccess'] == true) {
           AppFeedback.success('已保存', '图片已保存到相册');

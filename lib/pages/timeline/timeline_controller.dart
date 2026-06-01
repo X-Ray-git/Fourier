@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
@@ -27,6 +28,9 @@ class TimelineController extends GetxController {
   final articles = <ArticleModel>[].obs;
   final allArticles = <ArticleModel>[].obs;
   final selectedMode = TimelineViewMode.unread.obs;
+  final selectedArticle = Rxn<ArticleModel>();
+  final selectedFeedId = RxnString();
+  final selectedCategory = RxnString();
   final filterCount = 0.obs;
 
   String? _cursor;
@@ -42,7 +46,15 @@ class TimelineController extends GetxController {
   void onInit() {
     super.onInit();
     ever(allArticles, (_) => _updateAppBadge());
-    
+    ever(selectedFeedId, (_) {
+      _applyFilter();
+      selectedArticle.value = null;
+    });
+    ever(selectedCategory, (_) {
+      _applyFilter();
+      selectedArticle.value = null;
+    });
+
     // 监听全局文章状态变更，精准更新内存数据，保持 UI 同步（如 AI 过滤拦截数）
     ever(ArticleStateNotifier.version, (_) {
       final entryId = ArticleStateNotifier.lastEntryId;
@@ -103,20 +115,9 @@ class TimelineController extends GetxController {
     }
 
     final results = await Future.wait([
-      FeedHttp.collectEntries(
-        view: 0,
-        withContent: true,
-        feedMap: _feedMap,
-      ),
-      FeedHttp.collectEntries(
-        view: 1,
-        withContent: true,
-        feedMap: _feedMap,
-      ),
-      FeedHttp.collectAllInboxEntries(
-        limit: 100,
-        withContent: true,
-      ),
+      FeedHttp.collectEntries(view: 0, withContent: true, feedMap: _feedMap),
+      FeedHttp.collectEntries(view: 1, withContent: true, feedMap: _feedMap),
+      FeedHttp.collectAllInboxEntries(limit: 100, withContent: true),
     ]);
 
     final feedsResult = results[0];
@@ -153,8 +154,12 @@ class TimelineController extends GetxController {
     final socialOk = socialResult is Success<List<ArticleModel>>;
     final inboxOk = inboxResult is Success<List<ArticleModel>>;
 
-    _applyUnreadSnapshot(unreadData,
-        feedsOk: feedsOk, socialOk: socialOk, inboxOk: inboxOk);
+    _applyUnreadSnapshot(
+      unreadData,
+      feedsOk: feedsOk,
+      socialOk: socialOk,
+      inboxOk: inboxOk,
+    );
     _loadFromLocalDatabase();
 
     loadingState.value = Success(articles.toList());
@@ -178,8 +183,12 @@ class TimelineController extends GetxController {
     return AppConstants.defaultReadSyncWindowDays;
   }
 
-  void _applyUnreadSnapshot(List<ArticleModel> unreadData,
-      {bool feedsOk = true, bool socialOk = true, bool inboxOk = true}) {
+  void _applyUnreadSnapshot(
+    List<ArticleModel> unreadData, {
+    bool feedsOk = true,
+    bool socialOk = true,
+    bool inboxOk = true,
+  }) {
     final unreadIds = unreadData.map((a) => a.entryId).toSet();
     final localArticles = LocalArticleDbService.readAllArticles();
 
@@ -190,7 +199,9 @@ class TimelineController extends GetxController {
       if (local.category == 'inbox' && !inboxOk) continue;
       if (local.category == 'social' && !socialOk) continue;
       // feeds 文章：feeds API 是主数据源，失败则跳过
-      if (!feedsOk && local.category != 'inbox' && local.category != 'social') continue;
+      if (!feedsOk && local.category != 'inbox' && local.category != 'social') {
+        continue;
+      }
 
       final localOverride = LocalArticleDbService.readOverrideOf(local.entryId);
       if (localOverride == false) {
@@ -270,7 +281,10 @@ class TimelineController extends GetxController {
         return;
       }
 
-      LocalArticleDbService.upsertMany(windowedReadData, defaultReadState: true);
+      LocalArticleDbService.upsertMany(
+        windowedReadData,
+        defaultReadState: true,
+      );
       _loadFromLocalDatabase();
 
       final earliest = windowedReadData
@@ -352,8 +366,18 @@ class TimelineController extends GetxController {
   int get unreadCount => allArticles.where((a) => !a.isRead).length;
   int get readCount => allArticles.where((a) => a.isRead).length;
   int get allCount => allArticles.length;
-  
+
   void _updateAppBadge() {
+    if (Platform.isMacOS) {
+      final unread = unreadCount;
+      if (unread == 0) {
+        AppBadger.removeBadge();
+      } else {
+        AppBadger.updateBadgeCount(unread);
+      }
+      return;
+    }
+
     final strategy = GStorage.setting.get(
       StorageKeys.badgeStrategy,
       defaultValue: 'unread_count',
@@ -362,7 +386,7 @@ class TimelineController extends GetxController {
       AppBadger.removeBadge();
       return;
     }
-    
+
     final unread = unreadCount;
     if (unread == 0) {
       AppBadger.removeBadge();
@@ -374,6 +398,7 @@ class TimelineController extends GetxController {
       }
     }
   }
+
   List<ArticleModel> get searchSourceArticles => allArticles;
   String get emptyMessage => switch (selectedMode.value) {
     TimelineViewMode.unread => '没有未读文章',
@@ -402,7 +427,15 @@ class TimelineController extends GetxController {
 
   void _applyFilter() {
     final mode = selectedMode.value;
-    final source = allArticles;
+    final feedId = selectedFeedId.value;
+    final category = selectedCategory.value;
+
+    final source = allArticles.where((a) {
+      if (feedId != null && a.feedId != feedId) return false;
+      if (category != null && a.displayCategory != category) return false;
+      return true;
+    });
+
     final filtered = switch (mode) {
       TimelineViewMode.unread => source.where((a) => !a.isRead).toList(),
       TimelineViewMode.read => source.where((a) => a.isRead).toList(),
@@ -426,12 +459,14 @@ class TimelineController extends GetxController {
     final raw = GStorage.articleDb.get(entryId);
     if (raw is! Map) return;
 
-    final updatedFromDb = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
-    
+    final updatedFromDb = ArticleModel.fromCache(
+      Map<String, dynamic>.from(raw),
+    );
+
     // 保护可能尚未同步到 DB 的本地“已读”状态
     final localOverride = GStorage.readStatus.get(entryId);
     final mergedRead = localOverride == true ? true : updatedFromDb.isRead;
-    
+
     final finalUpdated = ArticleModel(
       entryId: updatedFromDb.entryId,
       feedId: updatedFromDb.feedId,
@@ -486,6 +521,12 @@ class TimelineController extends GetxController {
     allArticles.refresh();
     _applyFilter();
     _updateFilterCount();
+
+    // Update selectedArticle if it was modified
+    if (selectedArticle.value?.entryId == entryId) {
+      selectedArticle.value = updated;
+    }
+
     loadingState.value = Success(articles.toList());
   }
 

@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
@@ -20,6 +21,7 @@ class ArticleCard extends StatefulWidget {
   final VoidCallback? onTranslate;
   final bool showFeedTitle;
   final bool showSummary;
+  final bool isSelected;
 
   const ArticleCard({
     super.key,
@@ -28,6 +30,7 @@ class ArticleCard extends StatefulWidget {
     this.onTranslate,
     this.showFeedTitle = true,
     this.showSummary = false,
+    this.isSelected = false,
   });
 
   @override
@@ -58,6 +61,7 @@ class _ArticleCardState extends State<ArticleCard> {
       showFeedTitle: widget.showFeedTitle,
       showSummary: widget.showSummary,
       isTranslated: _isTranslated,
+      isSelected: widget.isSelected,
       onTranslateSuccess: _onTranslateSuccess,
     );
   }
@@ -70,6 +74,7 @@ class _ArticleCardContent extends StatelessWidget {
   final bool showFeedTitle;
   final bool showSummary;
   final bool isTranslated;
+  final bool isSelected;
   final VoidCallback? onTranslateSuccess;
 
   const _ArticleCardContent({
@@ -79,6 +84,7 @@ class _ArticleCardContent extends StatelessWidget {
     required this.showFeedTitle,
     required this.showSummary,
     required this.isTranslated,
+    required this.isSelected,
     this.onTranslateSuccess,
   });
 
@@ -99,274 +105,304 @@ class _ArticleCardContent extends StatelessWidget {
 
       return RepaintBoundary(
         child: Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          margin: EdgeInsets.symmetric(
+            horizontal: Platform.isMacOS ? 8 : 12,
+            vertical: Platform.isMacOS ? 2 : 6,
+          ),
           clipBehavior: Clip.antiAlias, // 确保内部带色条的 Container 会被完美裁切圆角
           elevation: 0,
+          color: isSelected
+              ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+              : (Platform.isMacOS ? Colors.transparent : null),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-              width: 1,
-            ),
+            borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
+            side: Platform.isMacOS && !isSelected
+                ? BorderSide.none
+                : BorderSide(
+                    color: isSelected
+                        ? colorScheme.primary.withValues(alpha: 0.5)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.35),
+                    width: 1,
+                  ),
           ),
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: () =>
-                _showTranslateMenu(context, isTranslated, isPending),
-            child: Container(
-              // 将 AI 拒文左侧色条移至 InkWell 内部，水波纹现在可正常覆盖全卡片
-              decoration: article.isRejectedByAi
-                  ? BoxDecoration(
-                      border: Border(
-                        left: BorderSide(color: colorScheme.primary, width: 4),
-                      ),
-                    )
-                  : null,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // AI 拒文标记优化显示
-                  if (article.isRejectedByAi && article.filterReason != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withValues(
-                            alpha: 0.4,
-                          ),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: colorScheme.primary.withValues(alpha: 0.15),
+          child: GestureDetector(
+            onSecondaryTapDown: Platform.isMacOS
+                ? (details) {
+                    _showMacOSContextMenu(
+                      context,
+                      details.globalPosition,
+                      isTranslated,
+                      isPending,
+                    );
+                  }
+                : null,
+            child: InkWell(
+              onTap: onTap,
+              onLongPress: Platform.isMacOS
+                  ? null
+                  : () => _showTranslateMenu(context, isTranslated, isPending),
+              child: Container(
+                // 将 AI 拒文左侧色条移至 InkWell 内部，水波纹现在可正常覆盖全卡片
+                decoration: article.isRejectedByAi
+                    ? BoxDecoration(
+                        border: Border(
+                          left: BorderSide(
+                            color: colorScheme.primary,
+                            width: 4,
                           ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 14,
-                              color: colorScheme.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                article.filterReason!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.primary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        // 使用 Text.rich 和 WidgetSpan 确保红点与文字第一行绝对对齐，不受字体缩放影响
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              if (!article.isRead)
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 6),
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primary,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              TextSpan(
-                                text: displayTitle,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  height: 1.4,
-                                  fontWeight: article.isRead
-                                      ? FontWeight.w400
-                                      : FontWeight.w600,
-                                  color: article.isRead
-                                      ? colorScheme.onSurface.withValues(
-                                          alpha: 0.7,
-                                        )
-                                      : colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      // 翻译状态标签，移除了生硬的透明度叠加，改用规范的 Material 颜色
-                      if (isPending) ...[
-                        const SizedBox(width: 8),
-                        Container(
+                      )
+                    : null,
+                padding: EdgeInsets.all(Platform.isMacOS ? 12 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // AI 拒文标记优化显示
+                    if (article.isRejectedByAi && article.filterReason != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 10,
-                                height: 10,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '翻译中',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ] else if (isTranslated) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
                             color: colorScheme.primaryContainer.withValues(
                               alpha: 0.4,
                             ),
                             borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Tooltip(
-                            message: '已翻译',
-                            child: Icon(
-                              Icons.translate,
-                              size: 16,
-                              color: colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (article.author != null && article.author!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      article.author!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (showSummary)
-                    _buildSummaryBlock(colorScheme, article.entryId),
-                  const SizedBox(height: 12),
-                  // 底部元信息区域重构：放弃 Wrap 与硬编码宽度，改用 Row + Flexible，保证时间永不换行
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              flex: 0,
-                              child: PillTag(
-                                label: viewLabel,
-                                backgroundColor: viewColor.withValues(
-                                  alpha: 0.14,
-                                ),
-                                foregroundColor: viewColor,
+                            border: Border.all(
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.15,
                               ),
                             ),
-                            if (categoryLabel.isNotEmpty) ...[
-                              const SizedBox(width: 6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome,
+                                size: 14,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
                               Flexible(
-                                flex: 0,
-                                child: PillTag(
-                                  label: categoryLabel,
-                                  backgroundColor:
-                                      colorScheme.surfaceContainerHighest,
-                                  foregroundColor: colorScheme.onSurfaceVariant,
+                                child: Text(
+                                  article.filterReason!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.primary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.6,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          // 使用 Text.rich 和 WidgetSpan 确保红点与文字第一行绝对对齐，不受字体缩放影响
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                if (!article.isRead)
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                TextSpan(
+                                  text: displayTitle,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.4,
+                                    fontWeight: article.isRead
+                                        ? FontWeight.w400
+                                        : FontWeight.w600,
+                                    color: article.isRead
+                                        ? colorScheme.onSurface.withValues(
+                                            alpha: 0.7,
+                                          )
+                                        : colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        // 翻译状态标签，移除了生硬的透明度叠加，改用规范的 Material 颜色
+                        if (isPending) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '翻译中',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatTime(article.publishedAt),
-                            style: TextStyle(
-                              fontSize: 12,
+                        ] else if (isTranslated) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer.withValues(
+                                alpha: 0.4,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Tooltip(
+                              message: '已翻译',
+                              child: Icon(
+                                Icons.translate,
+                                size: 16,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (article.author != null &&
+                        article.author!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        article.author!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (showSummary)
+                      _buildSummaryBlock(colorScheme, article.entryId),
+                    const SizedBox(height: 12),
+                    // 底部元信息区域重构：放弃 Wrap 与硬编码宽度，改用 Row + Flexible，保证时间永不换行
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                flex: 0,
+                                child: PillTag(
+                                  label: viewLabel,
+                                  backgroundColor: viewColor.withValues(
+                                    alpha: 0.14,
+                                  ),
+                                  foregroundColor: viewColor,
+                                ),
+                              ),
+                              if (categoryLabel.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  flex: 0,
+                                  child: PillTag(
+                                    label: categoryLabel,
+                                    backgroundColor:
+                                        colorScheme.surfaceContainerHighest,
+                                    foregroundColor:
+                                        colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
                               color: colorScheme.onSurfaceVariant.withValues(
                                 alpha: 0.6,
                               ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTime(article.publishedAt),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    if (showFeedTitle) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _FeedIcon(imageUrl: article.feedImage, size: 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              article.feedTitle,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
                     ],
-                  ),
-                  if (showFeedTitle) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _FeedIcon(imageUrl: article.feedImage, size: 14),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            article.feedTitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.8,
-                              ),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -463,7 +499,7 @@ class _ArticleCardContent extends StatelessWidget {
     );
   }
 
-  Future<void> _translateArticle(BuildContext context) async {
+  Future<void> _translateArticle() async {
     try {
       await TranslationService.translateArticle(article);
       AppFeedback.success('翻译完成', '已生成文章译文');
@@ -510,7 +546,7 @@ class _ArticleCardContent extends StatelessWidget {
                     ? null
                     : () {
                         Navigator.pop(context);
-                        _translateArticle(context);
+                        _translateArticle();
                       },
               ),
               if (isTranslated) ...[
@@ -532,6 +568,64 @@ class _ArticleCardContent extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _showMacOSContextMenu(
+    BuildContext context,
+    Offset position,
+    bool isTranslated,
+    bool isPending,
+  ) async {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'translate',
+          enabled: !isPending,
+          child: Row(
+            children: [
+              isPending
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.primary,
+                      ),
+                    )
+                  : Icon(Icons.translate, size: 18, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(isPending ? '翻译中...' : (isTranslated ? '重新翻译' : '翻译文章')),
+            ],
+          ),
+        ),
+        if (isTranslated)
+          PopupMenuItem(
+            value: 'delete_translation',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
+                const SizedBox(width: 8),
+                Text('删除翻译', style: TextStyle(color: colorScheme.error)),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    if (result == 'translate') {
+      _translateArticle();
+    } else if (result == 'delete_translation') {
+      TranslationService.deleteTranslation(article.entryId);
+    }
   }
 
   String _formatTime(String isoTime) {

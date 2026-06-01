@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -8,6 +10,7 @@ import '../../services/article_state_notifier.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../utils/storage.dart';
+import '../article/article_page.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
 
@@ -20,6 +23,7 @@ class FilterReviewPage extends StatefulWidget {
 
 class _FilterReviewPageState extends State<FilterReviewPage> {
   final _articles = <ArticleModel>[].obs;
+  final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
 
   @override
@@ -84,6 +88,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       }
     }
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
+    if (_selectedArticle.value?.entryId == article.entryId) {
+      _selectedArticle.value = null;
+    }
   }
 
   void _reject(ArticleModel article) {
@@ -119,12 +126,23 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     );
     ArticleStateNotifier.tick(article.entryId);
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
+    if (_selectedArticle.value?.entryId == article.entryId) {
+      _selectedArticle.value = null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    if (Platform.isMacOS) {
+      return _buildMacOSLayout(context, cs);
+    }
+
+    return _buildMobileScaffold(context, cs);
+  }
+
+  Widget _buildMobileScaffold(BuildContext context, ColorScheme cs) {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -287,20 +305,30 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                               ),
                             ),
                           ),
-                          child: ArticleCard(
-                            article: article,
-                            showFeedTitle: true,
-                            showSummary: true,
-                            onTap: () {
-                              Get.toNamed(
-                                Routes.article,
-                                arguments: {
-                                  'article': article,
-                                  'sequence': _articles,
-                                  'index': index,
-                                },
-                              );
-                            },
+                          child: Obx(
+                            () => ArticleCard(
+                              article: article,
+                              isSelected:
+                                  Platform.isMacOS &&
+                                  _selectedArticle.value?.entryId ==
+                                      article.entryId,
+                              showFeedTitle: true,
+                              showSummary: true,
+                              onTap: () {
+                                if (Platform.isMacOS) {
+                                  _selectedArticle.value = article;
+                                } else {
+                                  Get.toNamed(
+                                    Routes.article,
+                                    arguments: {
+                                      'article': article,
+                                      'sequence': _articles,
+                                      'index': index,
+                                    },
+                                  );
+                                }
+                              },
+                            ),
                           ),
                         );
                       },
@@ -309,6 +337,90 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
           ],
         );
       }),
+    );
+  }
+
+  Widget _buildMacOSLayout(BuildContext context, ColorScheme cs) {
+    return ColoredBox(
+      color: cs.surface,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 392,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MacReviewHeader(articles: _articles, colorScheme: cs),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: cs.outlineVariant.withValues(alpha: 0.35),
+                ),
+                Expanded(
+                  child: Obx(() {
+                    final q = AutoFilterWorker.queuedCount.value;
+                    final p = AutoFilterWorker.processingCount.value;
+                    final llmActive = q > 0 || p > 0;
+
+                    if (_articles.isEmpty) {
+                      return _buildEmptyState(
+                        cs,
+                        llmActive: llmActive,
+                        llmCount: q + p,
+                      );
+                    }
+
+                    return ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
+                      itemCount: _articles.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 4),
+                      itemBuilder: (context, index) {
+                        final article = _articles[index];
+                        return Obx(() {
+                          final selected =
+                              _selectedArticle.value?.entryId ==
+                              article.entryId;
+                          return _MacReviewRow(
+                            article: article,
+                            selected: selected,
+                            onTap: () => _selectedArticle.value = article,
+                            onKeep: () => _keep(article),
+                            onReject: () => _reject(article),
+                          );
+                        });
+                      },
+                    );
+                  }),
+                ),
+              ],
+            ),
+          ),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.35),
+          ),
+          Expanded(
+            child: Obx(() {
+              final selected = _selectedArticle.value;
+              if (selected == null) {
+                return Center(
+                  child: Text(
+                    '未选择文章',
+                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                  ),
+                );
+              }
+              return ArticlePageView(
+                key: ValueKey(selected.entryId),
+                article: selected,
+                isSplitView: true,
+              );
+            }),
+          ),
+        ],
+      ),
     );
   }
 
@@ -363,6 +475,286 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MacReviewHeader extends StatelessWidget {
+  final RxList<ArticleModel> articles;
+  final ColorScheme colorScheme;
+
+  const _MacReviewHeader({required this.articles, required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 62,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 7, 14, 7),
+        child: Obx(() {
+          final humanCount = articles.length;
+          final q = AutoFilterWorker.queuedCount.value;
+          final p = AutoFilterWorker.processingCount.value;
+          final llmActive = q > 0 || p > 0;
+          final llmCount = q + p;
+
+          return Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 18, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '垃圾拦截',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.15,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      llmActive
+                          ? '$humanCount 篇待处理 · $llmCount 篇判定中'
+                          : humanCount == 0
+                          ? '全部处理完毕'
+                          : '$humanCount 篇待处理',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.15,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (llmActive)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _MacReviewRow extends StatelessWidget {
+  final ArticleModel article;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onKeep;
+  final VoidCallback onReject;
+
+  const _MacReviewRow({
+    required this.article,
+    required this.selected,
+    required this.onTap,
+    required this.onKeep,
+    required this.onReject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final feedTitle = article.feedTitle == '?' ? '未知来源' : article.feedTitle;
+    final reason = article.filterReason?.trim();
+
+    return Material(
+      color: selected
+          ? cs.primaryContainer.withValues(alpha: 0.58)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      article.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.3,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        color: selected ? cs.primary : cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      feedTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    if (reason != null && reason.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        reason,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.35,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.82),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                children: [
+                  _SideTooltip(
+                    message: '保留',
+                    child: IconButton(
+                      icon: const Icon(Icons.restore_rounded),
+                      iconSize: 18,
+                      visualDensity: VisualDensity.compact,
+                      color: const Color(0xFF10B981),
+                      onPressed: onKeep,
+                    ),
+                  ),
+                  _SideTooltip(
+                    message: '移除',
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                      iconSize: 18,
+                      visualDensity: VisualDensity.compact,
+                      color: cs.error,
+                      onPressed: onReject,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SideTooltip extends StatefulWidget {
+  final String message;
+  final Widget child;
+
+  const _SideTooltip({required this.message, required this.child});
+
+  @override
+  State<_SideTooltip> createState() => _SideTooltipState();
+}
+
+class _SideTooltipState extends State<_SideTooltip> {
+  OverlayEntry? _entry;
+
+  void _show() {
+    if (_entry != null) return;
+
+    final target = context.findRenderObject();
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (target is! RenderBox || overlay is! RenderBox) return;
+
+    final targetOffset = target.localToGlobal(Offset.zero, ancestor: overlay);
+    final targetSize = target.size;
+    final top = (targetOffset.dy + targetSize.height / 2 - 16).clamp(
+      8.0,
+      overlay.size.height - 40.0,
+    );
+    final rightSide = targetOffset.dx + targetSize.width + 8;
+    final left = rightSide + 72 < overlay.size.width
+        ? rightSide
+        : targetOffset.dx - 72;
+
+    _entry = OverlayEntry(
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return Positioned(
+          left: left,
+          top: top,
+          child: IgnorePointer(
+            child: Material(
+              color: Colors.transparent,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: cs.inverseSurface.withValues(alpha: 0.96),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.20),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Text(
+                    widget.message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onInverseSurface,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context).insert(_entry!);
+  }
+
+  void _hide() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  @override
+  void dispose() {
+    _hide();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => _show(),
+      onExit: (_) => _hide(),
+      child: widget.child,
     );
   }
 }

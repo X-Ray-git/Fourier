@@ -64,6 +64,8 @@ dependencies:
   # 视频播放
   video_player: ^2.9.5
   vector_math: ^2.2.0
+  window_manager: ^0.5.1
+  file_selector: ^1.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

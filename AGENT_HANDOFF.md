@@ -136,6 +136,25 @@ flutter build macos --debug
 
 9. 如果 main 侧还保留旧 README/AGENT_HANDOFF 结构，请优先把本节放到文档顶部，避免后续 agent 只读旧上下文。
 
+## 2026-06-01 追加修复：macOS 快捷键双重触发、刷新动画与未读计数
+
+### 本次反馈问题与修复总结
+
+1. **左右快捷键“两个两个跳动” (双重触发 bug)**
+   - **原因**：之前的修改在 macOS 分栏模式中增加了全局 `HardwareKeyboard` 监听，但未完全禁用 `ArticlePageView` 内部 `Focus` 节点上的同级监听。当按下方向键时，两个监听器可能同时捕获事件，导致切换下一篇的操作被瞬间执行了两次。
+   - **修复**：在 `lib/pages/article/article_page.dart` 中增加判断逻辑：当启用了全局键盘监听（`_usesGlobalShortcuts`）时，`Focus` 节点的 `onKeyEvent` 会直接返回 `KeyEventResult.ignored`，从而避免重复触发。
+
+2. **左侧边栏未读气泡数量不准确 (点开一篇已读文章会减2)**
+   - **原因**：此问题与上述双重触发 Bug 紧密相关。由于方向键双重触发，文章状态（已读）的 `tick` 事件被连续调用两次。而 `SubscriptionsController.refreshUnreadCounts` 之前采用的是基于事件的“盲目增量计算”（即：如果收到一篇文章更新且它是已读状态，未读数就无脑 `-1`）。这导致一篇文章被点开时，未读数错误地减去了 2。
+   - **修复**：彻底废弃了脆弱的 `-1/+1` 增量计算逻辑。修改 `lib/pages/subscriptions/subscriptions_controller.dart`，当收到增量更新事件时，直接在内存的 `GStorage.articleDb` Map 中遍历该源（`feedId`）的所有文章，重新精准统计一次真实的未读文章总数，杜绝了多次调用导致的数据漂移问题。
+
+3. **刷新按钮旋转方向反了**
+   - **原因**：原先 `RotationTransition` 默认顺时针旋转，但 `Icons.sync` 图标的箭头在视觉上指示的是逆时针循环，这导致按钮看起来像是在“倒转”。
+   - **修复**：在 `lib/pages/timeline/timeline_page.dart` 中，将 `turns: _spinController` 修改为 `turns: ReverseAnimation(_spinController)`，实现视觉上的顺向旋转。
+
+4. **文章内可点击链接希望改为手型光标暗示（搁置）**
+   - **技术讨论与放弃原因**：目前的 HTML 渲染库 `flutter_html: ^3.0.0-beta.2` 在将 `<a>` 标签转为 `TextSpan` 时，未开放 `mouseCursor` 属性注入。叠加外层的 `SelectionArea`（强制为所有未指定光标的文本添加 I 字形选择光标），导致系统不会将链接渲染为手型。如果使用 `flutter_html` 的拦截器将链接替换为原生组件，会破坏 Flutter 中内联文本的排版特性，造成长链接无法自动换行。经过权衡后，我们决定不采用会导致严重排版破坏的妥协方案，保留了可以复制文本但无手型暗示的现状。后续彻底解决建议等待 `flutter_html` 库底层更新或进行定制 Patch。
+
 ## 项目速览
 
 **工程目标**：构建高密度、低摩擦的 Folo RSS 阅读器，兼顾 Android 移动端与 macOS 分栏阅读体验。

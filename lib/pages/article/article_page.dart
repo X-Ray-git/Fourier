@@ -1159,6 +1159,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ? Focus(
             autofocus: true,
             onKeyEvent: (node, event) {
+              if (_usesGlobalShortcuts) {
+                return KeyEventResult.ignored;
+              }
+
               if (event is! KeyDownEvent) {
                 return KeyEventResult.ignored;
               }

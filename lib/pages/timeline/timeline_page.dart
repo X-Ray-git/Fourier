@@ -769,7 +769,7 @@ class _MacSyncButtonState extends State<_MacSyncButton>
     final cs = widget.colorScheme;
     return IconButton(
       icon: RotationTransition(
-        turns: _spinController,
+        turns: ReverseAnimation(_spinController),
         child: Icon(
           Icons.sync,
           size: 20,

@@ -2,7 +2,6 @@ import 'package:get/get.dart';
 
 import '../../http/feed_http.dart';
 import '../../http/init.dart';
-import '../../models/article.dart';
 import '../../models/feed.dart';
 import '../../services/account_service.dart';
 import '../../services/article_state_notifier.dart';
@@ -114,17 +113,23 @@ class SubscriptionsController extends GetxController {
     if (eid != null) {
       // 消费后立刻清除，防止后续调用永远走增量路径
       ArticleStateNotifier.clearLastEntryId();
-      // 增量：只更新单篇对应的 feedId 计数
       final raw = GStorage.articleDb.get(eid);
       if (raw is Map) {
-        final a = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
-        if (!a.isRead && !a.isRejectedByAi && a.feedId.isNotEmpty) {
-          _unreadCounts[a.feedId] = (_unreadCounts[a.feedId] ?? 0) + 1;
-        } else if ((a.isRead || a.isRejectedByAi) && a.feedId.isNotEmpty) {
-          final prev = _unreadCounts[a.feedId] ?? 0;
-          if (prev > 0) _unreadCounts[a.feedId] = prev - 1;
+        final feedId = raw['feedId'] as String?;
+        if (feedId != null && feedId.isNotEmpty) {
+          int count = 0;
+          for (final item in GStorage.articleDb.values) {
+            if (item is Map) {
+              if (item['feedId'] == feedId &&
+                  item['isRead'] != true &&
+                  item['isRejectedByAi'] != true) {
+                count++;
+              }
+            }
+          }
+          _unreadCounts[feedId] = count;
+          _unreadCounts.refresh();
         }
-        _unreadCounts.refresh();
       }
       return;
     }

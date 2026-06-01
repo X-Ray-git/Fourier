@@ -2,158 +2,7 @@
 
 > **快速上手**：Flutter 3.x + GetX + Hive + Dio 项目。入口 `lib/main.dart`，路由 `lib/router/app_pages.dart`。
 > 当前产品名统一为 **Auto Folo**；Dart package 名仍是 `autofolo`。验证优先使用 `flutter analyze` 与 `flutter test`，不要用裸 `dart analyze lib/` 判断 Flutter 项目健康度。
-> 常用构建：`flutter build apk --debug`、`flutter build macos --debug`。
-
-## 2026-06-01 交接重点：快捷键、同步反馈、品牌统一、审核页已读同步
-
-### 用户本次反馈的原始问题
-
-1. macOS 分栏阅读里，`←` / `→` 方向键没有稳定切换文章，而是会框选/聚焦不同的图标元素。
-2. `M` 标已读必须先点文章卡片、再点文章正文才能生效；快捷键依赖焦点，体验不符合预期。
-3. 时间线同步按钮点击后没有动画或确认感。
-4. README 与当前功能不一致，需要同步更新，最好把图标也放上去。
-5. 为了统一性，软件展示名应考虑改为 `Auto Folo`；工程目录名是否也应修改需要给出建议。
-6. 进一步反馈：其他设备上已标为已读的文章，时间线未读列表已经能挪出，但“垃圾拦截/审核页”仍然显示这些文章；气泡计数已经减少，但审核页列表和“xx 篇待处理”没有同步变化。
-
-### 已做修改
-
-#### 1. macOS 阅读快捷键修复
-
-文件：`lib/pages/article/article_page.dart`
-
-- 在 `ArticlePageView` 的 macOS 分栏场景中增加 `HardwareKeyboard.instance.addHandler`。
-- 快捷键只在 `widget.isSplitView == true` 时启用全局硬件键盘处理，避免影响普通文章页或移动端。
-- 处理逻辑：
-  - `←` 调用 `widget.onPrevious`
-  - `→` 调用 `widget.onNext`
-  - `M` 在未更新中时切换已读/未读
-  - `Esc` 关闭当前文章
-- 忽略带 `Alt` / `Control` / `Meta` 的组合键，避免吞掉系统或应用菜单快捷键。
-- 保留原来的 `Focus.onKeyEvent` 作为局部兜底，但真正解决焦点被正文、按钮、图标拿走的问题依赖全局 handler。
-
-设计原因：
-
-- 原实现把快捷键挂在文章页的 `Focus` 上，正文里的 `SelectionArea`、工具栏按钮和其他可聚焦元素会抢走焦点。
-- 用户看到的“方向键框选不同图标元素”，本质是 Flutter 焦点遍历先消费了方向键。
-- 使用硬件键盘 handler 可以让文章分栏处于打开状态时始终获得这些阅读快捷键，不再要求用户点中正文。
-
-#### 2. macOS 同步按钮反馈
-
-文件：`lib/pages/timeline/timeline_page.dart`
-
-- 将 `_MacTimelineAppBar` 里的同步 `IconButton` 替换为 `_MacSyncButton`。
-- `_MacSyncButton` 使用 `AnimationController` + `RotationTransition`，点击后图标旋转并显示“同步中”tooltip。
-- 同步期间按钮禁用，避免重复触发。
-- 增加 450ms 最短反馈窗口：即使同步很快返回，用户也能看到明确点击确认感。
-
-#### 3. 品牌名统一为 Auto Folo
-
-涉及文件：
-
-- `lib/common/constants/constants.dart`：`AppConstants.appName = 'Auto Folo'`
-- `lib/main.dart`：入口类由 `FoloReaderApp` 改为 `AutoFoloApp`
-- `test/widget_test.dart`：同步测试类名
-- `lib/http/init.dart`：`X-App-Name` 改为 `Auto Folo`，`X-App-Version` 改为 `1.1.0`
-- `lib/pages/settings/settings_page.dart`：关于页显示 `Auto Folo v1.1.0`，说明改为支持 Android 和 macOS
-- `macos/Runner/Configs/AppInfo.xcconfig`：`PRODUCT_NAME = Auto Folo`
-- `macos/Runner.xcodeproj/project.pbxproj` 与 `Runner.xcscheme`：macOS 产物名同步为 `Auto Folo.app`
-
-未改动但需要理解：
-
-- `pubspec.yaml` 的 package name 仍是 `autofolo`。这是 Dart 包名，不能有空格，保持不变是正确的。
-- Bundle id / method channel 仍保留 `com.folo.autofolo`，避免破坏已有本地数据、平台通道和已安装应用升级路径。
-- HTTP header 的 `X-App-Platform` 目前仍是 `mobile/android`。这是既有行为，本次没有改平台识别逻辑；如果未来要严格区分 macOS，需要单独评估服务端兼容性。
-
-#### 4. README 更新
-
-文件：`README.md`
-
-- 标题改为 `Auto Folo — Folo RSS 信息流阅读器`。
-- 顶部加入 `assets/icon.png` 图标。
-- 移除 Android-only 描述，改为支持 Android 和 macOS。
-- 功能矩阵补充 macOS 分栏阅读、桌面快捷键和同步反馈。
-- 快速开始补充 `flutter run -d macos`。
-
-#### 5. 审核页跟随其他设备已读状态
-
-文件：`lib/pages/timeline/filter_review_page.dart`
-
-- 审核页原先只在打开时 `_loadArticles()` 一次，并只监听 `AutoFilterWorker.onRejected` 新增拦截项。
-- 时间线同步会更新 `TimelineController.filterCount`，所以气泡计数能减少；但审核页自己的 `_articles` 没有重新对齐，导致页面列表和“xx 篇待处理”仍显示旧数据。
-- 已增加两个 GetX worker：
-  - `_articleStateWorker` 监听 `ArticleStateNotifier.version`，单篇文章状态变化时走 `_syncArticleFromDb(entryId)`。
-  - `_filterCountWorker` 监听 `TimelineController.filterCount`，全量同步导致计数变化时重新 `_loadArticles()`。
-- `_syncArticleFromDb` 会从 Hive 本地库读取该文章：
-  - `isRejectedByAi && !isRead` 才保留在审核列表。
-  - 已读、取消拦截、已删除或不再符合条件时，从 `_articles` 移除。
-  - 如果右侧正在预览的文章被移除，`_selectedArticle` 自动清空。
-- 因为移动端和 macOS 的待处理文案都基于 `_articles.length`，列表修剪后“xx 篇待处理”会同步变化。
-
-设计原因：
-
-- 不应该只在 UI 层隐藏一份旧列表；审核页应以 `LocalArticleDbService.readAllArticles()` / Hive 中的最终文章状态为准。
-- 监听 `ArticleStateNotifier` 覆盖用户手动标已读、保留、拒绝等单篇变化。
-- 监听 `filterCount` 覆盖“其他设备已读同步”这种批量落库变化，因为 `_applyUnreadSnapshot` / `_refreshRecentReadWindow` 并不逐篇发 `ArticleStateNotifier.tick`。
-
-### 验证结果
-
-已运行并通过：
-
-```bash
-flutter analyze
-flutter test
-flutter build macos --debug
-```
-
-macOS debug 构建产物确认：`build/macos/Build/Products/Debug/Auto Folo.app`。
-
-注意：第一次直接跑 `dart analyze` 会因为 Flutter package URI 无法解析产生大量误报；此项目应以 `flutter analyze` 为准。
-
-### 关于工程目录名的建议
-
-- 不建议在当前 Codex worktree 内直接重命名 `<historical-codex-worktree>`，这会影响当前会话和 Git worktree 路径。
-- 如果主仓库要改名，建议仓库/clone 目录改为 `auto-folo`，比 `autofolo-mobile` 更符合当前 Android + macOS 双端定位。
-- 不建议把 Dart package name 改成 `auto_folo`，除非愿意承担 import 路径、测试、CI、发布脚本和原生工程引用的额外迁移成本；当前 `package:autofolo/...` 是稳定内部标识。
-
-### 需要在 main 分支/主工程侧同步的事项
-
-如果这次改动是在临时 worktree 中完成，合入 main 时请逐项确认：
-
-1. 合入 `lib/pages/article/article_page.dart` 的 macOS 分栏硬件键盘 handler。
-2. 合入 `lib/pages/timeline/timeline_page.dart` 的 `_MacSyncButton`，确保同步按钮有旋转反馈。
-3. 合入 `lib/pages/timeline/filter_review_page.dart` 的 `_articleStateWorker` / `_filterCountWorker`，否则审核页仍会出现计数减少但列表不消失。
-4. 合入 `README.md` 的 Auto Folo 文档、图标展示、macOS 支持说明。
-5. 合入展示名改动：`AppConstants.appName`、`AutoFoloApp`、设置页关于信息、macOS `PRODUCT_NAME` 与 Xcode scheme/product 引用。
-6. 保持 `pubspec.yaml:name` 为 `autofolo`，不要为了展示名强行改 Dart package。
-7. 保持 bundle id / method channel 稳定，除非计划做一次完整应用迁移。
-8. 合入后在 main 侧至少运行：
-
-```bash
-flutter analyze
-flutter test
-flutter build macos --debug
-```
-
-9. 如果 main 侧还保留旧 README/AGENT_HANDOFF 结构，请优先把本节放到文档顶部，避免后续 agent 只读旧上下文。
-
-## 2026-06-01 追加修复：macOS 快捷键双重触发、刷新动画与未读计数
-
-### 本次反馈问题与修复总结
-
-1. **左右快捷键“两个两个跳动” (双重触发 bug)**
-   - **原因**：之前的修改在 macOS 分栏模式中增加了全局 `HardwareKeyboard` 监听，但未完全禁用 `ArticlePageView` 内部 `Focus` 节点上的同级监听。当按下方向键时，两个监听器可能同时捕获事件，导致切换下一篇的操作被瞬间执行了两次。
-   - **修复**：在 `lib/pages/article/article_page.dart` 中增加判断逻辑：当启用了全局键盘监听（`_usesGlobalShortcuts`）时，`Focus` 节点的 `onKeyEvent` 会直接返回 `KeyEventResult.ignored`，从而避免重复触发。
-
-2. **左侧边栏未读气泡数量不准确 (点开一篇已读文章会减2)**
-   - **原因**：此问题与上述双重触发 Bug 紧密相关。由于方向键双重触发，文章状态（已读）的 `tick` 事件被连续调用两次。而 `SubscriptionsController.refreshUnreadCounts` 之前采用的是基于事件的“盲目增量计算”（即：如果收到一篇文章更新且它是已读状态，未读数就无脑 `-1`）。这导致一篇文章被点开时，未读数错误地减去了 2。
-   - **修复**：彻底废弃了脆弱的 `-1/+1` 增量计算逻辑。修改 `lib/pages/subscriptions/subscriptions_controller.dart`，当收到增量更新事件时，直接在内存的 `GStorage.articleDb` Map 中遍历该源（`feedId`）的所有文章，重新精准统计一次真实的未读文章总数，杜绝了多次调用导致的数据漂移问题。
-
-3. **刷新按钮旋转方向反了**
-   - **原因**：原先 `RotationTransition` 默认顺时针旋转，但 `Icons.sync` 图标的箭头在视觉上指示的是逆时针循环，这导致按钮看起来像是在“倒转”。
-   - **修复**：在 `lib/pages/timeline/timeline_page.dart` 中，将 `turns: _spinController` 修改为 `turns: ReverseAnimation(_spinController)`，实现视觉上的顺向旋转。
-
-4. **文章内可点击链接希望改为手型光标暗示（搁置）**
-   - **技术讨论与放弃原因**：目前的 HTML 渲染库 `flutter_html: ^3.0.0-beta.2` 在将 `<a>` 标签转为 `TextSpan` 时，未开放 `mouseCursor` 属性注入。叠加外层的 `SelectionArea`（强制为所有未指定光标的文本添加 I 字形选择光标），导致系统不会将链接渲染为手型。如果使用 `flutter_html` 的拦截器将链接替换为原生组件，会破坏 Flutter 中内联文本的排版特性，造成长链接无法自动换行。经过权衡后，我们决定不采用会导致严重排版破坏的妥协方案，保留了可以复制文本但无手型暗示的现状。后续彻底解决建议等待 `flutter_html` 库底层更新或进行定制 Patch。
+> 常用构建：`flutter build apk --debug`、`flutter build macos --debug`。内部发布走 tag 触发的 GitHub Actions，详见第 70 节；macOS 发布包必须保持 arm64。
 
 ## 项目速览
 
@@ -2916,14 +2765,16 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 - 改动文件均在 git working tree 中（未 commit）
 - Android `subscriptions_page.dart` 已 `git checkout` 回退至原始状态
 
-### 67.1 改动目标
+### 67.7 已回退的早期移动端订阅页尝试（历史参考）
 
-用户反馈订阅源页面（`SubscriptionsPage`）：
+注意：这段记录的是早期对移动端 `SubscriptionsPage` 的尝试；根据本节开头的关键前提，相关代码已回退，仅保留为避免后续重复踩坑。
+
+当时用户反馈订阅源页面（`SubscriptionsPage`）：
 1. 对齐混乱——View / Category / Feed 三级缩进关系不清晰
 2. 缺少"自动拉取全文"和"自动翻译"两个按源开关按钮
 3. 希望视觉风格与主页面统一
 
-### 67.2 已落地的代码改动（`lib/pages/subscriptions/subscriptions_page.dart`）
+### 67.8 当时尝试的代码改动（后续已回退，`lib/pages/subscriptions/subscriptions_page.dart`）
 
 | 改动项 | 变更 |
 |--------|------|
@@ -2935,7 +2786,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 | **新增按钮** | 每张 Feed 卡片右侧增加两个 `_FeedToggleButton`（`article_outlined`/`translate_outlined`），分别控制 `FeedReadabilitySettingsService` 和 `FeedTranslationSettingsService` |
 | **新增组件** | `_FeedToggleButton` — 小型 toggle icon button，32×32 tap target，关闭态空心灰色 35% 透明度，开启态实心主色 |
 
-### 67.3 当前问题：按钮在运行时不可见
+### 67.9 当时问题：按钮在运行时不可见
 
 **症状**：用户执行 `flutter clean && flutter pub get && flutter run` 后，在订阅源页面展开到 Feed 卡片时，只能看到未读数字，看不到两个 toggle 按钮。
 
@@ -2964,10 +2815,280 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
    flutter run
    ```
 
-### 67.4 建议的调试步骤（下一位 agent）
+### 67.10 当时建议的调试步骤（仅历史参考）
 
 1. **先确认代码能跑到**：在 `_FeedCardState.build()` 第一行加 `debugPrint('[FeedCard] build: ${_feed.title}, readability=$_autoReadability, translate=$_autoTranslate')`，看日志是否输出。
 2. **排除 Icon 字体问题**：把 `_FeedToggleButton` 的 icon 暂时换成 `Icons.star` / `Icons.star_border`（最基础 icon），看是否出现。
 3. **排除布局问题**：把两个 `_FeedToggleButton` 替换为临时的红色 `Container(width:24, height:24, color:Colors.red)`，看红色方块是否出现。
 4. **缩小 Obx 范围测试**：把 `Obx` 从包裹整个卡片改为仅包裹未读徽章，看按钮是否出现。
 5. **如果不生效**：考虑放弃 `StatefulWidget` 方案，改为在 `SubscriptionsController` 中用 RxMap 管理 toggle 状态，`_FeedCard` 退回 `StatelessWidget` + `Obx` 读取 controller 的响应式状态。
+
+## 68. 快捷键、同步反馈、品牌统一、审核页已读同步（2026-06-01）
+
+### 用户本次反馈的原始问题
+
+1. macOS 分栏阅读里，`←` / `→` 方向键没有稳定切换文章，而是会框选/聚焦不同的图标元素。
+2. `M` 标已读必须先点文章卡片、再点文章正文才能生效；快捷键依赖焦点，体验不符合预期。
+3. 时间线同步按钮点击后没有动画或确认感。
+4. README 与当前功能不一致，需要同步更新，最好把图标也放上去。
+5. 为了统一性，软件展示名应考虑改为 `Auto Folo`；工程目录名是否也应修改需要给出建议。
+6. 进一步反馈：其他设备上已标为已读的文章，时间线未读列表已经能挪出，但“垃圾拦截/审核页”仍然显示这些文章；气泡计数已经减少，但审核页列表和“xx 篇待处理”没有同步变化。
+
+### 已做修改
+
+#### 1. macOS 阅读快捷键修复
+
+文件：`lib/pages/article/article_page.dart`
+
+- 在 `ArticlePageView` 的 macOS 分栏场景中增加 `HardwareKeyboard.instance.addHandler`。
+- 快捷键只在 `widget.isSplitView == true` 时启用全局硬件键盘处理，避免影响普通文章页或移动端。
+- 处理逻辑：
+  - `←` 调用 `widget.onPrevious`
+  - `→` 调用 `widget.onNext`
+  - `M` 在未更新中时切换已读/未读
+  - `Esc` 关闭当前文章
+- 忽略带 `Alt` / `Control` / `Meta` 的组合键，避免吞掉系统或应用菜单快捷键。
+- 保留原来的 `Focus.onKeyEvent` 作为局部兜底，但真正解决焦点被正文、按钮、图标拿走的问题依赖全局 handler。
+
+设计原因：
+
+- 原实现把快捷键挂在文章页的 `Focus` 上，正文里的 `SelectionArea`、工具栏按钮和其他可聚焦元素会抢走焦点。
+- 用户看到的“方向键框选不同图标元素”，本质是 Flutter 焦点遍历先消费了方向键。
+- 使用硬件键盘 handler 可以让文章分栏处于打开状态时始终获得这些阅读快捷键，不再要求用户点中正文。
+
+#### 2. macOS 同步按钮反馈
+
+文件：`lib/pages/timeline/timeline_page.dart`
+
+- 将 `_MacTimelineAppBar` 里的同步 `IconButton` 替换为 `_MacSyncButton`。
+- `_MacSyncButton` 使用 `AnimationController` + `RotationTransition`，点击后图标旋转并显示“同步中”tooltip。
+- 同步期间按钮禁用，避免重复触发。
+- 增加 450ms 最短反馈窗口：即使同步很快返回，用户也能看到明确点击确认感。
+
+#### 3. 品牌名统一为 Auto Folo
+
+涉及文件：
+
+- `lib/common/constants/constants.dart`：`AppConstants.appName = 'Auto Folo'`
+- `lib/main.dart`：入口类由 `FoloReaderApp` 改为 `AutoFoloApp`
+- `test/widget_test.dart`：同步测试类名
+- `lib/http/init.dart`：`X-App-Name` 改为 `Auto Folo`，`X-App-Version` 改为 `1.1.0`
+- `lib/pages/settings/settings_page.dart`：关于页显示 `Auto Folo v1.1.0`，说明改为支持 Android 和 macOS
+- `macos/Runner/Configs/AppInfo.xcconfig`：`PRODUCT_NAME = Auto Folo`
+- `macos/Runner.xcodeproj/project.pbxproj` 与 `Runner.xcscheme`：macOS 产物名同步为 `Auto Folo.app`
+
+未改动但需要理解：
+
+- `pubspec.yaml` 的 package name 仍是 `autofolo`。这是 Dart 包名，不能有空格，保持不变是正确的。
+- Bundle id / method channel 仍保留 `com.folo.autofolo`，避免破坏已有本地数据、平台通道和已安装应用升级路径。
+- HTTP header 的 `X-App-Platform` 目前仍是 `mobile/android`。这是既有行为，本次没有改平台识别逻辑；如果未来要严格区分 macOS，需要单独评估服务端兼容性。
+
+#### 4. README 更新
+
+文件：`README.md`
+
+- 标题改为 `Auto Folo — Folo RSS 信息流阅读器`。
+- 顶部加入 `assets/icon.png` 图标。
+- 移除 Android-only 描述，改为支持 Android 和 macOS。
+- 功能矩阵补充 macOS 分栏阅读、桌面快捷键和同步反馈。
+- 快速开始补充 `flutter run -d macos`。
+
+#### 5. 审核页跟随其他设备已读状态
+
+文件：`lib/pages/timeline/filter_review_page.dart`
+
+- 审核页原先只在打开时 `_loadArticles()` 一次，并只监听 `AutoFilterWorker.onRejected` 新增拦截项。
+- 时间线同步会更新 `TimelineController.filterCount`，所以气泡计数能减少；但审核页自己的 `_articles` 没有重新对齐，导致页面列表和“xx 篇待处理”仍显示旧数据。
+- 已增加两个 GetX worker：
+  - `_articleStateWorker` 监听 `ArticleStateNotifier.version`，单篇文章状态变化时走 `_syncArticleFromDb(entryId)`。
+  - `_filterCountWorker` 监听 `TimelineController.filterCount`，全量同步导致计数变化时重新 `_loadArticles()`。
+- `_syncArticleFromDb` 会从 Hive 本地库读取该文章：
+  - `isRejectedByAi && !isRead` 才保留在审核列表。
+  - 已读、取消拦截、已删除或不再符合条件时，从 `_articles` 移除。
+  - 如果右侧正在预览的文章被移除，`_selectedArticle` 自动清空。
+- 因为移动端和 macOS 的待处理文案都基于 `_articles.length`，列表修剪后“xx 篇待处理”会同步变化。
+
+设计原因：
+
+- 不应该只在 UI 层隐藏一份旧列表；审核页应以 `LocalArticleDbService.readAllArticles()` / Hive 中的最终文章状态为准。
+- 监听 `ArticleStateNotifier` 覆盖用户手动标已读、保留、拒绝等单篇变化。
+- 监听 `filterCount` 覆盖“其他设备已读同步”这种批量落库变化，因为 `_applyUnreadSnapshot` / `_refreshRecentReadWindow` 并不逐篇发 `ArticleStateNotifier.tick`。
+
+### 验证结果
+
+已运行并通过：
+
+```bash
+flutter analyze
+flutter test
+flutter build macos --debug
+```
+
+macOS debug 构建产物确认：`build/macos/Build/Products/Debug/Auto Folo.app`。
+
+注意：第一次直接跑 `dart analyze` 会因为 Flutter package URI 无法解析产生大量误报；此项目应以 `flutter analyze` 为准。
+
+### 关于工程目录名的建议
+
+- 不建议在当前 Codex worktree 内直接重命名 `<historical-codex-worktree>`，这会影响当前会话和 Git worktree 路径。
+- 如果主仓库要改名，建议仓库/clone 目录改为 `auto-folo`，比 `autofolo-mobile` 更符合当前 Android + macOS 双端定位。
+- 不建议把 Dart package name 改成 `auto_folo`，除非愿意承担 import 路径、测试、CI、发布脚本和原生工程引用的额外迁移成本；当前 `package:autofolo/...` 是稳定内部标识。
+
+### 需要在 main 分支/主工程侧同步的事项
+
+如果这次改动是在临时 worktree 中完成，合入 main 时请逐项确认：
+
+1. 合入 `lib/pages/article/article_page.dart` 的 macOS 分栏硬件键盘 handler。
+2. 合入 `lib/pages/timeline/timeline_page.dart` 的 `_MacSyncButton`，确保同步按钮有旋转反馈。
+3. 合入 `lib/pages/timeline/filter_review_page.dart` 的 `_articleStateWorker` / `_filterCountWorker`，否则审核页仍会出现计数减少但列表不消失。
+4. 合入 `README.md` 的 Auto Folo 文档、图标展示、macOS 支持说明。
+5. 合入展示名改动：`AppConstants.appName`、`AutoFoloApp`、设置页关于信息、macOS `PRODUCT_NAME` 与 Xcode scheme/product 引用。
+6. 保持 `pubspec.yaml:name` 为 `autofolo`，不要为了展示名强行改 Dart package。
+7. 保持 bundle id / method channel 稳定，除非计划做一次完整应用迁移。
+8. 合入后在 main 侧至少运行：
+
+```bash
+flutter analyze
+flutter test
+flutter build macos --debug
+```
+
+9. 如果 main 侧还保留旧 README/AGENT_HANDOFF 结构，请优先把本节放到文档顶部，避免后续 agent 只读旧上下文。
+
+## 69. macOS 快捷键双重触发、刷新动画与未读计数（2026-06-01 追加修复）
+
+### 本次反馈问题与修复总结
+
+1. **左右快捷键“两个两个跳动” (双重触发 bug)**
+   - **原因**：之前的修改在 macOS 分栏模式中增加了全局 `HardwareKeyboard` 监听，但未完全禁用 `ArticlePageView` 内部 `Focus` 节点上的同级监听。当按下方向键时，两个监听器可能同时捕获事件，导致切换下一篇的操作被瞬间执行了两次。
+   - **修复**：在 `lib/pages/article/article_page.dart` 中增加判断逻辑：当启用了全局键盘监听（`_usesGlobalShortcuts`）时，`Focus` 节点的 `onKeyEvent` 会直接返回 `KeyEventResult.ignored`，从而避免重复触发。
+
+2. **左侧边栏未读气泡数量不准确 (点开一篇已读文章会减2)**
+   - **原因**：此问题与上述双重触发 Bug 紧密相关。由于方向键双重触发，文章状态（已读）的 `tick` 事件被连续调用两次。而 `SubscriptionsController.refreshUnreadCounts` 之前采用的是基于事件的“盲目增量计算”（即：如果收到一篇文章更新且它是已读状态，未读数就无脑 `-1`）。这导致一篇文章被点开时，未读数错误地减去了 2。
+   - **修复**：彻底废弃了脆弱的 `-1/+1` 增量计算逻辑。修改 `lib/pages/subscriptions/subscriptions_controller.dart`，当收到增量更新事件时，直接在内存的 `GStorage.articleDb` Map 中遍历该源（`feedId`）的所有文章，重新精准统计一次真实的未读文章总数，杜绝了多次调用导致的数据漂移问题。
+
+3. **刷新按钮旋转方向反了**
+   - **原因**：原先 `RotationTransition` 默认顺时针旋转，但 `Icons.sync` 图标的箭头在视觉上指示的是逆时针循环，这导致按钮看起来像是在“倒转”。
+   - **修复**：在 `lib/pages/timeline/timeline_page.dart` 中，将 `turns: _spinController` 修改为 `turns: ReverseAnimation(_spinController)`，实现视觉上的顺向旋转。
+
+4. **文章内可点击链接希望改为手型光标暗示（搁置）**
+   - **技术讨论与放弃原因**：目前的 HTML 渲染库 `flutter_html: ^3.0.0-beta.2` 在将 `<a>` 标签转为 `TextSpan` 时，未开放 `mouseCursor` 属性注入。叠加外层的 `SelectionArea`（强制为所有未指定光标的文本添加 I 字形选择光标），导致系统不会将链接渲染为手型。如果使用 `flutter_html` 的拦截器将链接替换为原生组件，会破坏 Flutter 中内联文本的排版特性，造成长链接无法自动换行。经过权衡后，我们决定不采用会导致严重排版破坏的妥协方案，保留了可以复制文本但无手型暗示的现状。后续彻底解决建议等待 `flutter_html` 库底层更新或进行定制 Patch。
+
+## 70. Android + macOS 内部发布流程（2026-06-01）
+
+### 70.1 本次发布命名与版本
+
+- 推荐并采用 tag：`v1.1.1`。
+- 版本号同步：
+  - `pubspec.yaml`：`version: 1.1.1+3`
+  - `lib/http/init.dart`：`X-App-Version: 1.1.1`
+  - `lib/pages/settings/settings_page.dart`：关于页显示 `Auto Folo v1.1.1`
+  - `CHANGELOG.md`：新增 `1.1.1 - 2026-06-01`
+- 用户当前只自用，不考虑软件商城；发布策略按“内部测试版”处理，直接产出 APK 和 macOS zip。
+
+### 70.2 GitHub Actions 工作流
+
+文件：`.github/workflows/internal-release.yml`
+
+触发方式：
+
+- `push` tag，匹配 `v*`。
+- `workflow_dispatch` 手动触发。
+
+工作流结构：
+
+1. `Android APK`
+   - runner：`ubuntu-latest`
+   - Java：Temurin 17
+   - Flutter：`subosito/flutter-action@v2`，固定 `flutter-version: '3.41.6'`
+   - 验证：`flutter analyze --no-fatal-infos lib test`、`flutter test`
+   - 构建：`flutter build apk --release`
+   - 产物：`Auto-Folo-android-${GITHUB_REF_NAME}.apk`
+
+2. `macOS App`
+   - runner：`macos-latest`
+   - Flutter：固定 `3.41.6`
+   - 先执行 `test "$(uname -m)" = "arm64"`，确保远端 runner 是 arm64。
+   - 验证：`flutter analyze --no-fatal-infos lib test`、`flutter test`
+   - 构建：`flutter build macos --release`
+   - 打包：先用 `ditto --arch arm64` 复制出 arm64-only `.app`，再 zip。
+   - 打包后验证：
+     - `file ... | grep arm64`
+     - `! file ... | grep x86_64`
+   - 产物：`Auto-Folo-macOS-arm64-${GITHUB_REF_NAME}.zip`
+
+3. `Publish GitHub Release`
+   - 依赖 Android 和 macOS 两个 build job。
+   - 下载 build artifacts 后用 `gh release view/create/upload` 创建或更新 release。
+   - 必须设置：
+     - `GH_TOKEN: ${{ github.token }}`
+     - `GH_REPO: ${{ github.repository }}`
+   - `GH_REPO` 是必要修复：release job 没有 checkout，目录里没有 `.git`；不显式传仓库时 `gh release view` 会报 `fatal: not a git repository`。
+
+### 70.3 macOS arm64 约束
+
+用户明确要求：macOS 不论远程还是本地，都始终希望构建 arm64。
+
+当前约束点：
+
+- CI 远端：`Verify arm64 runner` 强制 `uname -m == arm64`。
+- CI 发布包：`ditto --arch arm64` 瘦身，再用 `file` 确认包含 arm64 且不包含 x86_64。
+- 本地/项目配置：`macos/Runner.xcodeproj/project.pbxproj` 的 Runner `Release` / `Profile` 配置加入 `ARCHS = arm64`。
+- 已用 `xcodebuild -showBuildSettings -project macos/Runner.xcodeproj -scheme Runner -configuration Release` 确认解析结果包含：
+  - `ARCHS = arm64`
+  - `HOST_ARCH = arm64`
+  - `NATIVE_ARCH = arm64`
+
+注意：在固定 `ARCHS` 前，本地 `flutter build macos --release` 的原始产物曾是 universal binary（同时含 `x86_64` 和 `arm64`）。不要回退当前 arm64 约束。
+
+### 70.4 本次踩坑与修复
+
+1. 首次 tag push 没有自动跑新 workflow。
+   - 原因：workflow 刚引入，第一次需要手动 `gh workflow run` 或重新移动 tag 触发。
+
+2. GitHub 默认 Flutter 版本导致 analyze 失败。
+   - 表现：Flutter 3.44.0 把 `SizeTransition.axisAlignment` deprecation info 作为 fatal 处理。
+   - 修复：analyze 改为 `flutter analyze --no-fatal-infos lib test`。
+
+3. macOS 在 Flutter 3.44.0 arm64 runner 上构建失败。
+   - 表现：`_window_macos.dart` 相关 snapshot generator 崩溃。
+   - 修复：工作流固定 Flutter `3.41.6`。
+
+4. GitHub Release 发布失败。
+   - 报错：`failed to run git: fatal: not a git repository (or any of the parent directories): .git`
+   - 原因：release job 只下载 artifacts，没有 checkout，`gh` 无法从 git remote 推断仓库。
+   - 修复：增加 `GH_REPO: ${{ github.repository }}`。
+
+5. GitHub Actions 有 Node.js 20 deprecation warning。
+   - 来源：`actions/checkout@v4`、`actions/upload-artifact@v4` 等当前 action 运行时提示。
+   - 当前不影响发布；后续可单独升级 action 或按 GitHub 建议切 Node 24。
+
+### 70.5 已验证结果
+
+本地验证过：
+
+- `flutter analyze lib test`：通过
+- `flutter test`：通过
+- `flutter build apk --release`：通过
+- `flutter build macos --release`：通过（固定 `ARCHS` 前产物为 universal，随后已用项目配置与 CI 打包约束改为 arm64-only 发布）
+- arm64 zip 解包后检查：主程序和所有 framework 都是 `Mach-O ... arm64`，未发现 `x86_64`。
+
+远端发布验证：
+
+- GitHub Actions run：已通过，具体 run id 不写入仓库文档
+- 结果：`Android APK`、`macOS App`、`Publish GitHub Release` 全部通过。
+- Release URL：`GitHub Release v1.1.1`
+- Release assets：
+  - `Auto-Folo-android-v1.1.1.apk`
+  - `Auto-Folo-macOS-arm64-v1.1.1.zip`
+
+### 70.6 当前仓库状态注意
+
+- `v1.1.1` 是 annotated tag，已移动到包含 release workflow 修复和 macOS arm64 约束的提交。
+- `main` 当前发布相关提交：
+  - `53cc355 ci: build internal releases from tags`
+  - `310af8c ci: allow informational analyzer warnings`
+  - `e35b091 ci: pin Flutter for internal release builds`
+  - `ddfa988 ci: package macos release as arm64`
+  - `63a6c72 ci: fix release publishing without checkout`
+- `.gitignore` 和 `scratch/` 在发布前后都存在用户侧未提交变更；不要在无明确要求时纳入发布/文档提交。

@@ -95,9 +95,15 @@ jobs:
       - name: Package macOS app
         run: |
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent \
+          ditto --arch arm64 \
             "build/macos/Build/Products/Release/Auto Folo.app" \
-            "dist/Auto-Folo-macOS-${GITHUB_REF_NAME}.zip"
+            "dist/Auto Folo.app"
+          file "dist/Auto Folo.app/Contents/MacOS/Auto Folo" | grep arm64
+          ! file "dist/Auto Folo.app/Contents/MacOS/Auto Folo" | grep x86_64
+          ditto -c -k --sequesterRsrc --keepParent \
+            "dist/Auto Folo.app" \
+            "dist/Auto-Folo-macOS-arm64-${GITHUB_REF_NAME}.zip"
+          rm -rf "dist/Auto Folo.app"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4

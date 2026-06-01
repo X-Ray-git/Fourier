@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/refresh_aware_scroll_physics.dart';
@@ -8,9 +9,15 @@ import '../../common/widgets/shimmer_card.dart';
 
 import 'dart:io';
 import '../../http/init.dart';
+import '../../models/article.dart';
 import '../../router/app_pages.dart';
+import '../../common/widgets/feedback_toast.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/feed_readability_settings_service.dart';
+import '../../services/feed_translation_settings_service.dart';
+import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
+import '../subscriptions/subscriptions_controller.dart';
 import '../widgets/article_card.dart';
 import 'timeline_controller.dart';
 
@@ -37,6 +44,8 @@ class _TimelinePageState extends State<TimelinePage> {
     refreshKey: _refreshKey,
   );
   DateTime? _lastTapTime;
+  String? _lastArticleTapEntryId;
+  DateTime? _lastArticleTapAt;
 
   @override
   void initState() {
@@ -80,6 +89,53 @@ class _TimelinePageState extends State<TimelinePage> {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
+  }
+
+  void _selectRelativeArticle(int delta) {
+    final list = controller.articles;
+    if (list.isEmpty) return;
+
+    final selected = controller.selectedArticle.value;
+    final currentIndex = selected == null
+        ? -1
+        : list.indexWhere((a) => a.entryId == selected.entryId);
+    final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
+    if (nextIndex < 0 || nextIndex >= list.length) return;
+    controller.selectedArticle.value = list[nextIndex];
+  }
+
+  Future<void> _openOriginalArticle(ArticleModel article) async {
+    if (article.url.isEmpty) return;
+
+    final uri = SecurityUtils.parseHttpUrl(article.url);
+    if (uri == null) {
+      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
+      return;
+    }
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      AppFeedback.error('无法打开链接', '未找到默认浏览器');
+    }
+  }
+
+  void _handleMacArticleTap(ArticleModel article) {
+    final now = DateTime.now();
+    final isDoubleTap =
+        _lastArticleTapEntryId == article.entryId &&
+        _lastArticleTapAt != null &&
+        now.difference(_lastArticleTapAt!).inMilliseconds < 300;
+
+    controller.selectedArticle.value = article;
+    _lastArticleTapEntryId = article.entryId;
+    _lastArticleTapAt = now;
+
+    if (isDoubleTap) {
+      _lastArticleTapEntryId = null;
+      _lastArticleTapAt = null;
+      _openOriginalArticle(article);
+    }
   }
 
   Widget _buildFilterBar(int count) {
@@ -191,20 +247,7 @@ class _TimelinePageState extends State<TimelinePage> {
               SizedBox(
                 width: 380,
                 child: Scaffold(
-                  appBar: AppBar(
-                    title: const Text('时间线', style: TextStyle(fontSize: 16)),
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.surface.withValues(alpha: 0.5),
-                    centerTitle: false,
-                    actions: [
-                      IconButton(
-                        icon: const Icon(Icons.sync, size: 20),
-                        tooltip: '同步',
-                        onPressed: () => controller.loadFeedsThenArticles(),
-                      ),
-                    ],
-                  ),
+                  appBar: _MacTimelineAppBar(controller: controller),
                   body: content,
                 ),
               ),
@@ -225,6 +268,9 @@ class _TimelinePageState extends State<TimelinePage> {
                     key: ValueKey(selected.entryId),
                     article: selected,
                     isSplitView: true,
+                    onClose: () => controller.selectedArticle.value = null,
+                    onPrevious: () => _selectRelativeArticle(-1),
+                    onNext: () => _selectRelativeArticle(1),
                   );
                 }),
               ),
@@ -255,6 +301,7 @@ class _TimelinePageState extends State<TimelinePage> {
     return Obx(() {
       ArticleStateNotifier.version.value; // 订阅变更通知
       final filterCount = controller.filterCount.value;
+      final filterBarCount = Platform.isMacOS ? 0 : 1;
       return ScrollConfiguration(
         behavior: const NoOverscrollIndicatorBehavior(),
         child: controller.articles.isEmpty
@@ -268,7 +315,7 @@ class _TimelinePageState extends State<TimelinePage> {
                       MediaQuery.of(context).padding.bottom,
                 ),
                 children: [
-                  _buildFilterBar(filterCount),
+                  if (!Platform.isMacOS) _buildFilterBar(filterCount),
                   Padding(
                     padding: const EdgeInsets.only(top: 64),
                     child: _EmptyView(
@@ -288,12 +335,12 @@ class _TimelinePageState extends State<TimelinePage> {
                       (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
                       MediaQuery.of(context).padding.bottom,
                 ),
-                itemCount: controller.articles.length + 1, // +1 for filter bar
+                itemCount: controller.articles.length + filterBarCount,
                 itemBuilder: (context, index) {
-                  if (index == 0) {
+                  if (!Platform.isMacOS && index == 0) {
                     return _buildFilterBar(filterCount);
                   }
-                  final articleIndex = index - 1;
+                  final articleIndex = index - filterBarCount;
                   if (articleIndex == controller.articles.length) {
                     return const Padding(
                       padding: EdgeInsets.all(24),
@@ -307,27 +354,29 @@ class _TimelinePageState extends State<TimelinePage> {
                     );
                   }
                   final article = controller.articles[articleIndex];
-                  return ArticleCard(
-                    article: article,
-                    isSelected:
-                        Platform.isMacOS &&
-                        controller.selectedArticle.value?.entryId ==
-                            article.entryId,
-                    onTap: () {
-                      if (Platform.isMacOS) {
-                        controller.selectedArticle.value = article;
-                      } else {
-                        Get.toNamed(
-                          Routes.article,
-                          arguments: {
-                            'article': article,
-                            'sequence': controller.articles.toList(),
-                            'index': articleIndex,
-                          },
-                        );
-                      }
-                    },
-                  );
+                  return Obx(() {
+                    return ArticleCard(
+                      article: article,
+                      isSelected:
+                          Platform.isMacOS &&
+                          controller.selectedArticle.value?.entryId ==
+                              article.entryId,
+                      onTap: () {
+                        if (Platform.isMacOS) {
+                          _handleMacArticleTap(article);
+                        } else {
+                          Get.toNamed(
+                            Routes.article,
+                            arguments: {
+                              'article': article,
+                              'sequence': controller.articles.toList(),
+                              'index': articleIndex,
+                            },
+                          );
+                        }
+                      },
+                    );
+                  });
                 },
               ),
       );
@@ -552,6 +601,187 @@ class _EmptyView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── macOS 时间线上下文 AppBar ──────────────────
+
+class _MacTimelineAppBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  final TimelineController controller;
+
+  const _MacTimelineAppBar({required this.controller});
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Obx(() {
+      final feedId = controller.selectedFeedId.value;
+      final category = controller.selectedCategory.value;
+
+      String title = '时间线';
+      String? subtitle;
+      Widget? trailing;
+
+      if (feedId != null && Get.isRegistered<SubscriptionsController>()) {
+        final sub = Get.find<SubscriptionsController>();
+        final feed = sub.allFeeds.firstWhereOrNull(
+          (f) => f.feedId == feedId,
+        );
+        if (feed != null) {
+          title = feed.title;
+          final unread = controller.articles
+              .where((a) => !a.isRead)
+              .length;
+          final total = controller.articles.length;
+          subtitle = unread > 0
+              ? '$unread 篇未读 · $total 篇当前列表'
+              : '$total 篇当前列表';
+          trailing = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _FeedToggleIcon(
+                icon: Icons.article_outlined,
+                activeIcon: Icons.article,
+                enabled: FeedReadabilitySettingsService
+                    .isAutoReadabilityEnabled(feedId),
+                tooltip: '自动拉取全文',
+                onToggle: () {
+                  FeedReadabilitySettingsService.toggleAutoReadability(feedId);
+                },
+                colorScheme: cs,
+              ),
+              const SizedBox(width: 2),
+              _FeedToggleIcon(
+                icon: Icons.translate_outlined,
+                activeIcon: Icons.translate,
+                enabled: FeedTranslationSettingsService
+                    .isAutoTranslateEnabled(feedId),
+                tooltip: '自动翻译',
+                onToggle: () {
+                  FeedTranslationSettingsService.toggleAutoTranslate(feedId);
+                },
+                colorScheme: cs,
+              ),
+            ],
+          );
+        }
+      } else if (category != null) {
+        title = category;
+        final unread = controller.articles
+            .where((a) => !a.isRead)
+            .length;
+        subtitle = '$unread 篇未读';
+      }
+
+      return AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (subtitle != null)
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        backgroundColor: cs.surface.withValues(alpha: 0.5),
+        centerTitle: false,
+        actions: [
+          if (trailing != null) trailing,
+          if (feedId != null)
+            IconButton(
+              icon: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+              tooltip: '清除筛选',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                controller.selectedFeedId.value = null;
+                controller.selectedCategory.value = null;
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.sync, size: 20),
+            tooltip: '同步',
+            onPressed: () => controller.loadFeedsThenArticles(),
+          ),
+        ],
+      );
+    });
+  }
+}
+
+/// macOS 时间线 AppBar 内的小型开关图标（带本地状态）
+class _FeedToggleIcon extends StatefulWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final bool enabled;
+  final String tooltip;
+  final VoidCallback onToggle;
+  final ColorScheme colorScheme;
+
+  const _FeedToggleIcon({
+    required this.icon,
+    required this.activeIcon,
+    required this.enabled,
+    required this.tooltip,
+    required this.onToggle,
+    required this.colorScheme,
+  });
+
+  @override
+  State<_FeedToggleIcon> createState() => _FeedToggleIconState();
+}
+
+class _FeedToggleIconState extends State<_FeedToggleIcon> {
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = widget.enabled;
+  }
+
+  @override
+  void didUpdateWidget(covariant _FeedToggleIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.enabled != widget.enabled) {
+      _enabled = widget.enabled;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(
+        _enabled ? widget.activeIcon : widget.icon,
+        size: 20,
+        color: _enabled
+            ? widget.colorScheme.primary
+            : widget.colorScheme.onSurfaceVariant,
+      ),
+      tooltip: widget.tooltip,
+      visualDensity: VisualDensity.compact,
+      onPressed: () {
+        widget.onToggle();
+        setState(() => _enabled = !_enabled);
+      },
     );
   }
 }

@@ -2599,3 +2599,223 @@ Flutter 侧：
 3. 若要提交，请先确认哪些 staged 改动来自同步/历史，哪些来自本轮 macOS 适配；当前 worktree 存在 staged + unstaged 混合状态。
 4. 不要随意清理 `stash@{0}`，除非用户确认当前状态已安全。
 5. 不要改 `~/dev` 主工作区。
+
+## 67. macOS 侧边栏与相关页面全面适配（本轮对话完整记录）
+
+> **关键前提**：本轮对话中用户始终在指 macOS 端，对话初期提到的"订阅源页面""对齐""按钮缺失"等均指 macOS 侧边栏（`macos_sidebar.dart`），而非 Android 的 `subscriptions_page.dart`。Android 端本轮零改动，所有修改均已回退。
+
+### 67.1 用户原始诉求（按时间线）
+
+1. 订阅源页面粗糙，对齐不对，缺少自动拉取全文 / 自动翻译按钮
+2. "最左边那一列"点按有延迟
+3. "全部文章"右侧气泡数字不对（过滤了 AI 拦截文章）
+4. 文章详情页里的 Feed 胶囊点击后弹出全屏新页面，体验突兀
+5. Feed 详情页（`_MacFeedHeader`）缺少自动拉取/翻译 toggle
+6. 要求所有没能适配 macOS 的地方全部适配
+
+### 67.2 改动总览
+
+| 文件 | 改动项 | 原因 |
+|------|--------|------|
+| `lib/pages/main/widgets/macos_sidebar.dart` | 4 项 | 核心改动 |
+| `lib/pages/timeline/timeline_page.dart` | 2 项 | 上下文 AppBar + FeedToggleIcon |
+| `lib/pages/article/article_page.dart` | 1 项 | Feed 胶囊改为原地过滤 |
+| `lib/pages/feed_detail/feed_detail_page.dart` | 1 项 | `_MacFeedHeader` 补 toggle |
+| `lib/pages/settings/settings_page.dart` | 1 项 | 底部死空白 |
+| `lib/pages/subscriptions/subscriptions_page.dart` | 0 | 已 `git checkout` 回退 |
+
+---
+
+### 67.3 改动详情
+
+#### 67.3.1 `macos_sidebar.dart` — 4 项
+
+**a) 点按延迟修复：删除 `_CategoryItem` 的 `onDoubleTap`**
+
+`InkWell` 同时有 `onTap` 和 `onDoubleTap` 时，Flutter 必须等 ~300ms 确认无第二击才能触发 `onTap`。展开/折叠已有独立的 chevron `IconButton`，`onDoubleTap` 完全多余。删除后点按即时响应。
+
+```dart
+// 改前：InkWell(onTap: onTap, onDoubleTap: onToggle, ...)
+// 改后：InkWell(onTap: onTap, ...)
+```
+
+**b) 侧边栏 Feed 项新增自动拉取全文 / 自动翻译 toggle 图标**
+
+`_SidebarItem` 新增 `Widget? trailing` 可选参数，Feed 项传入两个 toggle 图标：
+
+- `_FeedAutoReadabilityIcon` — `Icons.article` / `article_outlined`，控制 `FeedReadabilitySettingsService`
+- `_FeedAutoTranslateIcon` — `Icons.translate` / `translate_outlined`，控制 `FeedTranslationSettingsService`
+
+每个是独立的 `StatefulWidget`，`initState` 读 Hive 当前值，点击写入 Hive + `setState`。开启态实心 + `cs.primary`，关闭态空心 + 30% 透明。
+
+**c) "全部文章"气泡数字修正**
+
+```dart
+// 改前：timelineController.allArticles.where((a) => !a.isRead && !a.isRejectedByAi).length
+// 改后：timelineController.allArticles.where((a) => !a.isRead).length
+```
+
+不再过滤 AI 拦截文章，显示全部未读数。
+
+**d) ScrollConfiguration 尝试与回退**
+
+曾尝试用 `ScrollConfiguration(dragDevices: {PointerDeviceKind.touch})` 消除 `ListView` 内 trackpad 点击的 scroll arena 延迟。但导致触控板一指拖拽滚动失效（两指滑动走 `PointerScrollEvent` 不受影响）。已回退。主要延迟来源 `onDoubleTap` 删除后，剩余延迟可接受。
+
+---
+
+#### 67.3.2 `timeline_page.dart` — 2 项
+
+**a) macOS AppBar 动态上下文**
+
+新增 `_MacTimelineAppBar` 组件（`PreferredSizeWidget`），替换原来写死"时间线"的 AppBar：
+
+| 状态 | 标题 | 副标题 | 右侧操作 |
+|------|------|--------|----------|
+| 未选中 | "时间线" | — | 🔄 同步 |
+| 选中 Feed | Feed 标题 | "N 篇未读 · M 篇当前列表" | 📄 🌐 ✕ 🔄 |
+| 选中分类 | 分类名 | "N 篇未读" | ✕ 🔄 |
+
+Feed 标题从 `SubscriptionsController.allFeeds` 查找；toggle 按钮通过 `_FeedToggleIcon`（带本地 `StatefulWidget` 状态）实现。
+
+**b) `_FeedToggleIcon` 组件**
+
+macOS 时间线 AppBar 内的小型开关图标。与侧边栏的 `_FeedAutoReadabilityIcon` 不同，这个接收 `enabled` 初值和 `onToggle` 回调，内部用 `StatefulWidget` 维护本地开关态，`didUpdateWidget` 同步外部变化。
+
+---
+
+#### 67.3.3 `article_page.dart` — 1 项
+
+**Feed 胶囊改为原地过滤（macOS）**
+
+```dart
+// 改前：统一 Get.toNamed(Routes.feedDetail, ...)
+// 改后：
+if (Platform.isMacOS) {
+  final tc = Get.find<TimelineController>();
+  tc.selectedArticle.value = null;   // 关闭右面板
+  tc.selectedCategory.value = null;
+  tc.selectedFeedId.value = article.feedId;  // 原地过滤时间线
+  return;
+}
+Get.toNamed(Routes.feedDetail, ...);  // 移动端不变
+```
+
+**设计决策**：macOS 上不跳全屏页，而是关闭当前文章面板 + 在时间线中过滤该 Feed。与侧边栏点 Feed 行为一致，统一为三栏布局内的原地切换。移动端仍走 `FeedDetailPage`。
+
+---
+
+#### 67.3.4 `feed_detail_page.dart` — 1 项
+
+**`_MacFeedHeader` 新增自动拉取/翻译 toggle**
+
+`FeedDetailPage` 的 macOS 布局（`_buildMacOSLayout`）头部 `_MacFeedHeader` 原本只有：返回按钮、头像、标题、未读统计、读筛选下拉、同步按钮。缺少自动拉取全文和自动翻译 toggle（移动端 SliverAppBar 有）。
+
+在同步按钮后新增两个 `IconButton`（`Obx` 响应），使用 `FeedReadabilitySettingsService.toggleAutoReadability` 和 `FeedTranslationSettingsService.toggleAutoTranslate`，与 `controller.refreshAutoReadabilityStatus()` / `refreshAutoTranslateStatus()` 联动。
+
+---
+
+#### 67.3.5 `settings_page.dart` — 1 项
+
+**macOS 底部死空白修复**
+
+```dart
+// 改前：MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 32
+// 改后：MediaQuery.paddingOf(context).bottom + (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) + 32
+```
+
+macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致底部大量空白。加 `Platform.isMacOS` 守卫。
+
+---
+
+### 67.4 设计决策与讨论过程
+
+#### 决策 1：侧边栏 Feed 点击 vs FeedDetailPage
+
+**问题**：侧边栏点 Feed → 设 `selectedFeedId` 原地过滤；文章胶囊点 → `Get.toNamed(FeedDetailPage)` 全屏跳转。两条路径体验不一致。
+
+**讨论**：全屏新页面破坏三栏布局的连贯性，用户明确反对。
+
+**方案**：统一为原地过滤——时间线 AppBar 动态显示上下文（Feed 名 + 统计 + toggle 开关 + 清除按钮）。右侧文章面板自动关闭，用户回到过滤后的时间线。
+
+#### 决策 2：toggle 按钮位置
+
+- **侧边栏**：Feed 项行内右侧（`_SidebarItem.trailing`），14px 小图标，紧贴未读数字前面
+- **FeedDetailPage 头部**：`_MacFeedHeader` 的 `actions` 区域，20px 标准图标
+- **时间线 AppBar**：选中 Feed 后出现在 `actions` 区域，20px 标准图标
+
+三处均使用 `FeedReadabilitySettingsService` / `FeedTranslationSettingsService` 读写 Hive，状态通过 `StatefulWidget` 本地维护，无需全局状态管理。
+
+#### 决策 3：ScrollConfiguration dragDevices
+
+尝试用 `dragDevices: {PointerDeviceKind.touch}` 消除 scroll arena 点按延迟 → 导致触控板一指拖拽滚动失效 → 回退。结论：`onDoubleTap` 才是延迟主因，删掉后无需额外处理 scroll arena。
+
+---
+
+### 67.5 技术要点
+
+- **`_FeedToggleIcon` vs `_FeedAutoReadabilityIcon`**：前者在 `timeline_page.dart`（接收外部 `enabled` + `onToggle`），后者在 `macos_sidebar.dart`（内部直接读 Hive）。两者不能互换——侧边栏图标需要在 Feed 列表上下文中独立工作，时间线 AppBar 图标需要响应 `selectedFeedId` 变化。
+- **`SubscriptionsController` 在 macOS 上的注册**：`main_page.dart` 中 `if (Platform.isMacOS) { Get.put(SubscriptionsController()); }` 确保 macOS 可用 `Get.find<SubscriptionsController>()`。
+- **macOS 三栏布局**：`_macPages = [TimelinePage, FilterReviewPage, SettingsPage]`（`IndexedStack`），`SubscriptionsPage` 不在其中，订阅树直接渲染在侧边栏内。
+- **`article_page.dart` 的 `openSource()`**：在 macOS split view 中，文章是 `ArticlePageView(isSplitView: true)` 内联在右侧面板，不是 push route。`Get.back()` 不适用，改用 `tc.selectedArticle.value = null` 清空右面板。
+
+### 67.6 当前验证状态
+
+- `dart analyze lib/`：零 error 零 warning（仅 2 个预存 info）
+- 改动文件均在 git working tree 中（未 commit）
+- Android `subscriptions_page.dart` 已 `git checkout` 回退至原始状态
+
+### 67.1 改动目标
+
+用户反馈订阅源页面（`SubscriptionsPage`）：
+1. 对齐混乱——View / Category / Feed 三级缩进关系不清晰
+2. 缺少"自动拉取全文"和"自动翻译"两个按源开关按钮
+3. 希望视觉风格与主页面统一
+
+### 67.2 已落地的代码改动（`lib/pages/subscriptions/subscriptions_page.dart`）
+
+| 改动项 | 变更 |
+|--------|------|
+| **Feed 卡片边距** | `margin: only(left:48, right:16, bottom:8)` → `only(left:44, right:16, top:4, bottom:4)` |
+| **Category 缩进** | `padding: LTRB(32, ...)` → `LTRB(40, ...)` |
+| **Category chevron** | 裸 Icon → 包裹在圆形背景 `Container`（与 View 层 chevron 统一），icon 也换成 `Icons.chevron_right` |
+| **展开动画** | `AnimatedCrossFade` → `AnimatedSize`（View 和 Category 两层的展开/折叠动画都换了） |
+| **Feed 卡片类型** | `StatelessWidget` → `StatefulWidget`（需要本地维护 toggle 状态） |
+| **新增按钮** | 每张 Feed 卡片右侧增加两个 `_FeedToggleButton`（`article_outlined`/`translate_outlined`），分别控制 `FeedReadabilitySettingsService` 和 `FeedTranslationSettingsService` |
+| **新增组件** | `_FeedToggleButton` — 小型 toggle icon button，32×32 tap target，关闭态空心灰色 35% 透明度，开启态实心主色 |
+
+### 67.3 当前问题：按钮在运行时不可见
+
+**症状**：用户执行 `flutter clean && flutter pub get && flutter run` 后，在订阅源页面展开到 Feed 卡片时，只能看到未读数字，看不到两个 toggle 按钮。
+
+**已验证的事实**：
+- `dart analyze lib/` 零错误
+- `git diff` 确认改动在磁盘上
+- 代码中只有一处 `_FeedCard` 定义（`lib/pages/subscriptions/subscriptions_page.dart:641`）
+- `_FeedCard` 的 `build()` 中 toggle 按钮在 `Expanded(Column(...))` 之后、`if (hasUnread) ...[badge]` 之前——如果未读徽章能渲染，按钮应该也能渲染
+
+**未验证的假设 / 可排查方向**：
+
+1. **`Obx` 重建与 StatefulWidget 交互**：`_FeedCardState.build()` 的方法体被 `Obx(() { ... })` 包裹。`Obx` 内部读取 `_controller.unreadFor(_feed.feedId)` 建立响应式依赖。如果 `_unreadCounts` RxMap 频繁触发重建，可能导致 widget 子树被替换时 state 丢失。可尝试将 `Obx` 范围缩小到只包裹未读徽章部分，而不是整个卡片。
+
+2. **`AnimatedSize` 内 StatefulWidget 的生命周期**：`_FeedCard` 实例在 `_CategorySection` 的 `AnimatedSize` 条件分支内（`_expanded ? [卡片列表] : SizedBox`）。当 `_expanded` 从 `false` → `true` 时 Flutter 创建新 element，`initState` 运行；但若 `_CategorySection` 自身被重建（比如搜索过滤导致 `filteredNodes` 变化），element 可能被复用或重建，状态可能丢失。
+
+3. **Icon 字体不可用**：`Icons.article_outlined` 和 `Icons.translate_outlined` 在某些旧版 Material Icons 字体中可能不存在，导致图标渲染为空。虽然 Flutter 3.x 应该支持，但可尝试替换为更基础的 icon（如 `Icons.article` / `Icons.translate` 也作为 fallback）来排除。
+
+4. **`colorscheme` 参数传递问题**：`_FeedToggleButton` 接收 `ColorScheme colorScheme`。在 `_FeedCardState.build()` 中传入的是局部变量 `cs` = `Theme.of(context).colorScheme`。这本身没问题，但可加 `debugPrint` 确认 `build()` 确实被调用。
+
+5. **编译缓存残留**：虽然用户执行了 `flutter clean`，但 Android 的 `app/build/` 或 Gradle 缓存可能未被完全清除。可尝试：
+   ```bash
+   flutter clean
+   rm -rf android/app/build
+   rm -rf android/.gradle
+   flutter pub get
+   flutter run
+   ```
+
+### 67.4 建议的调试步骤（下一位 agent）
+
+1. **先确认代码能跑到**：在 `_FeedCardState.build()` 第一行加 `debugPrint('[FeedCard] build: ${_feed.title}, readability=$_autoReadability, translate=$_autoTranslate')`，看日志是否输出。
+2. **排除 Icon 字体问题**：把 `_FeedToggleButton` 的 icon 暂时换成 `Icons.star` / `Icons.star_border`（最基础 icon），看是否出现。
+3. **排除布局问题**：把两个 `_FeedToggleButton` 替换为临时的红色 `Container(width:24, height:24, color:Colors.red)`，看红色方块是否出现。
+4. **缩小 Obx 范围测试**：把 `Obx` 从包裹整个卡片改为仅包裹未读徽章，看按钮是否出现。
+5. **如果不生效**：考虑放弃 `StatefulWidget` 方案，改为在 `SubscriptionsController` 中用 RxMap 管理 toggle 状态，`_FeedCard` 退回 `StatelessWidget` + `Obx` 读取 controller 的响应式状态。

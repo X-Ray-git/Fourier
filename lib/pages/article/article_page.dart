@@ -414,6 +414,13 @@ class ArticleController extends GetxController {
 
   Future<void> openSource() async {
     if (article.feedId.isEmpty) return;
+    if (Platform.isMacOS) {
+      final tc = Get.find<TimelineController>();
+      tc.selectedArticle.value = null;
+      tc.selectedCategory.value = null;
+      tc.selectedFeedId.value = article.feedId;
+      return;
+    }
     Get.toNamed(
       Routes.feedDetail,
       arguments: {'feedId': article.feedId, 'feedTitle': article.feedTitle},
@@ -542,12 +549,18 @@ class ArticlePageView extends StatefulWidget {
   final ArticleModel article;
   final String? pageLabel;
   final bool isSplitView;
+  final VoidCallback? onClose;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
 
   const ArticlePageView({
     super.key,
     required this.article,
     this.pageLabel,
     this.isSplitView = false,
+    this.onClose,
+    this.onPrevious,
+    this.onNext,
   });
 
   @override
@@ -1086,8 +1099,32 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ? Focus(
             autofocus: true,
             onKeyEvent: (node, event) {
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.keyM) {
+              if (event is! KeyDownEvent) {
+                return KeyEventResult.ignored;
+              }
+
+              if (event.logicalKey == LogicalKeyboardKey.escape) {
+                if (widget.onClose != null) {
+                  widget.onClose!();
+                } else {
+                  Get.back();
+                }
+                return KeyEventResult.handled;
+              }
+
+              if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                  widget.onPrevious != null) {
+                widget.onPrevious!();
+                return KeyEventResult.handled;
+              }
+
+              if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+                  widget.onNext != null) {
+                widget.onNext!();
+                return KeyEventResult.handled;
+              }
+
+              if (event.logicalKey == LogicalKeyboardKey.keyM) {
                 if (!controller.isUpdatingReadState.value) {
                   if (controller.isRead.value) {
                     controller.markAsUnread();

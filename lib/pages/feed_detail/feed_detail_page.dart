@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/constants/constants.dart';
 import '../../http/feed_http.dart';
@@ -12,6 +14,7 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../models/feed.dart';
 import '../../router/app_pages.dart';
+import '../../utils/security_utils.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
@@ -29,6 +32,7 @@ import '../../utils/storage.dart';
 import '../widgets/article_card.dart';
 import '../timeline/timeline_controller.dart';
 import '../subscriptions/subscriptions_controller.dart';
+import '../article/article_page.dart';
 
 /// Feed 详情控制器 — 按订阅源或分类或 view 筛选文章
 class FeedDetailController extends GetxController {
@@ -49,6 +53,9 @@ class FeedDetailController extends GetxController {
   final isAutoReadabilityEnabled = false.obs;
   final readFilter = 0.obs; // 0=未读, 1=全部, 2=已读
   final allArticles = <ArticleModel>[].obs; // 全量（含已读）
+  final selectedArticle = Rxn<ArticleModel>();
+  String? _lastArticleTapEntryId;
+  DateTime? _lastArticleTapAt;
 
   @override
   void onInit() {
@@ -63,7 +70,8 @@ class FeedDetailController extends GetxController {
         (args['categoryName'] as String?) ??
         (args['viewName'] as String?) ??
         '';
-    _cacheScope = filterFeedId ??
+    _cacheScope =
+        filterFeedId ??
         'category:${filterCategory ?? 'view:${filterView ?? 'all'}'}';
     refreshAutoTranslateStatus();
     refreshAutoReadabilityStatus();
@@ -74,11 +82,61 @@ class FeedDetailController extends GetxController {
   void _applyFilter() {
     switch (readFilter.value) {
       case 0:
-        articles.value = allArticles.where((a) => !a.isRead && !a.isRejectedByAi).toList();
+        articles.value = allArticles
+            .where((a) => !a.isRead && !a.isRejectedByAi)
+            .toList();
       case 1:
         articles.value = allArticles.where((a) => !a.isRejectedByAi).toList();
       case 2:
-        articles.value = allArticles.where((a) => a.isRead && !a.isRejectedByAi).toList();
+        articles.value = allArticles
+            .where((a) => a.isRead && !a.isRejectedByAi)
+            .toList();
+    }
+  }
+
+  void selectRelativeArticle(int delta) {
+    if (articles.isEmpty) return;
+
+    final selected = selectedArticle.value;
+    final currentIndex = selected == null
+        ? -1
+        : articles.indexWhere((a) => a.entryId == selected.entryId);
+    final nextIndex = (currentIndex + delta).clamp(0, articles.length - 1);
+    if (nextIndex < 0 || nextIndex >= articles.length) return;
+    selectedArticle.value = articles[nextIndex];
+  }
+
+  Future<void> openOriginalArticle(ArticleModel article) async {
+    if (article.url.isEmpty) return;
+
+    final uri = SecurityUtils.parseHttpUrl(article.url);
+    if (uri == null) {
+      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
+      return;
+    }
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      AppFeedback.error('无法打开链接', '未找到默认浏览器');
+    }
+  }
+
+  void handleMacArticleTap(ArticleModel article) {
+    final now = DateTime.now();
+    final isDoubleTap =
+        _lastArticleTapEntryId == article.entryId &&
+        _lastArticleTapAt != null &&
+        now.difference(_lastArticleTapAt!).inMilliseconds < 300;
+
+    selectedArticle.value = article;
+    _lastArticleTapEntryId = article.entryId;
+    _lastArticleTapAt = now;
+
+    if (isDoubleTap) {
+      _lastArticleTapEntryId = null;
+      _lastArticleTapAt = null;
+      openOriginalArticle(article);
     }
   }
 
@@ -131,9 +189,11 @@ class FeedDetailController extends GetxController {
     }
 
     unawaited(ReadSyncService.syncPendingReads());
-    
+
     bool hasInitialContent = false;
-    final local = LocalArticleDbService.readAllArticles().where(_matchesScope).toList();
+    final local = LocalArticleDbService.readAllArticles()
+        .where(_matchesScope)
+        .toList();
     if (local.isNotEmpty) {
       allArticles.value = _mergeLocalReadState(local);
       _applyFilter();
@@ -141,7 +201,8 @@ class FeedDetailController extends GetxController {
       hasInitialContent = true;
     } else if (Get.isRegistered<TimelineController>()) {
       final timeline = Get.find<TimelineController>();
-      if (timeline.loadingState.value is Success<List<ArticleModel>> && timeline.allArticles.isNotEmpty) {
+      if (timeline.loadingState.value is Success<List<ArticleModel>> &&
+          timeline.allArticles.isNotEmpty) {
         allArticles.value = timeline.allArticles.where(_matchesScope).toList();
         _applyFilter();
         loadingState.value = Success(articles.toList());
@@ -149,7 +210,9 @@ class FeedDetailController extends GetxController {
       }
     }
 
-    final cachedArticles = ContentCacheService.readFeedDetailArticles(_cacheScope);
+    final cachedArticles = ContentCacheService.readFeedDetailArticles(
+      _cacheScope,
+    );
     if (!hasInitialContent && cachedArticles.isNotEmpty) {
       allArticles.value = _mergeLocalReadState(cachedArticles);
       _applyFilter();
@@ -187,20 +250,9 @@ class FeedDetailController extends GetxController {
     }
 
     final results = await Future.wait([
-      FeedHttp.collectEntries(
-        view: 0,
-        withContent: true,
-        feedMap: _feedMap,
-      ),
-      FeedHttp.collectEntries(
-        view: 1,
-        withContent: true,
-        feedMap: _feedMap,
-      ),
-      FeedHttp.collectAllInboxEntries(
-        limit: 100,
-        withContent: true,
-      ),
+      FeedHttp.collectEntries(view: 0, withContent: true, feedMap: _feedMap),
+      FeedHttp.collectEntries(view: 1, withContent: true, feedMap: _feedMap),
+      FeedHttp.collectAllInboxEntries(limit: 100, withContent: true),
     ]);
 
     final unreadResult = results[0];
@@ -231,8 +283,12 @@ class FeedDetailController extends GetxController {
     final socialOk = socialResult is Success<List<ArticleModel>>;
     final inboxOk = inboxResult is Success<List<ArticleModel>>;
 
-    _applyUnreadSnapshot(filteredUnread,
-        feedsOk: feedsOk, socialOk: socialOk, inboxOk: inboxOk);
+    _applyUnreadSnapshot(
+      filteredUnread,
+      feedsOk: feedsOk,
+      socialOk: socialOk,
+      inboxOk: inboxOk,
+    );
 
     final all = LocalArticleDbService.readAllArticles()
         .where(_matchesScope)
@@ -240,7 +296,7 @@ class FeedDetailController extends GetxController {
     allArticles.value = _mergeLocalReadState(all);
     _applyFilter();
     loadingState.value = Success(articles.toList());
-    
+
     final unread = allArticles.where((a) => !a.isRead).toList();
     ContentCacheService.saveFeedDetailArticles(_cacheScope, unread);
     // 全量同步完成后，强制通知订阅列表做全量重新计数，保证数字一致
@@ -278,8 +334,12 @@ class FeedDetailController extends GetxController {
     return true;
   }
 
-  void _applyUnreadSnapshot(List<ArticleModel> unreadData,
-      {bool feedsOk = true, bool socialOk = true, bool inboxOk = true}) {
+  void _applyUnreadSnapshot(
+    List<ArticleModel> unreadData, {
+    bool feedsOk = true,
+    bool socialOk = true,
+    bool inboxOk = true,
+  }) {
     final unreadIds = unreadData.map((a) => a.entryId).toSet();
     final localArticles = LocalArticleDbService.readAllArticles()
         .where(_matchesScope)
@@ -291,7 +351,9 @@ class FeedDetailController extends GetxController {
       // 按文章类型独立判定：对应 API 失败则跳过，不误标记
       if (local.category == 'inbox' && !inboxOk) continue;
       if (local.category == 'social' && !socialOk) continue;
-      if (!feedsOk && local.category != 'inbox' && local.category != 'social') continue;
+      if (!feedsOk && local.category != 'inbox' && local.category != 'social') {
+        continue;
+      }
 
       final localOverride = LocalArticleDbService.readOverrideOf(local.entryId);
       if (localOverride == false) {
@@ -377,7 +439,7 @@ class FeedDetailController extends GetxController {
       allArticles.value = _mergeLocalReadState(all);
       _applyFilter();
       loadingState.value = Success(articles.toList());
-      
+
       final unread = allArticles.where((a) => !a.isRead).toList();
       ContentCacheService.saveFeedDetailArticles(_cacheScope, unread);
 
@@ -437,11 +499,15 @@ class FeedDetailPage extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     // 解析安全的头像链接
-    final safeImageUrl = controller.feedImage != null &&
-            controller.feedImage!.isNotEmpty
+    final safeImageUrl =
+        controller.feedImage != null && controller.feedImage!.isNotEmpty
         ? (ArticleImageService.toProxiedUrl(controller.feedImage) ??
-            controller.feedImage)
+              controller.feedImage)
         : null;
+
+    if (Platform.isMacOS) {
+      return _buildMacOSLayout(context, controller, cs, safeImageUrl);
+    }
 
     return Scaffold(
       body: custom_refresh.RefreshIndicator(
@@ -457,7 +523,8 @@ class FeedDetailPage extends StatelessWidget {
               expandedHeight: 220,
               pinned: true,
               stretch: true,
-              backgroundColor: Colors.transparent, // 必须透明，靠内部的 BackdropFilter 呈现毛玻璃
+              backgroundColor:
+                  Colors.transparent, // 必须透明，靠内部的 BackdropFilter 呈现毛玻璃
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
@@ -476,7 +543,11 @@ class FeedDetailPage extends StatelessWidget {
                     ),
                   ),
                   FlexibleSpaceBar(
-                    titlePadding: const EdgeInsets.only(left: 48, right: 48, bottom: 16),
+                    titlePadding: const EdgeInsets.only(
+                      left: 48,
+                      right: 48,
+                      bottom: 16,
+                    ),
                     centerTitle: true,
                     title: Text(
                       controller.feedTitle,
@@ -511,7 +582,10 @@ class FeedDetailPage extends StatelessWidget {
 
                         // 3. 居中大头像展示区（向上滚动时会自动淡出）
                         Positioned(
-                          top: MediaQuery.of(context).padding.top + kToolbarHeight + 10,
+                          top:
+                              MediaQuery.of(context).padding.top +
+                              kToolbarHeight +
+                              10,
                           left: 0,
                           right: 0,
                           child: Center(
@@ -534,13 +608,19 @@ class FeedDetailPage extends StatelessWidget {
                                 ],
                                 image: safeImageUrl != null
                                     ? DecorationImage(
-                                        image: CachedNetworkImageProvider(safeImageUrl),
+                                        image: CachedNetworkImageProvider(
+                                          safeImageUrl,
+                                        ),
                                         fit: BoxFit.cover,
                                       )
                                     : null,
                               ),
                               child: safeImageUrl == null
-                                  ? Icon(Icons.rss_feed, size: 32, color: cs.primary)
+                                  ? Icon(
+                                      Icons.rss_feed,
+                                      size: 32,
+                                      color: cs.primary,
+                                    )
                                   : null,
                             ),
                           ),
@@ -554,12 +634,17 @@ class FeedDetailPage extends StatelessWidget {
               actions: [
                 // Unread Count Badge
                 Obx(() {
-                  final unreadCount = controller.articles.where((a) => !a.isRead).length;
+                  final unreadCount = controller.articles
+                      .where((a) => !a.isRead)
+                      .length;
                   if (unreadCount == 0) return const SizedBox.shrink();
                   return Center(
                     child: Container(
                       margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: cs.primary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
@@ -576,37 +661,41 @@ class FeedDetailPage extends StatelessWidget {
                   );
                 }),
                 // 已读筛选
-                Obx(() => PopupMenuButton<int>(
-                      tooltip: '筛选文章状态',
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      icon: Icon(
-                        controller.readFilter.value == 0
-                            ? Icons.mark_email_unread_outlined
-                            : controller.readFilter.value == 1
-                                ? Icons.inbox
-                                : Icons.done_all,
-                        size: 22,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      onSelected: (v) {
-                        controller.readFilter.value = v;
-                        controller._applyFilter();
-                      },
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(value: 0, child: Text('仅未读')),
-                        const PopupMenuItem(value: 1, child: Text('全部')),
-                        const PopupMenuItem(value: 2, child: Text('仅已读')),
-                      ],
-                    )),
+                Obx(
+                  () => PopupMenuButton<int>(
+                    tooltip: '筛选文章状态',
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    icon: Icon(
+                      controller.readFilter.value == 0
+                          ? Icons.mark_email_unread_outlined
+                          : controller.readFilter.value == 1
+                          ? Icons.inbox
+                          : Icons.done_all,
+                      size: 22,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    onSelected: (v) {
+                      controller.readFilter.value = v;
+                      controller._applyFilter();
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 0, child: Text('仅未读')),
+                      const PopupMenuItem(value: 1, child: Text('全部')),
+                      const PopupMenuItem(value: 2, child: Text('仅已读')),
+                    ],
+                  ),
+                ),
                 // 强制提取长文
                 if (controller.filterFeedId != null)
                   Obx(() {
                     final isEnabled = controller.isAutoReadabilityEnabled.value;
                     return IconButton(
                       icon: Icon(
-                        isEnabled ? Icons.chrome_reader_mode : Icons.chrome_reader_mode_outlined,
+                        isEnabled
+                            ? Icons.chrome_reader_mode
+                            : Icons.chrome_reader_mode_outlined,
                         color: isEnabled ? cs.primary : cs.onSurfaceVariant,
                       ),
                       tooltip: isEnabled ? '强制全文提取已开启' : '开启强制全文提取',
@@ -654,16 +743,16 @@ class FeedDetailPage extends StatelessWidget {
 
               return switch (state) {
                 Loading() => const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _FeedDetailSkeleton(),
-                  ),
+                  hasScrollBody: false,
+                  child: _FeedDetailSkeleton(),
+                ),
                 LoadError(:final errMsg) => SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _ErrorView(
-                      message: errMsg,
-                      onRetry: controller.loadData,
-                    ),
+                  hasScrollBody: false,
+                  child: _ErrorView(
+                    message: errMsg,
+                    onRetry: controller.loadData,
                   ),
+                ),
                 Success(:final response) when response.isEmpty =>
                   SliverFillRemaining(
                     hasScrollBody: false,
@@ -673,49 +762,327 @@ class FeedDetailPage extends StatelessWidget {
                     ),
                   ),
                 Success() => Obx(() {
-                    final list = controller.articles;
-                    if (list.isEmpty) {
-                      return SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _EmptyView(
-                          onRetry: controller.loadData,
-                          readFilter: controller.readFilter.value,
-                        ),
-                      );
-                    }
-                    return SliverPadding(
-                      padding: EdgeInsets.only(
-                        top: 6,
-                        bottom: 16 + MediaQuery.of(context).padding.bottom,
-                      ),
-                      sliver: SliverList.builder(
-                        itemCount: list.length,
-                        itemBuilder: (context, index) {
-                          final article = list[index];
-                          return ArticleCard(
-                            article: article,
-                            showFeedTitle: true,
-                            onTap: () {
-                              Get.toNamed(
-                                Routes.article,
-                                arguments: {
-                                  'article': article,
-                                  'sequence': controller.articles.toList(),
-                                  'index': index,
-                                },
-                              );
-                            },
-                          );
-                        },
+                  final list = controller.articles;
+                  if (list.isEmpty) {
+                    return SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _EmptyView(
+                        onRetry: controller.loadData,
+                        readFilter: controller.readFilter.value,
                       ),
                     );
-                  }),
+                  }
+                  return SliverPadding(
+                    padding: EdgeInsets.only(
+                      top: 6,
+                      bottom: 16 + MediaQuery.of(context).padding.bottom,
+                    ),
+                    sliver: SliverList.builder(
+                      itemCount: list.length,
+                      itemBuilder: (context, index) {
+                        final article = list[index];
+                        return ArticleCard(
+                          article: article,
+                          showFeedTitle: true,
+                          onTap: () {
+                            Get.toNamed(
+                              Routes.article,
+                              arguments: {
+                                'article': article,
+                                'sequence': controller.articles.toList(),
+                                'index': index,
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  );
+                }),
               };
             }),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildMacOSLayout(
+    BuildContext context,
+    FeedDetailController controller,
+    ColorScheme cs,
+    String? safeImageUrl,
+  ) {
+    return ColoredBox(
+      color: cs.surface,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 380,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MacFeedHeader(
+                  controller: controller,
+                  colorScheme: cs,
+                  imageUrl: safeImageUrl,
+                ),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: cs.outlineVariant.withValues(alpha: 0.35),
+                ),
+                Expanded(child: _MacFeedArticleList(controller: controller)),
+              ],
+            ),
+          ),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.35),
+          ),
+          Expanded(
+            child: Obx(() {
+              final selected = controller.selectedArticle.value;
+              if (selected == null) {
+                return Center(
+                  child: Text(
+                    '请选择文章',
+                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                  ),
+                );
+              }
+              return ArticlePageView(
+                key: ValueKey(selected.entryId),
+                article: selected,
+                isSplitView: true,
+                onClose: () => controller.selectedArticle.value = null,
+                onPrevious: () => controller.selectRelativeArticle(-1),
+                onNext: () => controller.selectRelativeArticle(1),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MacFeedHeader extends StatelessWidget {
+  final FeedDetailController controller;
+  final ColorScheme colorScheme;
+  final String? imageUrl;
+
+  const _MacFeedHeader({
+    required this.controller,
+    required this.colorScheme,
+    required this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 68,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(74, 8, 8, 8),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              iconSize: 17,
+              tooltip: '返回',
+              visualDensity: VisualDensity.compact,
+              onPressed: Get.back,
+            ),
+            const SizedBox(width: 4),
+            _MacFeedAvatar(imageUrl: imageUrl, colorScheme: colorScheme),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    controller.feedTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Obx(() {
+                    final unread = controller.articles
+                        .where((a) => !a.isRead)
+                        .length;
+                    final total = controller.articles.length;
+                    return Text(
+                      unread > 0
+                          ? '$unread 篇未读 · $total 篇当前列表'
+                          : '$total 篇当前列表',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            Obx(
+              () => PopupMenuButton<int>(
+                tooltip: '筛选文章状态',
+                icon: Icon(
+                  controller.readFilter.value == 0
+                      ? Icons.mark_email_unread_outlined
+                      : controller.readFilter.value == 1
+                      ? Icons.inbox
+                      : Icons.done_all,
+                  size: 20,
+                ),
+                onSelected: (v) {
+                  controller.readFilter.value = v;
+                  controller._applyFilter();
+                  controller.selectedArticle.value = null;
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 0, child: Text('仅未读')),
+                  PopupMenuItem(value: 1, child: Text('全部')),
+                  PopupMenuItem(value: 2, child: Text('仅已读')),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.sync, size: 20),
+              tooltip: '同步',
+              onPressed: controller.loadData,
+            ),
+            if (controller.filterFeedId != null)
+              Obx(() {
+                final isEnabled = controller.isAutoReadabilityEnabled.value;
+                return IconButton(
+                  icon: Icon(
+                    isEnabled ? Icons.article : Icons.article_outlined,
+                    size: 20,
+                    color: isEnabled
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                  tooltip: isEnabled ? '自动拉取全文已开启' : '自动拉取全文',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () async {
+                    await FeedReadabilitySettingsService
+                        .toggleAutoReadability(
+                      controller.filterFeedId ?? '',
+                    );
+                    controller.refreshAutoReadabilityStatus();
+                  },
+                );
+              }),
+            if (controller.filterFeedId != null)
+              Obx(() {
+                final isEnabled = controller.isAutoTranslateEnabled.value;
+                return IconButton(
+                  icon: Icon(
+                    isEnabled ? Icons.translate : Icons.translate_outlined,
+                    size: 20,
+                    color: isEnabled
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                  tooltip: isEnabled ? '自动翻译已开启' : '自动翻译',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () async {
+                    await FeedTranslationSettingsService.toggleAutoTranslate(
+                      controller.filterFeedId ?? '',
+                    );
+                    controller.refreshAutoTranslateStatus();
+                  },
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MacFeedAvatar extends StatelessWidget {
+  final String? imageUrl;
+  final ColorScheme colorScheme;
+
+  const _MacFeedAvatar({required this.imageUrl, required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: Container(
+        width: 38,
+        height: 38,
+        color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+        child: imageUrl == null
+            ? Icon(Icons.rss_feed, size: 20, color: colorScheme.primary)
+            : CachedNetworkImage(
+                imageUrl: imageUrl!,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) =>
+                    Icon(Icons.rss_feed, size: 20, color: colorScheme.primary),
+              ),
+      ),
+    );
+  }
+}
+
+class _MacFeedArticleList extends StatelessWidget {
+  final FeedDetailController controller;
+
+  const _MacFeedArticleList({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final state = controller.loadingState.value;
+      return switch (state) {
+        Loading() => const _FeedDetailSkeleton(),
+        LoadError(:final errMsg) => _ErrorView(
+          message: errMsg,
+          onRetry: controller.loadData,
+        ),
+        Success() => Obx(() {
+          final list = controller.articles;
+          if (list.isEmpty) {
+            return _EmptyView(
+              onRetry: controller.loadData,
+              readFilter: controller.readFilter.value,
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 18),
+            itemCount: list.length,
+            itemBuilder: (context, index) {
+              final article = list[index];
+              return Obx(() {
+                return ArticleCard(
+                  article: article,
+                  showFeedTitle: true,
+                  isSelected:
+                      controller.selectedArticle.value?.entryId ==
+                      article.entryId,
+                  onTap: () => controller.handleMacArticleTap(article),
+                );
+              });
+            },
+          );
+        }),
+      };
+    });
   }
 }
 
@@ -736,10 +1103,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: Theme.of(context)
-                  .colorScheme
-                  .outlineVariant
-                  .withValues(alpha: 0.3),
+              color: Theme.of(
+                context,
+              ).colorScheme.outlineVariant.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -752,9 +1118,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                   width: double.infinity,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -763,9 +1129,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                   width: MediaQuery.of(context).size.width * 0.6,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -776,9 +1142,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                       width: 48,
                       height: 20,
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
@@ -787,9 +1153,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                       width: 64,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -825,7 +1191,11 @@ class _ErrorView extends StatelessWidget {
                 color: colorScheme.errorContainer.withValues(alpha: 0.4),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.cloud_off_rounded, size: 48, color: colorScheme.error),
+              child: Icon(
+                Icons.cloud_off_rounded,
+                size: 48,
+                color: colorScheme.error,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
@@ -853,8 +1223,13 @@ class _ErrorView extends StatelessWidget {
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('重新加载'),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
               ),
             ],
@@ -875,7 +1250,7 @@ class _EmptyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isUnread = readFilter == 0;
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -920,8 +1295,13 @@ class _EmptyView extends StatelessWidget {
                 icon: const Icon(Icons.sync, size: 18),
                 label: const Text('强制同步'),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
               ),
             ],

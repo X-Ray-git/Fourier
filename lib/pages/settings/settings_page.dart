@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -134,6 +135,18 @@ class _SettingsPageState extends State<SettingsPage> {
       extendBodyBehindAppBar: true,
       appBar: widget.showAppBar
           ? AppBar(
+              leadingWidth: Platform.isMacOS ? 88 : null,
+              leading: Platform.isMacOS && Navigator.of(context).canPop()
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 66),
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                        iconSize: 17,
+                        tooltip: '返回',
+                        onPressed: Get.back,
+                      ),
+                    )
+                  : null,
               title: const Text('设置'),
               centerTitle: true,
               backgroundColor: colorScheme.surface.withValues(alpha: 0.7),
@@ -153,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
           MediaQuery.paddingOf(context).top + 8,
           16,
           MediaQuery.paddingOf(context).bottom +
-              kBottomNavigationBarHeight +
+              (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
               32,
         ),
         children: [

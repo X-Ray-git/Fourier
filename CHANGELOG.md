@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-06-01
+
+### Added
+- Added macOS desktop release packaging and Android APK packaging through tag-triggered GitHub Actions.
+- Added macOS sidebar-oriented reading flow, task center access, and desktop-focused sync feedback.
+
+### Fixed
+- Fixed macOS split-view keyboard shortcuts so left/right navigation and `M` read-state toggling work without focus glitches or double triggers.
+- Fixed rejected/unread review counts and subscription unread badges drifting after read-state sync.
+- Updated product branding and macOS app bundle display name to Auto Folo.
+
 ## [1.1.0] - 2026-05-26
 
 ### Added

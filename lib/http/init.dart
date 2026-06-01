@@ -28,7 +28,7 @@ class Request {
         'Content-Type': 'application/json',
         'X-App-Platform': 'mobile/android',
         'X-App-Name': 'Auto Folo',
-        'X-App-Version': '1.1.0',
+        'X-App-Version': '1.1.1',
       },
     );
 

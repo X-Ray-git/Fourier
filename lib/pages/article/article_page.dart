@@ -607,10 +607,16 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     controller = Get.put(ArticleController(widget.article), tag: _tag);
     _scrollController = ScrollController();
     _builtCount = _initialBuildCount;
+    if (_usesGlobalShortcuts) {
+      HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
+    }
   }
 
   @override
   void dispose() {
+    if (_usesGlobalShortcuts) {
+      HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
+    }
     _scrollController.dispose();
     _scrollProgress.dispose();
     if (Get.isRegistered<ArticleController>(tag: _tag)) {
@@ -665,6 +671,60 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   bool _shouldUseVirtualizedBody(List<HtmlChunk> chunks) {
     if (chunks.length >= _virtualChunkThreshold) return true;
     return _rawEstimatedExtentFor(chunks) >= _virtualExtentThreshold;
+  }
+
+  bool get _usesGlobalShortcuts => Platform.isMacOS && widget.isSplitView;
+
+  bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (_hasShortcutModifierPressed()) return false;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      _closeArticle();
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft && widget.onPrevious != null) {
+      widget.onPrevious!();
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.arrowRight && widget.onNext != null) {
+      widget.onNext!();
+      return true;
+    }
+
+    if (event is KeyDownEvent && key == LogicalKeyboardKey.keyM) {
+      _toggleReadState();
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _hasShortcutModifierPressed() {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isAltPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed;
+  }
+
+  void _closeArticle() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Get.back();
+    }
+  }
+
+  void _toggleReadState() {
+    if (controller.isUpdatingReadState.value) return;
+    if (controller.isRead.value) {
+      controller.markAsUnread();
+    } else {
+      controller.markAsRead();
+    }
   }
 
   double _estimatedExtentFor(List<HtmlChunk> chunks) {
@@ -1104,11 +1164,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               }
 
               if (event.logicalKey == LogicalKeyboardKey.escape) {
-                if (widget.onClose != null) {
-                  widget.onClose!();
-                } else {
-                  Get.back();
-                }
+                _closeArticle();
                 return KeyEventResult.handled;
               }
 
@@ -1125,13 +1181,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               }
 
               if (event.logicalKey == LogicalKeyboardKey.keyM) {
-                if (!controller.isUpdatingReadState.value) {
-                  if (controller.isRead.value) {
-                    controller.markAsUnread();
-                  } else {
-                    controller.markAsRead();
-                  }
-                }
+                _toggleReadState();
                 return KeyEventResult.handled;
               }
               return KeyEventResult.ignored;

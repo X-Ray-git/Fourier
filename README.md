@@ -1,19 +1,25 @@
-# autofolo — Folo RSS 信息流 Android 阅读器
+# Auto Folo — Folo RSS 信息流阅读器
 
-基于 Flutter 的 Folo RSS 聚合阅读客户端，致力于提供丝滑、原生的专属信息流体验，仅支持 Android。
+<p align="center">
+  <img src="assets/icon.png" alt="Auto Folo 图标" width="96" height="96">
+</p>
+
+基于 Flutter 的 Folo RSS 聚合阅读客户端，支持 Android 和 macOS。Auto Folo 聚焦高密度信息流阅读：同步 Folo 未读、按源筛选、逐块渲染长文，并用 DeepSeek 完成自动过滤、翻译和摘要。
 
 ## 功能矩阵
 
 | 模块 | 功能 |
 |------|------|
-| **时间线** | 未读 / 全部 / 已读 三态视图，下拉刷新 + 无限滚动，游标分页 |
+| **时间线** | 未读 / 全部 / 已读 三态视图，下拉刷新 + 无限滚动，游标分页，macOS 分栏阅读 |
 | **订阅源** | view → 分类 → 订阅源 三级分组，搜索，按分类/按源筛选文章 |
 | **文章详情** | DOM 拆块懒加载渲染（60fps），图片画廊 + 手势缩放，内嵌图片防布局抖动 |
-| **已读管理** | 文章内 FAB 标已读/恢复未读，本地 + Folo 云端双向同步，后台已读窗口补抓 |
+| **已读管理** | 文章内 FAB / macOS 工具栏标已读或恢复未读，本地 + Folo 云端双向同步，后台已读窗口补抓 |
 | **翻译** | DeepSeek 逐篇 HTML 翻译（保留标签结构），按订阅源自动翻译开关，卡片翻译状态标记 |
 | **摘要** | DeepSeek 100-300 字一句话摘要，后台自动摘要队列 |
 | **本地库** | Hive 持久化文章库（5000 条上限），TTL 分级缓存（15min/30min/10min） |
 | **搜索** | 文章标题/来源/作者搜索，订阅源搜索 |
+| **桌面快捷键** | macOS 分栏阅读支持 `←` / `→` 切换文章、`M` 标已读/恢复未读、`Esc` 关闭文章 |
+| **同步反馈** | macOS 同步按钮点击后会旋转显示同步中状态，避免无反馈的重复点击 |
 | **安全** | URL 协议白名单校验，Cookie 注入安全过滤 |
 
 ## 技术栈
@@ -26,7 +32,7 @@
 | 本地存储 | Hive（6 个 Box：setting / localCache / readStatus / articleDb / translations / summaries） |
 | 渲染 | CustomScrollView + SliverList 逐块渲染 + RepaintBoundary 隔离 |
 | HTML 解析 | `html` 包 DOM 遍历拆块 + Isolate 大文本异步 |
-| 主题 | Material You / Dynamic Color |
+| 主题 | Material You / Dynamic Color / Auto Folo 品牌色 |
 | AI | DeepSeek API（翻译 v4-flash / 摘要 v4-flash） |
 
 ## 目录结构
@@ -44,7 +50,7 @@ lib/
 │   ├── article.dart                  # 文章模型（JSON/缓存序列化）
 │   └── feed.dart                     # 订阅源模型（含 view/inbox 分类）
 ├── pages/
-│   ├── main/main_page.dart           # 底部导航（时间线/订阅源/设置）
+│   ├── main/main_page.dart           # Android 底部导航 / macOS 分栏布局
 │   ├── timeline/                     # 时间线（三态视图 + 本地库合并）
 │   ├── subscriptions/                # 订阅源（三级分组 + 搜索）
 │   ├── feed_detail/                  # 按源/按分类筛选文章
@@ -83,8 +89,10 @@ lib/
 ```bash
 flutter pub get
 flutter run
-# 或直接构建 APK
+# 或直接构建 Android APK
 flutter build apk --debug
+# macOS 桌面版
+flutter run -d macos
 ```
 
 ## 首次配置

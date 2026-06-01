@@ -454,7 +454,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'autofolo v1.0.0',
+                    'Auto Folo v1.1.0',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -464,7 +464,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 8),
                   Text(
                     '基于 Folo API 的 RSS 信息流浏览器。'
-                    '仅支持 Android 平台。',
+                    '支持 Android 和 macOS。',
                     style: TextStyle(
                       fontSize: 13,
                       color: colorScheme.onSurfaceVariant,

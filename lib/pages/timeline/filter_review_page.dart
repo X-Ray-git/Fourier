@@ -26,11 +26,27 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final _articles = <ArticleModel>[].obs;
   final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
+  Worker? _articleStateWorker;
+  Worker? _filterCountWorker;
 
   @override
   void initState() {
     super.initState();
     _loadArticles();
+    _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
+      final entryId = ArticleStateNotifier.lastEntryId;
+      if (entryId != null) {
+        _syncArticleFromDb(entryId);
+      } else {
+        _loadArticles();
+      }
+    });
+    if (Get.isRegistered<TimelineController>()) {
+      _filterCountWorker = ever(
+        Get.find<TimelineController>().filterCount,
+        (_) => _loadArticles(),
+      );
+    }
     AutoFilterWorker.onRejected = (entryId, title, reason) {
       if (!mounted) return;
       if (_seenIds.contains(entryId)) return;
@@ -54,6 +70,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   @override
   void dispose() {
     AutoFilterWorker.onRejected = null;
+    _articleStateWorker?.dispose();
+    _filterCountWorker?.dispose();
     super.dispose();
   }
 
@@ -65,6 +83,47 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       _seenIds.add(a.entryId);
     }
     _articles.value = all;
+    _pruneInvalidSelection();
+  }
+
+  void _syncArticleFromDb(String entryId) {
+    final raw = GStorage.articleDb.get(entryId);
+    final index = _articles.indexWhere((a) => a.entryId == entryId);
+
+    if (raw is! Map) {
+      if (index >= 0) {
+        _articles.removeAt(index);
+      }
+      _pruneInvalidSelection();
+      return;
+    }
+
+    final article = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
+    final shouldShow = article.isRejectedByAi && !article.isRead;
+    if (!shouldShow) {
+      if (index >= 0) {
+        _articles.removeAt(index);
+      }
+      _pruneInvalidSelection();
+      return;
+    }
+
+    _seenIds.add(entryId);
+    if (index >= 0) {
+      _articles[index] = article;
+    } else {
+      _articles.insert(0, article);
+    }
+    if (_selectedArticle.value?.entryId == entryId) {
+      _selectedArticle.value = article;
+    }
+  }
+
+  void _pruneInvalidSelection() {
+    final selected = _selectedArticle.value;
+    if (selected == null) return;
+    if (_articles.any((a) => a.entryId == selected.entryId)) return;
+    _selectedArticle.value = null;
   }
 
   void _selectRelativeArticle(int delta) {

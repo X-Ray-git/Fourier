@@ -1,11 +1,144 @@
-# AutoFolo Mobile 交接文档（持续更新）
+# Auto Folo 交接文档（持续更新）
 
 > **快速上手**：Flutter 3.x + GetX + Hive + Dio 项目。入口 `lib/main.dart`，路由 `lib/router/app_pages.dart`。
-> `dart analyze lib/` 应始终零错误。编译：`flutter build apk --release`。
+> 当前产品名统一为 **Auto Folo**；Dart package 名仍是 `autofolo`。验证优先使用 `flutter analyze` 与 `flutter test`，不要用裸 `dart analyze lib/` 判断 Flutter 项目健康度。
+> 常用构建：`flutter build apk --debug`、`flutter build macos --debug`。
+
+## 2026-06-01 交接重点：快捷键、同步反馈、品牌统一、审核页已读同步
+
+### 用户本次反馈的原始问题
+
+1. macOS 分栏阅读里，`←` / `→` 方向键没有稳定切换文章，而是会框选/聚焦不同的图标元素。
+2. `M` 标已读必须先点文章卡片、再点文章正文才能生效；快捷键依赖焦点，体验不符合预期。
+3. 时间线同步按钮点击后没有动画或确认感。
+4. README 与当前功能不一致，需要同步更新，最好把图标也放上去。
+5. 为了统一性，软件展示名应考虑改为 `Auto Folo`；工程目录名是否也应修改需要给出建议。
+6. 进一步反馈：其他设备上已标为已读的文章，时间线未读列表已经能挪出，但“垃圾拦截/审核页”仍然显示这些文章；气泡计数已经减少，但审核页列表和“xx 篇待处理”没有同步变化。
+
+### 已做修改
+
+#### 1. macOS 阅读快捷键修复
+
+文件：`lib/pages/article/article_page.dart`
+
+- 在 `ArticlePageView` 的 macOS 分栏场景中增加 `HardwareKeyboard.instance.addHandler`。
+- 快捷键只在 `widget.isSplitView == true` 时启用全局硬件键盘处理，避免影响普通文章页或移动端。
+- 处理逻辑：
+  - `←` 调用 `widget.onPrevious`
+  - `→` 调用 `widget.onNext`
+  - `M` 在未更新中时切换已读/未读
+  - `Esc` 关闭当前文章
+- 忽略带 `Alt` / `Control` / `Meta` 的组合键，避免吞掉系统或应用菜单快捷键。
+- 保留原来的 `Focus.onKeyEvent` 作为局部兜底，但真正解决焦点被正文、按钮、图标拿走的问题依赖全局 handler。
+
+设计原因：
+
+- 原实现把快捷键挂在文章页的 `Focus` 上，正文里的 `SelectionArea`、工具栏按钮和其他可聚焦元素会抢走焦点。
+- 用户看到的“方向键框选不同图标元素”，本质是 Flutter 焦点遍历先消费了方向键。
+- 使用硬件键盘 handler 可以让文章分栏处于打开状态时始终获得这些阅读快捷键，不再要求用户点中正文。
+
+#### 2. macOS 同步按钮反馈
+
+文件：`lib/pages/timeline/timeline_page.dart`
+
+- 将 `_MacTimelineAppBar` 里的同步 `IconButton` 替换为 `_MacSyncButton`。
+- `_MacSyncButton` 使用 `AnimationController` + `RotationTransition`，点击后图标旋转并显示“同步中”tooltip。
+- 同步期间按钮禁用，避免重复触发。
+- 增加 450ms 最短反馈窗口：即使同步很快返回，用户也能看到明确点击确认感。
+
+#### 3. 品牌名统一为 Auto Folo
+
+涉及文件：
+
+- `lib/common/constants/constants.dart`：`AppConstants.appName = 'Auto Folo'`
+- `lib/main.dart`：入口类由 `FoloReaderApp` 改为 `AutoFoloApp`
+- `test/widget_test.dart`：同步测试类名
+- `lib/http/init.dart`：`X-App-Name` 改为 `Auto Folo`，`X-App-Version` 改为 `1.1.0`
+- `lib/pages/settings/settings_page.dart`：关于页显示 `Auto Folo v1.1.0`，说明改为支持 Android 和 macOS
+- `macos/Runner/Configs/AppInfo.xcconfig`：`PRODUCT_NAME = Auto Folo`
+- `macos/Runner.xcodeproj/project.pbxproj` 与 `Runner.xcscheme`：macOS 产物名同步为 `Auto Folo.app`
+
+未改动但需要理解：
+
+- `pubspec.yaml` 的 package name 仍是 `autofolo`。这是 Dart 包名，不能有空格，保持不变是正确的。
+- Bundle id / method channel 仍保留 `com.folo.autofolo`，避免破坏已有本地数据、平台通道和已安装应用升级路径。
+- HTTP header 的 `X-App-Platform` 目前仍是 `mobile/android`。这是既有行为，本次没有改平台识别逻辑；如果未来要严格区分 macOS，需要单独评估服务端兼容性。
+
+#### 4. README 更新
+
+文件：`README.md`
+
+- 标题改为 `Auto Folo — Folo RSS 信息流阅读器`。
+- 顶部加入 `assets/icon.png` 图标。
+- 移除 Android-only 描述，改为支持 Android 和 macOS。
+- 功能矩阵补充 macOS 分栏阅读、桌面快捷键和同步反馈。
+- 快速开始补充 `flutter run -d macos`。
+
+#### 5. 审核页跟随其他设备已读状态
+
+文件：`lib/pages/timeline/filter_review_page.dart`
+
+- 审核页原先只在打开时 `_loadArticles()` 一次，并只监听 `AutoFilterWorker.onRejected` 新增拦截项。
+- 时间线同步会更新 `TimelineController.filterCount`，所以气泡计数能减少；但审核页自己的 `_articles` 没有重新对齐，导致页面列表和“xx 篇待处理”仍显示旧数据。
+- 已增加两个 GetX worker：
+  - `_articleStateWorker` 监听 `ArticleStateNotifier.version`，单篇文章状态变化时走 `_syncArticleFromDb(entryId)`。
+  - `_filterCountWorker` 监听 `TimelineController.filterCount`，全量同步导致计数变化时重新 `_loadArticles()`。
+- `_syncArticleFromDb` 会从 Hive 本地库读取该文章：
+  - `isRejectedByAi && !isRead` 才保留在审核列表。
+  - 已读、取消拦截、已删除或不再符合条件时，从 `_articles` 移除。
+  - 如果右侧正在预览的文章被移除，`_selectedArticle` 自动清空。
+- 因为移动端和 macOS 的待处理文案都基于 `_articles.length`，列表修剪后“xx 篇待处理”会同步变化。
+
+设计原因：
+
+- 不应该只在 UI 层隐藏一份旧列表；审核页应以 `LocalArticleDbService.readAllArticles()` / Hive 中的最终文章状态为准。
+- 监听 `ArticleStateNotifier` 覆盖用户手动标已读、保留、拒绝等单篇变化。
+- 监听 `filterCount` 覆盖“其他设备已读同步”这种批量落库变化，因为 `_applyUnreadSnapshot` / `_refreshRecentReadWindow` 并不逐篇发 `ArticleStateNotifier.tick`。
+
+### 验证结果
+
+已运行并通过：
+
+```bash
+flutter analyze
+flutter test
+flutter build macos --debug
+```
+
+macOS debug 构建产物确认：`build/macos/Build/Products/Debug/Auto Folo.app`。
+
+注意：第一次直接跑 `dart analyze` 会因为 Flutter package URI 无法解析产生大量误报；此项目应以 `flutter analyze` 为准。
+
+### 关于工程目录名的建议
+
+- 不建议在当前 Codex worktree 内直接重命名 `<historical-codex-worktree>`，这会影响当前会话和 Git worktree 路径。
+- 如果主仓库要改名，建议仓库/clone 目录改为 `auto-folo`，比 `autofolo-mobile` 更符合当前 Android + macOS 双端定位。
+- 不建议把 Dart package name 改成 `auto_folo`，除非愿意承担 import 路径、测试、CI、发布脚本和原生工程引用的额外迁移成本；当前 `package:autofolo/...` 是稳定内部标识。
+
+### 需要在 main 分支/主工程侧同步的事项
+
+如果这次改动是在临时 worktree 中完成，合入 main 时请逐项确认：
+
+1. 合入 `lib/pages/article/article_page.dart` 的 macOS 分栏硬件键盘 handler。
+2. 合入 `lib/pages/timeline/timeline_page.dart` 的 `_MacSyncButton`，确保同步按钮有旋转反馈。
+3. 合入 `lib/pages/timeline/filter_review_page.dart` 的 `_articleStateWorker` / `_filterCountWorker`，否则审核页仍会出现计数减少但列表不消失。
+4. 合入 `README.md` 的 Auto Folo 文档、图标展示、macOS 支持说明。
+5. 合入展示名改动：`AppConstants.appName`、`AutoFoloApp`、设置页关于信息、macOS `PRODUCT_NAME` 与 Xcode scheme/product 引用。
+6. 保持 `pubspec.yaml:name` 为 `autofolo`，不要为了展示名强行改 Dart package。
+7. 保持 bundle id / method channel 稳定，除非计划做一次完整应用迁移。
+8. 合入后在 main 侧至少运行：
+
+```bash
+flutter analyze
+flutter test
+flutter build macos --debug
+```
+
+9. 如果 main 侧还保留旧 README/AGENT_HANDOFF 结构，请优先把本节放到文档顶部，避免后续 agent 只读旧上下文。
 
 ## 项目速览
 
-**工程目标**：对标 PiliPlus 的工程成熟度与流畅体验。
+**工程目标**：构建高密度、低摩擦的 Folo RSS 阅读器，兼顾 Android 移动端与 macOS 分栏阅读体验。
 
 | 维度 | 详情 |
 |------|------|

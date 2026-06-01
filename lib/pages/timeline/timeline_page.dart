@@ -630,26 +630,22 @@ class _MacTimelineAppBar extends StatelessWidget
 
       if (feedId != null && Get.isRegistered<SubscriptionsController>()) {
         final sub = Get.find<SubscriptionsController>();
-        final feed = sub.allFeeds.firstWhereOrNull(
-          (f) => f.feedId == feedId,
-        );
+        final feed = sub.allFeeds.firstWhereOrNull((f) => f.feedId == feedId);
         if (feed != null) {
           title = feed.title;
-          final unread = controller.articles
-              .where((a) => !a.isRead)
-              .length;
+          final unread = controller.articles.where((a) => !a.isRead).length;
           final total = controller.articles.length;
-          subtitle = unread > 0
-              ? '$unread 篇未读 · $total 篇当前列表'
-              : '$total 篇当前列表';
+          subtitle = unread > 0 ? '$unread 篇未读 · $total 篇当前列表' : '$total 篇当前列表';
           trailing = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               _FeedToggleIcon(
                 icon: Icons.article_outlined,
                 activeIcon: Icons.article,
-                enabled: FeedReadabilitySettingsService
-                    .isAutoReadabilityEnabled(feedId),
+                enabled:
+                    FeedReadabilitySettingsService.isAutoReadabilityEnabled(
+                      feedId,
+                    ),
                 tooltip: '自动拉取全文',
                 onToggle: () {
                   FeedReadabilitySettingsService.toggleAutoReadability(feedId);
@@ -660,8 +656,9 @@ class _MacTimelineAppBar extends StatelessWidget
               _FeedToggleIcon(
                 icon: Icons.translate_outlined,
                 activeIcon: Icons.translate,
-                enabled: FeedTranslationSettingsService
-                    .isAutoTranslateEnabled(feedId),
+                enabled: FeedTranslationSettingsService.isAutoTranslateEnabled(
+                  feedId,
+                ),
                 tooltip: '自动翻译',
                 onToggle: () {
                   FeedTranslationSettingsService.toggleAutoTranslate(feedId);
@@ -673,9 +670,7 @@ class _MacTimelineAppBar extends StatelessWidget
         }
       } else if (category != null) {
         title = category;
-        final unread = controller.articles
-            .where((a) => !a.isRead)
-            .length;
+        final unread = controller.articles.where((a) => !a.isRead).length;
         subtitle = '$unread 篇未读';
       }
 
@@ -693,10 +688,7 @@ class _MacTimelineAppBar extends StatelessWidget
             if (subtitle != null)
               Text(
                 subtitle,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -705,7 +697,7 @@ class _MacTimelineAppBar extends StatelessWidget
         backgroundColor: cs.surface.withValues(alpha: 0.5),
         centerTitle: false,
         actions: [
-          if (trailing != null) trailing,
+          ?trailing,
           if (feedId != null)
             IconButton(
               icon: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
@@ -716,14 +708,78 @@ class _MacTimelineAppBar extends StatelessWidget
                 controller.selectedCategory.value = null;
               },
             ),
-          IconButton(
-            icon: const Icon(Icons.sync, size: 20),
-            tooltip: '同步',
-            onPressed: () => controller.loadFeedsThenArticles(),
-          ),
+          _MacSyncButton(controller: controller, colorScheme: cs),
         ],
       );
     });
+  }
+}
+
+class _MacSyncButton extends StatefulWidget {
+  final TimelineController controller;
+  final ColorScheme colorScheme;
+
+  const _MacSyncButton({required this.controller, required this.colorScheme});
+
+  @override
+  State<_MacSyncButton> createState() => _MacSyncButtonState();
+}
+
+class _MacSyncButtonState extends State<_MacSyncButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _spinController;
+  bool _isSyncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _spinController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+  }
+
+  @override
+  void dispose() {
+    _spinController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sync() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    _spinController.repeat();
+
+    try {
+      await Future.wait([
+        widget.controller.loadFeedsThenArticles(),
+        Future<void>.delayed(const Duration(milliseconds: 450)),
+      ]);
+    } finally {
+      if (mounted) {
+        _spinController.stop();
+        _spinController.reset();
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.colorScheme;
+    return IconButton(
+      icon: RotationTransition(
+        turns: _spinController,
+        child: Icon(
+          Icons.sync,
+          size: 20,
+          color: _isSyncing ? cs.primary : cs.onSurfaceVariant,
+        ),
+      ),
+      tooltip: _isSyncing ? '同步中' : '同步',
+      visualDensity: VisualDensity.compact,
+      onPressed: _isSyncing ? null : _sync,
+    );
   }
 }
 

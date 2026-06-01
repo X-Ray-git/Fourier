@@ -9,7 +9,7 @@ abstract final class ApiConstants {
 }
 
 abstract final class AppConstants {
-  static const String appName = 'autofolo';
+  static const String appName = 'Auto Folo';
   static const int defaultPageSize = 50;
   static const int defaultTimeout = 30000;
   static const int defaultReadSyncWindowDays = 2;

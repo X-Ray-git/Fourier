@@ -69,12 +69,12 @@ void main() async {
     });
   }
 
-  runApp(const FoloReaderApp());
+  runApp(const AutoFoloApp());
 }
 
 /// 应用入口
-class FoloReaderApp extends StatelessWidget {
-  const FoloReaderApp({super.key});
+class AutoFoloApp extends StatelessWidget {
+  const AutoFoloApp({super.key});
 
   @override
   Widget build(BuildContext context) {

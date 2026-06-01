@@ -94,104 +94,102 @@ class MacOSSidebar extends StatelessWidget {
                 }
 
                 return ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 18),
-                    itemCount: nodes.length,
-                    itemBuilder: (context, index) {
-                      final viewNode = nodes[index];
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _ViewLabel(label: viewNode.name),
-                          ...viewNode.categories.map((category) {
-                            final categoryKey =
-                                'cat:${viewNode.name}:${category.name}';
-                            return Obx(() {
-                              final selectedFeedId =
-                                  timelineController.selectedFeedId.value;
-                              final selectedCategory =
-                                  timelineController.selectedCategory.value;
-                              final isSelected =
-                                  currentIndex == 0 &&
-                                  selectedCategory == category.name &&
-                                  selectedFeedId == null;
-                              final containsSelectedFeed =
-                                  selectedFeedId != null &&
-                                  category.feeds.any(
-                                    (feed) => feed.feedId == selectedFeedId,
+                  padding: const EdgeInsets.only(bottom: 18),
+                  itemCount: nodes.length,
+                  itemBuilder: (context, index) {
+                    final viewNode = nodes[index];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _ViewLabel(label: viewNode.name),
+                        ...viewNode.categories.map((category) {
+                          final categoryKey =
+                              'cat:${viewNode.name}:${category.name}';
+                          return Obx(() {
+                            final selectedFeedId =
+                                timelineController.selectedFeedId.value;
+                            final selectedCategory =
+                                timelineController.selectedCategory.value;
+                            final isSelected =
+                                currentIndex == 0 &&
+                                selectedCategory == category.name &&
+                                selectedFeedId == null;
+                            final containsSelectedFeed =
+                                selectedFeedId != null &&
+                                category.feeds.any(
+                                  (feed) => feed.feedId == selectedFeedId,
+                                );
+                            final forceExpanded =
+                                subController.searchQuery.value.isNotEmpty ||
+                                containsSelectedFeed;
+                            final isExpanded =
+                                forceExpanded ||
+                                subController.isExpanded(categoryKey);
+                            return _CategoryGroup(
+                              category: category,
+                              isExpanded: isExpanded,
+                              isSelected: isSelected,
+                              badgeCount: subController.unreadForCategory(
+                                category.name,
+                                category.feeds,
+                              ),
+                              onToggle: () {
+                                subController.setExpanded(
+                                  categoryKey,
+                                  !isExpanded,
+                                );
+                              },
+                              onTap: () {
+                                timelineController.selectedFeedId.value = null;
+                                timelineController.selectedCategory.value =
+                                    category.name;
+                                onIndexChanged(0);
+                              },
+                              feedBuilder: (feed) {
+                                return Obx(() {
+                                  final feedSelected =
+                                      currentIndex == 0 &&
+                                      timelineController.selectedFeedId.value ==
+                                          feed.feedId;
+                                  return _SidebarItem(
+                                    icon: Icons.rss_feed,
+                                    imageUrl: feed.image,
+                                    label: feed.title,
+                                    isSelected: feedSelected,
+                                    badgeCount: subController.unreadFor(
+                                      feed.feedId,
+                                    ),
+                                    indentLevel: 2,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _FeedAutoReadabilityIcon(
+                                          feedId: feed.feedId,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        _FeedAutoTranslateIcon(
+                                          feedId: feed.feedId,
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () {
+                                      timelineController
+                                              .selectedCategory
+                                              .value =
+                                          null;
+                                      timelineController.selectedFeedId.value =
+                                          feed.feedId;
+                                      onIndexChanged(0);
+                                    },
                                   );
-                              final forceExpanded =
-                                  subController.searchQuery.value.isNotEmpty ||
-                                  containsSelectedFeed;
-                              final isExpanded =
-                                  forceExpanded ||
-                                  subController.isExpanded(categoryKey);
-                              return _CategoryGroup(
-                                category: category,
-                                isExpanded: isExpanded,
-                                isSelected: isSelected,
-                                badgeCount: subController.unreadForCategory(
-                                  category.name,
-                                  category.feeds,
-                                ),
-                                onToggle: () {
-                                  subController.setExpanded(
-                                    categoryKey,
-                                    !isExpanded,
-                                  );
-                                },
-                                onTap: () {
-                                  timelineController.selectedFeedId.value = null;
-                                  timelineController.selectedCategory.value =
-                                      category.name;
-                                  onIndexChanged(0);
-                                },
-                                feedBuilder: (feed) {
-                                  return Obx(() {
-                                    final feedSelected =
-                                        currentIndex == 0 &&
-                                        timelineController
-                                                .selectedFeedId
-                                                .value ==
-                                            feed.feedId;
-                                    return _SidebarItem(
-                                      icon: Icons.rss_feed,
-                                      imageUrl: feed.image,
-                                      label: feed.title,
-                                      isSelected: feedSelected,
-                                      badgeCount: subController.unreadFor(
-                                        feed.feedId,
-                                      ),
-                                      indentLevel: 2,
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _FeedAutoReadabilityIcon(
-                                            feedId: feed.feedId,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          _FeedAutoTranslateIcon(
-                                            feedId: feed.feedId,
-                                          ),
-                                        ],
-                                      ),
-                                      onTap: () {
-                                        timelineController
-                                            .selectedCategory
-                                            .value = null;
-                                        timelineController
-                                            .selectedFeedId
-                                            .value = feed.feedId;
-                                        onIndexChanged(0);
-                                      },
-                                    );
-                                  });
-                                },
-                              );
-                            });
-                          }),
-                        ],
-                      );
-                    },
+                                });
+                              },
+                            );
+                          });
+                        }),
+                      ],
+                    );
+                  },
                 );
               }),
             ),
@@ -600,7 +598,7 @@ class _SidebarItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (trailing != null) trailing!,
+                ?trailing,
                 _UnreadBadge(count: badgeCount, selected: isSelected),
               ],
             ),

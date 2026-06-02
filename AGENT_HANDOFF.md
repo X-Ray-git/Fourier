@@ -3407,3 +3407,32 @@ flutter devices
 - tag：`v1.1.4`
 
 Android 签名继续使用第 72 节配置的本机 debug keystore GitHub Secrets，因此应保持与 `v1.1.3` 可覆盖升级。
+
+## 74. 安卓端主时间线及垃圾拦截页灰屏彻底修复 (2026-06-02)
+
+### 74.1 问题复盘
+用户反馈：在安卓端，只要有文章被 AI 拦截（左上角/顶部出现数字），主时间线中间就会变成一片灰色，什么都看不见；点击进入垃圾拦截页面，里面同样是一片灰色。但从具体的订阅源点进去则显示正常。
+此外，用户提出被拦截的文章“应该在主时间线显示，按本身日期排序，同时在拦截页面按审核完成时间排序”。
+
+### 74.2 根本原因分析
+排查后发现，灰屏是由两个独立但相互叠加的错误造成的：
+
+1. **GetX `Obx` 的短路求值引发的运行时崩溃（导致灰屏的元凶）**
+   在 `timeline_page.dart` 和 `filter_review_page.dart` 中，为了判断文章卡片在 macOS 端是否被选中，代码写成了：
+   `isSelected: Platform.isMacOS && controller.selectedArticle.value?.entryId == article.entryId`
+   在安卓端，由于 `Platform.isMacOS` 为 `false`，Dart 的短路求值特性导致后半段的响应式变量 `controller.selectedArticle.value` 从未被读取。
+   GetX 的安全机制强制要求在 `Obx` 闭包内至少读取一次 Observable，否则会直接在 `build` 阶段抛出 `the improper use of a GetX has been detected` 异常。在 Release 模式下，这个异常导致整个列表的卡片渲染失败，呈现为大面积灰屏。
+
+2. **卡片内 `Row` 与 `Flexible` 的布局约束死锁（潜在的 Debug 崩溃）**
+   在 `ArticleCard` 渲染 AI 拒文理由时，原代码使用了一个 `mainAxisSize: MainAxisSize.min` 的 `Row`，里面嵌套了一个 `Flexible` 组件。
+   在 Flutter 中，试图让父组件紧缩（min）的同时让子组件扩展（flex）会触发严格的布局约束冲突断言。虽然在 Release 模式下这个 `assert` 会被跳过从而不会引发灰屏，但如果在 Debug 模式下运行，必定会触发红屏报错（Red Screen of Death）。
+
+### 74.3 修复方案与讨论过程
+1. **彻底修复 `ArticleCard` 布局冲突**：
+   移除了带有 `Flexible` 的 `Row`，改为使用原生且安全的 `Text.rich` 搭配 `WidgetSpan` 来渲染图文混排的拦截理由。这不仅彻底排除了 Debug 模式下的“红屏炸弹”，也提升了长文本截断的可靠性。
+2. **修复 GetX `Obx` 崩溃逻辑**：
+   在 `timeline_page.dart` 和 `filter_review_page.dart` 中的 `Obx` 闭包内，提前将 `selectedArticle.value?.entryId` 赋值给一个局部变量，强制其在所有平台上都被读取一次。这样既绕过了短路求值的陷阱，又保证了状态的正确注册。
+3. **澄清并恢复时间线的过滤逻辑**：
+   由于我最初误解了用户“新分析完的文章应该在垃圾拦截页面”的需求，曾一度在 `timeline_controller.dart` 中把被拦截文章从主时间线剔除了。用户澄清后确认：**被拦截的文章既要留在主时间线（按发布时间排序），也要出现在审核页面（按审核完成时间排序）**。这正符合旧有代码的双线并行排序逻辑，因此我立即撤销了那段错误剔除代码，恢复了原有设定。
+
+经过这些修改，安卓端的灰屏现象彻底消失，应用恢复正常运行与逻辑流转。

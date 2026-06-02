@@ -383,13 +383,11 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                               ),
                             ),
                           ),
-                          child: Obx(
-                            () => ArticleCard(
+                          child: Obx(() {
+                            final selectedId = _selectedArticle.value?.entryId;
+                            return ArticleCard(
                               article: article,
-                              isSelected:
-                                  Platform.isMacOS &&
-                                  _selectedArticle.value?.entryId ==
-                                      article.entryId,
+                              isSelected: Platform.isMacOS && selectedId == article.entryId,
                               showFeedTitle: true,
                               showSummary: true,
                               onTap: () {
@@ -406,8 +404,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                                   );
                                 }
                               },
-                            ),
-                          ),
+                            );
+                          }),
                         );
                       },
                     ),

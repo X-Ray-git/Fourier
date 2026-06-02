@@ -147,6 +147,7 @@ class ArticleController extends GetxController {
           isRejectedByAi: article.isRejectedByAi,
           filterReason: article.filterReason,
           filterReviewed: article.filterReviewed,
+          filteredAt: article.filteredAt,
         ),
       );
       update(); // 通知 UI 重建
@@ -185,6 +186,7 @@ class ArticleController extends GetxController {
               isRejectedByAi: article.isRejectedByAi,
               filterReason: article.filterReason,
               filterReviewed: article.filterReviewed,
+              filteredAt: article.filteredAt,
             ),
           );
         }
@@ -205,25 +207,7 @@ class ArticleController extends GetxController {
     isUpdatingReadState.value = true;
     // 标已读时清除 AI 过滤标记
     if (article.isRejectedByAi) {
-      LocalArticleDbService.upsertOne(
-        ArticleModel(
-          entryId: article.entryId,
-          feedId: article.feedId,
-          feedTitle: article.feedTitle,
-          feedImage: article.feedImage,
-          title: article.title,
-          url: article.url,
-          content: article.content,
-          publishedAt: article.publishedAt,
-          isRead: true,
-          category: article.category,
-          subscriptionCategory: article.subscriptionCategory,
-          author: article.author,
-          imageUrl: article.imageUrl,
-          isRejectedByAi: false,
-          filterReviewed: true,
-        ),
-      );
+      LocalArticleDbService.clearFilterState(article.entryId);
     }
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);

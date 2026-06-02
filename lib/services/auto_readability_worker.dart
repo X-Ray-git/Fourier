@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:html/parser.dart' as html_parser;
 
+import '../http/feed_http.dart';
 import '../http/init.dart';
 
 import '../models/article.dart';
@@ -67,9 +68,45 @@ abstract final class AutoReadabilityWorker {
   static Future<void> _processArticle(ArticleModel article) async {
     try {
       ArticleModel processedArticle = article;
+      var rawContent = article.content ?? '';
+
+      if (article.category == 'inbox' && rawContent.isEmpty) {
+        final inboxFetchedKey = 'inbox_detail_fetched_${article.entryId}';
+        final hasInboxFetched = GStorage.setting.get(inboxFetchedKey) == true;
+        if (!hasInboxFetched) {
+          final detailResult = await FeedHttp.getInboxEntryDetail(
+            entryId: article.entryId,
+          );
+          if (detailResult is Success<String> &&
+              detailResult.response.isNotEmpty) {
+            rawContent = detailResult.response;
+            processedArticle = ArticleModel(
+              entryId: article.entryId,
+              feedId: article.feedId,
+              feedTitle: article.feedTitle,
+              feedImage: article.feedImage,
+              title: article.title,
+              url: article.url,
+              content: rawContent,
+              publishedAt: article.publishedAt,
+              isRead: article.isRead,
+              category: article.category,
+              subscriptionCategory: article.subscriptionCategory,
+              author: article.author,
+              imageUrl: article.imageUrl,
+              isRejectedByAi: article.isRejectedByAi,
+              filterReason: article.filterReason,
+              filterReviewed: article.filterReviewed,
+              filteredAt: article.filteredAt,
+            );
+            LocalArticleDbService.upsertOne(processedArticle);
+            ArticleContentUtils.clearCacheForEntry(article.entryId);
+            GStorage.setting.put(inboxFetchedKey, true);
+          }
+        }
+      }
 
       // 检查是否需要去抓取长文
-      final rawContent = article.content ?? '';
       final isManualForced =
           FeedReadabilitySettingsService.isAutoReadabilityEnabled(
             article.feedId,
@@ -108,6 +145,7 @@ abstract final class AutoReadabilityWorker {
                 isRejectedByAi: article.isRejectedByAi,
                 filterReason: article.filterReason,
                 filterReviewed: article.filterReviewed,
+                filteredAt: article.filteredAt,
               );
               // 将包含长文的新文章存入本地数据库
               LocalArticleDbService.upsertOne(processedArticle);

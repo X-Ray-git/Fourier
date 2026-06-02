@@ -19,8 +19,10 @@ abstract final class AutoFilterWorker {
 
   /// 队列中剩余
   static final queuedCount = 0.obs;
+
   /// 正在处理中
   static final processingCount = 0.obs;
+
   /// 已完成（含成功和失败）
   static final doneCount = 0.obs;
 
@@ -75,9 +77,7 @@ abstract final class AutoFilterWorker {
       queuedCount.value = _queue.length;
       doneCount.value = 0;
 
-      await Future.wait(
-        batch.map((article) => _filterArticle(article)),
-      );
+      await Future.wait(batch.map((article) => _filterArticle(article)));
     } finally {
       _isProcessing = false;
       processingCount.value = 0;
@@ -153,15 +153,7 @@ abstract final class AutoFilterWorker {
   /// 清除单篇文章的过滤状态（用户捞回）
   static void unReject(String entryId) {
     if (entryId.isEmpty) return;
-    final raw = GStorage.articleDb.get(entryId);
-    if (raw is! Map) return;
-    // 直接写 DB，绕过 upsertMany 的 OR 合并逻辑
-    raw['isRejectedByAi'] = false;
-    raw['filterReason'] = null;
-    raw['filterReviewed'] = true;
-    raw['filteredAt'] = null;
-    GStorage.articleDb.put(entryId, raw);
-    LocalArticleDbService.invalidateCache();
+    LocalArticleDbService.clearFilterState(entryId);
     ArticleStateNotifier.tick(entryId);
   }
 }

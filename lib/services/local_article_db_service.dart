@@ -22,7 +22,7 @@ abstract final class LocalArticleDbService {
     if (_cachedAllArticles != null) {
       return _cachedAllArticles!;
     }
-    
+
     final items = <ArticleModel>[];
     for (final key in _articleKeys) {
       final raw = GStorage.articleDb.get(key);
@@ -57,6 +57,10 @@ abstract final class LocalArticleDbService {
           localOverride ??
           defaultReadState ??
           item.isRead || (existing?.isRead ?? false);
+      final mergedRejected =
+          item.isRejectedByAi || (existing?.isRejectedByAi ?? false);
+      final mergedReviewed =
+          item.filterReviewed || (existing?.filterReviewed ?? false);
 
       final merged = ArticleModel(
         entryId: item.entryId,
@@ -93,12 +97,15 @@ abstract final class LocalArticleDbService {
         imageUrl: (item.imageUrl != null && item.imageUrl!.isNotEmpty)
             ? item.imageUrl
             : existing?.imageUrl,
-        isRejectedByAi: item.isRejectedByAi || (existing?.isRejectedByAi ?? false),
-        filterReason: (item.filterReason != null && item.filterReason!.isNotEmpty)
+        isRejectedByAi: mergedRejected,
+        filterReason:
+            (item.filterReason != null && item.filterReason!.isNotEmpty)
             ? item.filterReason
             : existing?.filterReason,
-        filterReviewed: item.filterReviewed || (existing?.filterReviewed ?? false),
-        filteredAt: item.filteredAt ?? existing?.filteredAt,
+        filterReviewed: mergedReviewed,
+        filteredAt: mergedRejected
+            ? (item.filteredAt ?? existing?.filteredAt)
+            : null,
       );
 
       updates[item.entryId] = merged.toJson();
@@ -144,6 +151,17 @@ abstract final class LocalArticleDbService {
     invalidateCache();
   }
 
+  static void clearFilterState(String entryId) {
+    final raw = GStorage.articleDb.get(entryId);
+    if (raw is! Map) return;
+    raw['isRejectedByAi'] = false;
+    raw['filterReason'] = null;
+    raw['filterReviewed'] = true;
+    raw['filteredAt'] = null;
+    GStorage.articleDb.put(entryId, raw);
+    invalidateCache();
+  }
+
   static int _compareArticleByTimeDesc(ArticleModel a, ArticleModel b) {
     final ta = _timeScore(a);
     final tb = _timeScore(b);
@@ -161,7 +179,7 @@ abstract final class LocalArticleDbService {
     if (keys.length <= _maxArticles) return;
 
     final sorted = readAllArticles();
-    
+
     // 按优先级排序以决定保留哪些文章
     // 优先级 1: 所有未读文章 (在 5000 限制内优先保留未读，避免重复拉取)
     // 优先级 0: 已读文章
@@ -170,23 +188,23 @@ abstract final class LocalArticleDbService {
         if (!m.isRead) return 1;
         return 0;
       }
-      
+
       final sa = score(a);
       final sb = score(b);
       if (sa != sb) return sb.compareTo(sa); // 优先级高的排在前面
-      
+
       return _compareArticleByTimeDesc(a, b); // 优先级相同则按时间倒序
     });
-    
+
     final keepIds = sorted.take(_maxArticles).map((e) => e.entryId).toSet();
-    
+
     final toDelete = <String>[];
     for (final key in keys) {
       if (!keepIds.contains(key)) {
         toDelete.add(key);
       }
     }
-    
+
     if (toDelete.isNotEmpty) {
       GStorage.articleDb.deleteAll(toDelete);
       invalidateCache();

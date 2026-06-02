@@ -189,6 +189,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         isRejectedByAi: article.isRejectedByAi,
         filterReason: article.filterReason,
         filterReviewed: true,
+        filteredAt: article.filteredAt,
       ),
     );
     if (Get.isRegistered<TimelineController>()) {

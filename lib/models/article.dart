@@ -88,8 +88,10 @@ class ArticleModel {
     final sourceTitle = feedTitle ?? SourceTaxonomy.inboxDisplayTitle(item);
     return ArticleModel(
       entryId: entry['id'] as String? ?? '',
-      feedId: (item['feeds'] as Map<String, dynamic>?)?['id'] as String? ??
-          entry['inboxHandle'] as String? ?? '',
+      feedId:
+          (item['feeds'] as Map<String, dynamic>?)?['id'] as String? ??
+          entry['inboxHandle'] as String? ??
+          '',
       feedTitle: sourceTitle,
       feedImage: feedImage ?? item['image'] as String?,
       title: entry['title'] as String? ?? '?',

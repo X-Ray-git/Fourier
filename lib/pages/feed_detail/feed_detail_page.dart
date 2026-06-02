@@ -482,6 +482,7 @@ class FeedDetailController extends GetxController {
           isRejectedByAi: a.isRejectedByAi,
           filterReason: a.filterReason,
           filterReviewed: a.filterReviewed,
+          filteredAt: a.filteredAt,
         );
       }
       return a;
@@ -977,8 +978,7 @@ class _MacFeedHeader extends StatelessWidget {
                   tooltip: isEnabled ? '自动拉取全文已开启' : '自动拉取全文',
                   visualDensity: VisualDensity.compact,
                   onPressed: () async {
-                    await FeedReadabilitySettingsService
-                        .toggleAutoReadability(
+                    await FeedReadabilitySettingsService.toggleAutoReadability(
                       controller.filterFeedId ?? '',
                     );
                     controller.refreshAutoReadabilityStatus();

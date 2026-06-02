@@ -114,6 +114,7 @@ abstract final class AutoFilterWorker {
           isRejectedByAi: true,
           filterReason: result.reason,
           filterReviewed: article.filterReviewed,
+          filteredAt: DateTime.now().millisecondsSinceEpoch,
         );
         LocalArticleDbService.upsertOne(updated);
         ArticleStateNotifier.tick(article.entryId);
@@ -158,6 +159,7 @@ abstract final class AutoFilterWorker {
     raw['isRejectedByAi'] = false;
     raw['filterReason'] = null;
     raw['filterReviewed'] = true;
+    raw['filteredAt'] = null;
     GStorage.articleDb.put(entryId, raw);
     LocalArticleDbService.invalidateCache();
     ArticleStateNotifier.tick(entryId);

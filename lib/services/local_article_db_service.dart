@@ -98,6 +98,7 @@ abstract final class LocalArticleDbService {
             ? item.filterReason
             : existing?.filterReason,
         filterReviewed: item.filterReviewed || (existing?.filterReviewed ?? false),
+        filteredAt: item.filteredAt ?? existing?.filteredAt,
       );
 
       updates[item.entryId] = merged.toJson();
@@ -137,6 +138,7 @@ abstract final class LocalArticleDbService {
       isRejectedByAi: old.isRejectedByAi,
       filterReason: old.filterReason,
       filterReviewed: old.filterReviewed,
+      filteredAt: old.filteredAt,
     );
     GStorage.articleDb.put(entryId, updated.toJson());
     invalidateCache();

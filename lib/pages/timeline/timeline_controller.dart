@@ -484,6 +484,7 @@ class TimelineController extends GetxController {
       isRejectedByAi: updatedFromDb.isRejectedByAi,
       filterReason: updatedFromDb.filterReason,
       filterReviewed: updatedFromDb.filterReviewed,
+      filteredAt: updatedFromDb.filteredAt,
     );
 
     allArticles[idx] = finalUpdated;
@@ -516,6 +517,7 @@ class TimelineController extends GetxController {
       isRejectedByAi: a.isRejectedByAi,
       filterReason: a.filterReason,
       filterReviewed: a.filterReviewed,
+      filteredAt: a.filteredAt,
     );
     allArticles[idx] = updated;
     allArticles.refresh();
@@ -551,6 +553,7 @@ class TimelineController extends GetxController {
           isRejectedByAi: a.isRejectedByAi,
           filterReason: a.filterReason,
           filterReviewed: a.filterReviewed,
+          filteredAt: a.filteredAt,
         );
       }
       return a;

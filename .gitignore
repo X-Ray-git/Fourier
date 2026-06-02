@@ -50,3 +50,10 @@ app.*.map.json
 # Local data directory
 /data/
 android/build/
+
+# Local agent/tool configuration
+.antigravitycli/
+
+# Local scratch/playground directory for temporary scripts and data
+scratch/*
+!scratch/.gitkeep

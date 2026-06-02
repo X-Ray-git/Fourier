@@ -79,6 +79,11 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     final all = LocalArticleDbService.readAllArticles()
         .where((a) => a.isRejectedByAi && !a.isRead)
         .toList();
+    all.sort((a, b) {
+      final tA = a.filteredAt ?? 0;
+      final tB = b.filteredAt ?? 0;
+      return tA.compareTo(tB);
+    });
     for (final a in all) {
       _seenIds.add(a.entryId);
     }
@@ -112,7 +117,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     if (index >= 0) {
       _articles[index] = article;
     } else {
-      _articles.insert(0, article);
+      _articles.add(article);
     }
     if (_selectedArticle.value?.entryId == entryId) {
       _selectedArticle.value = article;

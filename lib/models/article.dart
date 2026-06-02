@@ -17,6 +17,7 @@ class ArticleModel {
   final bool isRejectedByAi;
   final String? filterReason;
   final bool filterReviewed; // 用户已审核过，不再重判
+  final int? filteredAt; // 拦截判定完成的时间戳（毫秒）
 
   ArticleModel({
     required this.entryId,
@@ -35,6 +36,7 @@ class ArticleModel {
     this.isRejectedByAi = false,
     this.filterReason,
     this.filterReviewed = false,
+    this.filteredAt,
   });
 
   factory ArticleModel.fromEntryJson(
@@ -72,6 +74,7 @@ class ArticleModel {
       imageUrl: imageUrl,
       isRejectedByAi: false,
       filterReviewed: false,
+      filteredAt: null,
     );
   }
 
@@ -99,6 +102,7 @@ class ArticleModel {
           subscriptionCategory ?? SourceTaxonomy.inboxShortLabel(item),
       isRejectedByAi: false,
       filterReviewed: false,
+      filteredAt: null,
     );
   }
 
@@ -119,6 +123,7 @@ class ArticleModel {
     'isRejectedByAi': isRejectedByAi,
     'filterReason': filterReason,
     'filterReviewed': filterReviewed,
+    'filteredAt': filteredAt,
   };
 
   factory ArticleModel.fromCache(Map<String, dynamic> json) => ArticleModel(
@@ -138,6 +143,7 @@ class ArticleModel {
     isRejectedByAi: json['isRejectedByAi'] as bool? ?? false,
     filterReason: json['filterReason'] as String?,
     filterReviewed: json['filterReviewed'] as bool? ?? false,
+    filteredAt: json['filteredAt'] as int?,
   );
 
   String get displayCategory =>

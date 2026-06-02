@@ -94,6 +94,33 @@ abstract final class TranslationService {
   static String? getApiKey() =>
       _apiKey ?? (GStorage.setting.get('deepseek_api_key') as String?);
 
+  static String getPrompt(String targetLang) {
+    final template =
+        GStorage.setting.get('translation_prompt', defaultValue: _defaultPrompt)
+            as String;
+    return template.replaceAll('{targetLang}', targetLang);
+  }
+
+  static Future<void> setPrompt(String prompt) async {
+    await GStorage.setting.put('translation_prompt', prompt);
+  }
+
+  static void resetPrompt() {
+    GStorage.setting.delete('translation_prompt');
+  }
+
+  static const String _defaultPrompt = '''
+你是一个专业的文章翻译助手。请将文章翻译成{targetLang}。
+
+要求：
+1. 只返回 JSON，不要返回 markdown、解释或代码块
+2. 具体 JSON 结构以 User Prompt 中的要求为准
+3. translated_title 为翻译后的标题
+4. translated_html 必须保留所有 HTML 标签、结构、属性、空白和排版
+5. 只翻译可见文本，不要改动任何 HTML 标签
+6. 你无法读取图片内容。请仅基于提供的文本翻译；如果有强依赖图片的上下文，请根据文本合理处理，不要编造图片细节。
+''';
+
   static void ensureHydrated() {
     if (_hydrated) return;
     final box = GStorage.translations;
@@ -248,23 +275,10 @@ abstract final class TranslationService {
       return record;
     }
 
-    final prompt =
-        '''
-你是一个专业的文章翻译助手。请将下面文章翻译成$targetLang。
-
-要求：
-1. 只返回 JSON，不要返回 markdown、解释或代码块
-2. JSON 结构必须是：{"translated_title":"...","translated_html":"..."}
-3. translated_title 为翻译后的标题
-4. translated_html 必须保留所有 HTML 标签、结构、属性、空白和排版
-5. 只翻译可见文本，不要改动任何 HTML 标签
-
-标题：
-${article.title}
-
-HTML：
-<html>$htmlContent</html>
-''';
+    final systemPrompt = getPrompt(targetLang);
+    final userContent =
+        'JSON 结构必须是：{"translated_title":"...","translated_html":"..."}\n\n'
+        '标题：\n${article.title}\n\nHTML：\n<html>$htmlContent</html>';
 
     try {
       _dio.options.headers['Authorization'] = 'Bearer $apiKey';
@@ -273,7 +287,8 @@ HTML：
       final llmConfig = LlmConfig.loadTranslate();
       final requestBody = <String, dynamic>{
         'messages': [
-          {'role': 'user', 'content': prompt},
+          {'role': 'system', 'content': systemPrompt},
+          {'role': 'user', 'content': userContent},
         ],
         'response_format': {'type': 'json_object'},
         'stream': false,
@@ -462,35 +477,14 @@ HTML：
     required LlmConfig llmConfig,
   }) async {
     final isFirst = i == 0;
-    final prompt = isFirst
-        ? '''
-你是一个专业的文章翻译助手。请将下面文章片段翻译成$targetLang。这是文章的第 1/$total 段。
-
-要求：
-1. 只返回 JSON，不要返回 markdown、解释或代码块
-2. JSON 结构必须是：{"translated_title":"...","translated_html":"..."}
-3. translated_title 为翻译后的标题
-4. translated_html 必须保留所有 HTML 标签、结构、属性、空白和排版
-5. 只翻译可见文本，不要改动任何 HTML 标签
-
-标题：
-$articleTitle
-
-HTML：
-<html>$chunkHtml</html>
-'''
-        : '''
-你是一个专业的文章翻译助手。请将下面文章片段翻译成$targetLang。这是文章的第 ${i + 1}/$total 段。
-
-要求：
-1. 只返回 JSON，不要返回 markdown、解释或代码块
-2. JSON 结构必须是：{"translated_html":"..."}
-3. 必须保留所有 HTML 标签、结构、属性、空白和排版
-4. 只翻译可见文本，不要改动任何 HTML 标签
-
-HTML：
-<html>$chunkHtml</html>
-''';
+    final systemPrompt = getPrompt(targetLang);
+    final userContent = isFirst
+        ? '这是文章的第 1/$total 段。\n'
+              'JSON 结构必须是：{"translated_title":"...","translated_html":"..."}\n\n'
+              '标题：\n$articleTitle\n\nHTML：\n<html>$chunkHtml</html>'
+        : '这是文章的第 ${i + 1}/$total 段。\n'
+              'JSON 结构必须是：{"translated_html":"..."}，不要返回标题。\n\n'
+              'HTML：\n<html>$chunkHtml</html>';
 
     try {
       // 每个并发请求用独立 header，避免共享 Dio 实例的状态竞争
@@ -504,7 +498,8 @@ HTML：
         '/chat/completions',
         data: {
           'messages': [
-            {'role': 'user', 'content': prompt},
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': userContent},
           ],
           'response_format': {'type': 'json_object'},
           'stream': false,

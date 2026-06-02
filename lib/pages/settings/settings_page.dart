@@ -9,6 +9,7 @@ import '../../common/widgets/feedback_toast.dart';
 import '../../services/account_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/llm_config.dart';
+import '../../services/summary_service.dart';
 import '../../services/translation_service.dart';
 import '../../router/app_pages.dart';
 import '../../utils/security_utils.dart';
@@ -432,8 +433,43 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 12),
 
-          // AI 过滤 Prompt
-          _FilterPromptCard(),
+          // Prompt 配置
+          _PromptCard(
+            title: '摘要 AI Prompt',
+            subtitle: '自定义摘要规则（返回必须是特定 JSON 格式）',
+            hintText: '输入摘要规则...',
+            emptyWarning: '请保留默认的 JSON 结构指令',
+            savedMessage: '新摘要将从下次请求生效',
+            helpText:
+                '这里配置 System Prompt。程序会自动拼接文章标题和 HTML 正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
+            loadPrompt: () => SummaryService.getPrompt('{targetLang}'),
+            savePrompt: SummaryService.setPrompt,
+            resetPrompt: SummaryService.resetPrompt,
+          ),
+          const SizedBox(height: 12),
+          _PromptCard(
+            title: '翻译 AI Prompt',
+            subtitle: '自定义翻译规则（返回必须是特定 JSON 格式）',
+            hintText: '输入翻译规则...',
+            emptyWarning: '请保留默认的 JSON 结构指令',
+            savedMessage: '新翻译将从下次请求生效',
+            helpText:
+                '这里配置 System Prompt。程序会自动拼接文章或分块正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
+            loadPrompt: () => TranslationService.getPrompt('{targetLang}'),
+            savePrompt: TranslationService.setPrompt,
+            resetPrompt: TranslationService.resetPrompt,
+          ),
+          const SizedBox(height: 12),
+          _PromptCard(
+            title: 'AI 过滤 Prompt',
+            subtitle: '自定义文章过滤规则（LLM 判定）',
+            hintText: '输入过滤规则...',
+            emptyWarning: '请保留至少一条过滤规则',
+            savedMessage: '新过滤将从下次请求生效',
+            loadPrompt: ArticleFilterService.getPrompt,
+            savePrompt: ArticleFilterService.setPrompt,
+            resetPrompt: ArticleFilterService.resetPrompt,
+          ),
 
           const SizedBox(height: 24),
 
@@ -490,20 +526,42 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
-// ─── 过滤 Prompt 卡片 ───────────────────
+// ─── Prompt 配置卡片 ───────────────────
 
-class _FilterPromptCard extends StatefulWidget {
+class _PromptCard extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final String hintText;
+  final String emptyWarning;
+  final String savedMessage;
+  final String? helpText;
+  final String Function() loadPrompt;
+  final Future<void> Function(String) savePrompt;
+  final void Function() resetPrompt;
+
+  const _PromptCard({
+    required this.title,
+    required this.subtitle,
+    required this.hintText,
+    required this.emptyWarning,
+    required this.savedMessage,
+    this.helpText,
+    required this.loadPrompt,
+    required this.savePrompt,
+    required this.resetPrompt,
+  });
+
   @override
-  State<_FilterPromptCard> createState() => _FilterPromptCardState();
+  State<_PromptCard> createState() => _PromptCardState();
 }
 
-class _FilterPromptCardState extends State<_FilterPromptCard> {
+class _PromptCardState extends State<_PromptCard> {
   late final TextEditingController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: ArticleFilterService.getPrompt());
+    _controller = TextEditingController(text: widget.loadPrompt());
   }
 
   @override
@@ -515,16 +573,16 @@ class _FilterPromptCardState extends State<_FilterPromptCard> {
   void _save() async {
     final text = _controller.text.trim();
     if (text.isEmpty) {
-      AppFeedback.warning('Prompt 不能为空', '请保留至少一条过滤规则');
+      AppFeedback.warning('Prompt 不能为空', widget.emptyWarning);
       return;
     }
-    await ArticleFilterService.setPrompt(text);
-    if (mounted) AppFeedback.success('Prompt 已保存', '新过滤将从下次请求生效');
+    await widget.savePrompt(text);
+    if (mounted) AppFeedback.success('Prompt 已保存', widget.savedMessage);
   }
 
   void _reset() {
-    ArticleFilterService.resetPrompt();
-    _controller.text = ArticleFilterService.getPrompt();
+    widget.resetPrompt();
+    _controller.text = widget.loadPrompt();
     setState(() {});
     AppFeedback.success('已重置', 'Prompt 恢复为默认');
   }
@@ -535,23 +593,30 @@ class _FilterPromptCardState extends State<_FilterPromptCard> {
 
     return Card(
       child: ExpansionTile(
-        title: const Text(
-          'AI 过滤 Prompt',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        subtitle: const Text('自定义文章过滤规则（LLM 判定）'),
+        subtitle: Text(widget.subtitle),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.helpText != null) ...[
+                  Text(
+                    widget.helpText!,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 TextField(
                   controller: _controller,
                   maxLines: 12,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    hintText: '输入过滤规则...',
+                    hintText: widget.hintText,
                     helperText: '${_controller.text.split('\n').length} 行',
                     helperStyle: TextStyle(
                       fontSize: 11,

@@ -87,6 +87,32 @@ abstract final class SummaryService {
   static String? getApiKey() =>
       _apiKey ?? (GStorage.setting.get('deepseek_api_key') as String?);
 
+  static String getPrompt(String targetLang) {
+    final template =
+        GStorage.setting.get('summary_prompt', defaultValue: _defaultPrompt)
+            as String;
+    return template.replaceAll('{targetLang}', targetLang);
+  }
+
+  static Future<void> setPrompt(String prompt) async {
+    await GStorage.setting.put('summary_prompt', prompt);
+  }
+
+  static void resetPrompt() {
+    GStorage.setting.delete('summary_prompt');
+  }
+
+  static const String _defaultPrompt = '''
+你是一个专业的文章摘要助手。请用{targetLang}生成一个简洁的文章摘要。
+
+要求：
+1. 只返回 JSON，不要返回 markdown、解释或代码块
+2. JSON 结构必须是：{"summary":"..."}
+3. 摘要应该抓住文章的核心观点和重要信息
+4. 如果原文内容较长，请控制在一到两句话，约 100-300 字；如果原文极短（如推文），请保持摘要同样简短，绝对不能超过原文长度，禁止自行发散或补充未提及细节
+5. 你无法读取图片内容。请仅基于文本摘要；如果有效文本不足以概括，请在 summary 中如实说明，不要编造图片细节。
+''';
+
   static void ensureHydrated() {
     if (_hydrated) return;
     final box = GStorage.summaries;
@@ -198,22 +224,7 @@ abstract final class SummaryService {
       return record;
     }
 
-    final prompt =
-        '''
-你是一个专业的文章摘要助手。请用$targetLang生成一个简洁的文章摘要。
-
-要求：
-1. 只返回 JSON，不要返回 markdown、解释或代码块
-2. JSON 结构必须是：{"summary":"..."}
-3. summary 是一句话或最多两句话的摘要，控制在 100~300 字之间
-4. 摘要应该抓住文章的核心观点和重要信息
-
-标题：
-${article.title}
-
-HTML：
-<html>$htmlContent</html>
-''';
+    final systemPrompt = getPrompt(targetLang);
 
     try {
       _dio.options.headers['Authorization'] = 'Bearer $apiKey';
@@ -222,7 +233,12 @@ HTML：
       final llmConfig = LlmConfig.loadSummary();
       final requestBody = <String, dynamic>{
         'messages': [
-          {'role': 'user', 'content': prompt},
+          {'role': 'system', 'content': systemPrompt},
+          {
+            'role': 'user',
+            'content':
+                '标题：\n${article.title}\n\nHTML：\n<html>$htmlContent</html>',
+          },
         ],
         'response_format': {'type': 'json_object'},
         'stream': false,

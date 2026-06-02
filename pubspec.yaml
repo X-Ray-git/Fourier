@@ -1,7 +1,7 @@
 name: autofolo
 description: "Auto Folo - RSS 信息流浏览器"
 publish_to: 'none'
-version: 1.1.4+6
+version: 1.1.5+7
 
 environment:
   sdk: ^3.11.4

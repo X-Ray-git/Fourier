@@ -3326,3 +3326,17 @@ flutter build apk --release --no-pub
 - 如果手机当前安装包来自同一套固定内部测试签名，则 `v1.1.3` GitHub APK 应该可以直接覆盖安装。
 - 如果手机当前安装包来自旧 GitHub Actions runner 的 debug key，则仍会签名冲突，需要卸载一次。
 - 一旦成功安装 `v1.1.3`，之后 GitHub Actions 发布的 APK 只要继续使用这套 secrets，就应能正常覆盖升级。
+
+### 72.7 v1.1.3 远端发布结果
+
+- tag：`v1.1.3`
+- tag 指向提交：`8f366a8 fix(android): use fixed signing key for internal releases`
+- GitHub Actions run：已通过，具体 run id 不写入仓库文档
+- 结果：`Android APK`、`macOS App`、`Publish GitHub Release` 全部通过。
+- Release URL：`GitHub Release v1.1.3`
+- Release assets：
+  - `Auto-Folo-android-v1.1.3.apk`
+        - 已下载到被 Git 忽略的临时目录并用 `apksigner verify --print-certs` 验证签名
+          - `Auto-Folo-macOS-arm64-v1.1.3.zip`
+    
+结论：`v1.1.3` GitHub Android APK 已确认使用固定内部测试签名。若用户手机上现有安装包来自同一签名，应可直接覆盖安装；若仍报签名冲突，说明手机上现有包来自另一把签名，需要卸载一次后再装。

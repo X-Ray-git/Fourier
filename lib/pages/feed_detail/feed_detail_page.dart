@@ -19,6 +19,7 @@ import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
+import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_service.dart';
 import '../../services/content_cache_service.dart';
@@ -847,12 +848,7 @@ class FeedDetailPage extends StatelessWidget {
             child: Obx(() {
               final selected = controller.selectedArticle.value;
               if (selected == null) {
-                return Center(
-                  child: Text(
-                    '请选择文章',
-                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
-                  ),
-                );
+                return const MacEmptyPlaceholder(message: '请选择文章');
               }
               return ArticlePageView(
                 key: ValueKey(selected.entryId),

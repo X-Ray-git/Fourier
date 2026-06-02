@@ -355,12 +355,10 @@ class _TimelinePageState extends State<TimelinePage> {
                   }
                   final article = controller.articles[articleIndex];
                   return Obx(() {
+                    final selectedId = controller.selectedArticle.value?.entryId;
                     return ArticleCard(
                       article: article,
-                      isSelected:
-                          Platform.isMacOS &&
-                          controller.selectedArticle.value?.entryId ==
-                              article.entryId,
+                      isSelected: Platform.isMacOS && selectedId == article.entryId,
                       onTap: () {
                         if (Platform.isMacOS) {
                           _handleMacArticleTap(article);

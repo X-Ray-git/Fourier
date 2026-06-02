@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.4] - 2026-06-02
+
+### Fixed
+- Prevented timeline article cards from rendering as release gray error boxes when local AI cache boxes are not hydrated yet.
+- Added pagination guards for Folo entry collection to avoid staying on the loading surface if a page repeats or the cursor stops advancing.
+
 ## [1.1.3] - 2026-06-02
 
 ### Fixed

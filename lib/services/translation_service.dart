@@ -154,7 +154,11 @@ abstract final class TranslationService {
   }
 
   static TranslationRecord? recordOf(String entryId) {
-    ensureHydrated();
+    try {
+      ensureHydrated();
+    } catch (e) {
+      debugPrint('[Translation] hydrate skipped: $e');
+    }
     return _records[entryId];
   }
 

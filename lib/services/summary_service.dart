@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
 import '../models/article.dart';
@@ -132,7 +133,11 @@ abstract final class SummaryService {
   }
 
   static SummaryRecord? recordOf(String entryId) {
-    ensureHydrated();
+    try {
+      ensureHydrated();
+    } catch (e) {
+      debugPrint('[Summary] hydrate skipped: $e');
+    }
     return _records[entryId];
   }
 

@@ -3340,3 +3340,70 @@ flutter build apk --release --no-pub
           - `Auto-Folo-macOS-arm64-v1.1.3.zip`
     
 结论：`v1.1.3` GitHub Android APK 已确认使用固定内部测试签名。若用户手机上现有安装包来自同一签名，应可直接覆盖安装；若仍报签名冲突，说明手机上现有包来自另一把签名，需要卸载一次后再装。
+
+## 73. Android 时间线灰屏修复与 v1.1.4 发布（2026-06-02）
+
+### 73.1 用户反馈
+
+用户成功安装 `v1.1.3` 后反馈：Android 端时间线主页面中间是一整片灰色，什么都看不见。用户进一步澄清：不是灰色占位卡片，而是彻底的一整片灰色。
+
+本机环境没有连接 Android 设备或模拟器：
+
+```bash
+flutter devices
+# 仅发现 macOS 和 Chrome
+```
+
+因此本轮无法直接截图复现 Android 页面，只能从 Flutter release 灰盒常见原因和时间线渲染路径排查。
+
+### 73.2 排查结论
+
+初始猜测是时间线停在骨架屏，但用户澄清不是占位卡片。因此排查转向 Flutter release 灰盒：
+
+- Flutter debug 下 widget 异常常表现为红屏/错误文本。
+- Flutter release 下某些 build/layout 异常可能表现为灰色错误块或整块灰色区域。
+
+时间线卡片 `ArticleCard` 在 build/initState 阶段会读取：
+
+- `TranslationService.hasTranslation`
+- `TranslationService.recordOf`
+- `TranslationService.displayTitleFor`
+- 摘要块开启时的 `SummaryService.recordOf`
+
+临时 widget test 复现出一个问题：如果本地 AI 缓存 box 尚未 hydration，`ArticleCard` 会因为 `GStorage.translations` 未初始化抛 `LateInitializationError`。真实 App 正常会先 `GStorage.init()`，但 release 中这类缓存读取不应能把整个时间线渲染链路打挂。
+
+另一个独立风险来自 `FeedHttp.collectEntries()`：
+
+- 它依赖 `publishedAfter = batch.last.publishedAt` 继续分页。
+- 如果服务端重复返回同一页，或最后一篇时间戳不前进，就可能长时间停留在加载态。
+- 这不会解释用户澄清后的“整片灰色”全部现象，但会造成主页面一直显示空表面/加载表面，因此一起修复。
+
+### 73.3 修复内容
+
+1. `lib/services/translation_service.dart`
+   - `recordOf()` 对 `ensureHydrated()` 增加 try/catch。
+   - 如果缓存 box 未就绪，记录调试日志后继续读取 `_records[entryId]`；这样既不会抛出 hydration 异常，也会保留 `Obx` 所需的 observable 读取。
+
+2. `lib/services/summary_service.dart`
+   - `recordOf()` 对 `ensureHydrated()` 增加 try/catch。
+   - 如果缓存 box 未就绪，记录调试日志后继续读取 `_records[entryId]`；摘要块按 idle/未生成状态处理，不抛异常。
+
+3. `lib/http/feed_http.dart`
+   - `collectEntries()` 增加 `seenIds` 去重。
+   - 如果某一页没有任何新 entryId，停止分页，避免重复页无限循环。
+   - 如果下一页 cursor 为空或与上一页相同，停止分页。
+   - 增加可选 `maxPages` 参数，保留未来调用方限制分页上限的能力。
+
+4. `test/article_card_test.dart`
+   - 新增 widget test：本地 AI cache 未 hydration 时，`ArticleCard` 必须能渲染且不抛异常。
+
+### 73.4 版本策略
+
+用户原话是“重新打包成 1.1.3”。但 `v1.1.3` 已经是已推送并成功发布的 tag，不应该移动或覆盖重打。为了避免历史混淆，本轮使用新 patch 版本：
+
+- `pubspec.yaml`：`1.1.4+6`
+- `X-App-Version`：`1.1.4`
+- 设置页关于版本：`Auto Folo v1.1.4`
+- tag：`v1.1.4`
+
+Android 签名继续使用第 72 节配置的本机 debug keystore GitHub Secrets，因此应保持与 `v1.1.3` 可覆盖升级。

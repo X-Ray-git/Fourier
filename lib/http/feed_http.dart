@@ -94,11 +94,17 @@ class FeedHttp {
     bool withContent = false,
     String? publishedAfter,
     Map<String, FeedModel>? feedMap,
+    int? maxPages,
   }) async {
     final items = <ArticleModel>[];
+    final seenIds = <String>{};
     var cursor = publishedAfter;
+    var pages = 0;
 
     while (true) {
+      if (maxPages != null && pages >= maxPages) break;
+      pages++;
+
       final result = await getEntries(
         view: view,
         limit: limit,
@@ -116,18 +122,24 @@ class FeedHttp {
 
       final batch = result.response;
       if (batch.isEmpty) break;
-      items.addAll(batch);
+
+      var newItems = 0;
+      for (final item in batch) {
+        if (item.entryId.isEmpty) continue;
+        if (seenIds.add(item.entryId)) {
+          items.add(item);
+          newItems++;
+        }
+      }
+      if (newItems == 0) break;
 
       if (batch.length < limit) break;
-      cursor = batch.last.publishedAt;
+      final nextCursor = batch.last.publishedAt;
+      if (nextCursor.isEmpty || nextCursor == cursor) break;
+      cursor = nextCursor;
     }
 
-    final deduped = <String, ArticleModel>{};
-    for (final item in items) {
-      if (item.entryId.isEmpty) continue;
-      deduped[item.entryId] = item;
-    }
-    return Success(deduped.values.toList());
+    return Success(items);
   }
 
   /// 收集所有 inbox 的未读条目。
@@ -226,13 +238,12 @@ class FeedHttp {
           final articles = data
               .whereType<Map>()
               .map(
-                (item) =>
-                    ArticleModel.fromInboxJson(
-                      Map<String, dynamic>.from(item),
-                      feedTitle: inboxTitle,
-                      feedImage: inboxImage,
-                      subscriptionCategory: inboxCategory,
-                    ),
+                (item) => ArticleModel.fromInboxJson(
+                  Map<String, dynamic>.from(item),
+                  feedTitle: inboxTitle,
+                  feedImage: inboxImage,
+                  subscriptionCategory: inboxCategory,
+                ),
               )
               .toList();
           return Success(articles);

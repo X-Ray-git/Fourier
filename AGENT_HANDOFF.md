@@ -3198,3 +3198,22 @@ flutter test --no-pub
 - `improve-macos-ui-layout` 的实际功能已由 main 现有提交覆盖；不要重复合并。
 - prompt 配置已经有意拆分为 System Prompt + User Prompt schema。不要把 JSON schema 全部塞回 System Prompt，否则分块翻译的非首块容易与标题字段要求冲突。
 - `LocalArticleDbService.upsertMany` 会保留已有 AI 拒绝状态；需要清除拒绝时必须使用直接清理路径 `clearFilterState()` 或等价的 raw DB 写法，不能用一个 `isRejectedByAi: false` 的 `ArticleModel` 期望 OR 合并自动清除。
+
+### 71.6 v1.1.2 远端发布结果
+
+- tag：`v1.1.2`
+- tag 指向提交：`29316f7 chore(release): prepare v1.1.2`
+- GitHub Actions run：已通过，具体 run id 不写入仓库文档
+- 结果：`Android APK`、`macOS App`、`Publish GitHub Release` 全部通过。
+- Release URL：`GitHub Release v1.1.2`
+- Release assets：
+  - `Auto-Folo-android-v1.1.2.apk`
+      - `Auto-Folo-macOS-arm64-v1.1.2.zip`
+    
+发布中仍出现 GitHub Actions 的 Node.js 20 deprecation warning：
+
+- 来源：`actions/checkout@v4`、`actions/setup-java@v4`、`actions/upload-artifact@v4`、`actions/download-artifact@v4`。
+- 当前不影响发布结果。
+- GitHub 提示 Node.js 24 将在 2026-06-16 起默认启用，Node.js 20 将在 2026-09-16 移除；后续可单独更新 workflow action 版本或设置 Node 24 兼容策略。
+
+注意：本节是 `v1.1.2` tag 推送并成功发布后的补充记录，因此位于 `main` 上 tag 之后的文档提交中；不要为补这段记录移动或 force-update `v1.1.2` tag。

@@ -490,7 +490,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Auto Folo v1.1.1',
+                    'Auto Folo v1.1.2',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,

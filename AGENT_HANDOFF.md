@@ -3092,3 +3092,109 @@ flutter build macos --debug
   - `ddfa988 ci: package macos release as arm64`
   - `63a6c72 ci: fix release publishing without checkout`
 - `.gitignore` 和 `scratch/` 在发布前后都存在用户侧未提交变更；不要在无明确要求时纳入发布/文档提交。
+
+## 71. worktree 复核、必要改动吸收与 v1.1.2 发布（2026-06-02）
+
+### 71.1 用户要求与判断过程
+
+用户要求谨慎检查所有待合并 worktree，确认是否正确、是否有必要；如果确认已经处理完，就清理所有 worktree、维护 `AGENT_HANDOFF.md`、维护 Git 仓库，并打一个小版本 tag 触发 Android + macOS 打包。
+
+本轮检查过的辅助 worktree：
+
+1. `<historical-agent-worktree>`
+   - 分支：`browse-entire-project`
+   - 状态：clean
+   - 主要提交：`81cef1b feat: inbox content fallback, ui tweaks, and index.html redesign`
+   - 结论：不直接 merge。里面包含一个有价值的 Inbox 正文 fallback，但也混入 `index.html` 大改和 UI 调整；其中 Inbox fallback 还存在“失败前就写入 fetched 标记，之后不再重试”的风险。
+
+2. `<historical-agent-worktree>`
+   - 分支：`improve-macos-ui-layout`
+   - 状态：clean
+   - 主要提交：`1616e8c fix(macos): fix keyboard double trigger, sync animation direction, and unread count inaccuracy`
+   - 结论：不需要再 merge。其核心效果已经在 `main` 的 `3a46af9 fix(macos): stabilize shortcuts and unread counts` 等后续提交中等价合入，并且 v1.1.1 发布流程已经验证。
+
+3. `<historical-agent-worktree>`
+   - 分支：`refactor-prompt-system-config`
+   - 状态：dirty，大量 WIP 修改
+   - 结论：不直接 merge。该 worktree 把 prompt 配置核心改动与大量格式化/无关文件修改混在一起。已手工吸收必要的摘要/翻译 prompt 配置能力，并修正了分块翻译 prompt 冲突问题。
+
+关键原则：
+
+- 不 cherry-pick 整个 worktree commit，也不直接合并 dirty WIP。
+- 只把确认必要且能解释清楚的行为手工整理进 `main`。
+- 对 dirty worktree 清理前，先把 WIP diff 保存到 `scratch/refactor-prompt-system-config.wip.patch`。`scratch/` 被 `.gitignore` 忽略，该补丁不进入版本库，但可用于本机恢复参考。
+- worktree 已清理到只剩主工作区 `<main-worktree>`；本轮没有删除本地分支名，只移除了辅助 checkout 目录。
+
+### 71.2 已合入的代码提交
+
+本轮在 `main` 上形成 4 个提交：
+
+1. `3311fc9 fix(filter): keep review queue append order`
+   - 新增 `ArticleModel.filteredAt`，记录 AI 拦截判定完成时间。
+   - 审核页初始加载按 `filteredAt` 升序显示；新拦截文章用 append 放到列表末尾，满足“垃圾拦截页面新文章始终附加在列表末尾”的要求。
+   - `AutoFilterWorker` 在拒绝文章时写入 `filteredAt`；解除拦截时清空。
+   - `.gitignore` 新增 `.antigravitycli/` 与 `scratch/` 忽略规则，保留 `scratch/.gitkeep`。
+
+2. `b4e9019 fix(inbox): backfill content before AI processing`
+   - 从 `browse-entire-project` 手工吸收 Inbox 正文 fallback，但修正为：只有 `FeedHttp.getInboxEntryDetail` 成功且返回非空正文后，才写入 `inbox_detail_fetched_${entryId}`。
+   - Inbox 文章在可读性和 AI 处理前先补详情正文，避免空正文进入总结/翻译/过滤流程。
+   - 内容更新时保留 `isRejectedByAi`、`filterReason`、`filterReviewed`、`filteredAt`，避免补全文或详情时破坏过滤队列状态。
+   - `LocalArticleDbService.clearFilterState()` 成为直接清理过滤状态的公共路径，避免 `upsertMany` 的 OR 合并逻辑让“清除拒绝”失效。
+
+3. `5050b9f feat(settings): configure summary and translation prompts`
+   - 从 `refactor-prompt-system-config` 手工吸收 prompt 配置核心。
+   - 设置页新增 3 个 Prompt 配置卡片：摘要、翻译、过滤。
+   - `SummaryService` 新增 `getPrompt` / `setPrompt` / `resetPrompt`，默认 prompt 要求返回 `{"summary":"..."}`。
+   - `TranslationService` 新增 `getPrompt` / `setPrompt` / `resetPrompt`，默认 prompt 只作为 System Prompt；具体 JSON schema 放在 User Prompt。
+   - 分块翻译特别注意：首块要求 `translated_title` + `translated_html`，非首块只要求 `translated_html` 并明确“不要返回标题”。这是对 WIP worktree 的修正，避免 System Prompt 与非首块 User Prompt 互相冲突。
+
+4. 版本/文档提交（本节所在提交）
+   - `pubspec.yaml`：`version: 1.1.2+4`
+   - `lib/http/init.dart`：`X-App-Version: 1.1.2`
+   - `lib/pages/settings/settings_page.dart`：关于页显示 `Auto Folo v1.1.2`
+   - `CHANGELOG.md`：新增 `1.1.2 - 2026-06-02`
+   - `AGENT_HANDOFF.md`：记录本轮 worktree 复核、清理和发布上下文。
+
+### 71.3 验证结果
+
+已运行并通过：
+
+```bash
+git diff --check
+dart analyze lib test
+flutter analyze --no-pub --no-fatal-infos lib test
+flutter test --no-pub
+```
+
+说明：
+
+- 直接 `dart analyze` 全仓库会扫到 `reference/` 下外部参考工程，出现大量与本项目无关的 package URI 报错；不要用它判断本项目健康度。
+- `flutter analyze --no-fatal-infos lib test` 与 `flutter test` 第一次都因 `pub get` 网络握手中断失败，未进入实际分析/测试；随后使用已有依赖缓存运行 `--no-pub` 版本通过。
+- 如果后续需要完整 CI 风格验证，优先跑 `flutter analyze --no-fatal-infos lib test` 和 `flutter test`。
+
+### 71.4 v1.1.2 内部发布计划
+
+小版本 tag：`v1.1.2`。
+
+发布语义：
+
+- 用户只自用，不考虑软件商城。
+- 继续按内部测试版处理，tag push 触发 `.github/workflows/internal-release.yml`。
+- GitHub Actions 会构建：
+  - Android release APK
+  - macOS arm64-only release zip
+  - GitHub Release assets
+
+必须保持：
+
+- macOS 本地与远端发布包都坚持 arm64。
+- 不要恢复 universal macOS 发布包。
+- 不要删除 `GH_REPO: ${{ github.repository }}`，否则 Release job 在没有 checkout 的目录中会再次报 `fatal: not a git repository`。
+
+### 71.5 后续 agent 注意事项
+
+- 如果需要恢复被清理 dirty worktree 的 WIP，可在本机查看 `scratch/refactor-prompt-system-config.wip.patch`。该文件未被 Git 跟踪，可能只存在于当前机器。
+- `browse-entire-project` 的 `index.html` redesign 未合入；不是遗漏，是因为与当前请求无关且改动过大。
+- `improve-macos-ui-layout` 的实际功能已由 main 现有提交覆盖；不要重复合并。
+- prompt 配置已经有意拆分为 System Prompt + User Prompt schema。不要把 JSON schema 全部塞回 System Prompt，否则分块翻译的非首块容易与标题字段要求冲突。
+- `LocalArticleDbService.upsertMany` 会保留已有 AI 拒绝状态；需要清除拒绝时必须使用直接清理路径 `clearFilterState()` 或等价的 raw DB 写法，不能用一个 `isRejectedByAi: false` 的 `ArticleModel` 期望 OR 合并自动清除。

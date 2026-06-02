@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-06-02
+
+### Added
+- Added editable Summary and Translation system prompts in Settings, with `{targetLang}` template substitution.
+
+### Fixed
+- Preserved AI filter queue order by recording `filteredAt` and appending new rejected articles to the review list.
+- Backfilled Inbox detail content before readability and AI processing, while only marking detail fetch success after non-empty content is stored.
+- Kept AI filter metadata stable across local article content updates and shared one direct cleanup path for rejected article recovery/read handling.
+
 ## [1.1.1] - 2026-06-01
 
 ### Added

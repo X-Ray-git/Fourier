@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3] - 2026-06-02
+
+### Fixed
+- Switched Android internal release builds to a fixed keystore supplied through GitHub Secrets, avoiding APK install conflicts caused by per-environment debug signing keys.
+
 ## [1.1.2] - 2026-06-02
 
 ### Added

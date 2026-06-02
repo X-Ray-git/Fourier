@@ -3217,3 +3217,112 @@ flutter test --no-pub
 - GitHub 提示 Node.js 24 将在 2026-06-16 起默认启用，Node.js 20 将在 2026-09-16 移除；后续可单独更新 workflow action 版本或设置 Node 24 兼容策略。
 
 注意：本节是 `v1.1.2` tag 推送并成功发布后的补充记录，因此位于 `main` 上 tag 之后的文档提交中；不要为补这段记录移动或 force-update `v1.1.2` tag。
+
+## 72. Android 安装签名冲突与 v1.1.3 修复（2026-06-02）
+
+### 72.1 用户遇到的问题
+
+用户安装 `v1.1.2` Android APK 时，系统提示：
+
+```text
+应用未安装：软件包与现有软件包存在冲突
+安装包的开发者签名有异常，建议清除同包名的数据或联系开发者
+```
+
+根本原因不是版本号不够高，而是 Android 覆盖安装要求：
+
+- `applicationId` 相同：当前是 `com.folo.folo_reader`
+- 签名证书也必须相同
+- `versionCode` 更高只在“包名相同且签名相同”时才决定是否可升级
+
+如果包名相同但签名不同，Android 会直接拒绝覆盖安装。这是安全机制，防止任意 APK 用相同包名和更高版本号接管旧应用数据。
+
+### 72.2 为什么之前会签名不同
+
+检查 `android/app/build.gradle.kts` 后发现，本项目之前的 release 构建实际使用了 debug 签名：
+
+```kotlin
+signingConfig = signingConfigs.getByName("debug")
+```
+
+debug keystore 通常与构建环境相关：
+
+- - - 换机器、删掉 debug keystore、换 runner，都可能导致签名不同
+
+因此用户本机 `flutter run` 安装的包和 GitHub Actions 构建的 release APK 可能同包名但签名不同，从而无法覆盖安装。
+
+### 72.3 用户确认的修复策略
+
+用户基本只自用，并确认目前只通过“本机”和“GitHub Actions”两种方式安装/打包过。经过讨论后，采用：
+
+- 使用固定 Android 内部测试签名材料
+- 将签名材料写入 GitHub Secrets，而不是提交到仓库
+- GitHub Actions 以后 tag 构建的 Android APK 使用同一套固定内部测试签名
+
+
+
+写入 GitHub Secrets 的项目：
+
+
+注意：
+
+- GitHub Secrets 不进入 Git 仓库，不会被 `git clone`、源码包、tag 或 Release 资产直接包含。
+- 但 Actions 运行时可以使用这把 key 签 APK，因此它仍然是“把签名能力交给 GitHub Actions 环境”。
+- 用户已明确同意将固定内部测试签名材料配置到 GitHub Secrets。
+
+### 72.4 代码修复
+
+修改文件：
+
+1. `.gitignore`
+   - 忽略 `android/key.properties`
+   - 忽略 `android/app/*.jks`
+   - 忽略 `android/app/*.keystore`
+
+2. `android/app/build.gradle.kts`
+   - 支持读取 `android/key.properties`
+   - 如果存在固定 keystore 配置，release build 使用 `signingConfigs.release`
+   - 如果本地没有 `android/key.properties`，仍 fallback 到 debug signing，保证普通本地开发命令可运行
+
+3. `.github/workflows/internal-release.yml`
+   - Android job 在 `flutter build apk --release` 前新增 `Configure Android signing`
+   - 从 GitHub Secrets 还原 `android/app/upload-keystore.jks`
+   - 生成 `android/key.properties`
+   - 若任一 secret 缺失，CI 直接失败，避免再次发布不稳定签名 APK
+
+### 72.5 本地验证
+
+已在本机生成被 `.gitignore` 忽略的签名配置文件：
+
+- `android/key.properties`
+- `android/app/upload-keystore.jks`
+
+本地验证命令：
+
+```bash
+dart analyze lib test
+flutter build apk --release --no-pub
+<android-sdk>/build-tools/<version>/apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+```
+
+验证结果：
+
+- `dart analyze lib test`：通过
+- `flutter build apk --release --no-pub`：通过
+- `apksigner verify --print-certs`：通过，并确认 APK 使用预期的固定内部测试签名证书。证书指纹不记录在仓库文档中。
+
+
+### 72.6 v1.1.3 发布预期
+
+版本计划：
+
+- `pubspec.yaml`：`1.1.3+5`
+- `X-App-Version`：`1.1.3`
+- 设置页关于版本：`Auto Folo v1.1.3`
+- tag：`v1.1.3`
+
+安装预期：
+
+- 如果手机当前安装包来自同一套固定内部测试签名，则 `v1.1.3` GitHub APK 应该可以直接覆盖安装。
+- 如果手机当前安装包来自旧 GitHub Actions runner 的 debug key，则仍会签名冲突，需要卸载一次。
+- 一旦成功安装 `v1.1.3`，之后 GitHub Actions 发布的 APK 只要继续使用这套 secrets，就应能正常覆盖升级。

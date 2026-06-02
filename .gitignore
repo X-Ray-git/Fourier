@@ -43,6 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore
 
 # Reference repositories (not part of this project)
 /reference/

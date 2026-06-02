@@ -3407,3 +3407,47 @@ flutter devices
 - tag：`v1.1.4`
 
 Android 签名继续使用第 72 节配置的本机 debug keystore GitHub Secrets，因此应保持与 `v1.1.3` 可覆盖升级。
+
+### 73.5 本地验证
+
+本轮修复提交前已完成：
+
+```bash
+dart format lib/http/feed_http.dart lib/services/translation_service.dart lib/services/summary_service.dart lib/http/init.dart lib/pages/settings/settings_page.dart test/article_card_test.dart
+git diff --check
+dart analyze lib test
+flutter test --no-pub
+flutter build apk --release --no-pub
+apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+```
+
+结果：
+
+- `dart analyze lib test` 通过。
+- `flutter test --no-pub` 通过，包含新增 `ArticleCard renders when local AI caches are not hydrated`。
+- 本地 Android release APK 构建成功。
+- 本地 APK 签名仍是第 72 节记录的本机 debug keystore：
+    
+### 73.6 GitHub Actions 发布结果
+
+提交：
+
+- Commit：`e017bff447392ebdbff5ac40d18aada86a42edf3`
+- Commit message：`fix(timeline): prevent Android release gray screen`
+- Tag：`v1.1.4`
+
+GitHub Actions：
+
+- Run ID：已通过，具体 run id 不写入仓库文档
+- Run URL：`GitHub Actions run`
+- 结果：成功。
+- Jobs：
+  - `macOS App`：通过，用时约 `6m30s`；包含 `Verify arm64 runner`，因此本次 macOS 仍为 arm64 构建。
+  - `Android APK`：通过，用时约 `9m50s`；`Configure Android signing`、`Build APK`、`Upload APK artifact` 均通过。
+  - `Publish GitHub Release`：通过，用时约 `12s`。
+- Release URL：`GitHub Release v1.1.4`
+- 预期 release assets（由 workflow 产物命名规则生成）：
+  - `Auto-Folo-android-v1.1.4.apk`
+  - `Auto-Folo-macOS-arm64-v1.1.4.zip`
+
+注意：本轮在 workflow 成功后，新的 `gh run view`/release 查询被 Codex 系统用量限制拒绝，因此没有继续下载 GitHub release asset 做远端 hash 和远端 APK 签名复验。可确认的信息来自已完成的 workflow 监控输出和本地 release APK 签名验证。

@@ -312,33 +312,19 @@ class _SidebarHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return SizedBox(
       height: 54,
       child: Padding(
-        padding: const EdgeInsets.only(left: 74, right: 10, top: 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Auto Folo',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface.withValues(alpha: 0.82),
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
-              iconSize: 18,
-              tooltip: '收起侧边栏',
-              visualDensity: VisualDensity.compact,
-              onPressed: onCollapse,
-            ),
-          ],
+        padding: const EdgeInsets.only(right: 10, top: 10),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: IconButton(
+            icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
+            iconSize: 18,
+            tooltip: '收起侧边栏',
+            visualDensity: VisualDensity.compact,
+            onPressed: onCollapse,
+          ),
         ),
       ),
     );

@@ -6,6 +6,7 @@ import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/refresh_aware_scroll_physics.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
+import '../../common/widgets/mac_empty_placeholder.dart';
 
 import 'dart:io';
 import '../../http/init.dart';
@@ -262,7 +263,7 @@ class _TimelinePageState extends State<TimelinePage> {
                 child: Obx(() {
                   final selected = controller.selectedArticle.value;
                   if (selected == null) {
-                    return const Center(child: Text('请在左侧选择文章'));
+                    return const MacEmptyPlaceholder(message: '请在左侧选择文章');
                   }
                   return ArticlePageView(
                     key: ValueKey(selected.entryId),

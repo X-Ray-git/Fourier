@@ -3479,3 +3479,30 @@ GitHub Actions：
    由于我最初误解了用户“新分析完的文章应该在垃圾拦截页面”的需求，曾一度在 `timeline_controller.dart` 中把被拦截文章从主时间线剔除了。用户澄清后确认：**被拦截的文章既要留在主时间线（按发布时间排序），也要出现在审核页面（按审核完成时间排序）**。这正符合旧有代码的双线并行排序逻辑，因此我立即撤销了那段错误剔除代码，恢复了原有设定。
 
 经过这些修改，安卓端的灰屏现象彻底消失，应用恢复正常运行与逻辑流转。
+## 75. macOS 桌面端 UI 细节精简与占位符统一
+
+### 75.1 需求与起因
+
+- **右侧占位符**：在 macOS 双栏布局下，当右侧没有选中任何文章时，之前一直只显示简陋的纯文本（“请在左侧选择文章”等）。用户反馈这显得太简陋，希望恢复成视觉丰富的占位符（用户误以为曾经有过，实际上代码历史中未曾实现过）。
+- **左上角标志**：侧边栏左上角的 “Auto Folo” 应用名称标志，在已经有独立系统窗口和标题栏的 macOS 环境下显得冗余且格格不入，用户希望删除。
+
+### 75.2 排查与实现
+
+1. **新建通用占位符组件**
+   - 创建 `lib/common/widgets/mac_empty_placeholder.dart`，提供 `MacEmptyPlaceholder`。
+   - 使用主题色着色的 `Icons.article_outlined`，配合 `alpha: 0.08` 的弱化背景圆环，下方辅以原有的提示文本。该设计贴合 macOS 现代极简风格，填补了留白而不显得突兀。
+2. **全局替换未选中状态**
+   - 梳理出 macOS 下所有采用 Split View（双栏布局）的三个页面：
+     - `TimelinePage` (时间线)
+     - `FeedDetailPage` (订阅源详情)
+     - `FilterReviewPage` (垃圾拦截审查)
+   - 统一将这三处在 `selectedArticle == null` 时渲染的纯文本替换为 `MacEmptyPlaceholder`。
+3. **清理侧边栏顶部**
+   - 编辑 `lib/pages/main/widgets/macos_sidebar.dart` 中的 `_SidebarHeader` 组件。
+   - 移除了包含 “Auto Folo” 文本的节点。
+   - 为保持头部剩余图标（收起侧边栏按钮）的对齐自然，移除了原有的 `Row` 布局，改用 `Align(alignment: Alignment.centerRight)` 使其合理停靠。
+
+### 75.3 后续建议
+
+如果后续在 macOS 桌面端引入新的双栏页面结构，遇到“右侧空内容/未选中”的状态，请务必复用 `MacEmptyPlaceholder` 以维持 UI 表现的统一性。同时尽量避免过度放置文字 Logo 标识，保持桌面环境的沉浸感。
+

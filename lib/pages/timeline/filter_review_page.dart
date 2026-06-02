@@ -14,6 +14,7 @@ import '../../utils/storage.dart';
 import '../article/article_page.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
+import '../../common/widgets/mac_empty_placeholder.dart';
 
 class FilterReviewPage extends StatefulWidget {
   const FilterReviewPage({super.key});
@@ -481,12 +482,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             child: Obx(() {
               final selected = _selectedArticle.value;
               if (selected == null) {
-                return Center(
-                  child: Text(
-                    '未选择文章',
-                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
-                  ),
-                );
+                return const MacEmptyPlaceholder(message: '未选择文章');
               }
               return ArticlePageView(
                 key: ValueKey(selected.entryId),

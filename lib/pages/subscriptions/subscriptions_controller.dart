@@ -121,8 +121,7 @@ class SubscriptionsController extends GetxController {
           for (final item in GStorage.articleDb.values) {
             if (item is Map) {
               if (item['feedId'] == feedId &&
-                  item['isRead'] != true &&
-                  item['isRejectedByAi'] != true) {
+                  item['isRead'] != true) {
                 count++;
               }
             }
@@ -137,7 +136,7 @@ class SubscriptionsController extends GetxController {
     final all = LocalArticleDbService.readAllArticles();
     final counts = <String, int>{};
     for (final a in all) {
-      if (a.isRead || a.isRejectedByAi || a.feedId.isEmpty) continue;
+      if (a.isRead || a.feedId.isEmpty) continue;
       counts[a.feedId] = (counts[a.feedId] ?? 0) + 1;
     }
     _unreadCounts.value = counts;

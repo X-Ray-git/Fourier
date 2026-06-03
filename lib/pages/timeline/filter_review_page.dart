@@ -424,7 +424,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            width: 392,
+            width: 380,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -482,7 +482,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             child: Obx(() {
               final selected = _selectedArticle.value;
               if (selected == null) {
-                return const MacEmptyPlaceholder(message: '未选择文章');
+                return const MacEmptyPlaceholder();
               }
               return ArticlePageView(
                 key: ValueKey(selected.entryId),
@@ -506,49 +506,19 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }) {
     final bool allDone = !llmActive;
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: allDone
-                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                    : cs.primaryContainer.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                allDone ? Icons.check_circle_outline : Icons.shield_outlined,
-                size: 56,
-                color: allDone ? const Color(0xFF10B981) : cs.primary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              allDone ? '处理完毕' : '暂无待处理内容',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (llmActive)
-              _LlmPill(cs: cs, count: llmCount)
-            else
-              Text(
-                allDone ? '所有文章已审核，阅读流保持清爽' : 'AI 过滤系统正在默默守护你的阅读流',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: cs.onSurfaceVariant,
-                  height: 1.6,
-                ),
-                textAlign: TextAlign.center,
-              ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            allDone ? Icons.check_circle_outline : Icons.shield_outlined,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.15),
+          ),
+          if (llmActive) ...[
+            const SizedBox(height: 16),
+            _LlmPill(cs: cs, count: llmCount),
           ],
-        ),
+        ],
       ),
     );
   }

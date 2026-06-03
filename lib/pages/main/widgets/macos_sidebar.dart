@@ -313,18 +313,14 @@ class _SidebarHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 54,
+      height: 38,
       child: Padding(
         padding: const EdgeInsets.only(right: 10, top: 10),
         child: Align(
           alignment: Alignment.centerRight,
-          child: IconButton(
-            icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
-            iconSize: 18,
-            tooltip: '收起侧边栏',
-            visualDensity: VisualDensity.compact,
-            onPressed: onCollapse,
-          ),
+          // 实验性 UI 精简：暂时取消“收起”按钮以避开 macOS 红绿灯，
+          // 但保留原有对齐逻辑和 SizedBox 高度占位，以便需要时随时恢复为 IconButton。
+          child: const SizedBox.shrink(),
         ),
       ),
     );

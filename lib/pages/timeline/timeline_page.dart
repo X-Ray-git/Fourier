@@ -243,7 +243,7 @@ class _TimelinePageState extends State<TimelinePage> {
 
         if (Platform.isMacOS) {
           return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
                 width: 380,
@@ -263,7 +263,7 @@ class _TimelinePageState extends State<TimelinePage> {
                 child: Obx(() {
                   final selected = controller.selectedArticle.value;
                   if (selected == null) {
-                    return const MacEmptyPlaceholder(message: '请在左侧选择文章');
+                    return const MacEmptyPlaceholder();
                   }
                   return ArticlePageView(
                     key: ValueKey(selected.entryId),

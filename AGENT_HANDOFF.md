@@ -2,7 +2,7 @@
 
 > **快速上手**：Flutter 3.x + GetX + Hive + Dio 项目。入口 `lib/main.dart`，路由 `lib/router/app_pages.dart`。
 > 当前产品名统一为 **Auto Folo**；Dart package 名仍是 `autofolo`。验证优先使用 `flutter analyze` 与 `flutter test`，不要用裸 `dart analyze lib/` 判断 Flutter 项目健康度。
-> 常用构建：`flutter build apk --debug`、`flutter build macos --debug`。内部发布走 tag 触发的 GitHub Actions，详见第 70 节；macOS 发布包必须保持 arm64。
+> 常用构建：`flutter build apk --debug`、`flutter build macos --debug`。内部发布走 tag 触发的 GitHub Actions，详见第 80 节；macOS 发布包必须保持 arm64。
 
 ## 项目速览
 
@@ -61,7 +61,7 @@
 
 ## 3. 已完成改动（本轮）
 
-## 3.1 体验与功能增强
+### 3.1 体验与功能增强
 
 1. **时间线：已读同步能力补齐**
    - 新增 `ReadSyncService`（本地待同步队列管理）。
@@ -85,7 +85,7 @@
    - 新增 `SecurityUtils.parseHttpUrl`。
    - 文章正文链接点击与“打开原文”统一做 http/https 校验与失败提示。
 
-## 3.2 稳定性与工程质量提升
+### 3.2 稳定性与工程质量提升
 
 1. **网络层健壮化**
    - `FeedHttp` 增加响应 Map 解析兜底，避免因返回结构异常导致崩溃。
@@ -132,6 +132,12 @@
 5. **工程与可维护性**
    - README 需要替换模板内容，补齐运行、配置与常见问题。
    - 增加 controller / http 的单元测试，补齐核心行为覆盖。
+
+## 6. 接手建议（最短路径）
+
+1. 先读本文件第 2、3、5 节。
+2. 优先从 `lib/pages/*` 的 controller 入手，继续补“可感知的体验闭环”。
+3. 每加一项功能，至少同步补 1 个测试（避免再次回到“模板测试失效”状态）。
 
 ## 7. 本轮追加优化（2026-05-16 晚）
 
@@ -185,15 +191,9 @@
    - 增加失败可点击重试；
    - 保留已加的内存/磁盘缓存尺寸优化参数。
 
-## 6. 接手建议（最短路径）
+## 10. 翻译功能实现（v1.1 新增）
 
-1. 先读本文件第 2、3、5 节。
-2. 优先从 `lib/pages/*` 的 controller 入手，继续补“可感知的体验闭环”。
-3. 每加一项功能，至少同步补 1 个测试（避免再次回到“模板测试失效”状态）。
-
-## 7. 翻译功能实现（v1.1 新增）
-
-### 7.1 需求确认
+### 10.1 需求确认
 
 1. **触发方式**：文章卡片长按，弹出菜单选择"翻译文章"
 2. **翻译服务**：DeepSeek API（flash 模型，无思考模式）
@@ -202,7 +202,7 @@
 5. **已翻译标记**：卡片上显示语言图标，详情页可切换原文/译文
 6. **可逆性**：支持删除翻译，重新请求翻译
 
-### 7.2 实现细节
+### 10.2 实现细节
 
 #### 新增文件
 
@@ -267,7 +267,7 @@
    - 保存/清除按钮集成（与 Token 一起保存）
    - Key 存储在 `GStorage.setting['deepseek_api_key']`
 
-### 7.3 工程集成要点
+### 10.3 工程集成要点
 
 1. **网络请求**
    - Dio 实例化在 `TranslationService` 内部，避免全局依赖
@@ -303,7 +303,7 @@
    - API prompt 明确要求保留标签结构，仅翻译文本
    - 响应后移除 `<html>` wrapper
 
-### 7.4 新增/修改文件清单
+### 10.4 新增/修改文件清单
 
 #### 新增
 
@@ -316,23 +316,23 @@
 - `lib/pages/widgets/article_card.dart` — 长按菜单 + 翻译标记
 - `lib/pages/settings/settings_page.dart` — API key 配置输入
 
-### 7.5 测试覆盖
+### 10.5 测试覆盖
 
 - 基础单元测试已通过（无新增测试，因主要逻辑依赖外部 API）
 - 建议后续补：
   - TranslationService.getTranslation 缓存命中/缺失场景
   - HTML 格式对应检查（翻译前后标签结构一致性）
 
-### 7.6 下一步扩展建议
+### 10.6 下一步扩展建议
 
 1. **多语言支持**：参数化 `targetLang`，UI 添加语言选择下拉
 2. **并发翻译**：支持多文章同时翻译，显示进度列表
 3. **翻译历史**：保存翻译记录，支持重新编辑/分享
 4. **本地翻译**：集成离线翻译模型（如 ML Kit）作为备选
 
-## 8. Social 类别拉取修复（v1.2 新增）
+## 11. Social 类别拉取修复（v1.2 新增）
 
-### 8.1 问题描述
+### 11.1 问题描述
 
 首页只拉取了 Folo API 的 `view=0`（feeds 未读）条目，忽略了 `view=1`（social 未读）条目。根据实际调用结果：
 - view=0 返回 68 篇未读文章
@@ -341,11 +341,11 @@
 
 导致首页缺少约 30% 的内容。
 
-### 8.2 根本原因
+### 11.2 根本原因
 
 `TimelineController` 和 `FeedDetailController` 的 `loadData()` 与 `_refreshRecentReadWindow()` 都只调用了 `FeedHttp.collectEntries(view: 0, ...)`，没有并行拉取 view=1 的条目。
 
-### 8.3 修复实现
+### 11.3 修复实现
 
 #### 修改 `ArticleModel.fromEntryJson()`
 
@@ -443,35 +443,35 @@ if (socialReadResult is Success<List<ArticleModel>>) {
 
 在 `loadData()` 和 `_refreshRecentReadWindow()` 中应用相同的改动，确保按 feed 或 category 筛选时也能包含 social 条目。
 
-### 8.4 修改文件清单
+### 11.4 修改文件清单
 
 1. `lib/models/article.dart` — 修改 `fromEntryJson()` 添加 `view` 参数
 2. `lib/http/feed_http.dart` — 修改 `getEntries()` 传入 `view` 参数
 3. `lib/pages/timeline/timeline_controller.dart` — 修改 `loadData()` 和 `_refreshRecentReadWindow()`
 4. `lib/pages/feed_detail/feed_detail_page.dart` — 修改 `loadData()` 和 `_refreshRecentReadWindow()`
 
-### 8.5 预期效果
+### 11.5 预期效果
 
 - 首页现在应该能显示 ~98 篇未读文章（68 feeds + 30 social）
 - 已读补抓也覆盖 social 条目，确保已读状态同步完整
 - 时间线/分类详情都能混合展示 feeds 和 social 的文章
 
-### 8.6 验证方式
+### 11.6 验证方式
 
 1. 登录后进入首页，观察未读数量是否接近 98
 2. 在设置里设置较小的已读补抓窗口（如 1 天），观察是否能补抓到 social 的已读文章
 3. 查看本地文章库中的 `category` 字段，确保 social 条目被正确标记为 'social'
 
-## 9. Inbox 拉取集成（v1.2 扩展）
+## 12. Inbox 拉取集成（v1.2 扩展）
 
-### 9.1 理解
+### 12.1 理解
 
 参考工程中 **inbox 不是独立页面，而是一种文章 category**，与 'feeds' 和 'social' 平级。在未读列表中，需要同时拉取：
 - view=0 feeds
 - view=1 social  
 - 所有 inbox 的条目
 
-### 9.2 实现
+### 12.2 实现
 
 #### 新增方法 `FeedHttp.collectAllInboxEntries()`
 
@@ -506,22 +506,22 @@ if (inboxResult is Success<List<ArticleModel>>) {
 
 同样添加 inbox 条目拉取，确保分类/订阅源详情页也能展示对应的 inbox 条目（虽然 inbox 条目的 subscriptionCategory 为空）。
 
-### 9.3 预期效果
+### 12.3 预期效果
 
 首页现在包含三种类型的文章：
 - feeds（订阅的 RSS/Feed）
 - social（社交媒体，如微博）
 - inbox（自定义或系统收件箱）
 
-### 9.4 修改文件清单
+### 12.4 修改文件清单
 
 1. `lib/http/feed_http.dart` — 新增 `collectAllInboxEntries()` 方法
 2. `lib/pages/timeline/timeline_controller.dart` — 修改 `loadData()` 包含 inbox
 3. `lib/pages/feed_detail/feed_detail_page.dart` — 修改 `loadData()` 包含 inbox
 
-## 10. 对标参考工程的细节优化（v1.3）
+## 13. 对标参考工程的细节优化（v1.3）
 
-### 10.1 发现与改进
+### 13.1 发现与改进
 
 通过对照 `<local-reference-project>` 的实现，发现以下细节：
 
@@ -541,20 +541,20 @@ final category = (view == 1 || feedView == 1) ? 'social' : 'feeds';
 
 并在 `FeedHttp.getEntries()` 中传入 Feed 的 view 字段。
 
-### 10.2 其他参考工程的细节（暂不改）
+### 13.2 其他参考工程的细节（暂不改）
 
 - **ArticleModel 缺失字段**：参考工程有 `status / should_reject / summary / article_type / has_events` 等过滤相关字段。移动端暂无需这些，保留扩展空间。
 - **HTTP 超时差异**：参考工程根据是否拉正文调整超时（60s 含正文，30s 不含）。当前 Dio 配置可能未区分，暂无显著问题。
 - **JSON 字符清洁**：参考工程清洗 Folo API 的控制字符。当前 Dio 反序列化可能已处理，如遇解析异常可在 Request 层补兜底。
 
-### 10.3 修改文件清单
+### 13.3 修改文件清单
 
 1. `lib/models/article.dart` — 修改 `fromEntryJson()` 支持 `feedView` 参数和双重判定
 2. `lib/http/feed_http.dart` — 传入 `feedView: f?.view`
 
-## 11. 图片渲染性能优化（v1.4）
+## 14. 图片渲染性能优化（v1.4）
 
-### 11.1 问题诊断
+### 14.1 问题诊断
 
 用户反馈：**有图片的文章帧率出现下降**。
 
@@ -575,7 +575,7 @@ final category = (view == 1 || feedView == 1) ? 'social' : 'feeds';
    - 虽然已在 onInit 时规范化，但 flutter_html 仍会全量重新解析
    - TagExtension 对每个 `<img>` 都触发 builder 回调
 
-### 11.2 实施改进
+### 14.2 实施改进
 
 #### 改进 1：添加 memCacheHeight 和 maxHeightDiskCache
 ```dart
@@ -627,31 +627,31 @@ errorWidget: (context, url, error) => AspectRatio(
 ),
 ```
 
-### 11.3 预期效果
+### 14.3 预期效果
 
 - **主观体验**：打开图片文章时不再感受到明显卡顿
 - **帧率**：从 30-40fps 稳定到 50-60fps
 - **内存**：多图片文章的峰值内存从 200+MB 降到 100-150MB
 
-### 11.4 后续可选优化
+### 14.4 后续可选优化
 
 1. **为卡片图片也添加 cacheHeight**（类似改造 ArticleCard）
 2. **实现图片加载优先级**（优先加载首屏可见图片）
 3. **考虑升级或更换 HTML 渲染库**（如果问题仍严重）
 
-### 11.5 修改文件清单
+### 14.5 修改文件清单
 
 1. `lib/pages/article/article_page.dart` — 修改 `_ArticleInlineImageState.build()`
    - 添加 memCacheHeight/maxHeightDiskCache
    - 替换占位符为静态容器
 
-## 26. 应用退出行为优化与桌面角标配置 (v1.6)
+## 15. 应用退出行为优化与桌面角标配置 (v1.6)
 
-### 26.1 需求
+### 15.1 需求
 - **退出行为**：首页按下返回键时，不再直接杀掉进程，而是改为“退后台 (Move to Background)”，以便保留内存状态，实现热启动秒开。
 - **桌面角标**：支持桌面图标红点/数字提醒，并在设置中提供配置项（显示未读数、仅显示红点、关闭）。
 
-### 26.2 实现
+### 15.2 实现
 - `lib/pages/main/main_page.dart`：
   - 在最外层包裹 `PopScope` 拦截 `didPop`。
   - 引入 `move_to_background` 插件，调用 `MoveToBackground.moveTaskToBack()`。
@@ -663,21 +663,21 @@ errorWidget: (context, url, error) => AspectRatio(
   - 引入 `flutter_app_badger` 插件。
   - 在 `onInit` 中使用 `ever(allArticles, ...)` 监听列表变化，触发角标更新。
 
-### 26.3 注意事项
+### 15.3 注意事项
 - 目前角标更新依赖 App 处于前台或后台挂起状态。若 App 被系统强杀，云端新文章无法主动推送到桌面角标，这需要未来通过 FCM 推送唤醒或 Background Fetch 解决。
 
 ## 历史版本标记
 
-## 12. 订阅源三级分组与视图标签（2026-05-17）
+## 16. 订阅源三级分组与视图标签（2026-05-17）
 
-### 12.1 需求
+### 16.1 需求
 
 - 订阅源页按 `view → 分类 → 订阅源` 三级展示
 - 时间线卡片展示 view 标签、分类标签、订阅源名称
 - view 颜色固定：feeds 紫、social 蓝、inbox 橙
 - inbox 进一步按 `x-ray` / `coderbill` 区分
 
-### 12.2 实现
+### 16.2 实现
 
 - `lib/utils/source_taxonomy.dart`
   - 统一 view 标签、颜色、排序
@@ -703,40 +703,40 @@ errorWidget: (context, url, error) => AspectRatio(
   - 分类过滤页显示 feed 名称
   - 单 feed 页保持更紧凑
 
-### 12.3 注意事项
+### 16.3 注意事项
 
 - timeline / feed detail 刷新订阅源缓存时要保留 inbox 节点，否则订阅源页会丢失 inbox 分组。
 - inbox 条目用 `subscriptionCategory` 保存 `x-ray` / `coderbill`，便于列表和卡片复用。
 - 如果 inbox 元数据结构变化，优先检查 `SourceTaxonomy.inboxShortLabel()` 的字段优先级。
 
-## 13. 文章来源跳转（2026-05-17）
+## 17. 文章来源跳转（2026-05-17）
 
-### 13.1 需求
+### 17.1 需求
 
 - 文章详情页里的订阅源名称可点击
 - 点击后直接跳到对应的订阅源详情页
 - 分类标签和 view 标签暂时不做跳转
 
-### 13.2 实现
+### 17.2 实现
 
 - `lib/pages/article/article_page.dart`
   - 在元数据区把 feedTitle 包装为可点击入口
   - 点击后通过 `Routes.feedDetail` 打开对应 `feedId`
   - 仅在 `subscriptionCategory` 非空时附带 category 参数
 
-### 13.3 注意事项
+### 17.3 注意事项
 
 - inbox 文章也可跳转，因为其 `feedId` 已映射为 inboxId。
 - 目前只对来源名开放跳转，后续如需分类跳转可复用同一入口的路由参数。
 
-## 14. 轻量提示统一（2026-05-17）
+## 18. 轻量提示统一（2026-05-17）
 
-### 14.1 需求
+### 18.1 需求
 
 - 所有普通提示尽量缩短展示时长、缩小占用面积
 - 替换 snackbar / 大块提示为统一的轻量 toast
 
-### 14.2 实现
+### 18.2 实现
 
 - `lib/common/widgets/feedback_toast.dart`
   - 新增 `AppFeedback` 统一入口
@@ -750,9 +750,14 @@ errorWidget: (context, url, error) => AspectRatio(
   - `lib/pages/settings/settings_page.dart`
   - `lib/pages/main/main_page.dart`
 
-## 25. HTML 渲染性能重构（v1.5）
+### 18.3 注意事项
 
-### 25.1 问题诊断
+- 目前只收口“普通反馈提示”；底部动作菜单、页面级 loading 暂未统一改造。
+- 如果后续仍觉得提示偏大，可以继续把 `_FeedbackToast` 再压缩到单行版本。
+
+## 19. HTML 渲染性能重构（v1.5）
+
+### 19.1 问题诊断
 
 文章详情页使用 `SingleChildScrollView` + 单个 `flutter_html` `Html` widget 渲染整篇 HTML，导致：
 - Widget 树一次性构建数百个节点，首帧卡顿
@@ -760,7 +765,7 @@ errorWidget: (context, url, error) => AspectRatio(
 - 图片异步加载完成触发 Reflow，布局抖动严重
 - `<iframe>` `<video>` 等 Platform View 在列表中引发崩溃
 
-### 25.2 重构方案：六项策略
+### 19.2 重构方案：六项策略
 
 #### 策略 1：DOM 拆块 + SliverList 懒加载（核心）
 
@@ -799,7 +804,7 @@ errorWidget: (context, url, error) => AspectRatio(
 - 切换原文/译文时 SliverList 无缝切换数据源
 - Obx 响应式驱动，无需重建整个页面
 
-### 25.3 渲染组件
+### 19.3 渲染组件
 
 新增 `lib/pages/article/widgets/html_chunk_card.dart`：
 - 每种 `HtmlChunkType` 对应独立渲染方法
@@ -809,7 +814,7 @@ errorWidget: (context, url, error) => AspectRatio(
 - 列表：手动构建 `Row` + 序号/圆点
 - 图片：`AspectRatio` + `CachedNetworkImage`（含 `memCacheHeight` 限制）
 
-### 25.4 架构变化
+### 19.4 架构变化
 
 ```
 Before (jank):
@@ -825,40 +830,35 @@ After (60fps):
         ↳ 标题 | 段落 | 图片(AspectRatio) | 代码 | ...
 ```
 
-### 25.5 新增/修改文件清单
+### 19.5 新增/修改文件清单
 
 - `lib/utils/html_chunk_parser.dart` — 新建
 - `lib/pages/article/widgets/html_chunk_card.dart` — 新建
 - `lib/pages/article/article_page.dart` — 重写（SingleChildScrollView → CustomScrollView + SliverList）
 
-### 14.3 注意事项
+## 20. 过滤页首屏复用全局缓存（2026-05-17）
 
-- 目前只收口“普通反馈提示”；底部动作菜单、页面级 loading 暂未统一改造。
-- 如果后续仍觉得提示偏大，可以继续把 `_FeedbackToast` 再压缩到单行版本。
-
-## 15. 过滤页首屏复用全局缓存（2026-05-17）
-
-### 15.1 需求
+### 20.1 需求
 
 - 点击进入订阅源/分类过滤时间线时，尽量不要先显示加载转圈
 - 优先复用全局本地文章库的已同步数据
 - 后台继续刷新当前 scope 的准确结果
 
-### 15.2 实现
+### 20.2 实现
 
 - `lib/pages/feed_detail/feed_detail_page.dart`
   - 新增 `_buildInitialLocalSnapshot()`
   - 页面启动时先从 `LocalArticleDbService.readAllArticles()` 过滤出当前 scope 的未读文章
   - 若有内容，先直接展示，再后台刷新网络结果
 
-### 15.3 注意事项
+### 20.3 注意事项
 
 - 这个首屏只负责“已有数据的即时展示”，不会替代网络补抓。
 - 如果本地库里尚未有该 scope 的文章，页面仍会走原本的加载流程。
 
-## 16. 自动翻译（文章拉取时自动处理）
+## 21. 自动翻译（文章拉取时自动处理）
 
-### 16.1 架构
+### 21.1 架构
 
 每个订阅源可配置是否自动翻译其新文章，配置存储在 `GStorage.setting` 中，以 `feed_auto_translate_{feedId}` 为 key。
 
@@ -868,7 +868,7 @@ After (60fps):
 2. 后台 Timer 以 500ms 间隔处理队列（每次处理 1 篇），调用 `TranslationService.translateArticle()`
 3. 翻译失败时静默处理，不显示错误提示
 
-### 16.2 核心代码
+### 21.2 核心代码
 
 **FeedTranslationSettingsService** (`lib/services/feed_translation_settings_service.dart`)：
 - `isAutoTranslateEnabled(feedId)` — 查询该 feed 是否启用自动翻译
@@ -882,13 +882,13 @@ After (60fps):
 - `getQueueSize()` — 获取待处理数量
 - `cancelProcessing()` — 取消后台处理
 
-### 16.3 集成点
+### 21.3 集成点
 
 1. **TimelineController** — `_applyUnreadSnapshot()` 入库后调用 `AutoTranslationWorker.enqueueIfEnabledMany(unreadData)`
 2. **FeedDetailController** — 同样在 `_applyUnreadSnapshot()` 中调用入队
 3. **FeedDetailPage** — appBar 新增 translate 图标按钮（仅当为单个 feed 过滤时显示），点击切换自动翻译状态
 
-### 16.4 UI 交互
+### 21.4 UI 交互
 
 - **appBar 中的 translate 按钮**：
   - 位置：FeedDetailPage appBar actions（仅在 `filterFeedId != null` 时显示）
@@ -900,13 +900,13 @@ After (60fps):
   - 新文章入库 → 自动排队 → 后台异步翻译
   - 无 UI 反馈（默认成功），仅在切换开关时有明确反馈
 
-### 16.5 储存与恢复
+### 21.5 存储与恢复
 
 - 设置存储在 `GStorage.setting` 中，应用重启后自动恢复
 - 每个 feed 的设置独立管理，互不影响
 - 未来若需要统一导出/导入设置，可在 SettingsPage 中增加备份能力
 
-### 16.6 已知限制与改进机会
+### 21.6 已知限制与改进机会
 
 1. **翻译内容范围**：当前仅翻译 title 和 content（未验证是否需要翻译 summary）
 2. **队列持久化**：后台队列在内存中，应用关闭后丢弃；后续可考虑持久化队列
@@ -969,7 +969,7 @@ lib/
   → _loadFromLocalDatabase → _mergeLocalReadState → 时间线展示
 ```
 
-### ArticleModel 字段（18 个）
+### ArticleModel 字段（核心字段，早期记录为 18 个）
 
 ```
 entryId, feedId, feedTitle, feedImage, title, url, content,
@@ -977,15 +977,15 @@ publishedAt, isRead, category, subscriptionCategory, author,
 imageUrl, isRejectedByAi, filterReason, filterReviewed
 ```
 
-## 17. 仓库完整性巡检与修复（2026-05-18）
+## 22. 仓库完整性巡检与修复（2026-05-18）
 
-### 17.1 巡检结论
+### 22.1 巡检结论
 
 1. 主工程（`lib/` + `test/`）可正常通过分析与测试。
 2. 未发现主工程内 merge 冲突标记或语法破坏。
 3. `dart analyze` 如果直接跑仓库根目录，会扫描 `reference/` 下第三方示例代码并产生大量无关错误，不代表主应用损坏。
 
-### 17.2 本次已修复问题
+### 22.2 本次已修复问题
 
 1. **文章详情页翻译/摘要按钮非响应式刷新**
    - 问题：按钮和摘要展示依赖 `Rx`，但未包裹 `Obx`，状态变化后 UI 不会及时更新。
@@ -1007,20 +1007,20 @@ imageUrl, isRejectedByAi, filterReason, filterReviewed
    - 修复：更新为项目化 README，补齐功能、配置、目录与质量检查命令。
    - 文件：`README.md`
 
-### 17.3 当前建议执行命令
+### 22.3 当前建议执行命令
 
 ```bash
 dart analyze lib test
 flutter test
 ```
 
-## 18. 主页面双标题修复（2026-05-18）
+## 23. 主页面双标题修复（2026-05-18）
 
-### 18.1 问题
+### 23.1 问题
 
 - MainPage 有全局 AppBar，TimelinePage/SettingsPage 也各自有 AppBar，导致在主页面内出现双层标题（如“时间线”重复）。
 
-### 18.2 修复
+### 23.2 修复
 
 1. `TimelinePage` 增加 `showAppBar` 参数，主页面内使用 `showAppBar: false`。
 2. `SettingsPage` 增加 `showAppBar` 参数，主页面内使用 `showAppBar: false`（独立路由仍保留 AppBar）。
@@ -1028,21 +1028,21 @@ flutter test
    - 把双击入口迁移到 MainPage 顶部标题；
    - 通过 `TimelineController` 暴露的 `scrollToTop` 回调触发列表滚动到顶部。
 
-### 18.3 影响文件
+### 23.3 影响文件
 
 - `lib/pages/main/main_page.dart`
 - `lib/pages/timeline/timeline_page.dart`
 - `lib/pages/timeline/timeline_controller.dart`
 - `lib/pages/settings/settings_page.dart`
 
-## 19. 文章图片过大与无法全屏修复（2026-05-18）
+## 24. 文章图片过大与无法全屏修复（2026-05-18）
 
-### 19.1 问题
+### 24.1 问题
 
 1. 文章正文图片恢复为 `flutter_html` 默认渲染后，尺寸约束丢失，出现超大图片。
 2. 先前可点击图片进入全屏预览的交互被回退，正文图片无法点开。
 
-### 19.2 修复
+### 24.2 修复
 
 1. 在 `ArticlePage` 的 `Html` 渲染中恢复 `ImageExtension` 自定义图片渲染：
    - 使用 `_ArticleInlineImage` 控件统一渲染正文图片；
@@ -1054,20 +1054,20 @@ flutter test
    - 使用 `CachedNetworkImage` + 统一请求头（`ArticleImageService.httpHeaders`）；
    - 失败态支持点击重试（retry stamp）。
 
-### 19.3 影响文件
+### 24.3 影响文件
 
 - `lib/pages/article/article_page.dart`
 
-## 20. 文章左右滑动切换（2026-05-18）
+## 25. 文章左右滑动切换（2026-05-18）
 
-### 20.1 需求
+### 25.1 需求
 
 - 在文章详情页支持左右滑动切换上一篇/下一篇
 - 手指跟随时页面要同步横向移动
 - 竖向滚动时避免误触发
 - 临近切页时要有明确视觉提示
 
-### 20.2 实现
+### 25.2 实现
 
 1. 文章详情页改为“单篇 / 序列”双模式：
    - 单篇：保持原有 `ArticlePageView`
@@ -1079,74 +1079,74 @@ flutter test
 3. 通过 PageView 自带横向拖动提供手势跟随和临近切页的预览效果。
 4. AppBar 标题追加页码（如 `文章详情 · 2/8`）作为额外视觉提示。
 
-### 20.3 影响文件
+### 25.3 影响文件
 
 - `lib/pages/article/article_page.dart`
 - `lib/pages/timeline/timeline_page.dart`
 - `lib/pages/feed_detail/feed_detail_page.dart`
 - `lib/pages/main/main_page.dart`
 
-## 21. 已读失败重试队列（2026-05-18）
+## 26. 已读失败重试队列（2026-05-18）
 
-### 21.1 问题
+### 26.1 问题
 
 - 文章标记已读时如果云端同步失败，本地虽然立即变为已读，但云端没有更新，导致其他客户端仍可能显示未读。
 
-### 21.2 处理策略
+### 26.2 处理策略
 
 1. 本地仍然立即生效，不回滚状态。
 2. 同步失败时写入本地待同步队列（`ReadSyncService`）。
 3. 在时间线和订阅源详情页进入/刷新时自动重试同步。
 4. 标记为未读时会清理对应的待同步已读记录，避免后续误补同步。
 
-### 21.3 影响文件
+### 26.3 影响文件
 
 - `lib/services/read_sync_service.dart`
 - `lib/pages/article/article_page.dart`
 - `lib/pages/timeline/timeline_controller.dart`
 - `lib/pages/feed_detail/feed_detail_page.dart`
 
-## 22. 翻译中状态提示增强（2026-05-18）
+## 27. 翻译中状态提示增强（2026-05-18）
 
-### 22.1 问题
+### 27.1 问题
 
 - 自动翻译 / 手动翻译处于 pending 时，原先只显示很小的旋转图标，卡片和详情页都不够显眼。
 
-### 22.2 修复
+### 27.2 修复
 
 1. 文章卡片的 pending 状态改成显眼徽标：`翻译中 + spinner`。
 2. 文章详情页在标题区下方增加持续可见的状态条，提示“翻译中，完成后会自动显示译文”。
 3. 保留按钮内的 pending 指示，形成双重提示。
 
-### 22.3 影响文件
+### 27.3 影响文件
 
 - `lib/pages/widgets/article_card.dart`
 - `lib/pages/article/article_page.dart`
 
-## 23. 摘要长度调整（2026-05-18）
+## 28. 摘要长度调整（2026-05-18）
 
-### 23.1 调整内容
+### 28.1 调整内容
 
 - 文章摘要提示改为 **100~300 字之间**。
 - 自动摘要与手动摘要共用同一服务提示词，因此两处都会同时生效。
 
-### 23.2 影响文件
+### 28.2 影响文件
 
 - `lib/services/summary_service.dart`
 
-## 24. 双击时间线底栏回顶部（2026-05-18）
+## 29. 双击时间线底栏回顶部（2026-05-18）
 
-### 24.1 调整内容
+### 29.1 调整内容
 
 - 取消顶部标题的双击回顶部入口。
 - 将回顶部手势迁移到**底部导航栏的“时间线”按钮**。
 - 当前页已是时间线时，连续双击底栏“时间线”按钮触发滚动到顶部。
 
-### 24.2 影响文件
+### 29.2 影响文件
 
 - `lib/pages/main/main_page.dart`
 
-## 26. 已知待修问题（2026-05-19 全库审查）
+## 30. 已知待修问题（2026-05-19 全库审查）
 
 以下问题已确认但暂不修复，供下一位接手者参考。
 
@@ -1190,11 +1190,11 @@ flutter test
 
 **建议修复**：`_extractSrc` 直接返回原始 URL 字符串，归一化工作统一交给 `normalizedImageUrl` getter。
 
-## 27. HTML 渲染管线修复（2026-05-19）
+## 31. HTML 渲染管线修复（2026-05-19）
 
 经过对 13 篇真实 Folo 文章的管线实测，发现并修复了 3 个渲染 BUG。
 
-### 27.1 BUG-1 🔴：标题内图片/媒体被吞掉
+### 31.1 BUG-1 🔴：标题内图片/媒体被吞掉
 
 **根因**：`_processElement` 对 `<h1>-<h6>` 直接调 `_stripInnerHtml` 剥离所有 HTML 标签。
 **影响**：实测中 6/13 篇文章丢失图片（新智元 86 张仅剩 33 张，少数派 7 张剩 5 张）。
@@ -1204,30 +1204,30 @@ flutter test
 - 新增 `_emitMediaChildren()` — 对标题仅发媒体块（文本已在标题中）
 - 标题有媒体 → 先发标题文本块，再递归发媒体块
 
-### 27.2 BUG-2 🟡：空标题产生多余空白间距
+### 31.2 BUG-2 🟡：空标题产生多余空白间距
 
 **根因**：`<h3><span><br></span></h3>`（微信公众号做分隔线）剥离后为空字符串，仍渲染为标题块。
 **影响**：新智元文章出现 14 处无意义大间距。
 **修复**：标题文本 trim 后为空 → `return` 跳过不发块。
 
-### 27.3 BUG-3 🟡：图片 CSS 百分比宽度误解析为 px
+### 31.3 BUG-3 🟡：图片 CSS 百分比宽度误解析为 px
 
 **根因**：`_extractDimensions` 正则 `width:\s*(\d+)\s*(px|em|rem)?` 不区分 `%` 单位，`100%` → 100px。
 **影响**：微信来源文章图片 `style="width:100%"` 被当作 100px 处理，但实际无高度，仍无法确定比例。
 **修复**：正则增加 `%|vw|vh` 单位匹配；百分比/视口单位 → 宽/高保持 `null` 交给渲染层 fallback（`AspectRatio`）。
 
-### 27.4 附带修复：未知元素不再丢弃媒体
+### 31.4 附带修复：未知元素不再丢弃媒体
 
 **根因**：`<a><img></a>` 等内联容器未被识别，`_processElement` 末尾只提取文本导致 `<img>` 丢失。
 **修复**：未知元素改为递归子节点，而非仅提取文本。
 
-### 27.5 影响文件
+### 31.5 影响文件
 
 - `lib/utils/html_chunk_parser.dart` — 核心修复（+5 新方法，~80 行改动）
 
-### 27.6 图片渲染完善（补充修复）
+### 31.6 图片渲染完善（补充修复）
 
-在 §27.1-27.4 的 HTML 解析修复之后，进一步排查了图片加载和微博格式问题：
+在 §31.1-31.4 的 HTML 解析修复之后，进一步排查了图片加载和微博格式问题：
 
 1. **Blockquote/Table/RawHtml 内图片不使用 ImageExtension**
    - 根因：`HtmlChunkCard._buildBlockquote` / `_buildTable` / `_buildRawHtml` 使用裸 `Html()` 不加 `ImageExtension`，导致图片不走 `CachedNetworkImage` + 统一请求头。
@@ -1242,21 +1242,21 @@ flutter test
 3. **微信图片代理 `img2.jintiankansha.me` 已失效**
    - 实测：所有请求返回 403/400，原始微信 CDN 图片 `X-ErrNo: -106`（已过期）。
    - 结论：非代码问题，属数据源/RSS 源质量问题。已通过 `ImageExtension` 的错误占位符提供降级展示。
-   - `ArticleImageService.normalizeImageUrl` 强制 HTTP→HTTPS 升级可能影响部分代理（已记录到 §26 #5，暂不修复）。
+   - `ArticleImageService.normalizeImageUrl` 强制 HTTP→HTTPS 升级可能影响部分代理（已记录到 §30 #5，暂不修复）。
 
-## 28. 视频播放支持（2026-05-19）
+## 32. 视频播放支持（2026-05-19）
 
-### 28.1 问题
+### 32.1 问题
 
 Social 条目（Twitter）中的 `<video>` 标签无法播放，显示静态占位符。两类格式：
 - 直接 `src`：`<video src="..." poster="..." width="..." height="...">`
 - `<source>` 子元素：`<video poster="..."><source src="..."></video>`
 
-### 28.2 Folo 官方方案
+### 32.2 Folo 官方方案
 
 Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-video` 包。不依赖第三方视频平台 SDK。
 
-### 28.3 实施
+### 32.3 实施
 
 1. **Parser** (`html_chunk_parser.dart`)
    - `<video>` 含 `<source>` 子元素时从中提取 `src`
@@ -1270,12 +1270,12 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
      - 顶层：圆形播放按钮（`Icons.play_arrow_rounded`）
    - 点击 → `url_launcher` 打开 mp4 URL（系统播放器处理）
 
-### 28.4 影响文件
+### 32.4 影响文件
 
 - `lib/utils/html_chunk_parser.dart` — `HtmlChunk` + `posterSrc`，`_processElement` 视频分支
 - `lib/pages/article/widgets/html_chunk_card.dart` — `_buildMediaPlaceholder` 重写
 
-### 28.5 预实验数据
+### 32.5 预实验数据
 
 | 样本 | src | poster | dims |
 |------|-----|--------|------|
@@ -1283,7 +1283,7 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 | `social_video_14` (direct src) | ✅ | ✅ | 1920×1080 |
 | `social_video_18` (`<source>`) | ✅ | ❌ | null×null |
 
-### 27.7 预实验数据
+### 32.6 验证结果
 
 | 指标 | 修复前 | 修复后 |
 |------|--------|--------|
@@ -1293,13 +1293,13 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 | 解析性能 | ~15ms | ~15ms（持平） |
 | dart analyze | 0 issues | 0 issues |
 
-## 29. AI 文章过滤系统（2026-05-20）
+## 33. AI 文章过滤系统（2026-05-20）
 
-### 29.1 功能概述
+### 33.1 功能概述
 
 基于 autofolo 的 `prompts.yaml` 过滤规则，用 DeepSeek JSON Output 对未读文章逐篇判定保留/拒绝。拒绝的文章进入审核页，用户可捞回或确认拒绝（自动标已读）。时间线卡片的拒文有橙色描边标记。
 
-### 29.2 影响文件
+### 33.2 影响文件
 
 - `lib/models/article.dart` — 新增 `isRejectedByAi`、`filterReason`、`filterReviewed`
 - `lib/services/article_filter_service.dart` — **新建**。调 DeepSeek 判定，内置裁简版 autofolo prompt
@@ -1312,7 +1312,7 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 - `lib/pages/article/article_page.dart` — 标已读时清除过滤标记
 - `lib/router/app_pages.dart` — 新增 `/filter-review` 路由
 
-### 29.3 数据流
+### 33.3 数据流
 
 ```
 拉取未读 → enqueueMany → 16 并发 DeepSeek 判定
@@ -1322,19 +1322,19 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
   → filterReviewed 防重判
 ```
 
-### 29.4 关键设计决策
+### 33.4 关键设计决策
 
 - `filterReviewed` 标记解决"捞回后再刷新又被拒绝"的问题
 - `upsertMany` 的 OR 合并逻辑与 `unReject` 直接写 DB 的冲突：unReject 绕过合并逻辑直接写 Hive
 - 审核页不支持下拉刷新，只通过 `doneCount` 监听实时追加
 
-## 30. LLM 并发数配置（2026-05-20）
+## 34. LLM 并发数配置（2026-05-20）
 
 - `LlmConfig` 新增 `concurrency` 字段，翻译/摘要/过滤各自独立
 - 三个 Worker 的并发数从硬编码改为 `LlmConfig.load().concurrency`
 - 设置页 LLM 卡新增「并发数」文本输入（1-1024）
 
-## 31. 图片画廊修复（2026-05-20）
+## 35. 图片画廊修复（2026-05-20）
 
 - **双击放大**：GestureDetector 从 InteractiveViewer 外层移到里层，避免手势冲突；缩放公式修正为 translate→scale→translate
 - **捏合缩放**：InteractiveViewer 移到最外层，不再被 GestureDetector 阻止
@@ -1343,13 +1343,13 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 - **图片预加载**：文章打开时隐藏 1px Stack 同时发出所有图片请求
 - **画廊分母错误**：审核页跳转文章时 sequence 改送审核列表自身，不再查全库
 
-## 32. Inbox 空内容修复（2026-05-20）
+## 36. Inbox 空内容修复（2026-05-20）
 
 - 根因：`chunks` 是 `late final List` 而非 `RxList`，`_fetchInboxContent` 更新后 Obx 不重建
 - 修复：`chunks` 改为 `RxList<HtmlChunk>`，`_fetchInboxContent` → `_initContent` → `chunks.value = ...`
 - Inbox 详情 API：`GET /entries/inbox?id=<entryId>` 返回完整 HTML 正文
 
-## 33. 其他杂项修复（2026-05-20）
+## 37. 其他杂项修复（2026-05-20）
 
 - **订阅源图标**：`LocalArticleDbService.upsertMany`/`setReadState` 补遗漏的 `feedImage` 字段
 - **缓存 key 升级**：`cache.subscriptions.v1` → `v2` 强制刷新带 `image` 字段的订阅源数据
@@ -1360,38 +1360,38 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 - **视频内联播放**：`video_player` + `InlineVideoPlayer` 三态组件
 - **Folo 图片代理**：`ArticleImageService.toProxiedUrl()` 对微博/Pixiv 等 CDN 走 `img.folo.is`
 
-## 34. 已读状态双向同步（2026-05-20）
+## 38. 已读状态双向同步（2026-05-20）
 
 - API 明确返回某篇文章为未读 → 清除本地 `readStatus` 旧标记，恢复未读
 - 解决 inbox 文章被误标已读后永久无法恢复的问题
 - 保护：`localOverride=false` 的用户手动标记不被覆盖
 - `collectEntries` 移除 `maxPages` 硬上限，改为页不满/页空自然终止
 
-## 35. 订阅源未读计数（2026-05-20）
+## 39. 订阅源未读计数（2026-05-20）
 
 - 三层未读计数：View / 分类 / 订阅源，各自求和
 - inbox `feedId` 取错 JSON 路径→未读数为 0 的 Bug 修复：`item['feeds']['id'] ?? entry['inboxHandle']`
 - `collectAllInboxEntries` limit 30 → 100
 
-## 36. 图片修复补充（2026-05-20）
+## 40. 图片修复补充（2026-05-20）
 
 - `i.qbitai.com` 图片需 `Referer: https://www.qbitai.com/` → 加代理规则走 `img.folo.is`
 - 图片画廊双击缩放加 `Matrix4Tween` + `AnimationController` (300ms easeOut)
 - `normalizedContent` / `imageUrls` 从 `late final` 改为普通字段，支持 inbox 异步补内容
 
-## 37. FeedDetail 对齐（2026-05-20）
+## 41. FeedDetail 对齐（2026-05-20）
 
 - AppBar 标题显示未读计数（如 `量子位 (5)`）
 - `showFeedTitle` 始终为 true，去底部空白
 
-## 38. 性能优化 — 卡顿修复（2026-05-20）
+## 42. 性能优化 — 卡顿修复（2026-05-20）
 
 - **静态 Dio 实例**：翻译/摘要/过滤三个服务各用 `static final _dio`，不再每条请求 `new Dio(BaseOptions(...))`
 - **normalizeHtml 缓存**：`ArticleContentUtils.normalizeHtmlForEntry(entryId, html)` 用 LinkedHashMap 做 200 条 LRU 缓存，翻译和摘要各调一次但共享结果，同篇长文章不再 DOM 解析两遍
 - **审核页增量推送**：过滤 Worker 完成一篇后通过 `onRejected` 回调直接推送单篇到审核列表（O(1)），替代 `ever(doneCount)` 每完成一篇扫全库 5000 篇（O(5000)）
 - `onRejected` 回调仅在审核页可见时注册（`initState`/`deactivate`/`dispose`），后台不触发
 
-## 39. ArticleStateNotifier 全局状态通知（2026-05-20）
+## 43. ArticleStateNotifier 全局状态通知（2026-05-20）
 
 - **新建** `lib/services/article_state_notifier.dart` — RxInt version 计数器
 - 所有文章状态变更点统一调 `ArticleStateNotifier.tick()`
@@ -1400,7 +1400,15 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 - 扩展方式：新页面只需加 listener，不需要修改 tick 点
 - **计划升级 D 方案**：`tick(entryId, changeType)` 带变更类型，消费者省掉一次 `box.get`
 
-## 40. UI 全面美化（2026-05-21，手动修订）
+## 44. FeedDetail 已读筛选 + tick(entryId) 增量（2026-05-21）
+
+- `ArticleStateNotifier.tick(entryId)` 替代无参 `tick()`，消费者改为增量更新单篇
+- FeedDetail `_refreshFromLocal`：`box.get(entryId)` 读单篇 → 更新/移除列表（O(1) 替代 O(5000)）
+- 订阅源 `refreshUnreadCounts`：增量 ±1 计数；首屏仍全量
+- FeedDetail 新增 `readFilter`：仅未读/全部/仅已读三档，AppBar 弹出菜单切换
+- `allArticles` 单独存全量（含已读），`articles` 按 filter 派生
+
+## 45. UI 全面美化（2026-05-21，手动修订）
 
 用户对所有页面进行了大量视觉打磨，涉及 13 个文件、+2456/-1148 行。
 
@@ -1461,15 +1469,7 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 
 - `feedback_toast.dart` 完全重写：Material 3 风格 SnackBar 替代旧 Toast
 
-## 41. FeedDetail 已读筛选 + tick(entryId) 增量（2026-05-20）
-
-- `ArticleStateNotifier.tick(entryId)` 替代无参 `tick()`，消费者改为增量更新单篇
-- FeedDetail `_refreshFromLocal`：`box.get(entryId)` 读单篇 → 更新/移除列表（O(1) 替代 O(5000)）
-- 订阅源 `refreshUnreadCounts`：增量 ±1 计数；首屏仍全量
-- FeedDetail 新增 `readFilter`：仅未读/全部/仅已读三档，AppBar 弹出菜单切换
-- `allArticles` 单独存全量（含已读），`articles` 按 filter 派生
-
-## 42. 主页时间线重大交互与逻辑重构（2026-05-22）
+## 46. 主页时间线重大交互与逻辑重构（2026-05-22）
 
 - **生命周期解耦**：将 `TimelineController` 的注入时机从 `TimelinePage` 提前至 `MainPage.initState`。彻底修复了由于 `AppBar` 过早构建导致“启动时未读胶囊被隐藏，切 Tab 才能出现”的严重错位 Bug。
 - **UI 重构（胶囊徽章）**：
@@ -1485,7 +1485,7 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 
 
 
-## 43. 刷新圈反悔手势阻断优化（2026-05-22）
+## 47. 刷新圈反悔手势阻断优化（2026-05-22）
 
 - **问题背景**：在带有半透明 AppBar 的设计中，当下拉刷新圈（未松手）再反悔向上推时，底层的 `ClampingScrollPhysics` 默认允许向上的滚动偏移量作用于列表，导致文章列表跟随手指滑动，钻入 AppBar 背后产生不自然的视觉穿透。
 - **高阶边界拦截**：为了完美复刻 PiliPlus 中“刷新圈在屏幕上时列表完全冻结”的效果，引入了 `RefreshAwareScrollPhysics`。
@@ -1497,7 +1497,7 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
 - **视觉配合**：
   - 同时移除了默认的边缘发光效果（`NoOverscrollIndicatorBehavior`），使得界面的操作反馈干净利落，达到指哪打哪的极佳手感。
 
-## 44. 审核页重塑 — 实时状态药片（2026-05-23）
+## 48. 审核页重塑 — 实时状态药片（2026-05-23）
 
 审核页（FilterReviewPage）从"判定中" + "全部确认"的旧设计完全重构：
 
@@ -1507,14 +1507,14 @@ Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-vi
   - `🤖 N 篇判定中`：仅 LLM Worker 活跃时显示，灰色底 + 微型 spinner
 - **实时性**：`humanCount` 由 `_articles.length` + `Obx` 驱动；`llmCount` 由 `AutoFilterWorker.queuedCount/processingCount`（RxInt）驱动；每篇卡片滑动后当场跳数
 - **空状态终结感**：全部处理完时图标变绿对勾 + "处理完毕"
-- **去除重复**：卡片自带拒文标签（§40），审核页不再额外显示判定原因
+- **去除重复**：卡片自带拒文标签（§45），审核页不再额外显示判定原因
 - **架构**：`_StatusPills` 和 `_LlmPill` 提升为文件级私有组件
 
 ### Vivo / OriginOS 桌面角标适配（待完成）
 
 Vivo 提供私有 ContentProvider API（`content://com.vivo.abe.provider.launcher.notification.num`）可直写角标。`MainActivity.kt` 已实现 `tryVivoBadge` + 通知兜底，但当前不生效。排查方向：查看 logcat 返回码、确认系统桌面角标开关、验证权限未被静默拦截。详见 vivo 开发者文档。
 
-## 45. 最终打磨与 v1.0.0-beta1 发布（2026-05-23）
+## 49. 最终打磨与 v1.0.0-beta1 发布（2026-05-23）
 
 ### 导航栏玻璃质感调优
 
@@ -1556,7 +1556,7 @@ Vivo 提供私有 ContentProvider API（`content://com.vivo.abe.provider.launche
 
 Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色主题，全 UI 打磨。
 
-## 46. 仓库管理规范（2026-05-23）
+## 50. 仓库管理规范（2026-05-23）
 
 以下规则记录到文档中以便未来 AGENT 和协作者严格遵循。
 
@@ -1578,7 +1578,7 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 - commit message 引用对应 § 编号（格式：`Refactor: xxx (§12)` 或 `Fix: xxx, see §8`）
 - 每个功能完成 → 立即更新文档，不打完 tag 才补文档
 - tag 打在文档和代码一起提交的 commit 上
-- § 编号连续递增，不跳号、不重号
+- § 编号应连续递增，不跳号、不重号
 
 ### 四、全局状态变更通知
 
@@ -1600,12 +1600,12 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 | 硬编码色值 | `filter_review_page` 绿色滑动、`timeline_page` 琥珀过滤等为**语义色**，刻意设计，不为违规 |
 | tag 被 force-update | `v1.0.0-beta1` 覆盖 3 次，从下个版本严格递增 |
 
-## 47. 审核界面直接预览 AI 摘要（2026-05-23）
+## 51. 审核界面直接预览 AI 摘要（2026-05-23）
 
-### 47.1 需求背景
+### 51.1 需求背景
 用户希望在垃圾拦截（审核界面）中能够直接看到文章的摘要，而不需要点击进入详情页，以提高审核效率。同时要求正式时间线保持清爽，不显示摘要，并且要求 UI 具有设计美感，不破坏原有的极简卡片布局。
 
-### 47.2 实现细节
+### 51.2 实现细节
 - **`lib/pages/widgets/article_card.dart`**：
   - 新增 `showSummary` 控制参数（默认 `false`）。
   - 在卡片标题和底部元数据之间，新增摘要展示区块 `_buildSummaryBlock`。
@@ -1617,7 +1617,7 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 - **`lib/pages/timeline/timeline_page.dart`**：
   - 保持默认不传入该参数，维持正式时间线不显示摘要。
 
-## 48. 通知角标 + 退后台（2026-05-23）
+## 52. 通知角标 + 退后台（2026-05-23）
 
 - 新增「通知与角标」设置区块：下拉选择桌面角标规则（显示数量 / 仅红点 / 关闭）
 - 设置页重新布局：角标从翻译区块中独立出来
@@ -1626,18 +1626,18 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 - 自写 `MoveToBackground`（MethodChannel `com.autofolo/move_to_background`），完全移除 `move_to_background` 依赖
 - 外来依赖归零，所有原生交互通过自写 MethodChannel + `MainActivity.kt` 控制
 
-## 49. 正文加载 + 数据持久化（2026-05-23）
+## 53. 正文加载 + 数据持久化（2026-05-23）
 
 - **Inbox 文章首次打开**：`_fetchInboxContent()` 拉取后自动 `upsertOne()` 写入本地 DB，再次打开直接读库，不再重复拉取
 - **Readability 抓取**：`fetchReadabilityContent()` 成功后同样持久化
 - **加载中状态**：新增 `isFetchingContent` observable，空正文时显示旋转菊花 + "正在加载正文…"，替代原来的"暂无正文内容"闪烁
 
-## 50. 译文/摘要内容传递修正（2026-05-23）
+## 54. 译文/摘要内容传递修正（2026-05-23）
 
 - `TranslationService.translateArticle()` 和 `SummaryService.summarizeArticle()` 新增 `overrideContent` 参数
 - 文章页触发翻译/摘要时传入已标准化的 `normalizedContent`，确保 Readability 抓取后的长文被正确用于翻译和摘要
 
-## 51. UI 细节打磨（2026-05-23）
+## 55. UI 细节打磨（2026-05-23）
 
 - 审核页 AppBar 标题字体对齐主时间线（`FontWeight.bold, fontSize: 17`）
 - 卡片内 AI 摘要预览 `maxLines` 从 2 扩展到 4
@@ -1645,13 +1645,13 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 - 文章详情页 API 错误提示改用服务端返回的 `errorMessage`
 - 主页面玻璃参数微调（模糊 20、透明度 0.50）
 
-## 52. 大文章分块翻译 + 邮件表格扁平化（2026-05-23）
+## 56. 大文章分块翻译 + 邮件表格扁平化（2026-05-23）
 
-### 52.1 正文规整优化
+### 56.1 正文规整优化
 - `ArticleContentUtils.normalizeHtml` 新增 `_flattenLayoutTables`：扁平化邮件 Newsletter 的 `<table>/<tr>/<td>` 布局壳，保留 `<th>` 数据表
 - 效果：98KB 邮件 → ~67KB 纯内容，削减 ~30% 的无意义标签
 
-### 52.2 分块翻译
+### 56.2 分块翻译
 - 阈值：归一化后正文 > 35KB 触发分块
 - 切分：按 `<p>/<h1>/<li>/<blockquote>` 段落边界，每块 ≤12KB
 - 并行：`Future.wait` 同时发出所有块的 LLM 请求，不等排列
@@ -1659,14 +1659,14 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 - 历史实现曾保留已翻译部分；用户后来明确要求“任一块失败则整篇丢弃并重试”，因此当前实现会整篇重试最多 5 次，不写入半截译文。
 - 2026-05-31 补充：分块翻译最终失败时，错误记录会带上最后一次失败的块号和具体原因，供任务中心失败明细直接展示。
 
-### 52.3 pending 瞬态不落盘
+### 56.3 pending 瞬态不落盘
 - `pending` 只在内存 `_records` map 中标记，不再通过 `GStorage.translations.put()` / `GStorage.summaries.put()` 写入磁盘
 - 终态（`done` / `error`）正常落盘；`pending` 重启后自然消失，无需清理逻辑
 
-### 52.4 未捕获异常兜底
+### 56.4 未捕获异常兜底
 - 翻译流程增加通用 `catch (e)` 处理器，防止非 Dio/Format/StateError 异常导致静默卡死
 
-## 53. v1.0.0-beta2 发布（2026-05-23）
+## 57. v1.0.0-beta2 发布（2026-05-23）
 
 - 移除 `flutter_app_badger`、`move_to_background` 外部依赖，全部改为自写 MethodChannel
 - Vivo/OriginOS 角标：ContentProvider 直写实现（待系统级验证）
@@ -1676,35 +1676,35 @@ Tag: `v1.0.0-beta1` — 功能完备（AI 过滤 + 翻译 + 摘要），橙色�
 
 Tag: `v1.0.0-beta2`
 
-## 48. 取消文章正文懒加载与重置列表增量刷新 (2026-05-24)
+## 58. 取消文章正文懒加载与重置列表增量刷新 (2026-05-24)
 
-### 48.1 文章阅读进度条精准度优先 (取消懒加载)
+### 58.1 文章阅读进度条精准度优先 (取消懒加载)
 - **背景**：原先使用 `SliverList.builder` 进行 HTML 节点的懒加载，以优化极长文章（多图、大 DOM）的首帧渲染和内存占用。但这导致底层的 `maxScrollExtent` 随着滚动不断动态变化，使得顶部“阅读进度条”出现跳动、不准或在未完全展开时无法达到 1.0 的问题。
 - **决策**：经测试确认当前设备性能可以承受全量渲染后，去除了懒加载机制，将 `SliverList` 替换为 `SliverToBoxAdapter` + `Column`。
 - **收益**：所有的 HTML 节点会在第一时间全部挂载，物理像素高度在首帧即可精确计算，彻底修复了阅读进度条的准确性问题。
 
-### 48.2 FeedDetail 已读 O(1) 增量优化回退
+### 58.2 FeedDetail 已读 O(1) 增量优化回退
 - **背景**：曾为防止“点击已读”时出现卡顿，在 `feed_detail_page.dart` 中引入了 O(1) 的增量更新逻辑（仅对 `articles` 列表中对应索引作 `remove` 或局部替换），以规避触发 `_applyFilter()` 带来的 O(N) 级别全列表重构。
 - **重新评估**：其实导致“点击已读卡顿”的真正元凶是**UI的整个 Widget Tree 重构**，而不是 Dart 层面的一层循环数组处理。由于我们在此前已经引入了 `ArticleStateNotifier` 以及局部 `Obx` 来控制重绘，UI 卡顿的根因已被解决。
 - **决策**：回退了 O(1) 优化，恢复使用 `allArticles.refresh()` + 全量 `_applyFilter()` 的设计。这使得业务逻辑的代码更简洁、直观，并且在 Dart 处理内存数组极快的加持下，没有观察到性能衰退。
 
-### 48.3 正文 DOM 懒加载设置开关
+### 58.3 正文 DOM 懒加载设置开关
 - **需求**：由于“一次性全量渲染”可能会在低端设备上引发卡顿或崩溃，我们需要把控制权交给用户。
 - **实现**：在设置页 (`SettingsPage`) 新增“渲染与性能”区块，加入了“正文 DOM 懒加载”开关（默认关闭）。旁边的 Info 按钮会弹出对话框，向高级用户明确解释“内存开销”与“阅读进度条精确度”之间的技术博弈。状态保存在 `GStorage.setting` 中，由 `article_page.dart` 实时读取并动态切换 `SliverList` 或 `SliverToBoxAdapter` 机制。
 
-## 49. 遗留问题与已知缺陷 (2026-05-24)
+## 59. 遗留问题与已知缺陷 (2026-05-24)
 
-### 49.1 特定长文/复杂排版文章卡顿问题
+### 59.1 特定长文/复杂排版文章卡顿问题
 - **现象**：文章《Tencent Open-Sources TencentDB Agent Memory: A 4-Tier Local Memory Pipeline for AI Agents》在渲染和滚动时存在轻微卡顿。
 - **状态**：该问题在 `main` 和 `fix-video-summary-ui` 分支均存在，属于历史遗留或 `flutter_html` 针对特定 DOM 结构（可能是超长的 `<pre>`、深层嵌套或者特定的 Markdown 转换残留）的解析性能瓶颈。
 - **建议**：后续需要对这类出现卡顿的特殊文章进行 Profile，分析是在布局计算 (Layout) 还是 `HtmlChunkParser` 解析时耗时过长。可能需要对 `flutter_html` 的特定组件进行缓存优化，或者针对超大代码块增加局部懒加载机制。
 
-## 50. 深色模式 HTML 字体对比度动态调整 (2026-05-25)
+## 60. 深色模式 HTML 字体对比度动态调整 (2026-05-25)
 
-### 50.1 问题背景
+### 60.1 问题背景
 深色模式下，部分带有内联样式（如 `<span style="color: #333333;">`）的文章文本会因为与深色背景对比度过低而难以阅读。
 
-### 50.2 核心实现
+### 60.2 核心实现
 - **`lib/utils/color_parser.dart`**：实现了 CSS 颜色字符串到 Flutter `Color` 的解析，支持 hex, rgb, rgba 以及基础颜色名。全面适配了新版 Flutter Color API（如 `r`, `g`, `b`, `a` 属性）。
 - **`lib/utils/html_contrast_utils.dart`**：
   - 基于 `package:html` 解析 HTML 片段。
@@ -1713,9 +1713,9 @@ Tag: `v1.0.0-beta2`
   - 内置 LRU 缓存，避免列表滚动时重复解析同一 HTML 片段带来的性能损耗。
 - **`lib/pages/article/widgets/html_chunk_card.dart`**：在 `Theme.of(context).brightness == Brightness.dark` 时，对 `paragraph`、`blockquote`、`table` 和 `rawHtml` 块调用 `HtmlContrastUtils.adjustHtmlContrast`，实现了无感的动态文字颜色自适应。
 
-## 51. 遗留问题与已知缺陷 (2026-05-25)
+## 61. 遗留问题与已知缺陷 (2026-05-25)
 
-### 51.1 审核列表快速刷新导致被拒文章“复活”问题
+### 61.1 审核列表快速刷新导致被拒文章“复活”问题
 - **现象**：当在“垃圾拦截（审核列表）”中左滑拒绝文章（标记为已读并加入 `ReadSyncService` 后台同步队列）后，如果立刻切回时间线进行下拉刷新，刚才被拒绝的文章会再次出现在审核列表中。但如果等待较长时间（让后台同步完成）后再刷新，则不会出现此问题。
 - **根因分析**：
   1. 左滑拒绝后，本地数据库标记该文章为已读，并将其放入 `ReadSyncService` 队列等待同步给 Folo API。
@@ -1725,46 +1725,46 @@ Tag: `v1.0.0-beta2`
   5. `FilterReviewPage` 监听到 `isRejectedByAi == true && !isRead`，导致该文章重新出现在审核列表中。
 - **建议修复方向**：
   在 `TimelineController._applyUnreadSnapshot` 中删除本地已读状态前，应优先检查 `ReadSyncService.pendingReadItems`。如果该文章存在于待同步队列中，说明它是用户刚刚执行的乐观更新（Optimistic Update），此时应信任本地已读状态，**不要**因为 API 返回了旧的 "未读" 状态就将其覆盖和删除。
-- **实际修复**（2026-05-25）：已在 `TimelineController` 和 `FeedDetailController` 的 `_applyUnreadSnapshot` 中实施——收集 `pendingReadItems` entryId 集合，在 stale 清除循环中跳过仍待同步的条目。同时在方法签名中增加 `trustCompleteness` 参数，部分 API 失败时跳过"标记本地缺失文章为已读"的第一个循环（参见 §52.12）。
+- **实际修复**（2026-05-25）：已在 `TimelineController` 和 `FeedDetailController` 的 `_applyUnreadSnapshot` 中实施——收集 `pendingReadItems` entryId 集合，在 stale 清除循环中跳过仍待同步的条目。同时在方法签名中增加 `trustCompleteness` 参数，部分 API 失败时跳过"标记本地缺失文章为已读"的第一个循环（参见 §62.11）。
 
-## 52. 性能优化（2026-05-25）
+## 62. 性能优化（2026-05-25）
 
 > 不影响任何现有功能与体验，`dart analyze` 零新增 warning，`flutter build apk --debug` 通过。
 
-### 52.1 API 请求并行化
+### 62.1 API 请求并行化
 - `TimelineController.loadData()` 和 `FeedDetailController.loadData()` 中 3 个串行 `await`（feeds / social / inbox）改为 `Future.wait` 并行。
 - `_refreshRecentReadWindow()` 中 2 个串行 `await`（feeds read / social read）同样改为 `Future.wait`。
 
-### 52.2 正则表达式编译缓存
+### 62.2 正则表达式编译缓存
 - `translation_service.dart`、`article_content_utils.dart`、`html_chunk_parser.dart`、`source_taxonomy.dart` 共 9 处方法内 `RegExp(...)` 提升为 `static final` 常量。
 
-### 52.3 不必要的 ArticleModel 全字段拷贝消除
+### 62.3 不必要的 ArticleModel 全字段拷贝消除
 - `_mergeLocalReadState()` 增加守卫条件：只在本地 readState 与当前 `isRead` 不同时才创建新对象。
 - `_updateReadStateInMemory()` 从 `.map()` 全列表遍历改为 `indexWhere` 单点定位。
 
-### 52.4 searchSourceArticles 去拷贝
+### 62.4 searchSourceArticles 去拷贝
 - `TimelineController.searchSourceArticles` 从 `allArticles.toList()` 改为直接返回 `allArticles` 引用。
 
-### 52.5 骨架屏动画代码去重
+### 62.5 骨架屏动画代码去重
 - 新增 `ShimmerFadeList`（`lib/common/widgets/shimmer_card.dart`），三处独立动画控制器替换为统一组件。
 
-### 52.6 Hive 批量写入
+### 62.6 Hive 批量写入
 - `LlmConfig._save()` 中 6 次 `await put` 合并为 1 次 `await putAll`。
 
-### 52.7 AI 过滤计数增量更新
+### 62.7 AI 过滤计数增量更新
 - `TimelineController` 新增 `filterCount` RxInt，不再每次 rebuild 全量遍历 `readAllArticles()`。
 
-### 52.8 FeedDetail 重复 upsertMany 移除
+### 62.8 FeedDetail 重复 upsertMany 移除
 - `FeedDetailController._applyUnreadSnapshot()` 中 stale 清除循环前的冗余调用已删除。
 
-### 52.9 ReadSyncService 指数退避
+### 62.9 ReadSyncService 指数退避
 - 重试延迟从固定 `2s` 改为 `1s → 2s → 4s`（`Duration(seconds: 1 << retry)`）。
 
-### 52.10 审核列表复活修复 (§51.1)
+### 62.10 审核列表复活修复 (§61.1)
 - 已在 `_applyUnreadSnapshot` 的 stale 清除循环中增加 `ReadSyncService.pendingReadItems` 守卫。
 - `TimelineController` 和 `FeedDetailController` 均已修复。“未读”状态就将其覆盖和删除。
 
-### 52.11 遗留问题：部分接口网络失败导致未读文章“闪烁”
+### 62.11 遗留问题：部分接口网络失败导致未读文章“闪烁”
 - **现象描述**：用户在网络不稳定的情况下刷新（例如 feeds 接口超时失败，但 social 接口成功返回），界面上部分未读文章会突然消失（表现为 0 未读）；而在网络恢复后的下一次刷新中，这些文章又会突然重新出现。
 - **根本原因**：`TimelineController`（以及 `FeedDetailController` 针对非 feeds 的请求失败时）存在部分网络失败的数据误判逻辑。当部分 API 成功时，`hasError && unreadData.isEmpty` 条件不成立，代码会继续调用 `_applyUnreadSnapshot(unreadData)`。由于 `unreadData` 缺少了失败接口的数据，快照对比逻辑会误以为这些本地未读文章在云端已经被标为已读，从而错误地将它们在本地标记为已读并隐藏。
 - **自我修复机制**：这种错误标记由于未经过 `ReadSyncService` 同步到服务器，所以在下一次网络成功的刷新中，服务器依然会返回未读状态。`_applyUnreadSnapshot` 发现后，会删除错误的本地已读标记，从而使文章重新出现。这保护了数据不丢失，但严重影响了 UX。
@@ -1773,15 +1773,15 @@ Tag: `v1.0.0-beta2`
 
 ---
 
-## 53. 已读同步全面修复（2026-05-25）
+## 63. 已读同步全面修复（2026-05-25）
 
-### 53.1 问题报告
+### 63.1 问题报告
 
 用户反馈：在 Folo Web 或其他客户端将文章标记为已读后，回到 autofolo 下拉刷新，该文章仍然显示为未读。
 
 **具体案例**：一篇真实文章在远端已读、本地仍显示未读，反复刷新无效。具体 entryId 和标题片段不再写入仓库文档。
 
-### 53.2 实验过程
+### 63.2 实验过程
 
 在用户已授权的本地上下文中调用 Folo API 进行对照实验；具体 token 不写入仓库文档：
 
@@ -1795,7 +1795,7 @@ Tag: `v1.0.0-beta2`
 
 **关键发现**：Folo API 的 `publishedAfter` 参数真实语义是**倒序分页游标**（"返回发布时间早于此的文章"），不是正向时间过滤器。命名具有误导性。
 
-### 53.3 三重根因
+### 63.3 三重根因
 
 #### 根因 A：`_refreshRecentReadWindow` 使用 `publishedAfter` 方向相反
 
@@ -1817,7 +1817,7 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 
 三个 API（feeds 未读 / social 未读 / inbox 未读）任意一个失败 → `hasError=true` → `trustCompleteness=false` → feeds 文章的已读推断也被跳过。inbox API 故障拖累所有文章类型。
 
-### 53.4 设计讨论
+### 63.4 设计讨论
 
 **`readStatus` 三态语义收敛**：
 
@@ -1833,7 +1833,7 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 - **审核保留** → 只清 AI 标记，不创建任何 readStatus 覆盖
 - **失败回退** → 删 readStatus，回退 articleDb，不残留
 
-### 53.5 具体改动
+### 63.5 具体改动
 
 #### 文件 1：`lib/pages/timeline/filter_review_page.dart`
 - `_keep()`：删除 `markAsUnreadLocal` 调用，改为 `GStorage.readStatus.delete()` + 从 DB 重读文章更新 `TimelineController.allArticles` 内存状态
@@ -1852,7 +1852,7 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 - `markAsRead()`：同步成功或失败后均 `GStorage.readStatus.delete()`（释放保护锁）；失败回退不写 `false`
 - `markAsUnread()`：删除 `GStorage.readStatus.put(entryId, false)`；失败回退仍写 `true`（正确）
 
-### 53.6 行为变化对照
+### 63.6 行为变化对照
 
 | 场景 | 旧行为 | 新行为 |
 |------|--------|--------|
@@ -1862,13 +1862,13 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 | inbox API 失败时刷新 | feeds 文章也不判定已读 | feeds 文章独立判定 |
 | 别处读完 >2天前发布的文章 | 路径② `publishedAfter` 方向错误 | ✅ 本地窗口过滤正确 |
 
-### 53.7 未改动文件
+### 63.7 未改动文件
 
 - `read_sync_service.dart` — 队列机制保持不变，未来可扩展支持双向操作（markUnread）
 - `auto_filter_worker.dart` — `unReject()` 逻辑正确，未修改
 - `local_article_db_service.dart` — `upsertMany` 合并逻辑未修改（`readStatus` 收敛后，`localOverride` 只有 `true` 或 `null`）
 
-### 53.8 遗留问题与安全分页方案研究（Pending Review & Next Steps）
+### 63.8 遗留问题与安全分页方案研究（Pending Review & Next Steps）
 
 经过对最新提交 `551894e` 的复盘，整体修复方向非常正确，但仍遗留了两个体验和边缘 Case 问题。这两个问题当前记录在案，作为后续优化的储备，暂不执行代码修改。
 
@@ -1881,12 +1881,12 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 - **隐患分析**：如果 API 的强制最大限制是 50（标准 REST 防护），或用户2天内阅读超过 200 篇，超出的文章将永远丢失。此外，单次请求 `limit: 200` 且携带 `withContent: true` 极易导致弱网超时。
 - **安全方案思路**：放弃单次拉取，实现严格的 `while` 循环分页。每次请求 `limit: 50`，获取数据后检查 `batch.last.publishedAt`。若最旧文章的时间尚未越过窗口底线（2天前），则将 `cursor` 设为 `batch.last.publishedAt` 继续请求下一页。直到 `batch.last.publishedAt < windowStart` 时安全退出循环。
 
-## 54. 恢复消失的表格与通用图文排版重构（2026-05-26）
+## 64. 恢复消失的表格与通用图文排版重构（2026-05-26）
 
-### 54.1 修复背景与现象
+### 64.1 修复背景与现象
 用户发现部分 RSS 源（如“小众软件”）文章内的表格完全消失，以及部分图片（尤其是 emoji）在表格中被放大多倍，导致整个版面被撑爆。
 
-### 54.2 诊断过程与核心思路
+### 64.2 诊断过程与核心思路
 1. **数据与解析层核实**：通过拦截并测试 API 响应，发现带有 `<table>` 的 HTML 节点在获取和切分时是完整的。真正的原因是 `flutter_html` 从 3.0.0 版本开始剥离了原生表格支持，将其独立到了 `flutter_html_table`。项目中没有注册相关的 `TableHtmlExtension`，导致所有 `<table ...>` 被静默丢弃。
 2. **“双重邮件展平”的发现与废弃**：
    - 根据 AGENT_HANDOFF 的历史记录（52.1 节），`ArticleContentUtils._flattenLayoutTables` 已经非常完美地剥离了没有 `<th>` 的邮件布局空壳，为 LLM 节省了约 30% 体积，这套安全机制被保留。
@@ -1896,25 +1896,25 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
    - 原 `_imageExtension` 中，所有渲染内的嵌图被强行绑定了 `width: maxWidth`。这导致了即使是原本只有十几像素的内联徽章或 emoji，也被强行拉伸填满整个屏幕，从而撑毁表格。
    - **重构机制**：现在会自动解析 `extensionContext.attributes` 的 `width` 和 `height`。当没有显式尺寸约束时，解除 `maxWidth` 强制限制，让 `CachedNetworkImage` 自主决定。并增加了针对常见 WordPress Emojis（如 `s.w.org/images/core/emoji`）的 `20x20` 特殊兜底逻辑。
 
-### 54.3 变更细节
+### 64.3 变更细节
 - **依赖变更**：引入 `flutter_html_table: ^3.0.0-beta.2`。
 - **解析层**：删除了 `html_chunk_parser.dart` 中与 `isEmail` 有关的所有逻辑以及不再使用的正则缓存变量。更新了列表的提取方式。
 - **渲染层**：为所有基于 `Html()` 渲染的组件插入 `TableHtmlExtension()`。重构 `_imageExtension`，使其兼容超大风景图及内联小图标的智能自适应尺寸。
 
 **结论**：本次修改不仅找回了表格，还使 App 全局掌握了渲染极其复杂图文嵌套（如引用内带视频、列表内带图片链接、表格内带小微标）的能力。
 
-## 55. 修复 HTML 块内链接无法点击的问题（2026-05-26）
+## 65. 修复 HTML 块内链接无法点击的问题（2026-05-26）
 
-### 55.1 问题背景
+### 65.1 问题背景
 
 用户反馈在文章详情页中，如果链接 (`<a>` 标签) 存在于标题 (`<h1>`-`<h6>`)、段落 (`<p>`)、列表 (`<li>`)、引用块 (`<blockquote>`)、表格 (`<table>`) 等 HTML 块内部，点击这些链接没有任何反应。
 
-### 55.2 根因分析
+### 65.2 根因分析
 
 1. **纯文本剥离**：在 `HtmlChunkParser` 解析标题、列表等区块时，原本的逻辑错误地剥离了部分内联 HTML 标签（包括 `<a>`），导致渲染层拿到的可能只是纯文本。
 2. **缺失链接处理**：在 `HtmlChunkCard` 渲染层中，对于这些元素的渲染，原先部分采用了 `Text` 控件，或者即使采用了 `Html` 控件也没有配置 `onLinkTap` 回调事件，因此用户无法触发外部链接的点击跳转。
 
-### 55.3 修复方案
+### 65.3 修复方案
 
 1. **Parser 层保留内联标签**：
    - 将 `_headingTextOnly` 重命名为 `_headingHtmlOnly`。
@@ -1924,24 +1924,24 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
    - 为所有涉及图文排版的区块（标题、段落、列表、表格、引用块及原始 HTML 区块）统一应用 `Html` 控件，并配置 `onLinkTap: _handleLinkTap`。
    - 对于深色模式下使用 `Html` 渲染的情况，统一先通过 `HtmlContrastUtils.adjustHtmlContrast` 调整整体 HTML 字符串的对比度。同时在 `Html` 的 `Style` 中为 `<a>` 标签配置主题色，确保所有区域的链接颜色一致且不突兀。
 
-### 55.4 影响文件
+### 65.4 影响文件
 
 - `lib/utils/html_chunk_parser.dart`
 - `lib/pages/article/widgets/html_chunk_card.dart`
 
 ---
 
-## 56. 优化文章滑动渲染性能（2026-05-26）
+## 66. 优化文章滑动渲染性能（2026-05-26）
 
-### 56.1 问题报告
+### 66.1 问题报告
 
 用户体验反馈：在阅读页面（`ArticlePageView`）横向滑动翻页时，UI 线程存在卡顿和掉帧现象。特别是在文章内容较长或者包含较多复杂元素时，滑动过程不够流畅。
 
-### 56.2 根因分析
+### 66.2 根因分析
 
 原先的 `_initContent` 方法在主隔离区（UI 线程）同步执行 HTML 解析和各种正则处理（包括 `ArticleContentUtils.normalizeHtml` 和 `HtmlChunkParser.parseSync` 等）。这些操作由于涉及大量字符串运算，会导致 UI 线程阻塞，从而在滑动切页时造成明显的掉帧卡顿。
 
-### 56.3 设计讨论与具体改动
+### 66.3 设计讨论与具体改动
 
 **核心思路**：将耗时的 HTML 解析操作卸载（Offload）到独立的 Isolate 中运行，释放 UI 线程的压力，确保页面滑动动画的 60fps/120fps 流畅渲染。
 
@@ -1950,7 +1950,7 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 2. **增加加载状态显示**：在 `ArticleController` 引入 `isParsingContent` 响应式变量，标识 Isolate 解析是否在进行。并在 `_ArticlePageViewState` 的 Sliver 列表渲染中，当 `isParsingContent` 为 true 时，展示一个居中的 `CircularProgressIndicator` 加载提示符（附带 "正在排版内容…" 字样），以填补 Isolate 计算期间的视觉空白，改善用户体验。
 3. **允许隐式滚动缓存**：在 `_ArticlePagerPageState` 返回的 `PageView.builder` 增加 `allowImplicitScrolling: true` 属性。此举允许 Flutter 在后台隐式预构建和缓存邻近的文章页面，配合 Isolate 的异步解析，使得用户滑动到下一页时，页面通常已经预排版完成，极大增强了操作丝滑感。
 
-### 56.4 行为变化对照
+### 66.4 行为变化对照
 
 | 场景 | 旧行为 | 新行为 |
 |------|--------|--------|
@@ -1960,37 +1960,37 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 
 ---
 
-## 57. 解决全局状态变更导致的时间线 UI 失步问题（2026-05-26）
+## 67. 解决全局状态变更导致的时间线 UI 失步问题（2026-05-26）
 
-### 57.1 问题背景
+### 67.1 问题背景
 
 在之前的架构中，当单篇文章的状态在全局被更新时（例如：AI 自动过滤 Worker 判定该文章为被拦截 `isRejectedByAi: true`，或用户在其他视图中改变了文章的已读未读状态等），如果用户不触发 `TimelineController.loadData()` 下拉刷新，`TimelineController` 内存中的 `allArticles` 列表将不会感知该变化。
 这会导致时间线列表卡片的 UI 呈现，以及顶部的“AI智能过滤拦截数”等聚合 UI 组件出现数据脏读或失步。
 
-### 57.2 增量同步机制设计（单点精确刷新）
+### 67.2 增量同步机制设计（单点精确刷新）
 
 在 `TimelineController.onInit` 中，借助已有的 `ArticleStateNotifier` 注册全局监听器。
 当发生状态更新时，通过新增的 `_syncSingleArticleFromDb(entryId)` 实现了精确增量更新，而不需要重新进行昂贵的全列表 `_applyFilter` 和 `loadData`（除非该变更引起了列表本身的分类流转）：
 
 1. **精确点查**：在 O(N) 找到当前时间线 `allArticles` 列表中的目标文章。如果不在此视图内则直接跳过，零开销。
 2. **读库映射**：从 Hive (`GStorage.articleDb`) 读取最新的底层统一数据包，并转换回 `ArticleModel`。
-3. **保护本地重写覆盖**：引入本地内存未读防闪烁机制，将从库里读到的新数据与 `GStorage.readStatus` 中的临时锁定（`true`）安全合并，防止同步瞬间的已读闪烁（收口机制与 §53 保持一致）。
+3. **保护本地重写覆盖**：引入本地内存未读防闪烁机制，将从库里读到的新数据与 `GStorage.readStatus` 中的临时锁定（`true`）安全合并，防止同步瞬间的已读闪烁（收口机制与 §63 保持一致）。
 4. **驱动响应系统**：直接替换 `allArticles[idx]`，触发 `.refresh()`，并随后调用 `_applyFilter()` 与 `_updateFilterCount()` 准确驱动“拦截器拦截数”和时间线分片的精确响应重绘。
 
-### 57.3 影响文件
+### 67.3 影响文件
 
 - `lib/pages/timeline/timeline_controller.dart`
 
 ---
 
-## 58. 修复 Inbox 旧文章不可见（被 5000 条本地缓存限制误删）的问题 (2026-05-26)
+## 68. 修复 Inbox 旧文章不可见（被 5000 条本地缓存限制误删）的问题 (2026-05-26)
 
-### 58.1 背景与现象
+### 68.1 背景与现象
 - 用户发现：虽然修复了 `feed_http.dart` 里的 Inbox 拉取逻辑，但“下拉刷新后，inbox 只有最新的一篇文章”。
 - 更换过滤条件为“全部”时，时间线最早的文章只追溯到 4 天前。
 - 通过 Curl 直接请求 `api.folo.is/entries/inbox`，证明服务器确实验证返回了 4 篇 Inbox 文章（包含 1 篇最新和 3 篇 1月/3月 的旧文章）。
 
-### 58.2 诊断过程
+### 68.2 诊断过程
 - 最初怀疑是 `_applyUnreadSnapshot` 的合并逻辑或 `AutoFilterWorker` 误拦。
 - 经过分析代码确认，`AutoFilterWorker` 会直接跳过无 `content` 的文章，所以 Inbox 的文章不会被 AI 拦截（`isRejectedByAi: false`）。
 - **关键线索**：时间线最早的文章只到 4 天前。
@@ -1998,26 +1998,26 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 - `TimelineController.loadData()` 正确拉取到了 3 篇一月/三月的 Inbox 文章并存入数据库，但**在同一帧内**触发了 `_trimOverflow()` 清理机制。
 - 之前的 `_trimOverflow()` **仅仅按照发布时间（`publishedAt`）倒序**保留最新的 5000 篇。由于 3 篇 Inbox 文章非常陈旧（早于 4 天前），它们在入库的瞬间就被无情地当做溢出旧数据删除了！
 
-### 58.3 修复方案与逻辑简化
+### 68.3 修复方案与逻辑简化
 1. **修改点**：重写 `LocalArticleDbService._trimOverflow()` 的排序算法，引入优先级保护机制，彻底抛弃单纯的时间倒序。
 2. **逻辑简化**：在与用户讨论后，用户表示其关注点在于“只要是未读文章就不应该丢失”，且能保证未读文章总数不会超过 5000。为契合极简设计理念，最终的排序策略被简化为：
    - **优先级 1（最高，优先保留）**：所有未读文章（`!isRead`）。只要是未读（不论 Feed 还是 Inbox），都优先保留，避免因年代久远被淘汰并导致后续无休止的重复拉取。
    - **优先级 0（最先淘汰）**：已读文章（`isRead == true`）。
    - **同级排序**：如果优先级相同，再按发布时间倒序排列。
 
-### 58.4 影响分析与架构哲学记录
+### 68.4 影响分析与架构哲学记录
 - **传送带效应（Sliding Window）**：无论客户端的 5000 容量限制如何挤出文章，都只是影响本地缓存。服务器依然是唯一的“真相源”（Source of Truth）。用户看完前排文章并标为已读后，下一次刷新时，由于腾出了本地空间，原本被挤出边界的老未读文章会如同传送带一般，从服务器被拉取并重新进入可视范围。
 - 这是一个典型的本地资源受限环境下的防饥饿、防雪崩缓存设计。由于未读状态（Priority 1）自带免死金牌，用户的核心待办列表再也不会因为其年代久远而陷入“插入即被删”的黑洞。
 
 ---
 
-## 59. 极致渲染优化：完美进度条与流畅加载的平衡 (2026-05-28)
+## 69. 极致渲染优化：完美进度条与流畅加载的平衡 (2026-05-28)
 
-### 59.1 背景与痛点
+### 69.1 背景与痛点
 在之前的架构中，为了防止多图超长文导致的初次渲染内存峰值与主线程卡顿，我们在 `ArticlePage` 引入了 `SliverList` 懒加载策略。
 但这引入了一个致命副作用：**阅读进度条失效/乱跳**。由于 Flutter `SliverList` 无法预知未渲染子组件的高度，导致 `ScrollController.position.maxScrollExtent` 在滑动过程中不断动态增加，使得顶部进度条永远算不准，也无法平滑到达 100%。
 
-### 59.2 核心策略：回归 Column + 大颗粒度打包
+### 69.2 核心策略：回归 Column + 大颗粒度打包
 为了在找回“绝对精确进度条”的同时避免初次渲染卡顿，我们采取了“降维打包”策略：
 1. **废弃 SliverList**：在 `ArticlePage` 中彻底移除懒加载机制，将文章所有区块通过 `Column` 一次性构建。
 2. **底层合并短段落 (HtmlChunkParser)**：
@@ -2025,16 +2025,16 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
    - 关键优化：使用 `<br><br>` 而不是 `\n\n` 进行拼接。这不仅大幅减少了 Flutter 组件树的层级数量（从几百个 Widget 降维到十几个），还完美保留了 `flutter_html` 解析时的物理段落间距。
 3. **列表不拆分**：遇到 `<ul>` 和 `<ol>`，不再暴力切分成独立 chunk，而是整块保留 HTML 提交渲染。
 
-### 59.3 终极补丁：渐进式分帧注入 (Incremental Rendering)
+### 69.3 终极补丁：渐进式分帧注入 (Incremental Rendering)
 虽然通过打包极大地减少了 Widget 数量，但在遇到包含数十个巨型区块的万字长文时，`Column` 的初次布局依然会导致打开文章或横向滑动切页时出现微小的掉帧（Jitter）。
 为此，我们在 `ArticlePage` 中引入了 `_renderIncrementally` 渐进式注入机制：
 - **首屏秒开**：瞬间只将前 3 个 Chunk 注入渲染队列，保证绝对顺滑无感。
 - **后台逐帧补齐**：剩余的 Chunk 每隔一帧（16ms）向 `Column` 底部追加一个。结合给 `HtmlChunkCard` 绑定的独立 `ValueKey`，底层 Flutter 引擎会自动跳过已渲染块的重绘（Rebuild），实现了无掉帧的丝滑加载。
 
-### 59.4 视觉防抖优化 (Layout Shift 保护)
+### 69.4 视觉防抖优化 (Layout Shift 保护)
 在 `HtmlChunkCard` 中，对于未知真实尺寸的网络图片，取消了原本硬编码的 `100.0` 兜底高度，改为动态计算的 `widget.maxWidth * 0.6` 作为占位符。由于大部分插图都是横屏比例，这个占位极大地减少了真实图片加载瞬间引发的版面跳动。
 
-### 59.5 影响文件
+### 69.5 影响文件
 - `lib/pages/article/article_page.dart`
 - `lib/utils/html_chunk_parser.dart`
 - `lib/pages/article/widgets/html_chunk_card.dart`
@@ -2042,52 +2042,29 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 
 ---
 
-## 60. 卡片转场动画防掉帧与预加载策略 (2026-05-30)
+## 70. 延迟 build + widget 缓存：根治重度技术文章首次打开掉帧 (2026-05-30)
 
-### 60.1 痛点与现象描述
-在之前的版本中，当用户在时间线点击文章卡片（触发进入 `ArticlePage`）时，转场动画（`Transition.rightToLeft`）会出现轻微的掉帧和卡顿感。
-
-### 60.2 根本原因分析
-我们深入排查了底层的渲染管线与线程资源争夺问题：
-1. **主线程的独占性与争夺**：Flutter 的转场动画大约需要 300ms，而任何界面的构建、布局与绘制都必须且只能在单一的主线程（UI 线程）完成。
-2. **异步解析的假象**：虽然在 `ArticleController` 中，我们将极其繁重的 HTML 字符串解析拆解任务放到了后台线程（通过 `Isolate.run` 提取 `HtmlChunk` 模型），做到了不卡主线程；但这段数据层面的“预处理”速度极快（通常数十毫秒）。
-3. **掉帧发生的时刻**：一旦后台解析完成，代码立即调用了 `_renderIncrementally` 开始将排版块塞入响应式队列 `target`，此时屏幕尚未完成转场。由于 `flutter_html` 等组件的排版开销巨大，瞬间在主线程生成这些复杂的 Widget 树直接阻塞了原本平滑的划入动画。
-
-### 60.3 渐进式渲染（错峰挂载）解决方案
-为彻底解决该问题，我们对“渲染队列”引入了**时间错峰策略**：
-1. **转场保护期**：在 `_renderIncrementally` 头部增加了时间戳校验。强制等待应用距离 `onInit` 走过 350ms，完全让渡出主线程的最初 300ms 算力，确保划入屏幕的动画能做到 100% 满帧。
-2. **降频挂载**：动画平稳落定后，再从队列里挤牙膏式地提取组件。我们将首批并发量从 3 降低到 2 个 Chunk，同时将后续块的逐帧间隔从 16ms 放宽至 24ms，从而抹平所有的算力峰值。
-
-### 60.4 概念澄清与架构约束（交接备忘）
-在这轮优化探讨中，我们明确纠正了一个常见的直觉误区，特留存给后续 Agent 查阅：
-- **直觉误区**：“能否开一个独立的后台线程，把还没来到屏幕中的画面预先渲染好？”
-- **架构事实**：**绝对不能**。对于任何现代 GUI 框架（Flutter / 原生 iOS 等），UI 视图的实例化（`build`）和排版计算必须处于并且只处于主线程。此处的“渲染队列”并非指后台的图形预渲染，而是**主线程上的分批挂载（Staggered Mounting）策略**，属于一种时间换空间的妥协。
-- **系统已实现的真正“预加载（Preloading）”**：应用中属于“无 UI 计算”的环节均已尽数剥离并移交后台处理。例如列表刷新时通过 `withContent: true` 将文章 HTML 悉数存入 `LocalArticleDbService`，乃至调用各种 Worker 提前发起深度网页提取、大模型全文翻译与摘要等，构成了底层数据的预载。这一套零卡顿的数据预备流程，加上卡片转场时这 350ms 的“错峰避让渲染”，共同奠定了应用顶级的操作流畅度。
-
-
-## 61. 延迟 build + widget 缓存：根治重度技术文章首次打开掉帧 (2026-05-28 晚)
-
-### 61.1 触发案例
+### 70.1 触发案例
 
 文章：**"Profiling in PyTorch (Part 1): A Beginner's Guide to torch.profiler"**
 - 来源：Hugging Face - Blog（feedId: `41459996870678531`，entryId: `1132614748223852544`）
 - 原始 HTML: 210KB，含 56 张图片、17 个 `<pre>` 代码块、166 个 `<code>` 标签、27 个表格、229 个 `<p>` 段落、29 个标题、66 个 SVG
 - 用户观察：**从打开到流畅滑动花费约一分钟**，掉帧极其严重
 
-### 61.2 诊断过程
+### 70.2 诊断过程
 
 1. **定位文章**：通过 Folo API 搜索到该文章（来自 Hugging Face - Blog 订阅源）
 2. **拉取原始内容**：用 Dart `HttpClient` 直接抓取 `huggingface.co/blog/torch-profiler` 原文（210KB）
 3. **模拟渲染管线**：编写 `scratch/analyze_pipeline.dart` 模拟 app 的 Readability 提取 → normalize → 分块全流程
 4. **锁定真凶**：通过数学建模确认根因
 
-### 61.3 真正的根因（不是图片加载）
+### 70.3 真正的根因（不是图片加载）
 
 关键路径：`_renderIncrementally` 每 16ms 向 `renderedChunks` 追加 1 块 → 触发 `Obx()` → Column 全量 rebuild → **所有已存在的 `HtmlChunkCard` 全部重新构建**。
 
 旧代码中 `HtmlChunkCard.build()` 每次都调用 `flutter_html` 的 `Html()` 重新解析 HTML 字符串为 Widget 树。以这篇 200 块的文章为例：
 
-```
+```text
 第 1 块加入：           1 次 Html() 解析
 第 2 块加入（16ms 后）： 2 次 Html() 解析（第 1 块又重来一遍）
 第 3 块加入：           3 次 Html() 解析
@@ -2100,7 +2077,7 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 
 **这是经典的 O(n²) 自爆——不是图片慢，是代码在反复解析同一段 HTML。**
 
-### 61.4 解决方案讨论
+### 70.4 解决方案讨论
 
 与用户讨论了三种修复方向：
 
@@ -2121,7 +2098,7 @@ FeedHttp.collectEntries(read: true, publishedAfter: isoStr, ...);
 - 时机 C（预测式：用户停留预览时预处理）：精准但实现复杂
 - **最终倾向**：B + C 组合
 
-### 61.5 实施方案细节
+### 70.5 实施方案细节
 
 #### 改动 1：HtmlChunkCard widget 缓存（`html_chunk_card.dart`）
 
@@ -2153,13 +2130,13 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 新增 `StorageKeys.articleInitialChunkBuildCount`，默认值 5，范围 3-20。每次打开文章实时读取，无需重启生效。
 
-### 61.6 与现有机制的协同
+### 70.6 与现有机制的协同
 
-- **不改动 `_renderIncrementally`**：它仍然控制数据流（renderedChunks 逐块增长）
+- **实现演进**：初始修复仍沿用 `_renderIncrementally` 控制数据流（renderedChunks 逐块增长）；随后与第 71 节的转场错峰优化合并后，数据层逐个追加被移除，最终由 View 层的 `_builtCount` / `_buildNextBatch()` 接管延迟 build。
 - **不改动 Column 架构**：所有块仍然在一个 Column 内，进度条保持精确
 - **不改动 `AutomaticKeepAliveClientMixin`**：补全后的块永驻不销毁
 
-### 61.7 效果评估
+### 70.7 效果评估
 
 | 指标 | 改之前 | 改之后 |
 |------|--------|--------|
@@ -2171,27 +2148,49 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 **注意**：总完成时间中图片加载仍是瓶颈（56 张图 × 网络耗时），但渲染侧的 O(n²) 自爆已完全消除。
 
-### 61.8 影响文件
+### 70.8 影响文件
 
 - `lib/pages/article/article_page.dart` — 核心：首帧占位 + 渐进构建 + 翻译切换重置
 - `lib/pages/article/widgets/html_chunk_card.dart` — widget 缓存
 - `lib/utils/html_chunk_parser.dart` — HtmlChunk 新增 `estimatedHeight`
 - `lib/common/constants/constants.dart` — 新增 `StorageKeys.articleInitialChunkBuildCount`
 
-### 61.9 遗留讨论
+### 70.9 遗留讨论
 
 以下来自本次对话但未实施的讨论，记录供后续参考：
 
 1. **方案三（Isolate 预处理 flutter_html）**：如果未来遇到 widget 缓存后单块 build 仍然超 5ms 的文章，可考虑将段落/标题的 HTML→TextSpan 转换搬进 Isolate，UI 线程直接拼 RichText。表格和列表暂不处理（数量少，优先级低）。
-2. **`_renderIncrementally` 的 16ms 延迟**：在 widget 缓存生效后，这个延迟的必要性大幅降低（原有块的 rebuild 已是 ns 级）。我们在 60 节中直接干掉了 `_renderIncrementally` 数据层的逐个追加，完全由 View 层的 `_builtCount` 配合首帧转场保护（350ms）接管了渲染控制权，达到了完美的体验。
+2. **`_renderIncrementally` 的 16ms 延迟**：在 widget 缓存生效后，这个延迟的必要性大幅降低（原有块的 rebuild 已是 ns 级）。最终合并状态中，`_renderIncrementally` 数据层逐个追加已被移除，完全由 View 层的 `_builtCount` 配合首帧转场保护（350ms）接管渲染控制。
 
 ---
 
-## 62. 未来功能规划 (Future Features)
+## 71. 卡片转场动画防掉帧与预加载策略 (2026-05-30)
+
+### 71.1 痛点与现象描述
+在之前的版本中，当用户在时间线点击文章卡片（触发进入 `ArticlePage`）时，转场动画（`Transition.rightToLeft`）会出现轻微的掉帧和卡顿感。
+
+### 71.2 根本原因分析
+我们深入排查了底层的渲染管线与线程资源争夺问题：
+1. **主线程的独占性与争夺**：Flutter 的转场动画大约需要 300ms，而任何界面的构建、布局与绘制都必须且只能在单一的主线程（UI 线程）完成。
+2. **异步解析的假象**：虽然在 `ArticleController` 中，我们将极其繁重的 HTML 字符串解析拆解任务放到了后台线程（通过 `Isolate.run` 提取 `HtmlChunk` 模型），做到了不卡主线程；但这段数据层面的“预处理”速度极快（通常数十毫秒）。
+3. **掉帧发生的时刻**：在当时实现中，一旦后台解析完成，代码会立即调用 `_renderIncrementally` 开始将排版块塞入响应式队列 `target`，此时屏幕尚未完成转场。由于 `flutter_html` 等组件的排版开销巨大，瞬间在主线程生成这些复杂的 Widget 树直接阻塞了原本平滑的划入动画。
+
+### 71.3 渐进式渲染（错峰挂载）解决方案
+为彻底解决该问题，我们对“渲染队列”引入了**时间错峰策略**：
+1. **转场保护期**：在当时的 `_renderIncrementally` 头部增加时间戳校验。强制等待应用距离 `onInit` 走过 350ms，完全让渡出主线程的最初 300ms 算力，确保划入屏幕的动画能做到 100% 满帧。最终合并后，这个保护语义由 View 层延迟 build 流程承接。
+2. **降频挂载**：动画平稳落定后，再从队列里挤牙膏式地提取组件。我们将首批并发量从 3 降低到 2 个 Chunk，同时将后续块的逐帧间隔从 16ms 放宽至 24ms，从而抹平所有的算力峰值。
+
+### 71.4 概念澄清与架构约束（交接备忘）
+在这轮优化探讨中，我们明确纠正了一个常见的直觉误区，特留存给后续 Agent 查阅：
+- **直觉误区**：“能否开一个独立的后台线程，把还没来到屏幕中的画面预先渲染好？”
+- **架构事实**：**绝对不能**。对于任何现代 GUI 框架（Flutter / 原生 iOS 等），UI 视图的实例化（`build`）和排版计算必须处于并且只处于主线程。此处的“渲染队列”并非指后台的图形预渲染，而是**主线程上的分批挂载（Staggered Mounting）策略**，属于一种时间换空间的妥协。
+- **系统已实现的真正“预加载（Preloading）”**：应用中属于“无 UI 计算”的环节均已尽数剥离并移交后台处理。例如列表刷新时通过 `withContent: true` 将文章 HTML 悉数存入 `LocalArticleDbService`，乃至调用各种 Worker 提前发起深度网页提取、大模型全文翻译与摘要等，构成了底层数据的预载。这一套零卡顿的数据预备流程，加上卡片转场时这 350ms 的“错峰避让渲染”，共同奠定了应用顶级的操作流畅度。
+
+## 72. 未来功能规划 (Future Features)
 
 本文档记录了目前暂未实现，但在未来迭代中计划加入的改进项。
 
-### 62.1 后台静默刷新通知角标 (Background Badge Sync)
+### 72.1 后台静默刷新通知角标 (Background Badge Sync)
 - **背景**：目前应用在“退后台（挂起）”状态或处于前台时，可以实时更新桌面图标的未读角标（红点或数字）。但如果应用被系统完全杀掉，即使服务器端有了新文章，桌面角标也无法自动更新，必须等到用户下次打开应用。
 - **目标**：实现应用在完全关闭状态下，桌面角标依然能随服务器未读文章数量变化而更新。
 - **技术选型方向**：
@@ -2201,13 +2200,13 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 ---
 
-## 63. 长文阅读页自适应虚拟渲染（2026-05-31）
+## 73. 长文阅读页自适应虚拟渲染（2026-05-31）
 
-### 63.1 背景
+### 73.1 背景
 
-第 61 节的 `Column + 渐进挂载 + widget 缓存` 已经让大多数文章打开和滚动足够流畅，但它的代价是：文章全部补齐后，所有 `HtmlChunkCard` 都常驻页面树。对普通文章这是可接受的；对极长 newsletter、多图长文、超大代码块文章，会推高内存占用。
+第 81 节的 `Column + 渐进挂载 + widget 缓存` 已经让大多数文章打开和滚动足够流畅，但它的代价是：文章全部补齐后，所有 `HtmlChunkCard` 都常驻页面树。对普通文章这是可接受的；对极长 newsletter、多图长文、超大代码块文章，会推高内存占用。
 
-### 63.2 本次决策
+### 73.2 本次决策
 
 保留普通文章的现有路径，不回退它的体验；只对长文启用虚拟渲染：
 
@@ -2220,7 +2219,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - `HtmlChunk` 数量 >= 80；或
 - 原始预估正文高度 >= 10000 px。
 
-### 63.3 进度条策略
+### 73.3 进度条策略
 
 以前直接使用 `ScrollMetrics.maxScrollExtent`，在 `SliverList` 懒加载下会因列表动态估算而跳动。本次长文模式改为稳定估算：
 
@@ -2231,7 +2230,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 这不是像普通文章一样绝对精确，但目标是“不乱跳、接近准确、长文更稳”。
 
-### 63.4 影响文件
+### 73.4 影响文件
 
 - `lib/pages/article/article_page.dart`
   - 新增长文判定；
@@ -2243,7 +2242,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
   - 普通模式默认保持缓存；
   - 长文虚拟列表传入 `keepAlive: false`。
 
-### 63.5 验收要点
+### 73.5 验收要点
 
 1. 普通文章仍走原路径，打开、滚动、进度条表现不应变差。
 2. 极长文不会一次性常驻所有复杂 HTML widget。
@@ -2252,13 +2251,13 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 ---
 
-## 64. 设置页任务中心（2026-05-31）
+## 74. 设置页任务中心（2026-05-31）
 
-### 64.1 产品定位
+### 74.1 产品定位
 
 用户明确希望审核页的高频交互和入口保持不变，因此任务中心不承载逐篇审核流程。任务中心定位为设置页内的低频诊断入口，用于查看后台同步和 AI 队列是否正常。
 
-### 64.2 第一版范围
+### 74.2 第一版范围
 
 入口：
 
@@ -2274,13 +2273,13 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - AI 过滤区只提供“去审核”跳转，不展示审核列表，不替代 `FilterReviewPage`。
 - 自动翻译/自动摘要失败时，可从任务中心进入失败文章列表，逐篇查看失败原因，并对单篇文章执行“打开”或“重试”。
 
-### 64.3 有意不做
+### 74.3 有意不做
 
 第一版不做暂停/继续、清空队列、批量重试、详细日志和批量审核。原因是这些操作会改变后台行为，容易引入误操作和更复杂的状态恢复；当前阶段只解决“用户能看懂后台是否在工作”的问题。
 
 这里的“单篇重试”不是批量操作：用户明确希望能在 AI 任务下排查“是哪篇文章失败了”，并对具体文章手动处理。因此任务中心允许查看失败明细和单篇重试，但仍不提供“一键全部重试”。
 
-### 64.4 影响文件
+### 74.4 影响文件
 
 - `lib/pages/settings/task_center_page.dart` — 新增任务中心页面。
 - `lib/pages/settings/settings_page.dart` — 设置页入口卡片。
@@ -2291,12 +2290,12 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 ---
 
-## 65. macOS 桌面端深度适配（2026-05-31，进行中）
+## 75. macOS 桌面端深度适配（2026-05-31，进行中）
 
-### 65.1 核心需求与设计
+### 75.1 核心需求与设计
 在原有跨平台代码基础上，全面提升 macOS 端的原生交互体验，使其具备真正的桌面级应用质感。设计上严格对标原始 `folo` 桌面端的“三栏布局”，同时保留 Android 端的原有形态。
 
-### 65.2 当前实现要点
+### 75.2 当前实现要点
 1. **三栏经典布局与毛玻璃侧边栏**：
    - 在 `lib/pages/main/main_page.dart` 中，移除了原有的移动端底导和基础侧边导航，彻底重构为 `MacOSSidebar | VerticalDivider | 核心内容区` 的三栏布局。
    - 新增 `lib/pages/main/widgets/macos_sidebar.dart`，使用 `BackdropFilter(sigmaX: 20, sigmaY: 20)` 实现 macOS 标志性的高强度毛玻璃（Vibrancy）效果。
@@ -2318,7 +2317,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 5. **独立的高清应用图标**：
    - 通过原生 `sips` 脚本对原始 Folo 高清图标进行自动重采样，生成了符合 macOS 标准的全尺寸 `.appiconset` 集合，完全替代了 Flutter 的默认模板图标。
 
-### 65.3 关键设计讨论与决策留档
+### 75.3 关键设计讨论与决策留档
 在本次迭代中，通过与用户的讨论，明确了以下几项关键的设计理念和未来规划：
 1. **摒弃侧边导航栏，回归三栏沉浸布局**：
    - 用户明确指出原始 folo 项目的界面设计非常优秀，因此决定放弃初版使用 `NavigationRail`（带 3 个按钮）的生硬方案。
@@ -2332,11 +2331,12 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 
 ---
 
-## 66. macOS 适配复盘与当前权威上下文（2026-06-01）
+## 76. macOS 适配复盘与当前权威上下文（2026-06-01）
 
-> 重要：第 65 节是早期记录，其中关于 `Cmd+W/Cmd+Q` 和毛玻璃的实现描述已经不完全准确。后续接手请以本节为准。
+> 重要：第 75 节是早期记录，其中关于 `Cmd+W/Cmd+Q` 和毛玻璃的实现描述已经不完全准确。后续接手请以本节为准。
+> 2026-06-03 校准：本节的“当前工作目录/当前分支/不要改 `~/dev` 主工作区”等约束，是 2026-06-01 当时 macOS 适配辅助 worktree 的历史语境；当前主工作区请结合第 81 节 worktree 清理记录和后续发布记录判断，不要机械套用本节路径约束。
 
-### 66.1 工作区与分支约束
+### 76.1 工作区与分支约束
 
 - 当前工作目录：`<historical-macos-worktree>`
 - 当前分支：`migrate-software-macos-adaptation`
@@ -2352,7 +2352,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
   - `8e41518 Improve chunk translation failure details`
 - 同步前创建过备份 stash：`stash@{0}: On migrate-software-macos-adaptation: pre-sync-macos-adaptation`。如确认当前工作无误，可后续手动清理；当前不要随意删除。
 
-### 66.2 用户目标与设计参考
+### 76.2 用户目标与设计参考
 
 用户当前主线目标是 macOS 端精细化适配，方向是参考 `reference/Folo` 的桌面端视觉和交互，而不是照搬内部实现。核心要求：
 
@@ -2363,7 +2363,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 5. Folo 左侧订阅栏的材质感、毛玻璃、视觉密度可以参考，但内部业务逻辑继续用本项目自己的 GetX/Hive/Folo API 逻辑。
 6. 审核页是高频入口，任务中心只是低频诊断入口，不能替代审核页。
 
-### 66.3 当前 macOS 主布局
+### 76.3 当前 macOS 主布局
 
 核心文件：
 
@@ -2391,7 +2391,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
   - 右侧文章内容
 - macOS 主内容切换已从淡入淡出改为直接 `IndexedStack`，避免点侧栏“垃圾拦截”等页面时出现两页叠加的过渡感。
 
-### 66.4 左侧订阅栏与折叠逻辑
+### 76.4 左侧订阅栏与折叠逻辑
 
 `lib/pages/main/widgets/macos_sidebar.dart` 当前新增并承载 macOS 左栏。
 
@@ -2409,7 +2409,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - feed row 显示 favicon、标题、未读角标。
 - category 和 feed 的未读数来自 `SubscriptionsController.unreadForCategory/unreadFor`。
 
-### 66.5 审核页入口与桌面交互
+### 76.5 审核页入口与桌面交互
 
 问题背景：
 
@@ -2438,7 +2438,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
   - 右侧两个按钮：保留、移除
 - 审核按钮 tooltip 不能上下弹出，否则会遮挡另一个按钮。当前已改为自定义 `_SideTooltip`，悬停时优先在按钮右侧显示；空间不够时才回退到左侧。
 
-### 66.6 macOS 关闭行为与菜单
+### 76.6 macOS 关闭行为与菜单
 
 当前权威实现不再依赖 Flutter 层用 `Focus` 抢 `Cmd+W/Cmd+Q`。
 
@@ -2458,7 +2458,7 @@ if (_cachedWidget == null || _cachedBrightness != brightness) {
 - `MainMenu.xib` 里 Window 菜单新增 `Close`，快捷键 `Cmd+W`，selector 为 `performClose:`。
 - App 菜单原有 `Quit` 仍走 `terminate:`，快捷键 `Cmd+Q`，两者语义已经区分。
 
-### 66.7 Dock 角标与 AppIcon
+### 76.7 Dock 角标与 AppIcon
 
 Dock 未读角标：
 
@@ -2485,7 +2485,7 @@ AppIcon：
   - `app_icon_1024.png`
 - 若 `flutter run -d macos` 仍显示旧图，优先判断为 macOS Dock/LaunchServices 图标缓存；构建产物 `Contents/Resources/AppIcon.icns` 已经验证为新图。
 
-### 66.8 macOS 左栏毛玻璃问题（未解决，后续重点）
+### 76.8 macOS 左栏毛玻璃问题（未解决，后续重点）
 
 这是当前最重要的未解决 UI 问题之一。
 
@@ -2520,7 +2520,7 @@ AppIcon：
   - 是否需要只让 Flutter 左侧区域完全透明，右侧内容区用实色容器遮住 native vibrancy
 - 用户说“先记录这个问题，晚点再考虑解决”，因此后续 agent 不要在没有明确要求时继续消耗时间。
 
-### 66.9 macOS 构建日志与 warning 处理
+### 76.9 macOS 构建日志与 warning 处理
 
 用户贴过 `flutter clean && flutter run -d macos --release` 日志，结论：
 
@@ -2555,7 +2555,7 @@ AppIcon：
   - 必要时查 `lsof build/macos/Build/Intermediates.noindex/XCBuildData/build.db`；
   - 不要误判为代码错误。
 
-### 66.10 当前验证记录
+### 76.10 当前验证记录
 
 本轮 macOS 适配过程中反复验证过：
 
@@ -2569,7 +2569,7 @@ AppIcon：
 - 如果正在运行旧 app，重建后需要退出旧 app 再重新运行，UI 才会更新。
 - macOS Dock 图标可能受系统缓存影响，产物内 `AppIcon.icns` 才是判断资源是否正确的第一依据。
 
-### 66.11 当前改动涉及的主要文件
+### 76.11 当前改动涉及的主要文件
 
 macOS 原生：
 
@@ -2593,7 +2593,7 @@ Flutter 侧：
 - `lib/pages/article/widgets/image_gallery_page.dart`
 - `test/widget_test.dart`
 
-### 66.12 后续接手建议
+### 76.12 后续接手建议
 
 1. 若继续 macOS 左栏毛玻璃，先从原生 view 层级做最小实验，不要继续只调 Flutter `BackdropFilter` 颜色。
 2. 若整理代码质量，优先把 macOS-only UI 封装边界再收紧，避免 `Platform.isMacOS` 分支污染移动端。
@@ -2601,11 +2601,11 @@ Flutter 侧：
 4. 不要随意清理 `stash@{0}`，除非用户确认当前状态已安全。
 5. 不要改 `~/dev` 主工作区。
 
-## 67. macOS 侧边栏与相关页面全面适配（本轮对话完整记录）
+## 77. macOS 侧边栏与相关页面全面适配（本轮对话完整记录）
 
 > **关键前提**：本轮对话中用户始终在指 macOS 端，对话初期提到的"订阅源页面""对齐""按钮缺失"等均指 macOS 侧边栏（`macos_sidebar.dart`），而非 Android 的 `subscriptions_page.dart`。Android 端本轮零改动，所有修改均已回退。
 
-### 67.1 用户原始诉求（按时间线）
+### 77.1 用户原始诉求（按时间线）
 
 1. 订阅源页面粗糙，对齐不对，缺少自动拉取全文 / 自动翻译按钮
 2. "最左边那一列"点按有延迟
@@ -2614,7 +2614,7 @@ Flutter 侧：
 5. Feed 详情页（`_MacFeedHeader`）缺少自动拉取/翻译 toggle
 6. 要求所有没能适配 macOS 的地方全部适配
 
-### 67.2 改动总览
+### 77.2 改动总览
 
 | 文件 | 改动项 | 原因 |
 |------|--------|------|
@@ -2627,9 +2627,9 @@ Flutter 侧：
 
 ---
 
-### 67.3 改动详情
+### 77.3 改动详情
 
-#### 67.3.1 `macos_sidebar.dart` — 4 项
+#### 77.3.1 `macos_sidebar.dart` — 4 项
 
 **a) 点按延迟修复：删除 `_CategoryItem` 的 `onDoubleTap`**
 
@@ -2664,7 +2664,7 @@ Flutter 侧：
 
 ---
 
-#### 67.3.2 `timeline_page.dart` — 2 项
+#### 77.3.2 `timeline_page.dart` — 2 项
 
 **a) macOS AppBar 动态上下文**
 
@@ -2684,7 +2684,7 @@ macOS 时间线 AppBar 内的小型开关图标。与侧边栏的 `_FeedAutoRead
 
 ---
 
-#### 67.3.3 `article_page.dart` — 1 项
+#### 77.3.3 `article_page.dart` — 1 项
 
 **Feed 胶囊改为原地过滤（macOS）**
 
@@ -2705,7 +2705,7 @@ Get.toNamed(Routes.feedDetail, ...);  // 移动端不变
 
 ---
 
-#### 67.3.4 `feed_detail_page.dart` — 1 项
+#### 77.3.4 `feed_detail_page.dart` — 1 项
 
 **`_MacFeedHeader` 新增自动拉取/翻译 toggle**
 
@@ -2715,7 +2715,7 @@ Get.toNamed(Routes.feedDetail, ...);  // 移动端不变
 
 ---
 
-#### 67.3.5 `settings_page.dart` — 1 项
+#### 77.3.5 `settings_page.dart` — 1 项
 
 **macOS 底部死空白修复**
 
@@ -2728,7 +2728,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 
 ---
 
-### 67.4 设计决策与讨论过程
+### 77.4 设计决策与讨论过程
 
 #### 决策 1：侧边栏 Feed 点击 vs FeedDetailPage
 
@@ -2752,20 +2752,20 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 
 ---
 
-### 67.5 技术要点
+### 77.5 技术要点
 
 - **`_FeedToggleIcon` vs `_FeedAutoReadabilityIcon`**：前者在 `timeline_page.dart`（接收外部 `enabled` + `onToggle`），后者在 `macos_sidebar.dart`（内部直接读 Hive）。两者不能互换——侧边栏图标需要在 Feed 列表上下文中独立工作，时间线 AppBar 图标需要响应 `selectedFeedId` 变化。
 - **`SubscriptionsController` 在 macOS 上的注册**：`main_page.dart` 中 `if (Platform.isMacOS) { Get.put(SubscriptionsController()); }` 确保 macOS 可用 `Get.find<SubscriptionsController>()`。
 - **macOS 三栏布局**：`_macPages = [TimelinePage, FilterReviewPage, SettingsPage]`（`IndexedStack`），`SubscriptionsPage` 不在其中，订阅树直接渲染在侧边栏内。
 - **`article_page.dart` 的 `openSource()`**：在 macOS split view 中，文章是 `ArticlePageView(isSplitView: true)` 内联在右侧面板，不是 push route。`Get.back()` 不适用，改用 `tc.selectedArticle.value = null` 清空右面板。
 
-### 67.6 当前验证状态
+### 77.6 当前验证状态
 
 - `dart analyze lib/`：零 error 零 warning（仅 2 个预存 info）
 - 改动文件均在 git working tree 中（未 commit）
 - Android `subscriptions_page.dart` 已 `git checkout` 回退至原始状态
 
-### 67.7 已回退的早期移动端订阅页尝试（历史参考）
+### 77.7 已回退的早期移动端订阅页尝试（历史参考）
 
 注意：这段记录的是早期对移动端 `SubscriptionsPage` 的尝试；根据本节开头的关键前提，相关代码已回退，仅保留为避免后续重复踩坑。
 
@@ -2774,7 +2774,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 2. 缺少"自动拉取全文"和"自动翻译"两个按源开关按钮
 3. 希望视觉风格与主页面统一
 
-### 67.8 当时尝试的代码改动（后续已回退，`lib/pages/subscriptions/subscriptions_page.dart`）
+### 77.8 当时尝试的代码改动（后续已回退，`lib/pages/subscriptions/subscriptions_page.dart`）
 
 | 改动项 | 变更 |
 |--------|------|
@@ -2786,7 +2786,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 | **新增按钮** | 每张 Feed 卡片右侧增加两个 `_FeedToggleButton`（`article_outlined`/`translate_outlined`），分别控制 `FeedReadabilitySettingsService` 和 `FeedTranslationSettingsService` |
 | **新增组件** | `_FeedToggleButton` — 小型 toggle icon button，32×32 tap target，关闭态空心灰色 35% 透明度，开启态实心主色 |
 
-### 67.9 当时问题：按钮在运行时不可见
+### 77.9 当时问题：按钮在运行时不可见
 
 **症状**：用户执行 `flutter clean && flutter pub get && flutter run` 后，在订阅源页面展开到 Feed 卡片时，只能看到未读数字，看不到两个 toggle 按钮。
 
@@ -2815,7 +2815,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
    flutter run
    ```
 
-### 67.10 当时建议的调试步骤（仅历史参考）
+### 77.10 当时建议的调试步骤（仅历史参考）
 
 1. **先确认代码能跑到**：在 `_FeedCardState.build()` 第一行加 `debugPrint('[FeedCard] build: ${_feed.title}, readability=$_autoReadability, translate=$_autoTranslate')`，看日志是否输出。
 2. **排除 Icon 字体问题**：把 `_FeedToggleButton` 的 icon 暂时换成 `Icons.star` / `Icons.star_border`（最基础 icon），看是否出现。
@@ -2823,9 +2823,9 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 4. **缩小 Obx 范围测试**：把 `Obx` 从包裹整个卡片改为仅包裹未读徽章，看按钮是否出现。
 5. **如果不生效**：考虑放弃 `StatefulWidget` 方案，改为在 `SubscriptionsController` 中用 RxMap 管理 toggle 状态，`_FeedCard` 退回 `StatelessWidget` + `Obx` 读取 controller 的响应式状态。
 
-## 68. 快捷键、同步反馈、品牌统一、审核页已读同步（2026-06-01）
+## 78. 快捷键、同步反馈、品牌统一、审核页已读同步（2026-06-01）
 
-### 用户本次反馈的原始问题
+### 78.1 用户本次反馈的原始问题
 
 1. macOS 分栏阅读里，`←` / `→` 方向键没有稳定切换文章，而是会框选/聚焦不同的图标元素。
 2. `M` 标已读必须先点文章卡片、再点文章正文才能生效；快捷键依赖焦点，体验不符合预期。
@@ -2834,9 +2834,9 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 5. 为了统一性，软件展示名应考虑改为 `Auto Folo`；工程目录名是否也应修改需要给出建议。
 6. 进一步反馈：其他设备上已标为已读的文章，时间线未读列表已经能挪出，但“垃圾拦截/审核页”仍然显示这些文章；气泡计数已经减少，但审核页列表和“xx 篇待处理”没有同步变化。
 
-### 已做修改
+### 78.2 已做修改
 
-#### 1. macOS 阅读快捷键修复
+#### 78.2.1 macOS 阅读快捷键修复
 
 文件：`lib/pages/article/article_page.dart`
 
@@ -2856,7 +2856,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 - 用户看到的“方向键框选不同图标元素”，本质是 Flutter 焦点遍历先消费了方向键。
 - 使用硬件键盘 handler 可以让文章分栏处于打开状态时始终获得这些阅读快捷键，不再要求用户点中正文。
 
-#### 2. macOS 同步按钮反馈
+#### 78.2.2 macOS 同步按钮反馈
 
 文件：`lib/pages/timeline/timeline_page.dart`
 
@@ -2865,7 +2865,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 - 同步期间按钮禁用，避免重复触发。
 - 增加 450ms 最短反馈窗口：即使同步很快返回，用户也能看到明确点击确认感。
 
-#### 3. 品牌名统一为 Auto Folo
+#### 78.2.3 品牌名统一为 Auto Folo
 
 涉及文件：
 
@@ -2883,7 +2883,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 - Bundle id / method channel 仍保留 `com.folo.autofolo`，避免破坏已有本地数据、平台通道和已安装应用升级路径。
 - HTTP header 的 `X-App-Platform` 目前仍是 `mobile/android`。这是既有行为，本次没有改平台识别逻辑；如果未来要严格区分 macOS，需要单独评估服务端兼容性。
 
-#### 4. README 更新
+#### 78.2.4 README 更新
 
 文件：`README.md`
 
@@ -2893,7 +2893,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 - 功能矩阵补充 macOS 分栏阅读、桌面快捷键和同步反馈。
 - 快速开始补充 `flutter run -d macos`。
 
-#### 5. 审核页跟随其他设备已读状态
+#### 78.2.5 审核页跟随其他设备已读状态
 
 文件：`lib/pages/timeline/filter_review_page.dart`
 
@@ -2914,7 +2914,7 @@ macOS 没有底部导航栏，`kBottomNavigationBarHeight`（~80px）会导致�
 - 监听 `ArticleStateNotifier` 覆盖用户手动标已读、保留、拒绝等单篇变化。
 - 监听 `filterCount` 覆盖“其他设备已读同步”这种批量落库变化，因为 `_applyUnreadSnapshot` / `_refreshRecentReadWindow` 并不逐篇发 `ArticleStateNotifier.tick`。
 
-### 验证结果
+### 78.3 验证结果
 
 已运行并通过：
 
@@ -2928,13 +2928,13 @@ macOS debug 构建产物确认：`build/macos/Build/Products/Debug/Auto Folo.app
 
 注意：第一次直接跑 `dart analyze` 会因为 Flutter package URI 无法解析产生大量误报；此项目应以 `flutter analyze` 为准。
 
-### 关于工程目录名的建议
+### 78.4 关于工程目录名的建议
 
 - 不建议在当前 Codex worktree 内直接重命名 `<historical-codex-worktree>`，这会影响当前会话和 Git worktree 路径。
 - 如果主仓库要改名，建议仓库/clone 目录改为 `auto-folo`，比 `autofolo-mobile` 更符合当前 Android + macOS 双端定位。
 - 不建议把 Dart package name 改成 `auto_folo`，除非愿意承担 import 路径、测试、CI、发布脚本和原生工程引用的额外迁移成本；当前 `package:autofolo/...` 是稳定内部标识。
 
-### 需要在 main 分支/主工程侧同步的事项
+### 78.5 需要在 main 分支/主工程侧同步的事项
 
 如果这次改动是在临时 worktree 中完成，合入 main 时请逐项确认：
 
@@ -2955,7 +2955,7 @@ flutter build macos --debug
 
 9. 如果 main 侧还保留旧 README/AGENT_HANDOFF 结构，请优先把本节放到文档顶部，避免后续 agent 只读旧上下文。
 
-## 69. macOS 快捷键双重触发、刷新动画与未读计数（2026-06-01 追加修复）
+## 79. macOS 快捷键双重触发、刷新动画与未读计数（2026-06-01 追加修复）
 
 ### 本次反馈问题与修复总结
 
@@ -2974,9 +2974,9 @@ flutter build macos --debug
 4. **文章内可点击链接希望改为手型光标暗示（搁置）**
    - **技术讨论与放弃原因**：目前的 HTML 渲染库 `flutter_html: ^3.0.0-beta.2` 在将 `<a>` 标签转为 `TextSpan` 时，未开放 `mouseCursor` 属性注入。叠加外层的 `SelectionArea`（强制为所有未指定光标的文本添加 I 字形选择光标），导致系统不会将链接渲染为手型。如果使用 `flutter_html` 的拦截器将链接替换为原生组件，会破坏 Flutter 中内联文本的排版特性，造成长链接无法自动换行。经过权衡后，我们决定不采用会导致严重排版破坏的妥协方案，保留了可以复制文本但无手型暗示的现状。后续彻底解决建议等待 `flutter_html` 库底层更新或进行定制 Patch。
 
-## 70. Android + macOS 内部发布流程（2026-06-01）
+## 80. Android + macOS 内部发布流程（2026-06-01）
 
-### 70.1 本次发布命名与版本
+### 80.1 本次发布命名与版本
 
 - 推荐并采用 tag：`v1.1.1`。
 - 版本号同步：
@@ -2986,7 +2986,7 @@ flutter build macos --debug
   - `CHANGELOG.md`：新增 `1.1.1 - 2026-06-01`
 - 用户当前只自用，不考虑软件商城；发布策略按“内部测试版”处理，直接产出 APK 和 macOS zip。
 
-### 70.2 GitHub Actions 工作流
+### 80.2 GitHub Actions 工作流
 
 文件：`.github/workflows/internal-release.yml`
 
@@ -3025,7 +3025,7 @@ flutter build macos --debug
      - `GH_REPO: ${{ github.repository }}`
    - `GH_REPO` 是必要修复：release job 没有 checkout，目录里没有 `.git`；不显式传仓库时 `gh release view` 会报 `fatal: not a git repository`。
 
-### 70.3 macOS arm64 约束
+### 80.3 macOS arm64 约束
 
 用户明确要求：macOS 不论远程还是本地，都始终希望构建 arm64。
 
@@ -3041,7 +3041,7 @@ flutter build macos --debug
 
 注意：在固定 `ARCHS` 前，本地 `flutter build macos --release` 的原始产物曾是 universal binary（同时含 `x86_64` 和 `arm64`）。不要回退当前 arm64 约束。
 
-### 70.4 本次踩坑与修复
+### 80.4 本次踩坑与修复
 
 1. 首次 tag push 没有自动跑新 workflow。
    - 原因：workflow 刚引入，第一次需要手动 `gh workflow run` 或重新移动 tag 触发。
@@ -3063,7 +3063,7 @@ flutter build macos --debug
    - 来源：`actions/checkout@v4`、`actions/upload-artifact@v4` 等当前 action 运行时提示。
    - 当前不影响发布；后续可单独升级 action 或按 GitHub 建议切 Node 24。
 
-### 70.5 已验证结果
+### 80.5 已验证结果
 
 本地验证过：
 
@@ -3082,7 +3082,7 @@ flutter build macos --debug
   - `Auto-Folo-android-v1.1.1.apk`
   - `Auto-Folo-macOS-arm64-v1.1.1.zip`
 
-### 70.6 当前仓库状态注意
+### 80.6 当前仓库状态注意
 
 - `v1.1.1` 是 annotated tag，已移动到包含 release workflow 修复和 macOS arm64 约束的提交。
 - `main` 当前发布相关提交：
@@ -3093,9 +3093,9 @@ flutter build macos --debug
   - `63a6c72 ci: fix release publishing without checkout`
 - `.gitignore` 和 `scratch/` 在发布前后都存在用户侧未提交变更；不要在无明确要求时纳入发布/文档提交。
 
-## 71. worktree 复核、必要改动吸收与 v1.1.2 发布（2026-06-02）
+## 81. worktree 复核、必要改动吸收与 v1.1.2 发布（2026-06-02）
 
-### 71.1 用户要求与判断过程
+### 81.1 用户要求与判断过程
 
 用户要求谨慎检查所有待合并 worktree，确认是否正确、是否有必要；如果确认已经处理完，就清理所有 worktree、维护 `AGENT_HANDOFF.md`、维护 Git 仓库，并打一个小版本 tag 触发 Android + macOS 打包。
 
@@ -3125,7 +3125,7 @@ flutter build macos --debug
 - 对 dirty worktree 清理前，先把 WIP diff 保存到 `scratch/refactor-prompt-system-config.wip.patch`。`scratch/` 被 `.gitignore` 忽略，该补丁不进入版本库，但可用于本机恢复参考。
 - worktree 已清理到只剩主工作区 `<main-worktree>`；本轮没有删除本地分支名，只移除了辅助 checkout 目录。
 
-### 71.2 已合入的代码提交
+### 81.2 已合入的代码提交
 
 本轮在 `main` 上形成 4 个提交：
 
@@ -3155,7 +3155,7 @@ flutter build macos --debug
    - `CHANGELOG.md`：新增 `1.1.2 - 2026-06-02`
    - `AGENT_HANDOFF.md`：记录本轮 worktree 复核、清理和发布上下文。
 
-### 71.3 验证结果
+### 81.3 验证结果
 
 已运行并通过：
 
@@ -3172,7 +3172,7 @@ flutter test --no-pub
 - `flutter analyze --no-fatal-infos lib test` 与 `flutter test` 第一次都因 `pub get` 网络握手中断失败，未进入实际分析/测试；随后使用已有依赖缓存运行 `--no-pub` 版本通过。
 - 如果后续需要完整 CI 风格验证，优先跑 `flutter analyze --no-fatal-infos lib test` 和 `flutter test`。
 
-### 71.4 v1.1.2 内部发布计划
+### 81.4 v1.1.2 内部发布计划
 
 小版本 tag：`v1.1.2`。
 
@@ -3191,7 +3191,7 @@ flutter test --no-pub
 - 不要恢复 universal macOS 发布包。
 - 不要删除 `GH_REPO: ${{ github.repository }}`，否则 Release job 在没有 checkout 的目录中会再次报 `fatal: not a git repository`。
 
-### 71.5 后续 agent 注意事项
+### 81.5 后续 agent 注意事项
 
 - 如果需要恢复被清理 dirty worktree 的 WIP，可在本机查看 `scratch/refactor-prompt-system-config.wip.patch`。该文件未被 Git 跟踪，可能只存在于当前机器。
 - `browse-entire-project` 的 `index.html` redesign 未合入；不是遗漏，是因为与当前请求无关且改动过大。
@@ -3199,7 +3199,7 @@ flutter test --no-pub
 - prompt 配置已经有意拆分为 System Prompt + User Prompt schema。不要把 JSON schema 全部塞回 System Prompt，否则分块翻译的非首块容易与标题字段要求冲突。
 - `LocalArticleDbService.upsertMany` 会保留已有 AI 拒绝状态；需要清除拒绝时必须使用直接清理路径 `clearFilterState()` 或等价的 raw DB 写法，不能用一个 `isRejectedByAi: false` 的 `ArticleModel` 期望 OR 合并自动清除。
 
-### 71.6 v1.1.2 远端发布结果
+### 81.6 v1.1.2 远端发布结果
 
 - tag：`v1.1.2`
 - tag 指向提交：`29316f7 chore(release): prepare v1.1.2`
@@ -3218,9 +3218,9 @@ flutter test --no-pub
 
 注意：本节是 `v1.1.2` tag 推送并成功发布后的补充记录，因此位于 `main` 上 tag 之后的文档提交中；不要为补这段记录移动或 force-update `v1.1.2` tag。
 
-## 72. Android 安装签名冲突与 v1.1.3 修复（2026-06-02）
+## 82. Android 安装签名冲突与 v1.1.3 修复（2026-06-02）
 
-### 72.1 用户遇到的问题
+### 82.1 用户遇到的问题
 
 用户安装 `v1.1.2` Android APK 时，系统提示：
 
@@ -3237,7 +3237,7 @@ flutter test --no-pub
 
 如果包名相同但签名不同，Android 会直接拒绝覆盖安装。这是安全机制，防止任意 APK 用相同包名和更高版本号接管旧应用数据。
 
-### 72.2 为什么之前会签名不同
+### 82.2 为什么之前会签名不同
 
 检查 `android/app/build.gradle.kts` 后发现，本项目之前的 release 构建实际使用了 debug 签名：
 
@@ -3251,7 +3251,7 @@ debug keystore 通常与构建环境相关：
 
 因此用户本机 `flutter run` 安装的包和 GitHub Actions 构建的 release APK 可能同包名但签名不同，从而无法覆盖安装。
 
-### 72.3 用户确认的修复策略
+### 82.3 用户确认的修复策略
 
 用户基本只自用，并确认目前只通过“本机”和“GitHub Actions”两种方式安装/打包过。经过讨论后，采用：
 
@@ -3270,7 +3270,7 @@ debug keystore 通常与构建环境相关：
 - 但 Actions 运行时可以使用这把 key 签 APK，因此它仍然是“把签名能力交给 GitHub Actions 环境”。
 - 用户已明确同意将固定内部测试签名材料配置到 GitHub Secrets。
 
-### 72.4 代码修复
+### 82.4 代码修复
 
 修改文件：
 
@@ -3290,7 +3290,7 @@ debug keystore 通常与构建环境相关：
    - 生成 `android/key.properties`
    - 若任一 secret 缺失，CI 直接失败，避免再次发布不稳定签名 APK
 
-### 72.5 本地验证
+### 82.5 本地验证
 
 已在本机生成被 `.gitignore` 忽略的签名配置文件：
 
@@ -3312,7 +3312,7 @@ flutter build apk --release --no-pub
 - `apksigner verify --print-certs`：通过，并确认 APK 使用预期的固定内部测试签名证书。证书指纹不记录在仓库文档中。
 
 
-### 72.6 v1.1.3 发布预期
+### 82.6 v1.1.3 发布预期
 
 版本计划：
 
@@ -3327,7 +3327,7 @@ flutter build apk --release --no-pub
 - 如果手机当前安装包来自旧 GitHub Actions runner 的 debug key，则仍会签名冲突，需要卸载一次。
 - 一旦成功安装 `v1.1.3`，之后 GitHub Actions 发布的 APK 只要继续使用这套 secrets，就应能正常覆盖升级。
 
-### 72.7 v1.1.3 远端发布结果
+### 82.7 v1.1.3 远端发布结果
 
 - tag：`v1.1.3`
 - tag 指向提交：`8f366a8 fix(android): use fixed signing key for internal releases`
@@ -3341,9 +3341,11 @@ flutter build apk --release --no-pub
     
 结论：`v1.1.3` GitHub Android APK 已确认使用固定内部测试签名。若用户手机上现有安装包来自同一签名，应可直接覆盖安装；若仍报签名冲突，说明手机上现有包来自另一把签名，需要卸载一次后再装。
 
-## 73. Android 时间线灰屏修复与 v1.1.4 发布（2026-06-02）
+## 83. Android 时间线灰屏修复与 v1.1.4 发布（2026-06-02）
 
-### 73.1 用户反馈
+> 2026-06-03 校准：本节记录的是第一次 Android 灰屏排查、缓存读取加固和 v1.1.4 发布过程；后续第 84 节进一步确认了“主时间线/垃圾拦截页灰屏”的真正根因是 GetX `Obx` 短路读取和卡片布局问题。诊断同类灰屏时，应以第 84 节为最终根因记录，同时保留本节作为发布与防御性修复历史。
+
+### 83.1 用户反馈
 
 用户成功安装 `v1.1.3` 后反馈：Android 端时间线主页面中间是一整片灰色，什么都看不见。用户进一步澄清：不是灰色占位卡片，而是彻底的一整片灰色。
 
@@ -3356,7 +3358,7 @@ flutter devices
 
 因此本轮无法直接截图复现 Android 页面，只能从 Flutter release 灰盒常见原因和时间线渲染路径排查。
 
-### 73.2 排查结论
+### 83.2 排查结论
 
 初始猜测是时间线停在骨架屏，但用户澄清不是占位卡片。因此排查转向 Flutter release 灰盒：
 
@@ -3378,7 +3380,7 @@ flutter devices
 - 如果服务端重复返回同一页，或最后一篇时间戳不前进，就可能长时间停留在加载态。
 - 这不会解释用户澄清后的“整片灰色”全部现象，但会造成主页面一直显示空表面/加载表面，因此一起修复。
 
-### 73.3 修复内容
+### 83.3 修复内容
 
 1. `lib/services/translation_service.dart`
    - `recordOf()` 对 `ensureHydrated()` 增加 try/catch。
@@ -3397,7 +3399,7 @@ flutter devices
 4. `test/article_card_test.dart`
    - 新增 widget test：本地 AI cache 未 hydration 时，`ArticleCard` 必须能渲染且不抛异常。
 
-### 73.4 版本策略
+### 83.4 版本策略
 
 用户原话是“重新打包成 1.1.3”。但 `v1.1.3` 已经是已推送并成功发布的 tag，不应该移动或覆盖重打。为了避免历史混淆，本轮使用新 patch 版本：
 
@@ -3406,9 +3408,9 @@ flutter devices
 - 设置页关于版本：`Auto Folo v1.1.4`
 - tag：`v1.1.4`
 
-Android 签名继续使用第 72 节配置的本机 debug keystore GitHub Secrets，因此应保持与 `v1.1.3` 可覆盖升级。
+Android 签名继续使用第 82 节配置的固定内部测试签名材料，因此应保持与 `v1.1.3` 可覆盖升级。
 
-### 73.5 本地验证
+### 83.5 本地验证
 
 本轮修复提交前已完成：
 
@@ -3426,9 +3428,9 @@ apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk
 - `dart analyze lib test` 通过。
 - `flutter test --no-pub` 通过，包含新增 `ArticleCard renders when local AI caches are not hydrated`。
 - 本地 Android release APK 构建成功。
-- 本地 APK 签名仍是第 72 节记录的本机 debug keystore：
+- 本地 APK 签名仍是第 82 节记录的本机 debug keystore：
     
-### 73.6 GitHub Actions 发布结果
+### 83.6 GitHub Actions 发布结果
 
 提交：
 
@@ -3451,13 +3453,14 @@ GitHub Actions：
   - `Auto-Folo-macOS-arm64-v1.1.4.zip`
 
 注意：本轮在 workflow 成功后，新的 `gh run view`/release 查询被 Codex 系统用量限制拒绝，因此没有继续下载 GitHub release asset 做远端 hash 和远端 APK 签名复验。可确认的信息来自已完成的 workflow 监控输出和本地 release APK 签名验证。
-## 74. 安卓端主时间线及垃圾拦截页灰屏彻底修复 (2026-06-02)
 
-### 74.1 问题复盘
+## 84. 安卓端主时间线及垃圾拦截页灰屏彻底修复 (2026-06-02)
+
+### 84.1 问题复盘
 用户反馈：在安卓端，只要有文章被 AI 拦截（左上角/顶部出现数字），主时间线中间就会变成一片灰色，什么都看不见；点击进入垃圾拦截页面，里面同样是一片灰色。但从具体的订阅源点进去则显示正常。
 此外，用户提出被拦截的文章“应该在主时间线显示，按本身日期排序，同时在拦截页面按审核完成时间排序”。
 
-### 74.2 根本原因分析
+### 84.2 根本原因分析
 排查后发现，灰屏是由两个独立但相互叠加的错误造成的：
 
 1. **GetX `Obx` 的短路求值引发的运行时崩溃（导致灰屏的元凶）**
@@ -3470,7 +3473,7 @@ GitHub Actions：
    在 `ArticleCard` 渲染 AI 拒文理由时，原代码使用了一个 `mainAxisSize: MainAxisSize.min` 的 `Row`，里面嵌套了一个 `Flexible` 组件。
    在 Flutter 中，试图让父组件紧缩（min）的同时让子组件扩展（flex）会触发严格的布局约束冲突断言。虽然在 Release 模式下这个 `assert` 会被跳过从而不会引发灰屏，但如果在 Debug 模式下运行，必定会触发红屏报错（Red Screen of Death）。
 
-### 74.3 修复方案与讨论过程
+### 84.3 修复方案与讨论过程
 1. **彻底修复 `ArticleCard` 布局冲突**：
    移除了带有 `Flexible` 的 `Row`，改为使用原生且安全的 `Text.rich` 搭配 `WidgetSpan` 来渲染图文混排的拦截理由。这不仅彻底排除了 Debug 模式下的“红屏炸弹”，也提升了长文本截断的可靠性。
 2. **修复 GetX `Obx` 崩溃逻辑**：
@@ -3479,14 +3482,15 @@ GitHub Actions：
    由于我最初误解了用户“新分析完的文章应该在垃圾拦截页面”的需求，曾一度在 `timeline_controller.dart` 中把被拦截文章从主时间线剔除了。用户澄清后确认：**被拦截的文章既要留在主时间线（按发布时间排序），也要出现在审核页面（按审核完成时间排序）**。这正符合旧有代码的双线并行排序逻辑，因此我立即撤销了那段错误剔除代码，恢复了原有设定。
 
 经过这些修改，安卓端的灰屏现象彻底消失，应用恢复正常运行与逻辑流转。
-## 75. macOS 桌面端 UI 细节精简与占位符统一
 
-### 75.1 需求与起因
+## 85. macOS 桌面端 UI 细节精简与占位符统一（补记于 2026-06-03）
+
+### 85.1 需求与起因
 
 - **右侧占位符**：在 macOS 双栏布局下，当右侧没有选中任何文章时，之前一直只显示简陋的纯文本（“请在左侧选择文章”等）。用户反馈这显得太简陋，希望恢复成视觉丰富的占位符（用户误以为曾经有过，实际上代码历史中未曾实现过）。
 - **左上角标志**：侧边栏左上角的 “Auto Folo” 应用名称标志，在已经有独立系统窗口和标题栏的 macOS 环境下显得冗余且格格不入，用户希望删除。
 
-### 75.2 排查与实现
+### 85.2 排查与实现
 
 1. **新建通用占位符组件**
    - 创建 `lib/common/widgets/mac_empty_placeholder.dart`，提供 `MacEmptyPlaceholder`。
@@ -3502,7 +3506,6 @@ GitHub Actions：
    - 移除了包含 “Auto Folo” 文本的节点。
    - 为保持头部剩余图标（收起侧边栏按钮）的对齐自然，移除了原有的 `Row` 布局，改用 `Align(alignment: Alignment.centerRight)` 使其合理停靠。
 
-### 75.3 后续建议
+### 85.3 后续建议
 
 如果后续在 macOS 桌面端引入新的双栏页面结构，遇到“右侧空内容/未选中”的状态，请务必复用 `MacEmptyPlaceholder` 以维持 UI 表现的统一性。同时尽量避免过度放置文字 Logo 标识，保持桌面环境的沉浸感。
-

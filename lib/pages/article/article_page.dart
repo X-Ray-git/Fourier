@@ -663,6 +663,15 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     if (_hasShortcutModifierPressed()) return false;
 
+    // 前置安全校验：只有当前组件对应的是当前选中的文章时，才响应快捷键。
+    // 这样可以彻底免疫组件交替销毁时的遗留监听器导致多重触发。
+    if (Get.isRegistered<TimelineController>()) {
+      final tc = Get.find<TimelineController>();
+      if (tc.selectedArticle.value?.entryId != widget.article.entryId) {
+        return false;
+      }
+    }
+
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.escape) {
       _closeArticle();
@@ -679,7 +688,29 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       return true;
     }
 
-    if (event is KeyDownEvent && key == LogicalKeyboardKey.keyM) {
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.offset - 150,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+        );
+      }
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.offset + 150,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+        );
+      }
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.keyM) {
       _toggleReadState();
       return true;
     }
@@ -1144,6 +1175,17 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             autofocus: true,
             onKeyEvent: (node, event) {
               if (_usesGlobalShortcuts) {
+                if (event is KeyDownEvent || event is KeyRepeatEvent) {
+                  final key = event.logicalKey;
+                  if (key == LogicalKeyboardKey.escape ||
+                      key == LogicalKeyboardKey.arrowLeft ||
+                      key == LogicalKeyboardKey.arrowRight ||
+                      key == LogicalKeyboardKey.arrowUp ||
+                      key == LogicalKeyboardKey.arrowDown ||
+                      key == LogicalKeyboardKey.keyM) {
+                    return KeyEventResult.handled;
+                  }
+                }
                 return KeyEventResult.ignored;
               }
 

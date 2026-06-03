@@ -848,7 +848,7 @@ class FeedDetailPage extends StatelessWidget {
             child: Obx(() {
               final selected = controller.selectedArticle.value;
               if (selected == null) {
-                return const MacEmptyPlaceholder(message: '请选择文章');
+                return const MacEmptyPlaceholder();
               }
               return ArticlePageView(
                 key: ValueKey(selected.entryId),

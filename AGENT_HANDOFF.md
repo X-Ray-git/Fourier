@@ -3633,3 +3633,37 @@ GitHub Actions：
 - **平台限制**：入口与展示逻辑只写在了 `_macPages`（`MainPage`）以及 `MacOSSidebar` 中，Android 端的 `BottomNavigationBar` 故意未做修改，请未来接手的 agent 留意这一刻意为之的限制。
 - **历史数据行为**：功能上线之前已经标记为已读的文章是没有时间戳的，因此进入此页面时它们会垫底，这是用户已知并接受的预期行为，请勿试图“强行初始化时间戳”以免破坏时间线。
 - **语义边界**：不要把所有 `setReadState(true)` 都当成用户阅读行为。只有用户真实打开文章、主动标记已读、或在垃圾拦截页主动处理文章时，才应该写入 `readHistory`。
+
+## 91. 四个 antigravity worktree 的最终合入审计（2026-06-06）
+
+### 91.1 背景
+用户要求谨慎检查当前所有 antigravity worktree，先合入确认安全的改动，再修复存在问题的分支后合入。检查时主分支为 `v1.1.6 / ffc4e2c`，四个 worktree 均为干净状态，且每个分支各自只有一个未合入提交。
+
+最终合入顺序：
+1. `fix-inline-code-rendering`
+2. `fix-read-status-navigation`
+3. `enable-auto-link-detection`
+4. `implement-recent-reading-page`
+
+### 91.2 合入时保留与修正的重点
+- `fix-inline-code-rendering`：直接合入。该分支修复 `<code>` 被一律拆成整行代码块的问题，保留对真实 `<pre>` / 多行 / 高亮代码块的块级保护。
+- `fix-read-status-navigation`：直接合入。`AGENT_HANDOFF.md` 与前一个分支产生末尾追加冲突，已保留双方内容，并将 macOS 分栏导航修复记录调整为第 88 节。
+- `enable-auto-link-detection`：修复后合入。原分支有两个问题：
+  - 直接拼接 `<a href="$url">$url</a>`，对 `&`、`<` 等字符不安全，已改为对 URL 和同一文本节点内的非 URL 文本统一 `htmlEscape.convert`。
+  - `_autoLinkifyTextNodes(fragment)` 传入的是 `dom.DocumentFragment`，原实现只处理 `dom.Element` / `dom.Text`，因此根节点不会继续遍历，功能实际不会生效。合入时补充了 `DocumentFragment` 分支并新增测试覆盖。
+- `implement-recent-reading-page`：修复后合入。原分支把阅读时间戳写在 `setReadState(true)` 内部，会把后台同步推断已读的历史文章错误标成“刚刚阅读”。合入时改为显式 `recordReadHistory`，只有用户打开文章、主动标记已读或处理垃圾拦截文章时才记录时间；同步推断已读不写历史。
+
+### 91.3 验证结果
+合入完成后已验证：
+
+```bash
+git diff --check
+dart analyze lib test
+flutter test --no-pub test/article_content_utils_test.dart
+flutter test --no-pub
+```
+
+结果均通过。`flutter test --no-pub` 期间仍会打印既有的 Translation hydrate skipped 日志，这是测试环境未初始化 Hive box 引起的既有输出，不影响测试通过。
+
+### 91.4 Git 状态提醒
+四个功能分支已经全部 merged 到 `main`。对应 antigravity worktree 目录和本地分支在本轮没有删除，原因是用户本轮要求“谨慎对待”并完成合入与推送，未明确要求清理 worktree；后续如需清理，可在确认没有其他 agent 继续使用这些 worktree 后再执行 `git worktree remove` 和本地分支删除。

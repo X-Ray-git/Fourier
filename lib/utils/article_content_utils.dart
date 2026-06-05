@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
@@ -46,7 +47,10 @@ abstract final class ArticleContentUtils {
     'ol',
   };
 
-  static final _multipleBrRe = RegExp(r'(<br\s*/?>\s*){3,}', caseSensitive: false);
+  static final _multipleBrRe = RegExp(
+    r'(<br\s*/?>\s*){3,}',
+    caseSensitive: false,
+  );
   static final _emptyParagraphRe = RegExp(
     r'<p>\s*(?:&nbsp;|\u00A0|<br\s*/?>|\s)*\s*</p>',
     caseSensitive: false,
@@ -64,6 +68,7 @@ abstract final class ArticleContentUtils {
     _trimSpacingStyles(fragment);
     _removeEmptyBlocks(fragment);
     _flattenLayoutTables(fragment);
+    _autoLinkifyTextNodes(fragment);
 
     var html = _fragmentToHtml(fragment);
     html = html.replaceAll(_multipleBrRe, '<br><br>');
@@ -256,13 +261,17 @@ abstract final class ArticleContentUtils {
   /// 提取核心正文算法（类似 Readability）
   static dom.Element? getReadabilityContent(dom.Document document) {
     // 1. Remove unwanted elements
-    final junk = document.querySelectorAll('script, style, noscript, nav, header, footer, aside, form, iframe, button');
+    final junk = document.querySelectorAll(
+      'script, style, noscript, nav, header, footer, aside, form, iframe, button',
+    );
     for (final el in junk) {
       el.remove();
     }
 
     // 2. Score paragraphs
-    final paragraphs = document.querySelectorAll('p, blockquote, article, div > text');
+    final paragraphs = document.querySelectorAll(
+      'p, blockquote, article, div > text',
+    );
     final candidates = <dom.Element, double>{};
 
     for (final p in paragraphs) {
@@ -282,7 +291,8 @@ abstract final class ArticleContentUtils {
         candidates[parent] = (candidates[parent] ?? 0.0) + score;
       }
       if (grandParent != null) {
-        candidates[grandParent] = (candidates[grandParent] ?? 0.0) + (score / 2.0);
+        candidates[grandParent] =
+            (candidates[grandParent] ?? 0.0) + (score / 2.0);
       }
     }
 
@@ -293,10 +303,13 @@ abstract final class ArticleContentUtils {
     candidates.forEach((el, score) {
       final className = (el.attributes['class'] ?? '').toLowerCase();
       final id = (el.attributes['id'] ?? '').toLowerCase();
-      
-      if (className.contains('comment') || id.contains('comment') || 
-          className.contains('sidebar') || id.contains('sidebar') ||
-          className.contains('menu') || id.contains('menu')) {
+
+      if (className.contains('comment') ||
+          id.contains('comment') ||
+          className.contains('sidebar') ||
+          id.contains('sidebar') ||
+          className.contains('menu') ||
+          id.contains('menu')) {
         score *= 0.1;
       }
 
@@ -307,5 +320,66 @@ abstract final class ArticleContentUtils {
     });
 
     return topCandidate;
+  }
+
+  static final _urlRe = RegExp(
+    r'https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&*+,;=%]*[a-zA-Z0-9\-_~/#]',
+    caseSensitive: false,
+  );
+
+  /// 遍历 DOM 树，将纯文本中的 URL 替换为 <a> 标签
+  static void _autoLinkifyTextNodes(dom.Node node, {bool insideLink = false}) {
+    if (node is dom.Element) {
+      final isLink = insideLink || node.localName == 'a';
+      // 跳过不可见或无需替换的标签
+      if (const {
+        'pre',
+        'code',
+        'script',
+        'style',
+        'noscript',
+      }.contains(node.localName)) {
+        return;
+      }
+      // 倒序遍历，因为替换文本节点时会修改父节点的 children 列表
+      for (int i = node.nodes.length - 1; i >= 0; i--) {
+        _autoLinkifyTextNodes(node.nodes[i], insideLink: isLink);
+      }
+    } else if (node is dom.Text) {
+      if (insideLink) return;
+
+      final text = node.text;
+      // 快速筛查，避免无谓的正则消耗
+      if (!text.contains('http://') && !text.contains('https://')) return;
+
+      final matches = _urlRe.allMatches(text).toList();
+      if (matches.isEmpty) return;
+
+      final buffer = StringBuffer();
+      var cursor = 0;
+      for (final match in matches) {
+        if (match.start > cursor) {
+          buffer.write(htmlEscape.convert(text.substring(cursor, match.start)));
+        }
+
+        final url = match.group(0)!;
+        final escapedUrl = htmlEscape.convert(url);
+        buffer.write('<a href="$escapedUrl">$escapedUrl</a>');
+        cursor = match.end;
+      }
+      if (cursor < text.length) {
+        buffer.write(htmlEscape.convert(text.substring(cursor)));
+      }
+
+      final parent = node.parentNode;
+      if (parent != null) {
+        final fragment = html_parser.parseFragment(buffer.toString());
+        final index = parent.nodes.indexOf(node);
+        if (index != -1) {
+          node.remove();
+          parent.nodes.insertAll(index, fragment.nodes);
+        }
+      }
+    }
   }
 }

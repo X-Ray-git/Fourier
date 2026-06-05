@@ -29,4 +29,27 @@ void main() {
     final urls = ArticleContentUtils.extractImageUrls(html);
     expect(urls, ['https://a.com/1.png', 'https://a.com/2.png']);
   });
+
+  test('normalizeHtml should safely linkify plain text urls only', () {
+    const raw = '''
+<p>Read https://example.com/path?a=1&b=2 from AT&T.</p>
+<p><a href="https://linked.example/path?a=1&b=2">https://linked.example/path?a=1&b=2</a></p>
+<p><code>https://code.example/path?a=1&b=2</code></p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(raw);
+
+    expect(
+      normalized,
+      contains(
+        '<a href="https://example.com/path?a=1&amp;b=2">https://example.com/path?a=1&amp;b=2</a>',
+      ),
+    );
+    expect(normalized, contains('AT&amp;T'));
+    expect(
+      normalized,
+      contains('<code>https://code.example/path?a=1&amp;b=2</code>'),
+    );
+    expect(RegExp(r'<a[^>]*>\s*<a').hasMatch(normalized), isFalse);
+  });
 }

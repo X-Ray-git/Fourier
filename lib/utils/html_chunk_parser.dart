@@ -129,16 +129,30 @@ abstract final class HtmlChunkParser {
 
 
   static const _mediaTags = {
-    'img', 'iframe', 'video', 'audio', 'table', 'pre', 'code',
+    'img', 'iframe', 'video', 'audio', 'table', 'pre',
     'blockquote', 'ul', 'ol', 'hr',
   };
+
+  /// 启发式判断一个元素是否为代码块（多行代码）
+  static bool _isBlockCode(dom.Element element) {
+    final tag = element.localName?.toLowerCase() ?? '';
+    if (tag == 'pre') return true;
+    if (tag == 'code') {
+      if (element.text.contains('\n')) return true;
+      final className = element.attributes['class'] ?? '';
+      if (className.contains('language-') || className.contains('hljs')) return true;
+      final style = element.attributes['style'] ?? '';
+      if (style.contains('display: block') || style.contains('display:block')) return true;
+    }
+    return false;
+  }
 
   /// 递归检查元素是否包含媒体子节点（图片/视频/表格等）
   static bool _hasMediaDescendant(dom.Element element) {
     for (final child in element.nodes) {
       if (child is dom.Element) {
         final tag = child.localName?.toLowerCase() ?? '';
-        if (_mediaTags.contains(tag)) return true;
+        if (_mediaTags.contains(tag) || _isBlockCode(child)) return true;
         if (_hasMediaDescendant(child)) return true;
       }
     }
@@ -153,7 +167,7 @@ abstract final class HtmlChunkParser {
         buffer.write(node.text);
       } else if (node is dom.Element) {
         final tag = node.localName?.toLowerCase() ?? '';
-        if (_mediaTags.contains(tag)) continue;
+        if (_mediaTags.contains(tag) || _isBlockCode(node)) continue;
         if (_hasMediaDescendant(node)) continue;
         buffer.write(node.outerHtml);
       }
@@ -166,7 +180,7 @@ abstract final class HtmlChunkParser {
     for (final child in element.nodes) {
       if (child is dom.Element) {
         final tag = child.localName?.toLowerCase() ?? '';
-        if (_mediaTags.contains(tag) || _headingTags.contains(tag) || tag == 'source') {
+        if (_mediaTags.contains(tag) || _headingTags.contains(tag) || tag == 'source' || _isBlockCode(child)) {
           _processElement(child, chunks);
         } else if (_hasMediaDescendant(child)) {
           _emitMediaChildren(child, chunks);
@@ -221,7 +235,7 @@ abstract final class HtmlChunkParser {
                             tag == 'hr' || 
                             tag == 'figure' || 
                             tag == 'blockquote' ||
-                            tag == 'pre' || tag == 'code';
+                            _isBlockCode(child);
         if (_mediaTags.contains(tag) || isBlockLike || _hasMediaDescendant(child)) {
           flush();
           _processElement(child, chunks);
@@ -305,7 +319,7 @@ abstract final class HtmlChunkParser {
     }
 
     // 代码块 - 回退为提取纯文本，降低渲染负担
-    if (tag == 'pre' || tag == 'code') {
+    if (_isBlockCode(element)) {
       chunks.add(HtmlChunk(
         type: HtmlChunkType.codeBlock,
         content: element.text.trim(),

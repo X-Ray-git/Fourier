@@ -3525,3 +3525,25 @@ GitHub Actions：
 在 macOS 双栏布局中，移除了原有的侧边栏“收起/展开”按钮。
 - **设计意图**：这是一种实验性质的极简 UI 探索，期望界面进一步去噪。
 - **备用恢复方案**：代码中使用了 `SizedBox.shrink()` 代替原按钮，但并未删除外部布局和折叠状态逻辑。如果未来评估发现取消折叠按钮带来不便，可随时反悔，将 `SizedBox.shrink()` 重新替换为原有的 `IconButton` 即可低成本恢复该功能。
+
+## 87. 行内代码排版与渲染重构 (2026-06-05)
+
+### 87.1 问题反馈
+用户反馈：正文 HTML 中的“行内代码块似乎会被渲染成整行代码块”。即原本属于段落内部的行内代码（如 `<code>print("hello")</code>`），会被强行折断成带横向滚动条的占据整行的独立块级组件，极大破坏了技术文章的连贯排版。
+
+### 87.2 问题诊断
+深入排查发现问题出在 `lib/utils/html_chunk_parser.dart` 中针对 `<code>` 标签的“一刀切”式块级拆分策略：
+- `HtmlChunkParser._mediaTags` 和 `_processMixedNodes` 的 `isBlockLike` 变量将 `'code'` 强行判定为媒体/块级节点。
+- 一旦遍历到 `<code>`，即使其位于段落正中，也会被立即触发截断（`flush()`），随后在 `_processElement` 中被一律提取封装为 `HtmlChunkType.codeBlock`。
+- 之所以采用这种“一刀切”防御性提取，推测是因为 `flutter_html` 解析大型带高亮的深层嵌套 `<code>` 会导致严重卡顿，加之部分不规范 RSS 源滥用 `<code>` 代替 `<pre>`。
+
+### 87.3 修复思路与实施
+不能粗暴地将 `code` 全盘变回行内元素，否则会导致非标准的多行代码源在屏幕上强制折行且丢失性能红利。于是引入了**启发式分类判定（Heuristic Detection）**：
+1. 从全局 `_mediaTags` 移除 `'code'` 标签。
+2. 新增 `_isBlockCode(dom.Element element)` 判定方法：
+   - 如果是 `<pre>`，绝对为块级代码块。
+   - 如果是 `<code>`，若内容包含 `\n`，或 `class` 包含 `language-/hljs`，或 `style` 指定了 `display: block`，则判定为块级代码块（升级提取为 `HtmlChunkType.codeBlock`）。
+   - 若不满足上述条件，仅是简短 `<code>`，则将其判定为行内代码，被原样追加进段落 HTML，交给 `flutter_html` 内置的 `code` 样式字典无缝渲染。
+3. 同步修改了相关的媒体探针 `_hasMediaDescendant` 等逻辑以融入该启发式方法。
+
+该修复以极低改动成本，既完美恢复了行内代码在段落中的丝滑阅读体验，又妥善保留了对真实代码块的长文加载性能保护。

@@ -5,6 +5,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../common/constants/constants.dart';
+import '../services/app_version_service.dart';
 import '../utils/storage.dart';
 
 /// HTTP 请求单例
@@ -28,7 +29,7 @@ class Request {
         'Content-Type': 'application/json',
         'X-App-Platform': 'mobile/android',
         'X-App-Name': 'Auto Folo',
-        'X-App-Version': '1.1.4',
+        'X-App-Version': AppVersionService.version,
       },
     );
 

@@ -14,6 +14,7 @@ import 'common/widgets/loading_widget.dart';
 import 'http/init.dart';
 import 'router/app_pages.dart';
 import 'services/account_service.dart';
+import 'services/app_version_service.dart';
 import 'utils/storage.dart';
 
 void main() async {
@@ -24,6 +25,9 @@ void main() async {
 
   // 初始化存储
   await GStorage.init();
+
+  // 初始化运行时版本信息，供请求头与设置页统一读取 pubspec 版本
+  await AppVersionService.init();
 
   // 初始化网络请求
   Request();

@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/account_service.dart';
+import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/llm_config.dart';
 import '../../services/summary_service.dart';
@@ -490,7 +491,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Auto Folo v1.1.4',
+                    'Auto Folo v${AppVersionService.version}',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,

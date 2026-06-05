@@ -3667,3 +3667,45 @@ flutter test --no-pub
 
 ### 91.4 Git 状态提醒
 四个功能分支已经全部 merged 到 `main`。对应 antigravity worktree 目录和本地分支在本轮没有删除，原因是用户本轮要求“谨慎对待”并完成合入与推送，未明确要求清理 worktree；后续如需清理，可在确认没有其他 agent 继续使用这些 worktree 后再执行 `git worktree remove` 和本地分支删除。
+
+## 92. 版本号统一与 v1.1.7 发布自动化（2026-06-06）
+
+### 92.1 背景
+用户确认希望推进版本并触发 GitHub Actions 打包，同时询问 `pubspec.yaml`、请求头 `X-App-Version`、设置页显示版本和 Git tag 是否可以自动统一，避免以后每次发布都手动维护多处。
+
+排查时发现：
+- `pubspec.yaml` 已是 `1.1.6+8`。
+- `lib/http/init.dart` 的 `X-App-Version` 仍写死为 `1.1.4`。
+- `lib/pages/settings/settings_page.dart` 的关于页仍显示 `Auto Folo v1.1.4`。
+
+### 92.2 本轮修改
+1. 新增 `lib/services/app_version_service.dart`，通过 `package_info_plus` 在运行时读取包版本。
+2. `main()` 在初始化网络请求前先 `await AppVersionService.init()`。
+3. `X-App-Version` 改为读取 `AppVersionService.version`。
+4. 设置页关于版本改为 `Auto Folo v${AppVersionService.version}`。
+5. 新增 `scripts/release.sh`：
+   - 输入 `scripts/release.sh 1.1.8 --push` 这类命令即可读取当前 build number、自动加 1、更新 `pubspec.yaml`、提交版本 bump、创建 `v1.1.8` tag，并按参数决定是否推送。
+6. `.github/workflows/internal-release.yml` 增加 `Validate Release Version` job：
+   - tag 触发时校验 `vX.Y.Z` 必须与 `pubspec.yaml` 的 `X.Y.Z+build` 主版本一致。
+   - Android 和 macOS job 都依赖该校验。
+7. release job 增加 `actions/checkout@v4`，避免 `gh release view` 在没有 git 仓库上下文时再次出现 `fatal: not a git repository`。
+
+### 92.3 本次发布版本
+本轮将 `pubspec.yaml` 推进到：
+
+```yaml
+version: 1.1.7+9
+```
+
+计划创建并推送 tag：
+
+```bash
+v1.1.7
+```
+
+该 tag 会触发 `Internal Release Builds` workflow，构建 Android release APK 和 macOS arm64 zip，并发布到 GitHub Release。后续人工检查 release 页面时，应看到：
+- `Auto-Folo-android-v1.1.7.apk`
+- `Auto-Folo-macOS-arm64-v1.1.7.zip`
+
+### 92.4 后续发布约定
+以后不要再手写修改 `X-App-Version` 或设置页版本。正常发布只需要维护 `pubspec.yaml` 与 tag；推荐直接使用 `scripts/release.sh <version> --push`，让脚本负责 build number、提交和 tag。CI 会负责校验 tag 与 `pubspec.yaml` 是否一致。

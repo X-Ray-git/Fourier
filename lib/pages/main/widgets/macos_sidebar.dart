@@ -66,6 +66,13 @@ class MacOSSidebar extends StatelessWidget {
                 onTap: () => onIndexChanged(1),
               );
             }),
+            _SidebarItem(
+              icon: Icons.history_rounded,
+              label: '最近阅读',
+              isSelected: currentIndex == 2,
+              badgeCount: 0,
+              onTap: () => onIndexChanged(2),
+            ),
             const SizedBox(height: 10),
             const _SectionLabel(label: '订阅源'),
             Expanded(
@@ -201,9 +208,9 @@ class MacOSSidebar extends StatelessWidget {
             _SidebarItem(
               icon: Icons.settings_outlined,
               label: '设置',
-              isSelected: currentIndex == 2,
+              isSelected: currentIndex == 3,
               badgeCount: 0,
-              onTap: () => onIndexChanged(2),
+              onTap: () => onIndexChanged(3),
             ),
             const SizedBox(height: 12),
           ],
@@ -251,12 +258,18 @@ class MacOSCollapsedSidebar extends StatelessWidget {
               selected: currentIndex == 1,
               onTap: () => onIndexChanged(1),
             ),
+            _RailButton(
+              icon: Icons.history_rounded,
+              tooltip: '最近阅读',
+              selected: currentIndex == 2,
+              onTap: () => onIndexChanged(2),
+            ),
             const Spacer(),
             _RailButton(
               icon: Icons.settings_outlined,
               tooltip: '设置',
-              selected: currentIndex == 2,
-              onTap: () => onIndexChanged(2),
+              selected: currentIndex == 3,
+              onTap: () => onIndexChanged(3),
             ),
             const SizedBox(height: 12),
           ],

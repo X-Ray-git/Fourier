@@ -8,6 +8,7 @@ abstract final class GStorage {
   static late final Box<dynamic> articleDb;
   static late final Box<dynamic> translations;
   static late final Box<dynamic> summaries;
+  static late final Box<dynamic> readHistory;
 
   static Future<void> init() async {
     final appDir = await getApplicationDocumentsDirectory();
@@ -31,6 +32,10 @@ abstract final class GStorage {
       'summaries',
       compactionStrategy: (entries, deletedEntries) => deletedEntries > 30,
     );
+    readHistory = await Hive.openBox(
+      'readHistory',
+      compactionStrategy: (entries, deletedEntries) => deletedEntries > 50,
+    );
   }
 
   static Future<void> close() async {
@@ -41,6 +46,7 @@ abstract final class GStorage {
       articleDb.close(),
       translations.close(),
       summaries.close(),
+      readHistory.close(),
     ]);
   }
 }

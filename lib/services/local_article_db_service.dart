@@ -124,6 +124,14 @@ abstract final class LocalArticleDbService {
   }
 
   static void setReadState(String entryId, bool isRead) {
+    if (isRead) {
+      if (!GStorage.readHistory.containsKey(entryId)) {
+        GStorage.readHistory.put(entryId, DateTime.now().millisecondsSinceEpoch);
+      }
+    } else {
+      GStorage.readHistory.delete(entryId);
+    }
+
     final raw = GStorage.articleDb.get(entryId);
     if (raw is! Map) return;
 

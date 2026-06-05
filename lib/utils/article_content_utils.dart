@@ -64,6 +64,7 @@ abstract final class ArticleContentUtils {
     _trimSpacingStyles(fragment);
     _removeEmptyBlocks(fragment);
     _flattenLayoutTables(fragment);
+    _autoLinkifyTextNodes(fragment);
 
     var html = _fragmentToHtml(fragment);
     html = html.replaceAll(_multipleBrRe, '<br><br>');
@@ -307,5 +308,51 @@ abstract final class ArticleContentUtils {
     });
 
     return topCandidate;
+  }
+
+  static final _urlRe = RegExp(
+    r'https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&*+,;=%]*[a-zA-Z0-9\-_~/#]',
+    caseSensitive: false,
+  );
+
+  /// 遍历 DOM 树，将纯文本中的 URL 替换为 <a> 标签
+  static void _autoLinkifyTextNodes(dom.Node node, {bool insideLink = false}) {
+    if (node is dom.Element) {
+      final isLink = insideLink || node.localName == 'a';
+      // 跳过不可见或无需替换的标签
+      if (const {'pre', 'code', 'script', 'style', 'noscript'}.contains(node.localName)) {
+        return;
+      }
+      // 倒序遍历，因为替换文本节点时会修改父节点的 children 列表
+      for (int i = node.nodes.length - 1; i >= 0; i--) {
+        _autoLinkifyTextNodes(node.nodes[i], insideLink: isLink);
+      }
+    } else if (node is dom.Text) {
+      if (insideLink) return;
+
+      final text = node.text;
+      // 快速筛查，避免无谓的正则消耗
+      if (!text.contains('http://') && !text.contains('https://')) return;
+
+      if (_urlRe.hasMatch(text)) {
+        final linkifiedHtml = text.replaceAllMapped(_urlRe, (match) {
+          final url = match.group(0)!;
+          return '<a href="$url">$url</a>';
+        });
+
+        if (linkifiedHtml != text) {
+          final parent = node.parentNode;
+          if (parent != null) {
+            // 将包含 <a> 标签的新 HTML 解析成碎片
+            final fragment = html_parser.parseFragment(linkifiedHtml);
+            final index = parent.nodes.indexOf(node);
+            if (index != -1) {
+              node.remove();
+              parent.nodes.insertAll(index, fragment.nodes);
+            }
+          }
+        }
+      }
+    }
   }
 }

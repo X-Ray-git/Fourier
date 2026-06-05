@@ -97,12 +97,52 @@ class _TimelinePageState extends State<TimelinePage> {
     if (list.isEmpty) return;
 
     final selected = controller.selectedArticle.value;
-    final currentIndex = selected == null
-        ? -1
-        : list.indexWhere((a) => a.entryId == selected.entryId);
-    final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
-    if (nextIndex < 0 || nextIndex >= list.length) return;
-    controller.selectedArticle.value = list[nextIndex];
+    if (selected == null) {
+      controller.selectedArticle.value = list.first;
+      return;
+    }
+
+    final currentIndex = list.indexWhere((a) => a.entryId == selected.entryId);
+    if (currentIndex != -1) {
+      final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
+      controller.selectedArticle.value = list[nextIndex];
+      return;
+    }
+
+    // 在当前过滤后的列表中找不到（通常是因为刚被标记为已读，从未读列表中消失）
+    // 回退到未过滤的底层全量列表寻找其绝对坐标
+    final allList = controller.allArticles;
+    final allIndex = allList.indexWhere((a) => a.entryId == selected.entryId);
+
+    if (allIndex != -1) {
+      // 提前构建哈希集合，将寻找过程降为 O(N)，避免 O(N^2) 导致 UI 卡顿
+      final listEntryIds = list.map((a) => a.entryId).toSet();
+
+      if (delta > 0) {
+        // 向后寻找下一个存在的文章
+        for (int i = allIndex + 1; i < allList.length; i++) {
+          if (listEntryIds.contains(allList[i].entryId)) {
+            controller.selectedArticle.value = allList[i];
+            return;
+          }
+        }
+        // 向后找尽，停留在当前可用列表的最后一篇
+        controller.selectedArticle.value = list.last;
+      } else {
+        // 向前寻找上一个存在的文章
+        for (int i = allIndex - 1; i >= 0; i--) {
+          if (listEntryIds.contains(allList[i].entryId)) {
+            controller.selectedArticle.value = allList[i];
+            return;
+          }
+        }
+        // 向前找尽，停留在当前可用列表的第一篇
+        controller.selectedArticle.value = list.first;
+      }
+    } else {
+      // 极端兜底情况：全量列表里都找不到
+      controller.selectedArticle.value = list.first;
+    }
   }
 
   Future<void> _openOriginalArticle(ArticleModel article) async {

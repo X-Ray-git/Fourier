@@ -329,7 +329,11 @@ abstract final class ArticleContentUtils {
 
   /// 遍历 DOM 树，将纯文本中的 URL 替换为 <a> 标签
   static void _autoLinkifyTextNodes(dom.Node node, {bool insideLink = false}) {
-    if (node is dom.Element) {
+    if (node is dom.DocumentFragment) {
+      for (int i = node.nodes.length - 1; i >= 0; i--) {
+        _autoLinkifyTextNodes(node.nodes[i], insideLink: insideLink);
+      }
+    } else if (node is dom.Element) {
       final isLink = insideLink || node.localName == 'a';
       // 跳过不可见或无需替换的标签
       if (const {

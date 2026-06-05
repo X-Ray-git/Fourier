@@ -346,10 +346,14 @@ class TimelineController extends GetxController {
   }
 
   /// 标记文章为已读（仅本地）
-  void markAsReadLocal(String entryId) {
+  void markAsReadLocal(String entryId, {bool recordHistory = true}) {
     if (entryId.trim().isEmpty) return;
     GStorage.readStatus.put(entryId, true);
-    LocalArticleDbService.setReadState(entryId, true);
+    LocalArticleDbService.setReadState(
+      entryId,
+      true,
+      recordHistory: recordHistory,
+    );
     _updateReadStateInMemory(entryId, true);
     ArticleStateNotifier.tick(entryId);
   }
@@ -359,6 +363,7 @@ class TimelineController extends GetxController {
     // 不再写入 readStatus=false；只更新本地缓存，信任服务端为最终权威
     LocalArticleDbService.setReadState(entryId, false);
     _updateReadStateInMemory(entryId, false);
+    ArticleStateNotifier.tick(entryId);
   }
 
   bool get hasMore => selectedMode.value != TimelineViewMode.read && _hasMore;

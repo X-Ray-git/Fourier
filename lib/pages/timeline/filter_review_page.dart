@@ -197,7 +197,11 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);
     } else {
       GStorage.readStatus.put(article.entryId, true);
-      LocalArticleDbService.setReadState(article.entryId, true);
+      LocalArticleDbService.setReadState(
+        article.entryId,
+        true,
+        recordHistory: true,
+      );
     }
     ReadSyncService.enqueue(
       article.entryId,
@@ -388,7 +392,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                             final selectedId = _selectedArticle.value?.entryId;
                             return ArticleCard(
                               article: article,
-                              isSelected: Platform.isMacOS && selectedId == article.entryId,
+                              isSelected:
+                                  Platform.isMacOS &&
+                                  selectedId == article.entryId,
                               showFeedTitle: true,
                               showSummary: true,
                               onTap: () {

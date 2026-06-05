@@ -14,6 +14,7 @@ import '../subscriptions/subscriptions_page.dart';
 import '../timeline/filter_review_page.dart';
 import '../timeline/timeline_controller.dart';
 import '../timeline/timeline_page.dart';
+import '../recent_read/recent_read_page.dart';
 import '../widgets/article_search_delegate.dart';
 import 'widgets/macos_sidebar.dart';
 
@@ -45,6 +46,7 @@ class _MainPageState extends State<MainPage> {
       onOpenFilterReview: () => _onDestinationSelected(1),
     ),
     const FilterReviewPage(),
+    const RecentReadPage(),
     const SettingsPage(showAppBar: false),
   ];
 

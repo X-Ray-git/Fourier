@@ -123,7 +123,22 @@ abstract final class LocalArticleDbService {
     upsertMany([article]);
   }
 
-  static void setReadState(String entryId, bool isRead) {
+  static void recordReadHistory(String entryId) {
+    if (entryId.trim().isEmpty) return;
+    GStorage.readHistory.put(entryId, DateTime.now().millisecondsSinceEpoch);
+  }
+
+  static void setReadState(
+    String entryId,
+    bool isRead, {
+    bool recordHistory = false,
+  }) {
+    if (isRead) {
+      if (recordHistory) recordReadHistory(entryId);
+    } else {
+      GStorage.readHistory.delete(entryId);
+    }
+
     final raw = GStorage.articleDb.get(entryId);
     if (raw is! Map) return;
 

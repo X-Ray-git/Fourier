@@ -213,7 +213,11 @@ class ArticleController extends GetxController {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);
     } else {
       GStorage.readStatus.put(article.entryId, true);
-      LocalArticleDbService.setReadState(article.entryId, true);
+      LocalArticleDbService.setReadState(
+        article.entryId,
+        true,
+        recordHistory: true,
+      );
     }
     final isInbox = article.category == 'inbox';
     ReadSyncService.enqueue(article.entryId, isInbox: isInbox);
@@ -239,6 +243,7 @@ class ArticleController extends GetxController {
         LocalArticleDbService.setReadState(article.entryId, false);
       }
       isRead.value = false;
+      ArticleStateNotifier.tick(article.entryId);
       AppFeedback.error('标记已读失败', '已重试5次，已恢复为未读');
     }
     isUpdatingReadState.value = false;
@@ -254,6 +259,7 @@ class ArticleController extends GetxController {
       LocalArticleDbService.setReadState(article.entryId, false);
     }
     isRead.value = false;
+    ArticleStateNotifier.tick(article.entryId);
 
     final ok = await _retrySync(
       action: () => FeedHttp.markUnread(entryId: article.entryId),
@@ -264,12 +270,16 @@ class ArticleController extends GetxController {
     if (!ok) {
       // 5 次失败 → 恢复本地已读
       if (Get.isRegistered<TimelineController>()) {
-        Get.find<TimelineController>().markAsReadLocal(article.entryId);
+        Get.find<TimelineController>().markAsReadLocal(
+          article.entryId,
+          recordHistory: false,
+        );
       } else {
         GStorage.readStatus.put(article.entryId, true);
         LocalArticleDbService.setReadState(article.entryId, true);
       }
       isRead.value = true;
+      ArticleStateNotifier.tick(article.entryId);
       AppFeedback.error('恢复未读失败', '已重试5次，已恢复为已读');
     }
     isUpdatingReadState.value = false;
@@ -591,6 +601,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     controller = Get.put(ArticleController(widget.article), tag: _tag);
     _scrollController = ScrollController();
     _builtCount = _initialBuildCount;
+    LocalArticleDbService.recordReadHistory(widget.article.entryId);
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     }

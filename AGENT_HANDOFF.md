@@ -3603,3 +3603,33 @@ GitHub Actions：
 
 ### 89.4 给后续接手 Agent 的提醒
 由于该逻辑深埋于 `ArticleContentUtils.normalizeHtml` 中，后续在处理任何跟“HTML 预处理”、“标签清理”相关的需求时，请务必注意不要破坏底部的 `_autoLinkifyTextNodes(fragment);` 调用顺序。另外，如果未来应用增加了“纯文本高亮”（比如搜索关键词高亮），建议采用与之相同的“DOM 纯文本节点树遍历”策略，以保证 HTML 结构的绝对安全。
+
+## 90. macOS 端“最近阅读”功能实现与语义修正 (2026-06-05)
+
+### 90.1 需求背景与痛点
+用户希望在侧边栏增加一个“最近阅读”页面，将所有已读文章严格按照**实际阅读时间倒序排列**。
+由于后端的 Folo API 不提供单篇文章精确的“阅读时间戳”，导致本地如果依赖服务端数据，只能按照文章的默认“发布时间”降级排序，无法真实反映阅读历史。
+此外，用户明确要求此功能**目前暂时仅在 macOS 端实现，不考虑安卓端**。
+
+### 90.2 技术选型与实现方案
+经过与用户的讨论，我们排除了依赖服务端修改的方案，采用了**“本地拦截+持久化”**的策略：
+1. **数据层 (Hive Box 记录时间戳)**：在 `lib/utils/storage.dart` 中新增了一个 `readHistory` Box。
+2. **状态层 (显式 Hook)**：新增 `LocalArticleDbService.recordReadHistory(entryId)`，专门记录用户真实打开文章或主动处理文章的时间。`LocalArticleDbService.setReadState` 保持状态写入语义，仅在显式传入 `recordHistory: true` 时才记录历史；后台静默同步推断已读不传该参数，因此不会污染最近阅读排序。
+3. **控制器层 (`RecentReadController`)**：负责从本地所有已读文章中读取数据，优先通过 `readHistory` 的时间戳进行降序；缺失时间戳的文章则回退到依 `publishedAt` 降序，并置于列表后方。
+4. **视图层 (`RecentReadPage` & `MacOSSidebar`)**：
+   - 新增极简双栏 `RecentReadPage`，左侧展示最近阅读列表，右侧复用 `ArticlePageView` 分栏阅读。
+   - 在 macOS 专属的侧边栏 (`MacOSSidebar` 及折叠模式) 的“垃圾拦截”下方新增了“最近阅读”的导航入口。
+
+### 90.3 本次合入前发现并修正的问题
+分支原始实现把写入时间戳放在 `setReadState(entryId, true)` 内部，这会把 `_applyUnreadSnapshot` / `_refreshRecentReadWindow` 等后台同步推断为已读的文章也标成“刚刚阅读”，与“最近阅读”的产品语义冲突。
+
+本次合入主分支前已改为：
+- 用户打开 `ArticlePageView` 时调用 `recordReadHistory`，所以已读文章再次打开会移动到最近阅读顶部。
+- 用户主动标记已读的路径传入 `recordHistory: true`。
+- 标记未读会删除对应 `readHistory`，避免未读文章残留在阅读历史里。
+- 同步推断已读仍只更新本地 read state，不写入阅读时间戳。
+
+### 90.4 关键注意事项与后续交接建议
+- **平台限制**：入口与展示逻辑只写在了 `_macPages`（`MainPage`）以及 `MacOSSidebar` 中，Android 端的 `BottomNavigationBar` 故意未做修改，请未来接手的 agent 留意这一刻意为之的限制。
+- **历史数据行为**：功能上线之前已经标记为已读的文章是没有时间戳的，因此进入此页面时它们会垫底，这是用户已知并接受的预期行为，请勿试图“强行初始化时间戳”以免破坏时间线。
+- **语义边界**：不要把所有 `setReadState(true)` 都当成用户阅读行为。只有用户真实打开文章、主动标记已读、或在垃圾拦截页主动处理文章时，才应该写入 `readHistory`。

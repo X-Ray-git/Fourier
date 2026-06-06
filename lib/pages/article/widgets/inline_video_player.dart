@@ -32,6 +32,8 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   Timer? _hideTimer;
   final FocusNode _focusNode = FocusNode();
 
+  static _InlineVideoPlayerState? activePlayer;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +43,9 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    if (activePlayer == this) {
+      activePlayer = null;
+    }
     _focusNode.dispose();
     _hideTimer?.cancel();
     _controller?..removeListener(_onControllerUpdate)..dispose();
@@ -50,10 +55,11 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   void _onControllerUpdate() => setState(() {});
 
   bool _handleGlobalKey(KeyEvent event) {
-    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
-      if (_controller != null && _controller!.value.isInitialized) {
-        // 如果正在播放，或者当前视频拥有焦点，则响应全局播放键
-        if (_controller!.value.isPlaying || _focusNode.hasFocus) {
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
+         event.logicalKey == LogicalKeyboardKey.space)) {
+      if (activePlayer == this) {
+        if (_controller != null && _controller!.value.isInitialized) {
           _togglePlayPause();
           return true; // 拦截事件
         }
@@ -100,6 +106,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       controller.addListener(_onControllerUpdate);
       await controller.play();
       controller.setLooping(true);
+      activePlayer = this;
       if (mounted) _focusNode.requestFocus();
       setState(() {});
       _startHideTimer();
@@ -112,6 +119,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
 
   void _togglePlayPause() {
     if (_controller == null) return;
+    activePlayer = this;
     if (mounted) _focusNode.requestFocus();
     if (_controller!.value.isPlaying) {
       _controller!.pause();
@@ -125,6 +133,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   }
 
   void _toggleControls() {
+    activePlayer = this;
     if (mounted) _focusNode.requestFocus();
     setState(() => _showControls = !_showControls);
     _startHideTimer();
@@ -151,13 +160,6 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
           aspectRatio: widget.aspectRatio,
           child: Focus(
             focusNode: _focusNode,
-            onKeyEvent: (node, event) {
-              if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
-                _togglePlayPause();
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
             child: GestureDetector(
               onTap: _toggleControls,
               child: Stack(

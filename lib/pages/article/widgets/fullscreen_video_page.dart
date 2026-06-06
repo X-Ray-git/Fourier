@@ -16,6 +16,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
   bool _showControls = true;
   Timer? _hideTimer;
   bool _isLandscape = false;
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
@@ -24,7 +25,17 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     _applyOrientation();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     widget.controller.addListener(_onControllerUpdate);
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+    _focusNode.requestFocus();
     _startHideTimer();
+  }
+
+  bool _handleGlobalKey(KeyEvent event) {
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+      _togglePlayPause();
+      return true;
+    }
+    return false;
   }
 
   void _applyOrientation() {
@@ -51,6 +62,8 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    _focusNode.dispose();
     widget.controller.removeListener(_onControllerUpdate);
     _hideTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -79,6 +92,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
   }
 
   void _toggleControls() {
+    _focusNode.requestFocus();
     setState(() => _showControls = !_showControls);
     _startHideTimer();
   }
@@ -109,11 +123,20 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: _toggleControls,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
+      body: Focus(
+        focusNode: _focusNode,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
+            _togglePlayPause();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: GestureDetector(
+          onTap: _toggleControls,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
             Center(
               child: AspectRatio(
                 aspectRatio: widget.controller.value.aspectRatio,
@@ -250,6 +273,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

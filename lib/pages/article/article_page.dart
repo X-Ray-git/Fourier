@@ -206,10 +206,6 @@ class ArticleController extends GetxController {
     if (isUpdatingReadState.value) return;
 
     isUpdatingReadState.value = true;
-    // 标已读时清除 AI 过滤标记
-    if (article.isRejectedByAi) {
-      LocalArticleDbService.clearFilterState(article.entryId);
-    }
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);
     } else {

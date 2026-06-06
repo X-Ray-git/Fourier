@@ -3709,3 +3709,24 @@ v1.1.7
 
 ### 92.4 后续发布约定
 以后不要再手写修改 `X-App-Version` 或设置页版本。正常发布只需要维护 `pubspec.yaml` 与 tag；推荐直接使用 `scripts/release.sh <version> --push`，让脚本负责 build number、提交和 tag。CI 会负责校验 tag 与 `pubspec.yaml` 是否一致。
+
+## Feature: Double-Click Auto-Read & Global Single-Step Undo (Cmd-Z)
+
+### Background & Interaction Philosophy
+- **User Need:** When double-clicking an article card (in macOS `TimelinePage`, `FeedDetailPage`, `RecentReadPage`) to open the original URL in a browser, users wanted the article to be automatically marked as read to eliminate manual tracking.
+- **Design Debate:**
+  - **Inconsistency Risk:** Single-clicking to preview in split-view does *not* auto-read. Why should double-clicking? We concluded that opening an external browser indicates a stronger "consumption" intent.
+  - **High Error Cost:** Accidental double-clicks (or misclicks of the 'M' shortcut) cause the article to disappear from the "Unread" filter. Finding it in the "All" list to mark it unread is highly disruptive.
+- **Solution:** A **depth=1 (single-step) Global Undo (Cmd-Z)**.
+
+### Architectural Decisions & Boundaries
+1. **Scope of Undo:** Any local "unread -> read" transition triggers `UndoService.recordRead(article)`. This unifies double-clicks, the 'M' shortcut, and the toolbar button under a single undo stack.
+2. **Lifecycle & Ghost Updates:** To prevent users from undoing an action after navigating away (which would cause a "ghost" update to a hidden list), `UndoService.clear()` is called whenever `TimelineController` changes view modes, feeds, or categories.
+3. **Idempotency:** Double-clicking an article that is *already* read does not trigger the "unread -> read" transition, thus keeping the undo log clean.
+4. **Input Focus Conflict:** To prevent `Cmd-Z` from intercepting standard text-field undo operations (e.g., in the search bar), the hotkey is registered via Flutter's idiomatic `Shortcuts` & `Actions` widget at the root `GetMaterialApp.builder`. Text fields inherently consume shortcut intents, ensuring zero conflict.
+
+### Implementation Details
+- **`lib/services/undo_service.dart`**: Manages the `_lastReadArticle`. The `undoLastRead()` function intelligently checks if an `ArticleController` is currently in memory (`Get.isRegistered`). If so, it reuses its `markAsUnread()` logic. Otherwise, it replicates the local database update + network sync with retry logic.
+- **`lib/main.dart`**: `UndoReadIntent` mapped to `LogicalKeyboardKey.keyZ` + `meta/ctrl`.
+- **`lib/pages/article/article_page.dart`**: Hooks into `ArticleController.markAsRead()` to record the action.
+- **`lib/pages/timeline/timeline_controller.dart`**: Hooks into `selectedFeedId`, `selectedCategory`, and `setViewMode` to purge undo history on context switch.

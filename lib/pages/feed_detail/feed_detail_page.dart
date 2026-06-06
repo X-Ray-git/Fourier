@@ -138,6 +138,12 @@ class FeedDetailController extends GetxController {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       openOriginalArticle(article);
+
+      if (!article.isRead) {
+        if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
+          Get.find<ArticleController>(tag: article.entryId).markAsRead();
+        }
+      }
     }
   }
 

@@ -16,6 +16,11 @@ import 'router/app_pages.dart';
 import 'services/account_service.dart';
 import 'services/app_version_service.dart';
 import 'utils/storage.dart';
+import 'services/undo_service.dart';
+
+class UndoReadIntent extends Intent {
+  const UndoReadIntent();
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -155,10 +160,32 @@ class AutoFoloApp extends StatelessWidget {
       themeMode: ThemeMode.system,
 
       // SmartDialog 注入毛玻璃版全局基础 Toast
-      builder: FlutterSmartDialog.init(
-        toastBuilder: (String msg) => _CustomToast(msg: msg),
-        loadingBuilder: (msg) => LoadingWidget(msg: msg),
-      ),
+      builder: (context, child) {
+        final smartDialogBuilder = FlutterSmartDialog.init(
+          toastBuilder: (String msg) => _CustomToast(msg: msg),
+          loadingBuilder: (msg) => LoadingWidget(msg: msg),
+        );
+        return Shortcuts(
+          shortcuts: <ShortcutActivator, Intent>{
+            SingleActivator(
+              LogicalKeyboardKey.keyZ,
+              meta: Platform.isMacOS,
+              control: !Platform.isMacOS,
+            ): const UndoReadIntent(),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              UndoReadIntent: CallbackAction<UndoReadIntent>(
+                onInvoke: (intent) {
+                  UndoService.undoLastRead();
+                  return null;
+                },
+              ),
+            },
+            child: smartDialogBuilder(context, child),
+          ),
+        );
+      },
       navigatorObservers: [FlutterSmartDialog.observer],
     );
   }

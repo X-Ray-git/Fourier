@@ -24,6 +24,7 @@ import '../../utils/html_chunk_parser.dart';
 import '../../utils/security_utils.dart';
 import '../../common/constants/constants.dart';
 import '../../utils/storage.dart';
+import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
 import 'widgets/html_chunk_card.dart';
 import 'package:flutter_html/flutter_html.dart';
@@ -205,6 +206,7 @@ class ArticleController extends GetxController {
     if (isUpdatingReadState.value) return;
 
     isUpdatingReadState.value = true;
+    UndoService.recordRead(article);
     // 标已读时清除 AI 过滤标记
     if (article.isRejectedByAi) {
       LocalArticleDbService.clearFilterState(article.entryId);

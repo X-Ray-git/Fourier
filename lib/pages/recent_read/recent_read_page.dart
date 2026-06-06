@@ -90,6 +90,12 @@ class _RecentReadPageState extends State<RecentReadPage> {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       _openOriginalArticle(article);
+
+      if (!article.isRead) {
+        if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
+          Get.find<ArticleController>(tag: article.entryId).markAsRead();
+        }
+      }
     }
   }
 

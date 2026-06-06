@@ -24,6 +24,7 @@ import '../article/article_page.dart';
 import '../subscriptions/subscriptions_controller.dart';
 import '../widgets/article_card.dart';
 import 'timeline_controller.dart';
+import '../../utils/scroll_utils.dart';
 
 /// 时间线页 — 本地文章库（未读/全部/已读）
 class TimelinePage extends StatefulWidget {
@@ -159,12 +160,7 @@ class _TimelinePageState extends State<TimelinePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final key = _itemKeys[entryId];
       if (key != null && key.currentContext != null) {
-        Scrollable.ensureVisible(
-          key.currentContext!,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        );
+        ScrollUtils.ensureVisible(key.currentContext!);
       }
     });
   }

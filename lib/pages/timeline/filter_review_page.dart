@@ -15,6 +15,7 @@ import '../article/article_page.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
+import '../../utils/scroll_utils.dart';
 
 class FilterReviewPage extends StatefulWidget {
   const FilterReviewPage({super.key});
@@ -27,6 +28,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final _articles = <ArticleModel>[].obs;
   final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
+  final Map<String, GlobalKey> _itemKeys = {};
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
 
@@ -142,6 +144,16 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     final nextIndex = (currentIndex + delta).clamp(0, _articles.length - 1);
     if (nextIndex < 0 || nextIndex >= _articles.length) return;
     _selectedArticle.value = _articles[nextIndex];
+    _scrollToArticle(_articles[nextIndex].entryId);
+  }
+
+  void _scrollToArticle(String entryId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _itemKeys[entryId];
+      if (key != null && key.currentContext != null) {
+        ScrollUtils.ensureVisible(key.currentContext!);
+      }
+    });
   }
 
   void _keep(ArticleModel article) {
@@ -465,6 +477,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                               _selectedArticle.value?.entryId ==
                               article.entryId;
                           return _MacReviewRow(
+                            key: _itemKeys.putIfAbsent(
+                              article.entryId,
+                              () => GlobalKey(),
+                            ),
                             article: article,
                             selected: selected,
                             onTap: () => _selectedArticle.value = article,
@@ -612,6 +628,7 @@ class _MacReviewRow extends StatelessWidget {
   final VoidCallback onReject;
 
   const _MacReviewRow({
+    super.key,
     required this.article,
     required this.selected,
     required this.onTap,

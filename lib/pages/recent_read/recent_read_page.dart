@@ -17,6 +17,7 @@ import '../../common/widgets/feedback_toast.dart';
 import '../article/article_page.dart';
 import '../widgets/article_card.dart';
 import 'recent_read_controller.dart';
+import '../../utils/scroll_utils.dart';
 
 class RecentReadPage extends StatefulWidget {
   const RecentReadPage({super.key});
@@ -33,6 +34,7 @@ class _RecentReadPageState extends State<RecentReadPage> {
   DateTime? _lastArticleTapAt;
   String? _lastArticleTapEntryId;
   final selectedArticle = Rxn<ArticleModel>();
+  final Map<String, GlobalKey> _itemKeys = {};
 
   @override
   void initState() {
@@ -57,6 +59,16 @@ class _RecentReadPageState extends State<RecentReadPage> {
     final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
     if (nextIndex < 0 || nextIndex >= list.length) return;
     selectedArticle.value = list[nextIndex];
+    _scrollToArticle(list[nextIndex].entryId);
+  }
+
+  void _scrollToArticle(String entryId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _itemKeys[entryId];
+      if (key != null && key.currentContext != null) {
+        ScrollUtils.ensureVisible(key.currentContext!);
+      }
+    });
   }
 
   Future<void> _openOriginalArticle(ArticleModel article) async {
@@ -207,6 +219,10 @@ class _RecentReadPageState extends State<RecentReadPage> {
                   return Obx(() {
                     final selectedId = selectedArticle.value?.entryId;
                     return ArticleCard(
+                      key: _itemKeys.putIfAbsent(
+                        article.entryId,
+                        () => GlobalKey(),
+                      ),
                       article: article,
                       isSelected:
                           Platform.isMacOS && selectedId == article.entryId,

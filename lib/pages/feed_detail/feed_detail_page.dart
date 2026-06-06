@@ -35,6 +35,7 @@ import '../widgets/article_card.dart';
 import '../timeline/timeline_controller.dart';
 import '../subscriptions/subscriptions_controller.dart';
 import '../article/article_page.dart';
+import '../../utils/scroll_utils.dart';
 
 /// Feed 详情控制器 — 按订阅源或分类或 view 筛选文章
 class FeedDetailController extends GetxController {
@@ -56,6 +57,7 @@ class FeedDetailController extends GetxController {
   final readFilter = 0.obs; // 0=未读, 1=全部, 2=已读
   final allArticles = <ArticleModel>[].obs; // 全量（含已读）
   final selectedArticle = Rxn<ArticleModel>();
+  final Map<String, GlobalKey> itemKeys = {};
   String? _lastArticleTapEntryId;
   DateTime? _lastArticleTapAt;
 
@@ -106,6 +108,16 @@ class FeedDetailController extends GetxController {
     final nextIndex = (currentIndex + delta).clamp(0, articles.length - 1);
     if (nextIndex < 0 || nextIndex >= articles.length) return;
     selectedArticle.value = articles[nextIndex];
+    scrollToArticle(articles[nextIndex].entryId);
+  }
+
+  void scrollToArticle(String entryId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = itemKeys[entryId];
+      if (key != null && key.currentContext != null) {
+        ScrollUtils.ensureVisible(key.currentContext!);
+      }
+    });
   }
 
   Future<void> openOriginalArticle(ArticleModel article) async {
@@ -1071,6 +1083,10 @@ class _MacFeedArticleList extends StatelessWidget {
               final article = list[index];
               return Obx(() {
                 return ArticleCard(
+                  key: controller.itemKeys.putIfAbsent(
+                    article.entryId,
+                    () => GlobalKey(),
+                  ),
                   article: article,
                   showFeedTitle: true,
                   isSelected:

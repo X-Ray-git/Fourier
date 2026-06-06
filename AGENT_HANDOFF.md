@@ -3842,3 +3842,22 @@ if (!isCurrentRoute) {
 ### 97.4 注意事项
 这种基于 `Cache Extent` 与 `currentContext` 的原生滚动方案存在理论上的局限性：对于极其大跨度的随机文章跳转，如果目标元素相距过远导致未被 `ListView` 底层构建出，其 `currentContext` 将为 `null` 而无法定位。但对于当前的按键单步（+/- 1）导航使用场景而言，上一篇/下一篇文章必定处于预渲染的缓存区内，因此是改动最小且高度可靠的最优方案。
 
+## 98. macOS 列表双向自动跟随滚动体验优化 (2026-06-06)
+
+### 98.1 需求与问题背景
+在第 97 项特性中，我们虽然实现了键盘导航的自动滚动定位，但用户反馈了一个明显的体验缺陷：**当选中的文章超出可视范围时，只有向下滑出时列表会跟随滚动，而向上滑出时，选中的高亮依然会跑到视野之外**。除此之外，自动跟随滚动特性只在 `timeline_page.dart` 中实现，订阅详情页（`feed_detail_page.dart`）、最近阅读（`recent_read_page.dart`）以及智能过滤页（`filter_review_page.dart`）完全不支持跟随滚动。
+
+### 98.2 问题产生原因
+之前的实现直接采用了 `Scrollable.ensureVisible(..., alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd)`。
+在 Flutter 的底层实现中，`keepVisibleAtEnd` 的计算逻辑使用了 `math.max(targetPixels, currentPixels)`，目的是保证滚动条只会向“结束”（底部）方向推进。这意味着：
+- 当目标元素在底部边界以下时，它会正常增加 `pixels` 向下滚动。
+- 当目标元素在顶部边界以上时，为了把它带回视野理论上需要减小 `pixels`（即向上滚动），但这会被 `math.max` 函数忽略。因此无论你怎么往上按方向键，滚动条都不会往上移动。
+
+### 98.3 修复方案与全局应用
+我们从根本上重构了这一逻辑，并将其封装为公共工具：
+1. **新增 ScrollUtils**：在 `lib/utils/scroll_utils.dart` 创建了 `ScrollUtils.ensureVisible` 静态方法。该方法会获取 `RenderObject` 和所在的 `Viewport`，计算元素的顶部（`targetTop`）和底部（`targetBottom`）在滚动列表中的绝对位置。
+2. **动态方向判断**：
+   - 如果 `targetTop < viewTop`（元素跑到了视野上方），则使用 `ScrollPositionAlignmentPolicy.keepVisibleAtStart` 使其对齐到顶部。
+   - 如果 `targetBottom > viewBottom`（元素跑到了视野下方），则使用 `ScrollPositionAlignmentPolicy.keepVisibleAtEnd` 使其对齐到底部。
+3. **全面覆盖**：将原先在 `timeline_page.dart` 的单点实现替换为新的 `ScrollUtils` 调用，并补全了 `feed_detail_page.dart`、`recent_read_page.dart` 和 `filter_review_page.dart` 中缺失的字典缓存 `_itemKeys` 绑定和状态联动。通过这一重构，所有支持 macOS 键盘导航的分屏文章列表均获得了一致、流畅的双向跟随滚动体验。
+

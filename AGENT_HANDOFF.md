@@ -3684,7 +3684,7 @@ flutter test --no-pub
 3. `X-App-Version` 改为读取 `AppVersionService.version`。
 4. 设置页关于版本改为 `Auto Folo v${AppVersionService.version}`。
 5. 新增 `scripts/release.sh`：
-   - 输入 `scripts/release.sh 1.1.8 --push` 这类命令即可读取当前 build number、自动加 1、更新 `pubspec.yaml`、提交版本 bump、创建 `v1.1.8` tag，并按参数决定是否推送。
+   - 输入 `scripts/release.sh 1.1.8 -m "- 修复了xx\n- 新增了xx" --push` 这类命令即可读取当前 build number、自动加 1、更新 `pubspec.yaml`、提交版本 bump 并在本文档末尾自动追加发布足迹（Footprint），最后创建带有更新附注的 `v1.1.8` tag，并按参数决定是否推送。
 6. `.github/workflows/internal-release.yml` 增加 `Validate Release Version` job：
    - tag 触发时校验 `vX.Y.Z` 必须与 `pubspec.yaml` 的 `X.Y.Z+build` 主版本一致。
    - Android 和 macOS job 都依赖该校验。
@@ -3708,7 +3708,9 @@ v1.1.7
 - `Auto-Folo-macOS-arm64-v1.1.7.zip`
 
 ### 92.4 后续发布约定
-以后不要再手写修改 `X-App-Version` 或设置页版本。正常发布只需要维护 `pubspec.yaml` 与 tag；推荐直接使用 `scripts/release.sh <version> --push`，让脚本负责 build number、提交和 tag。CI 会负责校验 tag 与 `pubspec.yaml` 是否一致。
+以后不要再手写修改 `X-App-Version` 或设置页版本。正常发布只需要维护 `pubspec.yaml` 与 tag；推荐直接使用 `scripts/release.sh <version> -m "<版本摘要>" --push`，让脚本负责 build number、提交、写入文档脚印和带有附注的 tag。CI 会负责校验 tag 与 `pubspec.yaml` 是否一致，并自动将你的 `<版本摘要>` 提取为 GitHub Release Notes。
+> [!IMPORTANT]
+> 执行发布脚本时，`-m` (message) 摘要参数是必填项！如果不填或为空，脚本会报错并拒绝发版。请使用 Bullet list 的形式（如 `"- 修复了xx\n- 优化了xx"`）简要归纳版本改动。
 
 ## 93. macOS 双击原文自动标已读与单步撤销（2026-06-06）
 

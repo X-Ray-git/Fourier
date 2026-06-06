@@ -42,9 +42,6 @@ class UndoService {
     }
 
     recordRead(article);
-    if (article.isRejectedByAi) {
-      LocalArticleDbService.clearFilterState(article.entryId);
-    }
 
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsReadLocal(article.entryId);

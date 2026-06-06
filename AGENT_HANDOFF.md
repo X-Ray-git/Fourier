@@ -3749,6 +3749,7 @@ v1.1.7
 
 
 
+
 ## 94. macOS 快捷键支持与设置页说明展示（2026-06-06）
 
 ### 94.1 需求背景
@@ -3822,4 +3823,22 @@ if (!isCurrentRoute) {
 ### 96.3 注意事项
 - 方案未引入任何第三方快捷键库或系统级媒体控制库，全部依赖于 Flutter 自带的 `Focus` 树和 `HardwareKeyboard`，确保了轻量级、低副作用。
 - 如果未来增加其他快捷键需求，请务必遵循“会与浏览器或列表滚动起冲突的按键（如空格、上下键）走焦点树捕获，不冲突的专用媒体按键走全局捕获”的原则。
+
+## 97. 键盘导航列表自动滚动定位 (2026-06-06)
+
+### 97.1 需求与问题背景
+在 macOS 等桌面端环境下，用户可以通过详情页的键盘左右方向键（`arrowLeft` / `arrowRight`）切换上一篇/下一篇。此操作会更新 `TimelineController` 的选中状态，进而高亮列表中对应的 `ArticleCard`。
+问题在于，当连续使用键盘切换时，选中的文章很快会超出当前 `ListView` 的可视范围。因为原本的列表没有记录各个动态高度卡片的渲染坐标，也没有在选中状态变更时触发列表自动对齐滚动逻辑，导致选中项常常跑到视口之外。
+
+### 97.2 实现方案考量
+由于文章卡片（`ArticleCard`）内部包含标题长短变化、AI摘要展开与否等动态高度因素，无法通过简单的 `index * fixedHeight` 公式计算精准的滚动偏移。同时为了避免引入重量级第三方组件（如 `scrollable_positioned_list`）带来对原有防过度滚动（`RefreshAwareScrollPhysics`）和上拉加载逻辑的破坏，最终采用了 Flutter 原生的基于 `GlobalKey` 上下文的追踪方案。
+
+### 97.3 具体的修改
+1. **状态维护**：在 `_TimelinePageState` 中增加了 `final Map<String, GlobalKey> _itemKeys = {};` 字典，以 `entryId` 为键缓存文章卡片的 Key。
+2. **节点绑定**：在构建中间文章列表的 `ListView.builder` 时，将缓存或新建的 `GlobalKey` 赋予每一张生成的 `ArticleCard`。
+3. **对齐滚动逻辑**：新增 `_scrollToArticle(String entryId)`。使用 `WidgetsBinding.instance.addPostFrameCallback` 在当前帧（选中状态变化后）绘制完成后执行。取出目标元素的 `currentContext`，调用 `Scrollable.ensureVisible`。配合 `ScrollPositionAlignmentPolicy.keepVisibleAtEnd` 参数，确保只在元素超出视口时，进行最少量的平滑滚动（250ms）使其重新进入可视范围。
+4. **触发绑定**：重构 `_selectRelativeArticle`，在每次更新 `controller.selectedArticle.value` 时同步触发该定位滚动逻辑。
+
+### 97.4 注意事项
+这种基于 `Cache Extent` 与 `currentContext` 的原生滚动方案存在理论上的局限性：对于极其大跨度的随机文章跳转，如果目标元素相距过远导致未被 `ListView` 底层构建出，其 `currentContext` 将为 `null` 而无法定位。但对于当前的按键单步（+/- 1）导航使用场景而言，上一篇/下一篇文章必定处于预渲染的缓存区内，因此是改动最小且高度可靠的最优方案。
 

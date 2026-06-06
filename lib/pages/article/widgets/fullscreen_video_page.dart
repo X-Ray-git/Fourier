@@ -31,7 +31,9 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
   }
 
   bool _handleGlobalKey(KeyEvent event) {
-    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
+         event.logicalKey == LogicalKeyboardKey.space)) {
       _togglePlayPause();
       return true;
     }
@@ -125,13 +127,6 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
       backgroundColor: Colors.black,
       body: Focus(
         focusNode: _focusNode,
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
-            _togglePlayPause();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
         child: GestureDetector(
           onTap: _toggleControls,
           child: Stack(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../services/article_image_service.dart';
@@ -29,15 +30,37 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   bool _hasError = false;
   bool _showControls = true;
   Timer? _hideTimer;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+  }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    _focusNode.dispose();
     _hideTimer?.cancel();
     _controller?..removeListener(_onControllerUpdate)..dispose();
     super.dispose();
   }
 
   void _onControllerUpdate() => setState(() {});
+
+  bool _handleGlobalKey(KeyEvent event) {
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+      if (_controller != null && _controller!.value.isInitialized) {
+        // 如果正在播放，或者当前视频拥有焦点，则响应全局播放键
+        if (_controller!.value.isPlaying || _focusNode.hasFocus) {
+          _togglePlayPause();
+          return true; // 拦截事件
+        }
+      }
+    }
+    return false;
+  }
 
   void _startHideTimer() {
     _hideTimer?.cancel();
@@ -77,6 +100,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       controller.addListener(_onControllerUpdate);
       await controller.play();
       controller.setLooping(true);
+      if (mounted) _focusNode.requestFocus();
       setState(() {});
       _startHideTimer();
     } catch (e) {
@@ -88,6 +112,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
 
   void _togglePlayPause() {
     if (_controller == null) return;
+    if (mounted) _focusNode.requestFocus();
     if (_controller!.value.isPlaying) {
       _controller!.pause();
       _hideTimer?.cancel();
@@ -100,6 +125,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   }
 
   void _toggleControls() {
+    if (mounted) _focusNode.requestFocus();
     setState(() => _showControls = !_showControls);
     _startHideTimer();
   }
@@ -123,9 +149,18 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
         borderRadius: BorderRadius.circular(10),
         child: AspectRatio(
           aspectRatio: widget.aspectRatio,
-          child: GestureDetector(
-            onTap: _toggleControls,
-            child: Stack(
+          child: Focus(
+            focusNode: _focusNode,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
+                _togglePlayPause();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GestureDetector(
+              onTap: _toggleControls,
+              child: Stack(
               fit: StackFit.expand,
               children: [
                 VideoPlayer(_controller!),
@@ -254,8 +289,9 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
     // 错误态
     if (_hasError) {

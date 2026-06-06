@@ -3746,3 +3746,32 @@ v1.1.7
 
 ### 93.4 后续注意
 撤销仍是单步设计，不要扩展成多步栈，除非后续确实需要更复杂的历史管理。当前目标是降低误双击和误标已读的恢复成本，而不是实现完整编辑器式 undo 系统。
+
+## 94. macOS 全屏图片 Esc 键退出优化 (2026-06-06)
+
+### 94.1 需求背景与问题
+用户反馈：在 macOS 环境下阅读文章时，如果点击正文中的图片进入了沉浸式全屏浏览模式，此时按下 `Esc` 键，期望的行为是仅退出全屏图片，回到文章详情。但实际表现为不仅退出了图片全屏，连带着整篇文章也被关闭了。
+
+### 94.2 问题产生原因
+在 `lib/pages/article/article_page.dart` 中，为了支持 macOS 分栏模式（`isSplitView == true`）下文章视图的全局快捷键操作（如方向键滚动、快捷标记已读等），`ArticlePageView` 注册了一个全局硬件键盘监听器 `HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent)`。
+该监听器由于是全局的，它在接收到 `Esc` 按键时，不论当前应用最顶层的 UI 是不是文章视图，都会强行拦截该按键并调用 `_closeArticle()`。因此，当图片通过 `HeroDialogRoute` 被压入新路由全屏展示时，按下 `Esc` 依然触发了底层的 `_closeArticle()`。
+
+### 94.3 修复方案与权衡
+由于这是由于底层的全局监听器“越权”拦截导致的问题，修复思路在于让 `ArticlePageView` 能够感知自身的路由层级。
+
+我们在 `_handleHardwareKeyEvent` 的顶部追加了层级校验：
+```dart
+if (!mounted) return false;
+final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+if (!isCurrentRoute) {
+  return false;
+}
+```
+**逻辑说明**：
+当图片全屏打开时，Flutter 会向 `Navigator` 压入一个新的 `ModalRoute`。此时底层的 `ArticlePageView` 的 `ModalRoute.of(context)?.isCurrent` 会变为 `false`。通过这层检查，全局监听器在此状态下将放弃对键盘事件的消费（返回 `false`），将 `Esc` 键交还给顶层的图片查看器处理（Flutter 原生的 `PageRoute` 默认支持通过 Esc pop 自身），从而完美实现了仅关闭图片全屏的正确交互逻辑。
+
+**为什么必须加 `!mounted` 校验**：
+这是一个必要的防御性编程细节。在极短的生命周期交替瞬间（例如快速关闭分栏页面并同时按下键盘），`context` 可能因组件被系统卸载（unmounted）而失效，此时强行读取 `ModalRoute.of(context)` 会导致框架异常。加上此校验能确保应用绝对稳定。
+
+### 94.4 给后续接手 Agent 的提醒
+由于该项目的桌面端体验深度依赖全局键盘快捷键监听，在未来如果要为文章视图增加其他的全局快捷键（比如快速分享 `Cmd+S` 等），请务必保留这个前置路由检查逻辑。凡是有弹层或子路由叠加在上方时，下层的快捷键行为理应让步，否则极易引发类似的操作冲突问题。

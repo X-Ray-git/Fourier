@@ -14,6 +14,7 @@ import 'common/constants/constants.dart';
 import 'common/widgets/loading_widget.dart';
 import 'http/init.dart';
 import 'router/app_pages.dart';
+import 'pages/main/main_controller.dart';
 import 'services/account_service.dart';
 import 'services/app_version_service.dart';
 import 'utils/storage.dart';
@@ -200,8 +201,11 @@ class AutoFoloApp extends StatelessWidget {
               ),
               OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
                 onInvoke: (intent) {
-                  if (Get.currentRoute != Routes.settings) {
-                    Get.toNamed(Routes.settings);
+                  if (Get.currentRoute != Routes.main) {
+                    Get.until((route) => route.settings.name == Routes.main);
+                  }
+                  if (Get.isRegistered<MainController>()) {
+                    Get.find<MainController>().changeIndex(3);
                   }
                   return null;
                 },

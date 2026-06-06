@@ -16,6 +16,7 @@ import '../timeline/timeline_controller.dart';
 import '../timeline/timeline_page.dart';
 import '../recent_read/recent_read_page.dart';
 import '../widgets/article_search_delegate.dart';
+import 'main_controller.dart';
 import 'widgets/macos_sidebar.dart';
 
 /// 主页面 — 移动端保留底部导航，macOS 使用桌面分栏布局。
@@ -27,9 +28,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  final _currentIndex = 0.obs;
-  final _isMacSidebarCollapsed = false.obs;
-  DateTime? _lastTimelineNavTapAt;
+  late final MainController controller;
   late final TimelineController _timelineController;
 
   static const _titles = ['时间线', '订阅源', '设置'];
@@ -43,7 +42,7 @@ class _MainPageState extends State<MainPage> {
   List<Widget> get _macPages => [
     TimelinePage(
       showAppBar: false,
-      onOpenFilterReview: () => _onDestinationSelected(1),
+      onOpenFilterReview: () => controller.changeIndex(1),
     ),
     const FilterReviewPage(),
     const RecentReadPage(),
@@ -53,6 +52,7 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
+    controller = Get.put(MainController());
     _timelineController = Get.put(TimelineController());
     if (Platform.isMacOS) {
       Get.put(SubscriptionsController());
@@ -76,17 +76,17 @@ class _MainPageState extends State<MainPage> {
       body: Row(
         children: [
           Obx(() {
-            if (_isMacSidebarCollapsed.value) {
+            if (controller.isMacSidebarCollapsed.value) {
               return MacOSCollapsedSidebar(
-                currentIndex: _currentIndex.value,
-                onIndexChanged: _onDestinationSelected,
-                onExpand: () => _isMacSidebarCollapsed.value = false,
+                currentIndex: controller.currentIndex.value,
+                onIndexChanged: controller.changeIndex,
+                onExpand: () => controller.isMacSidebarCollapsed.value = false,
               );
             }
             return MacOSSidebar(
-              currentIndex: _currentIndex.value,
-              onIndexChanged: _onDestinationSelected,
-              onCollapse: () => _isMacSidebarCollapsed.value = true,
+              currentIndex: controller.currentIndex.value,
+              onIndexChanged: controller.changeIndex,
+              onCollapse: () => controller.isMacSidebarCollapsed.value = true,
             );
           }),
           VerticalDivider(
@@ -99,7 +99,7 @@ class _MainPageState extends State<MainPage> {
               color: colorScheme.surface,
               child: Obx(
                 () => IndexedStack(
-                  index: _currentIndex.value,
+                  index: controller.currentIndex.value,
                   children: _macPages,
                 ),
               ),
@@ -123,7 +123,7 @@ class _MainPageState extends State<MainPage> {
         appBar: AppBar(
           leadingWidth: 130,
           leading: Obx(() {
-            if (_currentIndex.value != 0) return const SizedBox.shrink();
+            if (controller.currentIndex.value != 0) return const SizedBox.shrink();
             final mode = _timelineController.selectedMode.value;
             final _ = _timelineController.allArticles.length;
             return Padding(
@@ -139,7 +139,7 @@ class _MainPageState extends State<MainPage> {
           }),
           title: Obx(
             () => Text(
-              _titles[_currentIndex.value],
+              _titles[controller.currentIndex.value],
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
             ),
           ),
@@ -166,7 +166,7 @@ class _MainPageState extends State<MainPage> {
         ),
         body: Obx(
           () => _FadeIndexedStack(
-            index: _currentIndex.value,
+            index: controller.currentIndex.value,
             children: _mobilePages,
           ),
         ),
@@ -192,8 +192,8 @@ class _MainPageState extends State<MainPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                  selectedIndex: _currentIndex.value,
-                  onDestinationSelected: _onDestinationSelected,
+                  selectedIndex: controller.currentIndex.value,
+                  onDestinationSelected: controller.changeIndex,
                   destinations: const [
                     NavigationDestination(
                       icon: Icon(Icons.article_outlined),
@@ -221,7 +221,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<void> _openTimelineSearch(BuildContext context) async {
-    if (_currentIndex.value != 0) {
+    if (controller.currentIndex.value != 0) {
       AppFeedback.info('无法搜索', '当前仅支持时间线文章搜索');
       return;
     }
@@ -229,14 +229,14 @@ class _MainPageState extends State<MainPage> {
       return;
     }
 
-    final controller = Get.find<TimelineController>();
+    final timelineCtrl = Get.find<TimelineController>();
     final selected = await showSearch<ArticleModel?>(
       context: context,
-      delegate: ArticleSearchDelegate(source: controller.searchSourceArticles),
+      delegate: ArticleSearchDelegate(source: timelineCtrl.searchSourceArticles),
     );
     if (selected == null) return;
 
-    final source = controller.searchSourceArticles;
+    final source = timelineCtrl.searchSourceArticles;
     final index = source.indexOf(selected);
     Get.toNamed(
       Routes.article,
@@ -246,26 +246,6 @@ class _MainPageState extends State<MainPage> {
         'index': index < 0 ? 0 : index,
       },
     );
-  }
-
-  void _onDestinationSelected(int index) {
-    final now = DateTime.now();
-    if (index == _currentIndex.value) {
-      if (index == 0 &&
-          _lastTimelineNavTapAt != null &&
-          now.difference(_lastTimelineNavTapAt!).inMilliseconds < 300) {
-        _lastTimelineNavTapAt = null;
-        if (!Get.isRegistered<TimelineController>()) return;
-        Get.find<TimelineController>().scrollToTop();
-        return;
-      }
-      if (index == 0) {
-        _lastTimelineNavTapAt = now;
-      }
-      return;
-    }
-    _currentIndex.value = index;
-    _lastTimelineNavTapAt = index == 0 ? now : null;
   }
 }
 

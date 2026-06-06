@@ -3842,3 +3842,23 @@ if (!isCurrentRoute) {
 ### 97.4 注意事项
 这种基于 `Cache Extent` 与 `currentContext` 的原生滚动方案存在理论上的局限性：对于极其大跨度的随机文章跳转，如果目标元素相距过远导致未被 `ListView` 底层构建出，其 `currentContext` 将为 `null` 而无法定位。但对于当前的按键单步（+/- 1）导航使用场景而言，上一篇/下一篇文章必定处于预渲染的缓存区内，因此是改动最小且高度可靠的最优方案。
 
+## 98. macOS 设置快捷键行为等效化修复 (2026-06-06)
+
+### 98.1 问题背景
+用户反馈在 macOS 端按下 `Cmd + ,` 快捷键打开设置时，界面表现为弹出了一个全新的页面（覆盖在现有 UI 之上），而点击主页面侧边栏左下角的“设置”按钮时，却是在分栏布局的右侧区域内部切换显示设置页。两者行为并不等效，破坏了桌面端用户体验的一致性。
+
+### 98.2 问题根源
+根据代码审查，两者触发了完全不同的路由处理逻辑：
+1. **全局快捷键（`OpenSettingsIntent`）**：在 `lib/main.dart` 中，捕获按键后调用了 `Get.toNamed(Routes.settings)`。这会直接向导航栈中 Push 新页面。
+2. **侧边栏按钮（`MacOSSidebar`）**：触发了 `MainPage` 的局部状态更新 `_currentIndex.value = 3`。借由底层的 `IndexedStack` 组件，这只是在当前路由的树级内切换了可见子组件。
+
+### 98.3 修复思路与重构方案
+为了使全局快捷键行为等效于页面内部的分栏切换，我们需要将 `MainPage` 原有的私有状态提炼为可供外部（即 `main.dart` 中的快捷键监听回调）调用的全局状态。
+
+具体的实施方案：
+1. **状态抽象化**：新建 `lib/pages/main/main_controller.dart`，抽取 `currentIndex`、`isMacSidebarCollapsed` 等原本封装在 `_MainPageState` 内部的状态，将它们挂载在全局 `GetxController` 上。
+2. **页面解耦**：重构 `lib/pages/main/main_page.dart`，通过 `Get.put(MainController())` 注册并接管页面所有的索引切换操作，解除该 Widget 与导航状态的强绑定。
+3. **快捷键入口改造**：在 `lib/main.dart` 的 `OpenSettingsIntent` 回调中，不再进行粗暴的 `Get.toNamed`。而是增加判定：如果当前应用处在子层级路由（如某文章的详情页），则先调用 `Get.until((route) => route.settings.name == Routes.main)` 退回到顶层 `MainPage`；接着调用 `Get.find<MainController>().changeIndex(3)` 将视图切换为设置区。
+
+### 98.4 留给后续 Agent 的思考
+经过这次重构，`MainController` 成为了主界面分栏层级的标准接口。如果后续还需要添加别的全局快捷键（例如 `Cmd + 1` 切换到时间线、`Cmd + 2` 切换到订阅源），可以直接在 `main.dart` 注册相关 Intent，并通过调用 `MainController` 的 `changeIndex()` 来极低成本地实现视图切换，无需再次修改 `MainPage` 内部逻辑。

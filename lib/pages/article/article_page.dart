@@ -679,6 +679,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     if (_hasShortcutModifierPressed()) return false;
 
+    if (!mounted) return false;
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!isCurrentRoute) {
+      return false;
+    }
+
     // 前置安全校验：只有当前组件对应的是当前选中的文章时，才响应快捷键。
     // 这样可以彻底免疫组件交替销毁时的遗留监听器导致多重触发。
     if (Get.isRegistered<TimelineController>()) {

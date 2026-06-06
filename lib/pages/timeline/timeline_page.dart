@@ -50,6 +50,7 @@ class _TimelinePageState extends State<TimelinePage> {
   DateTime? _lastTapTime;
   String? _lastArticleTapEntryId;
   DateTime? _lastArticleTapAt;
+  final Map<String, GlobalKey> _itemKeys = {};
 
   @override
   void initState() {
@@ -109,6 +110,7 @@ class _TimelinePageState extends State<TimelinePage> {
     if (currentIndex != -1) {
       final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
       controller.selectedArticle.value = list[nextIndex];
+      _scrollToArticle(list[nextIndex].entryId);
       return;
     }
 
@@ -126,26 +128,45 @@ class _TimelinePageState extends State<TimelinePage> {
         for (int i = allIndex + 1; i < allList.length; i++) {
           if (listEntryIds.contains(allList[i].entryId)) {
             controller.selectedArticle.value = allList[i];
+            _scrollToArticle(allList[i].entryId);
             return;
           }
         }
         // 向后找尽，停留在当前可用列表的最后一篇
         controller.selectedArticle.value = list.last;
+        _scrollToArticle(list.last.entryId);
       } else {
         // 向前寻找上一个存在的文章
         for (int i = allIndex - 1; i >= 0; i--) {
           if (listEntryIds.contains(allList[i].entryId)) {
             controller.selectedArticle.value = allList[i];
+            _scrollToArticle(allList[i].entryId);
             return;
           }
         }
         // 向前找尽，停留在当前可用列表的第一篇
         controller.selectedArticle.value = list.first;
+        _scrollToArticle(list.first.entryId);
       }
     } else {
       // 极端兜底情况：全量列表里都找不到
       controller.selectedArticle.value = list.first;
+      _scrollToArticle(list.first.entryId);
     }
+  }
+
+  void _scrollToArticle(String entryId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _itemKeys[entryId];
+      if (key != null && key.currentContext != null) {
+        Scrollable.ensureVisible(
+          key.currentContext!,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
+      }
+    });
   }
 
   Future<void> _openOriginalArticle(ArticleModel article) async {
@@ -402,10 +423,15 @@ class _TimelinePageState extends State<TimelinePage> {
                     );
                   }
                   final article = controller.articles[articleIndex];
+                  final articleKey = _itemKeys.putIfAbsent(
+                    article.entryId,
+                    () => GlobalKey(),
+                  );
                   return Obx(() {
                     final selectedId =
                         controller.selectedArticle.value?.entryId;
                     return ArticleCard(
+                      key: articleKey,
                       article: article,
                       isSelected:
                           Platform.isMacOS && selectedId == article.entryId,

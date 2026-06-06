@@ -3709,3 +3709,40 @@ v1.1.7
 
 ### 92.4 后续发布约定
 以后不要再手写修改 `X-App-Version` 或设置页版本。正常发布只需要维护 `pubspec.yaml` 与 tag；推荐直接使用 `scripts/release.sh <version> --push`，让脚本负责 build number、提交和 tag。CI 会负责校验 tag 与 `pubspec.yaml` 是否一致。
+
+## 93. macOS 双击原文自动标已读与单步撤销（2026-06-06）
+
+### 93.1 背景与交互判断
+用户确认需要在 macOS 端双击文章卡片打开原文时自动将文章标记为已读。这里的产品判断是：单击只是进入右侧分栏预览，不应强行标已读；双击打开外部浏览器代表更明确的阅读/消费意图，可以自动标已读。
+
+同时，误双击或误按 `M` 会让文章从“未读”列表里消失，用户再去“全部”里找回并恢复未读成本很高。因此本轮引入一个深度为 1 的全局撤销：`Cmd-Z`（macOS）/ `Ctrl-Z`（其他平台配置层面保留）撤销最近一次“未读 -> 已读”转换。
+
+### 93.2 合入前审计发现的问题
+`super-galaxy-rolls-08h21` 分支原始实现有价值，但不能原样合入：
+- 双击时只有在对应 `ArticleController` 已注册时才会 `markAsRead()`，而双击打开原文并不保证右侧详情 controller 一定存在，因此自动标已读不可靠。
+- `ArticleController.markAsRead()` 一进入就记录 undo；如果后续网络同步失败并恢复未读，会留下不真实的可撤销记录。
+- `UndoService.undoLastRead()` 在复用 `ArticleController.markAsUnread()` 时没有 `await`，会过早显示“已撤销成功”。
+- 文档章节没有沿用 `AGENT_HANDOFF.md` 的编号格式。
+
+### 93.3 最终实现
+本轮保留功能方向，但修正实现边界：
+1. 新增 `lib/services/undo_service.dart`：
+   - 管理最近一次已读动作 `_lastReadArticle`。
+   - 提供 `markAsRead(article, showSuccess: false)`，用于双击外部打开时后台标已读。
+   - 如果 `ArticleController` 已存在，则复用 controller 的 `markAsRead()`，保证右侧详情页按钮状态同步；否则直接更新本地 DB / `TimelineController` / `ReadSyncService` 并调用 Folo API。
+   - 网络失败时恢复未读并清理对应 undo 记录。
+2. `ArticleController.markAsRead()`：
+   - 改为在本地已读状态真正生效后记录 undo。
+   - 如果同步失败并恢复未读，调用 `UndoService.clearForEntry()` 清掉错误撤销记录。
+   - 增加 `showSuccess` 参数，允许双击自动标已读时静默同步。
+3. `TimelinePage`、`FeedDetailPage`、`RecentReadPage`：
+   - 双击仍先打开原文。
+   - 若文章未读，则 `unawaited(UndoService.markAsRead(article, showSuccess: false))` 后台标已读。
+4. `main.dart`：
+   - 在 `GetMaterialApp.builder` 中通过 `Shortcuts` / `Actions` 注册全局撤销。
+   - 执行撤销前检查当前焦点 widget；如果焦点在 `EditableText`，直接返回，避免抢占搜索框、设置页输入框、Prompt 编辑框里的文本撤销。
+5. `TimelineController`：
+   - 切换 view mode、feed、category 时清空 undo，避免跨上下文撤销造成隐藏列表的状态跳变。
+
+### 93.4 后续注意
+撤销仍是单步设计，不要扩展成多步栈，除非后续确实需要更复杂的历史管理。当前目标是降低误双击和误标已读的恢复成本，而不是实现完整编辑器式 undo 系统。

@@ -29,6 +29,7 @@ import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/feed_translation_settings_service.dart';
 import '../../services/feed_readability_settings_service.dart';
+import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
 import '../widgets/article_card.dart';
 import '../timeline/timeline_controller.dart';
@@ -138,6 +139,10 @@ class FeedDetailController extends GetxController {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       openOriginalArticle(article);
+
+      if (!article.isRead) {
+        unawaited(UndoService.markAsRead(article, showSuccess: false));
+      }
     }
   }
 

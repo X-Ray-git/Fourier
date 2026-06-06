@@ -24,6 +24,7 @@ import '../../utils/html_chunk_parser.dart';
 import '../../utils/security_utils.dart';
 import '../../common/constants/constants.dart';
 import '../../utils/storage.dart';
+import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
 import 'widgets/html_chunk_card.dart';
 import 'package:flutter_html/flutter_html.dart';
@@ -200,7 +201,7 @@ class ArticleController extends GetxController {
   }
 
   /// 标为已读（本地 + 云端同步 + 失败重试最多 5 次）
-  Future<void> markAsRead() async {
+  Future<void> markAsRead({bool showSuccess = true}) async {
     if (isRead.value) return;
     if (isUpdatingReadState.value) return;
 
@@ -222,12 +223,13 @@ class ArticleController extends GetxController {
     final isInbox = article.category == 'inbox';
     ReadSyncService.enqueue(article.entryId, isInbox: isInbox);
     isRead.value = true;
+    UndoService.recordRead(article);
     ArticleStateNotifier.tick(article.entryId);
 
     final ok = await _retrySync(
       action: () =>
           FeedHttp.markRead(entryIds: [article.entryId], isInbox: isInbox),
-      successMsg: '已标记已读',
+      successMsg: showSuccess ? '已标记已读' : null,
       maxRetries: 5,
     );
 
@@ -243,6 +245,7 @@ class ArticleController extends GetxController {
         LocalArticleDbService.setReadState(article.entryId, false);
       }
       isRead.value = false;
+      UndoService.clearForEntry(article.entryId);
       ArticleStateNotifier.tick(article.entryId);
       AppFeedback.error('标记已读失败', '已重试5次，已恢复为未读');
     }
@@ -288,16 +291,18 @@ class ArticleController extends GetxController {
   /// 带重试的云端同步。成功返回 true，5 次均失败返回 false。
   Future<bool> _retrySync({
     required Future<LoadingState<void>> Function() action,
-    required String successMsg,
+    required String? successMsg,
     int maxRetries = 5,
   }) async {
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       final result = await action();
       if (result is Success<void>) {
-        if (attempt == 1) {
-          AppFeedback.success(successMsg, '已同步到云端');
-        } else {
-          AppFeedback.success(successMsg, '重试 $attempt 次后成功');
+        if (successMsg != null) {
+          if (attempt == 1) {
+            AppFeedback.success(successMsg, '已同步到云端');
+          } else {
+            AppFeedback.success(successMsg, '重试 $attempt 次后成功');
+          }
         }
         return true;
       }

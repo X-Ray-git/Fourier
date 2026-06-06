@@ -17,6 +17,7 @@ import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
+import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
 import '../subscriptions/subscriptions_controller.dart';
 
@@ -47,10 +48,12 @@ class TimelineController extends GetxController {
     super.onInit();
     ever(allArticles, (_) => _updateAppBadge());
     ever(selectedFeedId, (_) {
+      UndoService.clear();
       _applyFilter();
       selectedArticle.value = null;
     });
     ever(selectedCategory, (_) {
+      UndoService.clear();
       _applyFilter();
       selectedArticle.value = null;
     });
@@ -340,6 +343,7 @@ class TimelineController extends GetxController {
 
   void setViewMode(TimelineViewMode mode) {
     if (selectedMode.value == mode) return;
+    UndoService.clear();
     selectedMode.value = mode;
     _applyFilter();
     loadingState.value = Success(articles.toList());

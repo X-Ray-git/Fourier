@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,7 +11,6 @@ import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 
-import 'dart:io';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -16,6 +18,7 @@ import '../../common/widgets/feedback_toast.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/feed_readability_settings_service.dart';
 import '../../services/feed_translation_settings_service.dart';
+import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
 import '../subscriptions/subscriptions_controller.dart';
@@ -176,6 +179,10 @@ class _TimelinePageState extends State<TimelinePage> {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       _openOriginalArticle(article);
+
+      if (!article.isRead) {
+        unawaited(UndoService.markAsRead(article, showSuccess: false));
+      }
     }
   }
 
@@ -396,10 +403,12 @@ class _TimelinePageState extends State<TimelinePage> {
                   }
                   final article = controller.articles[articleIndex];
                   return Obx(() {
-                    final selectedId = controller.selectedArticle.value?.entryId;
+                    final selectedId =
+                        controller.selectedArticle.value?.entryId;
                     return ArticleCard(
                       article: article,
-                      isSelected: Platform.isMacOS && selectedId == article.entryId,
+                      isSelected:
+                          Platform.isMacOS && selectedId == article.entryId,
                       onTap: () {
                         if (Platform.isMacOS) {
                           _handleMacArticleTap(article);

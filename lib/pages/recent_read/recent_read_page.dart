@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../article/article_page.dart';
@@ -90,6 +92,10 @@ class _RecentReadPageState extends State<RecentReadPage> {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       _openOriginalArticle(article);
+
+      if (!article.isRead) {
+        unawaited(UndoService.markAsRead(article, showSuccess: false));
+      }
     }
   }
 

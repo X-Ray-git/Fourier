@@ -23,6 +23,10 @@ class UndoReadIntent extends Intent {
   const UndoReadIntent();
 }
 
+class OpenSettingsIntent extends Intent {
+  const OpenSettingsIntent();
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -173,6 +177,11 @@ class AutoFoloApp extends StatelessWidget {
               meta: Platform.isMacOS,
               control: !Platform.isMacOS,
             ): const UndoReadIntent(),
+            if (Platform.isMacOS)
+              SingleActivator(
+                LogicalKeyboardKey.comma,
+                meta: true,
+              ): const OpenSettingsIntent(),
           },
           child: Actions(
             actions: <Type, Action<Intent>>{
@@ -186,6 +195,14 @@ class AutoFoloApp extends StatelessWidget {
                     return null;
                   }
                   unawaited(UndoService.undoLastRead());
+                  return null;
+                },
+              ),
+              OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
+                onInvoke: (intent) {
+                  if (Get.currentRoute != Routes.settings) {
+                    Get.toNamed(Routes.settings);
+                  }
                   return null;
                 },
               ),

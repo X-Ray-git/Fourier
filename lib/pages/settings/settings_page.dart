@@ -129,6 +129,36 @@ class _SettingsPageState extends State<SettingsPage> {
     AppFeedback.info('配置已清除', '已移除本地配置');
   }
 
+  Widget _buildShortcutItem(BuildContext context, String keys, String desc) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(desc, style: TextStyle(color: cs.onSurface)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: Text(
+              keys,
+              style: TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -473,6 +503,34 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
 
           const SizedBox(height: 24),
+
+          if (Platform.isMacOS) ...[
+            Text(
+              '快捷键 (macOS)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    _buildShortcutItem(context, 'Cmd + ,', '打开设置'),
+                    _buildShortcutItem(context, 'Cmd + Z', '撤销最近一次已读'),
+                    _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
+                    _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
+                    _buildShortcutItem(context, '← / →', '切换上一篇 / 下一篇文章'),
+                    _buildShortcutItem(context, 'M', '切换文章已读 / 未读状态'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
 
           // 关于
           Text(

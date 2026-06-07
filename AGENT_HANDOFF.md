@@ -3930,3 +3930,17 @@ if (!isCurrentRoute) {
 ### 101.4 留给后续 Agent 的思考
 经过这次重构，`MainController` 成为了主界面分栏层级的标准接口。如果后续还需要添加别的全局快捷键（例如 `Cmd + 1` 切换到时间线、`Cmd + 2` 切换到订阅源），可以直接在 `main.dart` 注册相关 Intent，并通过调用 `MainController` 的 `changeIndex()` 来极低成本地实现视图切换，无需再次修改 `MainPage` 内部逻辑。
 
+
+## 102. 优化文章行内代码样式 (2026-06-07)
+
+### 102.1 问题描述
+用户反馈文章内的行内代码（`<code>` 标签）视觉表现较差：没有圆角、未体现等宽字体，看起来就像一个简陋的灰色高亮文本。
+
+### 102.2 根本原因
+由于项目使用的 `flutter_html` (v3.0.0-beta.2) 默认对行内元素的盒子模型（Box Model）支持有限。虽然在 `_buildParagraph` 中给 `'code'` 指定了 `backgroundColor` 和 `fontFamily: 'monospace'`，但 `Style` 对象在直接生成内联 `TextSpan` 的上下文中，并不支持附加 `borderRadius` 和 `padding` 效果。同时，单薄的 `fontFamily: 'monospace'` 在部分平台上缺乏有效的字体栈回退（fallback）机制，导致无法稳定呈现等宽字形。
+
+### 102.3 修复思路与实现
+1. **采用 Wrapper 机制接管渲染**：引入 `flutter_html` 自带的 `TagWrapExtension` 拦截 `<code>` 标签。利用此扩展将其原本生成的子元素树包裹在一个提供了合理内边距（Padding）与圆角（`BorderRadius.circular(6)`）的 `Container` 之中。
+2. **规避重复渲染**：剥离原 `Style` 对象中对 `'code'` 的 `backgroundColor` 设定，统一在 `Container` 的 `BoxDecoration` 中绘制背景色（采用 `colorScheme.surfaceContainerHighest.withValues(alpha: 0.6)`），从而达成柔和的圆角药丸（Pill）视觉效果。
+3. **增强跨端字体表现**：在 `'code'` 的 `Style` 声明中补全了等宽字体回退栈：`fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier']`。
+4. **抽取复用逻辑**：由于解析器在针对不规范 HTML 时，可能将行内 `<code>` 留存至段落、列表甚至表格的子树内，因此将扩展列表提取为了通用的 `_buildCommonExtensions(context, cs)` 方法，一揽子应用于页面的所有 `Html` 实例之中。

@@ -164,13 +164,34 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         'strong': Style(fontWeight: FontWeight.w700),
         'em': Style(fontStyle: FontStyle.italic),
         'code': Style(
-          backgroundColor: cs.surfaceContainerHighest,
           fontFamily: 'monospace',
+          fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier'],
           fontSize: FontSize(14),
         ),
       },
-      extensions: [_imageExtension(context), TableHtmlExtension()],
+      extensions: _buildCommonExtensions(context, cs),
     );
+  }
+
+  List<HtmlExtension> _buildCommonExtensions(BuildContext context, ColorScheme cs) {
+    return [
+      _imageExtension(context),
+      TableHtmlExtension(),
+      TagWrapExtension(
+        tagsToWrap: {'code'},
+        builder: (child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: child,
+          );
+        },
+      ),
+    ];
   }
 
   // ── 图片 ──
@@ -247,7 +268,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           ),
           'a': Style(color: cs.primary),
         },
-        extensions: [_imageExtension(context), TableHtmlExtension()],
+        extensions: _buildCommonExtensions(context, cs),
       ),
     );
   }
@@ -279,7 +300,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             padding: HtmlPaddings.symmetric(horizontal: 10, vertical: 8),
           ),
         },
-        extensions: [_imageExtension(context), TableHtmlExtension()],
+        extensions: _buildCommonExtensions(context, cs),
       ),
     );
   }
@@ -306,14 +327,14 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         'strong': Style(fontWeight: FontWeight.w700),
         'em': Style(fontStyle: FontStyle.italic),
         'code': Style(
-          backgroundColor: cs.surfaceContainerHighest,
           fontFamily: 'monospace',
+          fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier'],
           fontSize: FontSize(14),
         ),
         'ul': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
         'ol': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
       },
-      extensions: [_imageExtension(context), TableHtmlExtension()],
+      extensions: _buildCommonExtensions(context, cs),
     );
   }
 
@@ -514,7 +535,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         ),
         'a': Style(color: cs.primary),
       },
-      extensions: [_imageExtension(context), TableHtmlExtension()],
+      extensions: _buildCommonExtensions(context, cs),
     );
   }
 

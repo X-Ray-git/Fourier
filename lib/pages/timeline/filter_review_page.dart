@@ -15,6 +15,7 @@ import '../../services/summary_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
 import '../article/article_page.dart';
+import '../main/main_controller.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
@@ -537,6 +538,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 key: ValueKey(selected.entryId),
                 article: selected,
                 isSplitView: true,
+                isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 1,
                 onClose: () => _selectedArticle.value = null,
                 onPrevious: () => _selectRelativeArticle(-1),
                 onNext: () => _selectRelativeArticle(1),

@@ -548,6 +548,7 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onMKeyPressed;
+  final bool Function()? isActive;
 
   const ArticlePageView({
     super.key,
@@ -558,6 +559,7 @@ class ArticlePageView extends StatefulWidget {
     this.onPrevious,
     this.onNext,
     this.onMKeyPressed,
+    this.isActive,
   });
 
   @override
@@ -680,6 +682,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     if (!mounted) return false;
     final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
     if (!isCurrentRoute) {
+      return false;
+    }
+
+    if (widget.isActive != null && !widget.isActive!()) {
       return false;
     }
 

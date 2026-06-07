@@ -195,7 +195,7 @@ class AutoFoloApp extends StatelessWidget {
                       null) {
                     return null;
                   }
-                  unawaited(UndoService.undoLastRead());
+                  unawaited(UndoService.undoLastAction());
                   return null;
                 },
               ),

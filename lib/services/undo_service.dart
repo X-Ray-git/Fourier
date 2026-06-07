@@ -10,22 +10,39 @@ import '../http/init.dart';
 import '../common/widgets/feedback_toast.dart';
 import '../utils/storage.dart';
 
-class UndoService {
-  static ArticleModel? _lastReadArticle;
+enum UndoActionType {
+  read,
+  filterReject,
+  filterKeep,
+}
 
-  static ArticleModel? get lastReadArticle => _lastReadArticle;
+class UndoAction {
+  final UndoActionType type;
+  final ArticleModel article;
+
+  UndoAction(this.type, this.article);
+}
+
+class UndoService {
+  static UndoAction? _lastAction;
+
+  static ArticleModel? get lastReadArticle => _lastAction?.type == UndoActionType.read ? _lastAction?.article : null;
 
   static void recordRead(ArticleModel article) {
-    _lastReadArticle = article;
+    _lastAction = UndoAction(UndoActionType.read, article);
+  }
+
+  static void recordFilterAction(ArticleModel article, UndoActionType type) {
+    _lastAction = UndoAction(type, article);
   }
 
   static void clear() {
-    _lastReadArticle = null;
+    _lastAction = null;
   }
 
   static void clearForEntry(String entryId) {
-    if (_lastReadArticle?.entryId == entryId) {
-      _lastReadArticle = null;
+    if (_lastAction?.article.entryId == entryId) {
+      _lastAction = null;
     }
   }
 
@@ -83,10 +100,33 @@ class UndoService {
     }
   }
 
-  static Future<void> undoLastRead() async {
-    final article = _lastReadArticle;
-    if (article == null) return;
-    _lastReadArticle = null;
+  static Future<void> undoLastAction() async {
+    final action = _lastAction;
+    if (action == null) return;
+    _lastAction = null;
+
+    final article = action.article;
+
+    if (action.type == UndoActionType.filterKeep) {
+      // Undo a KEEP action: restore the AI reject status. No network calls.
+      LocalArticleDbService.upsertOne(article);
+      if (Get.isRegistered<TimelineController>()) {
+        final tc = Get.find<TimelineController>();
+        final idx = tc.allArticles.indexWhere((a) => a.entryId == article.entryId);
+        if (idx >= 0) {
+          tc.allArticles[idx] = article;
+          tc.allArticles.refresh();
+        }
+      }
+      ArticleStateNotifier.tick(article.entryId);
+      AppFeedback.success('已撤销', '文章已重新移入拦截列表');
+      return;
+    }
+
+    // Both 'read' and 'filterReject' mark the article as read. We must revert to unread.
+    if (action.type == UndoActionType.filterReject) {
+      LocalArticleDbService.upsertOne(article); // Restore to original filterReviewed:false state
+    }
 
     if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
       await Get.find<ArticleController>(tag: article.entryId).markAsUnread();
@@ -113,6 +153,30 @@ class UndoService {
       } else {
         LocalArticleDbService.setReadState(article.entryId, true);
         ArticleStateNotifier.tick(article.entryId);
+      }
+      if (action.type == UndoActionType.filterReject) {
+        // Re-apply filterReviewed:true since the network request failed
+        LocalArticleDbService.upsertOne(
+          ArticleModel(
+            entryId: article.entryId,
+            feedId: article.feedId,
+            feedTitle: article.feedTitle,
+            feedImage: article.feedImage,
+            title: article.title,
+            url: article.url,
+            content: article.content,
+            publishedAt: article.publishedAt,
+            isRead: true,
+            category: article.category,
+            subscriptionCategory: article.subscriptionCategory,
+            author: article.author,
+            imageUrl: article.imageUrl,
+            isRejectedByAi: article.isRejectedByAi,
+            filterReason: article.filterReason,
+            filterReviewed: true,
+            filteredAt: article.filteredAt,
+          ),
+        );
       }
       AppFeedback.error('撤销失败', '网络请求失败，已恢复为已读');
       return;

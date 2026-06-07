@@ -3930,6 +3930,7 @@ if (!isCurrentRoute) {
 ### 101.4 留给后续 Agent 的思考
 经过这次重构，`MainController` 成为了主界面分栏层级的标准接口。如果后续还需要添加别的全局快捷键（例如 `Cmd + 1` 切换到时间线、`Cmd + 2` 切换到订阅源），可以直接在 `main.dart` 注册相关 Intent，并通过调用 `MainController` 的 `changeIndex()` 来极低成本地实现视图切换，无需再次修改 `MainPage` 内部逻辑。
 
+<<<<<<< HEAD
 
 ## 102. 优化文章行内代码样式 (2026-06-07)
 
@@ -3967,4 +3968,61 @@ if (!isCurrentRoute) {
 在 `_reject` 方法中，紧跟着 `ReadSyncService.enqueue`，新增调用了：
 `unawaited(ReadSyncService.syncPendingReads());`
 这样既保证了已读状态能被持久化到待同步队列防丢失，又能够在文章被移除时立即尝试将状态同步到云端。
+
+## 104. macOS 桌面端快捷键 M 按键逻辑升级 (2026-06-07)
+
+### 104.1 需求背景与问题
+用户指出，在 macOS 桌面端分屏模式下使用键盘进行快速信息筛选时，按下 `m` 键将文章标记为已读后，当前应用焦点仍然停留在该文章上。由于应用已实现了全局的 `Ctrl+Z` / `Cmd+Z` 撤销快捷键，即便用户误操作将某篇文章标记为已读，恢复成本也极低。因此，用户希望按下 `m` 键将文章“标记已读”后，系统能自动跳转到下一篇文章，从而实现无缝的沉浸式“阅读-标记-下一篇”心流。
+
+### 104.2 跨端体验差异讨论
+在分析该需求时，我们特别讨论了该行为在不同平台的适用性：
+1. **桌面端（macOS 分屏视图）**：键盘用户具有极强的效率导向，自动跳转能有效免去手动按方向键切换的多余动作，因此该设计带来明确的正向收益。
+2. **移动端（Android/iOS 等）**：移动端基于手势滑动与 `PageView` 架构，用户习惯于在点击悬浮的“已读”按钮后，依然能保留在当前页面并由自己决定何时滑动翻页。系统若突兀地强制翻页，会破坏用户的操作空间感与物理直觉。
+
+基于以上共识，该跳转逻辑修改仅被限定于苹果的 macOS 桌面端应用。
+
+### 104.3 具体的修改实现
+由于现有代码架构的跨端防腐设计良好，`lib/pages/article/article_page.dart` 中的硬件键盘事件监听 `_handleHardwareKeyEvent` 在早期实现中便已被 `_usesGlobalShortcuts` 变量（即 `Platform.isMacOS && widget.isSplitView`）严格限制了生效范围。因此，我们只需要直接在该方法内扩展对 `m` 键（`LogicalKeyboardKey.keyM`）的处理代码，即可天然实现平台隔离隔离。
+
+新版逻辑如下：
+```dart
+    if (key == LogicalKeyboardKey.keyM) {
+      if (controller.isUpdatingReadState.value) return true;
+      final wasUnread = !controller.isRead.value;
+      _toggleReadState();
+      if (wasUnread && widget.onNext != null) {
+        widget.onNext!();
+      }
+      return true;
+    }
+```
+**设计说明**：
+- **状态防抖**：前置增加了对 `isUpdatingReadState` 的防御性检测，规避因极高频连按或网络拥堵造成的预期外重复跳转。
+- **定向安全跳转**：通过 `wasUnread` 保存文章在动作发生前的初始状态。仅在执行**将“未读”转为“已读”**的正向操作时，才会触发 `widget.onNext!()` 自动滚至下一篇。反之，若用户按下 `m` 是为了撤回并恢复“未读”（例如标为稍后阅读），焦点将静止不动，以免引发焦点迷失。
+
+### 104.4 给后续接手 Agent 的提醒
+由于本次优化强依赖于上层 Widget 传入的 `widget.onNext` 回调来实现导航能力，若未来重构了外层 `TimelinePage` 等页面中关于 `_selectRelativeArticle(1)` 的绑定与分发机制，请务必额外验证 macOS 分屏下单独敲击 `m` 键时的自动翻页连贯性是否依然生效。
+
+## 105. 垃圾拦截页快捷键与全局撤销重构 (2026-06-07)
+
+### 105.1 需求背景与问题
+为了提升垃圾拦截页（`FilterReviewPage`）的批处理效率，用户提出需要支持类似主页的快捷键心流。在 macOS 分栏模式下，拦截页面需要高频执行“移除（确认为垃圾）”和“保留（撤销拦截）”操作，并且应当支持 `Ctrl+Z` 完美撤销这两种动作，以免手滑误操作。
+
+### 105.2 UndoService 重构
+原有的 `UndoService` 被设计为单一状态跟踪（仅追踪 `_lastReadArticle`），且只能撤销“标为已读”动作。
+我们对 `UndoService` 进行了全面重构：
+1. **状态抽象**：引入了 `UndoActionType` 枚举（`read`, `filterReject`, `filterKeep`），并将单例变量变更为 `_lastAction` 复合对象。
+2. **底层撤销逻辑分支**：
+   - 对于普通的 `read` 和拦截页的 `filterReject`，因为它们都在业务上执行了标为已读的动作，所以在撤销时除了恢复本地数据库状态外，还会向服务端发送 `FeedHttp.markUnread` 网络请求同步未读状态。
+   - 对于拦截页的 `filterKeep`，因为它从未同步到已读列表，撤销时仅需将原始拦截状态（`isRejectedByAi: true`，以及原始的拒绝理由）重新 UPSERT 回本地数据库并发出事件总线刷新，无需网络开销。
+
+### 105.3 拦截页快捷键注入
+在 `FilterReviewPage` 中：
+- `M` 键（移除/拒绝）：通过向嵌套的 `ArticlePageView` 传递 `onMKeyPressed` 闭包回调来实现拦截。调用底层的 `_reject`，向撤销栈压入 `filterReject` 动作，并触发自动下一篇。
+- `K` 键（保留/放回）：在 `FilterReviewPage` 的顶层 `initState` 中注册 `HardwareKeyboard` 监听。由于父组件拦截器早于底层的 `Focus` 树触发，它能精准捕获 `K` 键，调用 `_keep`，向撤销栈压入 `filterKeep`，并触发自动下一篇。
+
+### 105.4 留给后续 Agent 的防坑记录：关于状态擦除的取舍
+在处理“保留 (`_keep`)”操作时，底层调用了 `AutoFilterWorker.unReject` 和 `clearFilterState`。这会导致文章被**彻底物理擦除**其曾经被 AI 拦截过的痕迹（清空了 `isRejectedByAi` 和 `filterReason`）。
+如果用户在拦截页按 `K` 将其放回，再跑到主时间线按 `M` 将其标为已读，这条数据看起来就是一条普普通通的好文章，**无法再作为 AI 的 False Positive（误判样本）进行提取和训练**。
+在与用户讨论后，用户明确指示**不在乎保留误杀的痕迹**，且这更符合用户侧“已读后不可见异常UI”的预期。因此本次重构刻意维持了这一“擦除”逻辑未变。未来如果业务层需要做模型微调，请警惕此处的样本流失，届时需要重构这部分的数据库结构，不再擦除，而是改用 `humanVerdict: 'keep'` 类似的追加状态来实现。
 

@@ -547,6 +547,7 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onClose;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final VoidCallback? onMKeyPressed;
 
   const ArticlePageView({
     super.key,
@@ -556,6 +557,7 @@ class ArticlePageView extends StatefulWidget {
     this.onClose,
     this.onPrevious,
     this.onNext,
+    this.onMKeyPressed,
   });
 
   @override
@@ -729,7 +731,16 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     if (key == LogicalKeyboardKey.keyM) {
+      if (widget.onMKeyPressed != null) {
+        widget.onMKeyPressed!();
+        return true;
+      }
+      if (controller.isUpdatingReadState.value) return true;
+      final wasUnread = !controller.isRead.value;
       _toggleReadState();
+      if (wasUnread && widget.onNext != null) {
+        widget.onNext!();
+      }
       return true;
     }
 

@@ -3930,3 +3930,23 @@ if (!isCurrentRoute) {
 ### 101.4 留给后续 Agent 的思考
 经过这次重构，`MainController` 成为了主界面分栏层级的标准接口。如果后续还需要添加别的全局快捷键（例如 `Cmd + 1` 切换到时间线、`Cmd + 2` 切换到订阅源），可以直接在 `main.dart` 注册相关 Intent，并通过调用 `MainController` 的 `changeIndex()` 来极低成本地实现视图切换，无需再次修改 `MainPage` 内部逻辑。
 
+## 102. 阅读进度条视觉滞后问题修复 (2026-06-07)
+
+### 102.1 问题描述
+用户反馈在文章详情页中，顶部 AppBar 下方的橙色阅读进度条（`LinearProgressIndicator`）在伴随页面滚动时“感觉比较滞后”，猜测可能是平滑参数设置过大。
+
+### 102.2 原因分析
+经过对 `lib/pages/article/article_page.dart` 代码的审查，发现进度条使用 `TweenAnimationBuilder` 包装以实现平滑动画，其 `duration` 参数被设置为 `400` 毫秒。
+- **技术机制**：当用户手指滑动屏幕时，`_scrollProgress` 值会高频、实时地更新。
+- **视觉滞后**：由于 `TweenAnimationBuilder` 的过渡时间长达 400 毫秒，进度条在每次接收到新目标进度时，都需要花费将近半秒钟的时间去“追赶”手指的实际位置。这导致进度条在连续滑动中永远处于落后状态，并在滑动停止后仍然缓慢移动，造成了严重的滞后感。
+
+### 102.3 讨论与决策
+- **方案 A（完全移除动画）**：直接将滚动进度绑定至 `LinearProgressIndicator`，零延迟但可能在某些低刷新率或跳跃滚动场景下显得生硬。
+- **方案 B（保留平滑但缩短时间）**：保留 `TweenAnimationBuilder`，但大幅缩短 `duration` 毫秒数。
+与用户确认后，我们选择保留原有的平滑机制（方案 B），因为微弱的过渡动画可以较好地掩盖 Flutter 偶尔的掉帧闪烁，并对由于回弹（Bouncing）等物理特性引发的突兀数值变化起到缓冲作用。用户期望进度条尽量“跟手”，但不必完全牺牲流畅过渡。
+
+### 102.4 修复方案
+在 `lib/pages/article/article_page.dart` 中：
+将 `TweenAnimationBuilder` 的 `duration` 从 `400` 毫秒修改为 `50` 毫秒。
+这一极短的时间既足以在人类视觉神经上实现“无滞后”的跟手感，又能为 UI 渲染保留最低限度的平滑过渡。由于这是跨平台共享的 Dart 侧 UI 代码，该项修改默认将在 iOS/macOS 与 Android 等所有端同步生效。
+

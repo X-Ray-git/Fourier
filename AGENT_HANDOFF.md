@@ -3930,3 +3930,36 @@ if (!isCurrentRoute) {
 ### 101.4 留给后续 Agent 的思考
 经过这次重构，`MainController` 成为了主界面分栏层级的标准接口。如果后续还需要添加别的全局快捷键（例如 `Cmd + 1` 切换到时间线、`Cmd + 2` 切换到订阅源），可以直接在 `main.dart` 注册相关 Intent，并通过调用 `MainController` 的 `changeIndex()` 来极低成本地实现视图切换，无需再次修改 `MainPage` 内部逻辑。
 
+## 102. macOS 桌面端快捷键 M 按键逻辑升级 (2026-06-07)
+
+### 102.1 需求背景与问题
+用户指出，在 macOS 桌面端分屏模式下使用键盘进行快速信息筛选时，按下 `m` 键将文章标记为已读后，当前应用焦点仍然停留在该文章上。由于应用已实现了全局的 `Ctrl+Z` / `Cmd+Z` 撤销快捷键，即便用户误操作将某篇文章标记为已读，恢复成本也极低。因此，用户希望按下 `m` 键将文章“标记已读”后，系统能自动跳转到下一篇文章，从而实现无缝的沉浸式“阅读-标记-下一篇”心流。
+
+### 102.2 跨端体验差异讨论
+在分析该需求时，我们特别讨论了该行为在不同平台的适用性：
+1. **桌面端（macOS 分屏视图）**：键盘用户具有极强的效率导向，自动跳转能有效免去手动按方向键切换的多余动作，因此该设计带来明确的正向收益。
+2. **移动端（Android/iOS 等）**：移动端基于手势滑动与 `PageView` 架构，用户习惯于在点击悬浮的“已读”按钮后，依然能保留在当前页面并由自己决定何时滑动翻页。系统若突兀地强制翻页，会破坏用户的操作空间感与物理直觉。
+
+基于以上共识，该跳转逻辑修改仅被限定于苹果的 macOS 桌面端应用。
+
+### 102.3 具体的修改实现
+由于现有代码架构的跨端防腐设计良好，`lib/pages/article/article_page.dart` 中的硬件键盘事件监听 `_handleHardwareKeyEvent` 在早期实现中便已被 `_usesGlobalShortcuts` 变量（即 `Platform.isMacOS && widget.isSplitView`）严格限制了生效范围。因此，我们只需要直接在该方法内扩展对 `m` 键（`LogicalKeyboardKey.keyM`）的处理代码，即可天然实现平台隔离隔离。
+
+新版逻辑如下：
+```dart
+    if (key == LogicalKeyboardKey.keyM) {
+      if (controller.isUpdatingReadState.value) return true;
+      final wasUnread = !controller.isRead.value;
+      _toggleReadState();
+      if (wasUnread && widget.onNext != null) {
+        widget.onNext!();
+      }
+      return true;
+    }
+```
+**设计说明**：
+- **状态防抖**：前置增加了对 `isUpdatingReadState` 的防御性检测，规避因极高频连按或网络拥堵造成的预期外重复跳转。
+- **定向安全跳转**：通过 `wasUnread` 保存文章在动作发生前的初始状态。仅在执行**将“未读”转为“已读”**的正向操作时，才会触发 `widget.onNext!()` 自动滚至下一篇。反之，若用户按下 `m` 是为了撤回并恢复“未读”（例如标为稍后阅读），焦点将静止不动，以免引发焦点迷失。
+
+### 102.4 给后续接手 Agent 的提醒
+由于本次优化强依赖于上层 Widget 传入的 `widget.onNext` 回调来实现导航能力，若未来重构了外层 `TimelinePage` 等页面中关于 `_selectRelativeArticle(1)` 的绑定与分发机制，请务必额外验证 macOS 分屏下单独敲击 `m` 键时的自动翻页连贯性是否依然生效。

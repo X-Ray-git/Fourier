@@ -729,7 +729,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     if (key == LogicalKeyboardKey.keyM) {
+      if (controller.isUpdatingReadState.value) return true;
+      final wasUnread = !controller.isRead.value;
       _toggleReadState();
+      if (wasUnread && widget.onNext != null) {
+        widget.onNext!();
+      }
       return true;
     }
 

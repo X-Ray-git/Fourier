@@ -4047,6 +4047,24 @@ if (!isCurrentRoute) {
 
 
 
+## 107. 行内代码文本基线向上浮动问题修复 (2026-06-07)
+
+### 107.1 问题描述
+用户反馈在文章详情页中，行内代码（由 `<code>` 标签包裹的文本）的文字在视觉上出现了“往上浮一点”的现象，没有与周围普通文本的基线完美对齐。
+
+### 107.2 原因分析
+在 `lib/pages/article/widgets/html_chunk_card.dart` 的 `_buildCommonExtensions` 中，使用 `TagWrapExtension` 对 `code` 标签进行了自定义包裹，使用了一个带圆角和背景色的 `Container`，并设置了 `padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2)`。
+由于 `flutter_html` 将其转换为 `WidgetSpan` 渲染，默认对齐方式通常基于底部或基线。而 `Container` 底部的 2 像素内边距（padding）导致整个 `Container` 的底部向下延伸。当它与外部普通文本对齐时，这 2 像素的底部边距将内部的文本向上推，产生了视觉上的悬浮感。
+
+### 107.3 修复方案与讨论
+我们讨论了三种方案：
+1. **调整 Container 的 Padding（不对称内边距）**：取消底部边距，实现简单，但导致背景框上下不对称，影响质感。
+2. **使用 Transform.translate 进行垂直偏移**：保留原有对称 Padding 和圆角，通过向下微调消除偏移。
+3. **废弃 TagWrapExtension，仅使用 Html Style**：完全交由原生引擎排版，但会丢失背景圆角（`borderRadius`）的视觉设定。
+
+**最终决策**：选择了方案二。在 `TagWrapExtension` 内部的 `Container` 外层包裹了 `Transform.translate(offset: const Offset(0, 1.5))`。
+此举能够完美保留现有的对称内边距和圆角设定，同时通过纯视觉阶段的向下微调，抵消了 2 像素底部边距造成的排版上推效应。这是一个由于固定 Padding 引起的固定偏差，因此使用固定的 `Offset` 抵消是合理且保持设计规范的最佳权衡。
+
 ---
 *🤖 Automated Release Footprint:* 
 *执行指令: `./scripts/release.sh 1.1.10 -m "- 优化文章行内代码块的视觉样式\n- 修复审核拦截页已读状态同步延迟问题\n- macOS 桌面端新增拦截页 M/K 快捷键批量操作与自动跳转\n- 重构全局撤销服务，支持拦截页的复杂状态撤销回滚\n- 修复阅读页顶部进度条动画滞后不跟手的问题" --push`*

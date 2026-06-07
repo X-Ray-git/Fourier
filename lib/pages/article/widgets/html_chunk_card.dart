@@ -180,14 +180,17 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
       TagWrapExtension(
         tagsToWrap: {'code'},
         builder: (child) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(6),
+          return Transform.translate(
+            offset: const Offset(0, 1.5),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: child,
             ),
-            child: child,
           );
         },
       ),

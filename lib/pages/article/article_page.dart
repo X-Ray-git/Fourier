@@ -900,7 +900,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               return progress > 0.0
                   ? TweenAnimationBuilder<double>(
                       tween: Tween<double>(begin: 0.0, end: progress),
-                      duration: const Duration(milliseconds: 400),
+                      duration: const Duration(milliseconds: 50),
                       curve: Curves.easeOutCubic,
                       builder: (context, value, _) {
                         return LinearProgressIndicator(

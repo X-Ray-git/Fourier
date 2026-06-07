@@ -3944,3 +3944,27 @@ if (!isCurrentRoute) {
 2. **规避重复渲染**：剥离原 `Style` 对象中对 `'code'` 的 `backgroundColor` 设定，统一在 `Container` 的 `BoxDecoration` 中绘制背景色（采用 `colorScheme.surfaceContainerHighest.withValues(alpha: 0.6)`），从而达成柔和的圆角药丸（Pill）视觉效果。
 3. **增强跨端字体表现**：在 `'code'` 的 `Style` 声明中补全了等宽字体回退栈：`fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier']`。
 4. **抽取复用逻辑**：由于解析器在针对不规范 HTML 时，可能将行内 `<code>` 留存至段落、列表甚至表格的子树内，因此将扩展列表提取为了通用的 `_buildCommonExtensions(context, cs)` 方法，一揽子应用于页面的所有 `Html` 实例之中。
+## 103. 审核/垃圾拦截页面的即时已读同步修复 (2026-06-07)
+
+### 103.1 问题背景
+用户反馈在“审核/垃圾拦截”页面（FilterReviewPage）移除一篇文章时，该文章的已读状态并没有立即同步至服务端，而是必须等到下一次手动下拉刷新或者到任务中心点击同步按钮时才会同步。
+
+### 103.2 问题根源
+根据代码分析，当在审核页面移除/拒绝文章时，触发了 `_reject` 方法：
+该方法中处理已读状态时，仅调用了 `ReadSyncService.enqueue(article.entryId, isInbox: ...)` 将待同步的项加入到了本地缓存队列（`pending_read_items`）中。
+然而，与文章阅读详情页（`ArticleController.markAsRead`）会即时触发 `FeedHttp.markRead` 并在后台重试不同，`_reject` 中并没有紧接着调用触发同步网络请求的命令。导致这些已读状态滞留在本地，必须被动等待其它触发点调用 `ReadSyncService.syncPendingReads()` 才能完成同步。
+
+### 103.3 修复思路与讨论
+关于修复方案，与用户讨论了以下几个方向的利弊：
+1. **即时触发同步**：在入队后立即触发异步同步，用户操作反馈最及时，但在批量快速滑动时可能会短暂触发多次并发的网络请求（虽然底层有防并发锁）。
+2. **退出页面时同步**：监听页面生命周期，在离开该页面时统一触发同步。能合并请求，但如果用户久留页面不退出则迟迟无法同步。
+3. **定时后台轮询**：每隔一定时间自动消费队列。最稳妥但稍微偏重。
+
+最终采用了方案一（用户选定），这符合用户期待的最直觉反应。
+
+### 103.4 具体实施
+在 `lib/pages/timeline/filter_review_page.dart` 中，顶部补充引入了 `dart:async`。
+在 `_reject` 方法中，紧跟着 `ReadSyncService.enqueue`，新增调用了：
+`unawaited(ReadSyncService.syncPendingReads());`
+这样既保证了已读状态能被持久化到待同步队列防丢失，又能够在文章被移除时立即尝试将状态同步到云端。
+

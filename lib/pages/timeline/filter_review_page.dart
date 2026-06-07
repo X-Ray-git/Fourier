@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -219,6 +220,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       article.entryId,
       isInbox: article.category == 'inbox',
     );
+    unawaited(ReadSyncService.syncPendingReads());
     ArticleStateNotifier.tick(article.entryId);
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
     if (_selectedArticle.value?.entryId == article.entryId) {

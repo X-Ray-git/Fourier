@@ -3963,3 +3963,26 @@ if (!isCurrentRoute) {
 
 ### 102.4 给后续接手 Agent 的提醒
 由于本次优化强依赖于上层 Widget 传入的 `widget.onNext` 回调来实现导航能力，若未来重构了外层 `TimelinePage` 等页面中关于 `_selectRelativeArticle(1)` 的绑定与分发机制，请务必额外验证 macOS 分屏下单独敲击 `m` 键时的自动翻页连贯性是否依然生效。
+
+## 103. 垃圾拦截页快捷键与全局撤销重构 (2026-06-07)
+
+### 103.1 需求背景与问题
+为了提升垃圾拦截页（`FilterReviewPage`）的批处理效率，用户提出需要支持类似主页的快捷键心流。在 macOS 分栏模式下，拦截页面需要高频执行“移除（确认为垃圾）”和“保留（撤销拦截）”操作，并且应当支持 `Ctrl+Z` 完美撤销这两种动作，以免手滑误操作。
+
+### 103.2 UndoService 重构
+原有的 `UndoService` 被设计为单一状态跟踪（仅追踪 `_lastReadArticle`），且只能撤销“标为已读”动作。
+我们对 `UndoService` 进行了全面重构：
+1. **状态抽象**：引入了 `UndoActionType` 枚举（`read`, `filterReject`, `filterKeep`），并将单例变量变更为 `_lastAction` 复合对象。
+2. **底层撤销逻辑分支**：
+   - 对于普通的 `read` 和拦截页的 `filterReject`，因为它们都在业务上执行了标为已读的动作，所以在撤销时除了恢复本地数据库状态外，还会向服务端发送 `FeedHttp.markUnread` 网络请求同步未读状态。
+   - 对于拦截页的 `filterKeep`，因为它从未同步到已读列表，撤销时仅需将原始拦截状态（`isRejectedByAi: true`，以及原始的拒绝理由）重新 UPSERT 回本地数据库并发出事件总线刷新，无需网络开销。
+
+### 103.3 拦截页快捷键注入
+在 `FilterReviewPage` 中：
+- `M` 键（移除/拒绝）：通过向嵌套的 `ArticlePageView` 传递 `onMKeyPressed` 闭包回调来实现拦截。调用底层的 `_reject`，向撤销栈压入 `filterReject` 动作，并触发自动下一篇。
+- `K` 键（保留/放回）：在 `FilterReviewPage` 的顶层 `initState` 中注册 `HardwareKeyboard` 监听。由于父组件拦截器早于底层的 `Focus` 树触发，它能精准捕获 `K` 键，调用 `_keep`，向撤销栈压入 `filterKeep`，并触发自动下一篇。
+
+### 103.4 留给后续 Agent 的防坑记录：关于状态擦除的取舍
+在处理“保留 (`_keep`)”操作时，底层调用了 `AutoFilterWorker.unReject` 和 `clearFilterState`。这会导致文章被**彻底物理擦除**其曾经被 AI 拦截过的痕迹（清空了 `isRejectedByAi` 和 `filterReason`）。
+如果用户在拦截页按 `K` 将其放回，再跑到主时间线按 `M` 将其标为已读，这条数据看起来就是一条普普通通的好文章，**无法再作为 AI 的 False Positive（误判样本）进行提取和训练**。
+在与用户讨论后，用户明确指示**不在乎保留误杀的痕迹**，且这更符合用户侧“已读后不可见异常UI”的预期。因此本次重构刻意维持了这一“擦除”逻辑未变。未来如果业务层需要做模型微调，请警惕此处的样本流失，届时需要重构这部分的数据库结构，不再擦除，而是改用 `humanVerdict: 'keep'` 类似的追加状态来实现。

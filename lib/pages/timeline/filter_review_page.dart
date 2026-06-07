@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../models/article.dart';
@@ -10,6 +11,7 @@ import '../../services/article_state_notifier.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/summary_service.dart';
+import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
 import '../article/article_page.dart';
 import '../timeline/timeline_controller.dart';
@@ -35,6 +37,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     _loadArticles();
     _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
       final entryId = ArticleStateNotifier.lastEntryId;
@@ -75,7 +78,27 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     AutoFilterWorker.onRejected = null;
     _articleStateWorker?.dispose();
     _filterCountWorker?.dispose();
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     super.dispose();
+  }
+
+  bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!isCurrentRoute) return false;
+    if (event is! KeyDownEvent) return false;
+
+    if (Platform.isMacOS) {
+      if (event.logicalKey == LogicalKeyboardKey.keyK) {
+        final selected = _selectedArticle.value;
+        if (selected != null) {
+          _keep(selected);
+          _selectRelativeArticle(1);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   void _loadArticles() {
@@ -157,6 +180,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _keep(ArticleModel article) {
+    UndoService.recordFilterAction(article, UndoActionType.filterKeep);
     ArticleStateNotifier.tick(article.entryId);
     AutoFilterWorker.unReject(article.entryId);
     // 清除遗留的 readStatus 覆盖（不应写入 false，用户只是保留文章，不是标未读）
@@ -184,6 +208,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _reject(ArticleModel article) {
+    UndoService.recordFilterAction(article, UndoActionType.filterReject);
     LocalArticleDbService.upsertOne(
       ArticleModel(
         entryId: article.entryId,
@@ -513,6 +538,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 onClose: () => _selectedArticle.value = null,
                 onPrevious: () => _selectRelativeArticle(-1),
                 onNext: () => _selectRelativeArticle(1),
+                onMKeyPressed: () {
+                  _reject(selected);
+                  _selectRelativeArticle(1);
+                },
               );
             }),
           ),

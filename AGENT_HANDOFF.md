@@ -4047,6 +4047,37 @@ if (!isCurrentRoute) {
 
 
 
+## 107. 垃圾审核页与主时间线快捷键监听冲突修复 (2026-06-07)
+
+### 107.1 现象与问题诊断
+用户反馈：在“垃圾审核”（FilterReviewPage）界面中，按下 `m` 键没有任何效果，但是却发现“主时间线”（TimelinePage）中的文章数量在减少。
+
+经过代码排查，发现这是由于 macOS 分屏布局机制导致的**全局键盘监听冲突**：
+1. **组件堆叠与存活**：macOS 版主界面使用 `IndexedStack` 来管理各个侧边栏页面，这导致“主时间线”和“垃圾审核”页面的实例同时存在于组件树中（且 `ModalRoute.of(context)?.isCurrent` 皆为 true）。
+2. **全局事件捕获**：两个页面都内部嵌套了 `ArticlePageView` 组件，该组件在 `initState` 时向 `HardwareKeyboard.instance` 注册了全局按键监听 `_handleHardwareKeyEvent`。
+3. **校验逻辑错位**：`ArticlePageView` 内部有一段针对当前选中文章的“前置安全校验”：
+   ```dart
+   if (Get.isRegistered<TimelineController>()) {
+     final tc = Get.find<TimelineController>();
+     if (tc.selectedArticle.value?.entryId != widget.article.entryId) return false;
+   }
+   ```
+   - 在**垃圾审核**页面中，当前 `widget.article` 来自页面自带的独立状态，不匹配主时间线 `TimelineController` 选中的文章，导致校验失败，因此直接**忽略了 M 键事件**。
+   - 而隐藏在后台的**主时间线**视图收到了同一份全局键盘事件，且该校验顺利**通过**（因为它的 `widget.article` 正好匹配 `TimelineController`），最终悄悄在后台执行了标记已读及翻页，导致主时间线内文章被误操作减少。
+
+### 107.2 修复方案讨论与决策
+为了修复该泄漏，讨论了以下三种方向：
+- **方案A（传递激活标志）**：向 `ArticlePageView` 注入 `isActive` 回调，由外层根据当前路由/侧边栏索引决定是否拦截响应。
+- **方案B（单独页面拦截）**：仅在垃圾审核页顶层拦截 `M` 键并吞噬事件。缺点是无法防御其他按键（如方向键）向后台的泄露。
+- **方案C（原生 Focus 树）**：废除全局键盘，彻底改用 Flutter 的 `FocusNode` / `Shortcuts` 机制。缺点是 macOS 的分屏焦点管理十分脆弱，鼠标误点侧边栏往往会导致全局阅读快捷键全部失效，体验倒退极大。
+
+**最终决策**：选择了改良版的**方案A**。既保留了全局热键随时可用的稳健体验，又以极小的代价彻底掐断了所有不可见页面的多余事件响应。
+
+### 107.3 实现细节
+1. 在 `ArticlePageView` 的构造函数增加 `final bool Function()? isActive;`。
+2. 在 `_handleHardwareKeyEvent` 首部添加校验：`if (widget.isActive != null && !widget.isActive!()) return false;`。
+3. 在 `TimelinePage` 中传入：`isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 0`。
+4. 在 `FilterReviewPage` 中传入：`isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 1`。
+
 ---
 *🤖 Automated Release Footprint:* 
-*执行指令: `./scripts/release.sh 1.1.10 -m "- 优化文章行内代码块的视觉样式\n- 修复审核拦截页已读状态同步延迟问题\n- macOS 桌面端新增拦截页 M/K 快捷键批量操作与自动跳转\n- 重构全局撤销服务，支持拦截页的复杂状态撤销回滚\n- 修复阅读页顶部进度条动画滞后不跟手的问题" --push`*

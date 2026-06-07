@@ -21,6 +21,7 @@ import '../../services/feed_translation_settings_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
+import '../main/main_controller.dart';
 import '../subscriptions/subscriptions_controller.dart';
 import '../widgets/article_card.dart';
 import 'timeline_controller.dart';
@@ -333,6 +334,7 @@ class _TimelinePageState extends State<TimelinePage> {
                     key: ValueKey(selected.entryId),
                     article: selected,
                     isSplitView: true,
+                    isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 0,
                     onClose: () => controller.selectedArticle.value = null,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),

@@ -4199,3 +4199,34 @@ if (!isCurrentRoute) {
 3. `lib/pages/recent_read/recent_read_page.dart`
 
 位于重置时间戳变量之后，优先执行 `_selectRelativeArticle(1);`（或针对 feed 的 `selectRelativeArticle(1);`），再调用现有的外链拉起与标记已读代码。由此平滑实现了类似邮件系统的快捷连续阅读流。
+
+## 113. macOS 时间线卡片双击动画掉帧修复（2026-06-08）
+
+### 113.1 缺陷描述
+在 macOS 端应用中，点击时间线文章卡片时，左侧卡片会触发水波纹反馈动画（`InkWell` ripple），同时右侧分栏会响应加载文章详情。当用户快速双击卡片以图快速打开外部浏览器并标记已读时，系统出现严重的视觉断裂和掉帧感。
+
+### 113.2 根因分析
+1. **单双击设计权衡**：为了避免原生 `onDoubleTap` 带来的 300ms 强制判断延迟，代码中去除了该回调，转而在 `_handleMacArticleTap` 中通过计算两次点击的时间差（`< 300ms`）手动判定双击。
+2. **第一击并发压力**：无论是单击还是双击，第一击都会同步触发 `controller.selectedArticle.value = article`，随即启动极其繁重的 `ArticlePageView` HTML 结构解析（包括 `Isolate.run` 以及返回后立即在主线程执行的前 5 个 `HtmlChunkCard` 的重度构建）。
+3. **视觉冲突与线程拥堵**：双击行为发生在第一击之后的 150-300ms 之间，这正好与 `ArticlePageView` 首帧解析渲染的回调相撞。此时，第二击又并发触发了 `launchUrl`（唤起外部浏览器）和 `UndoService.markAsRead`。而 `markAsRead` 会修改状态，导致包含该卡片的列表项从界面上迅速移除（销毁 `ArticleCard` widget），直接截断了刚刚开启的水波纹动画，造成强烈的撕裂和卡顿感。
+
+### 113.3 解决思路与实现
+核心原则是：**在保留双击响应速度（零人工 Delay）的前提下，实现重型操作的渲染错峰。**
+修改 `lib/pages/timeline/timeline_page.dart`：在第 112 节已确定的“先选中下一篇”基础上，将双击后触发的浏览器启动及已读处理放入 `WidgetsBinding.instance.addPostFrameCallback` 中。让 Flutter 把当前正处于启动水波纹和准备布局变更阶段的那一帧顺畅渲染完（完成上屏），然后立即接管并执行其余沉重任务。
+```dart
+    if (isDoubleTap) {
+      _lastArticleTapEntryId = null;
+      _lastArticleTapAt = null;
+      _selectRelativeArticle(1);
+
+      // Let the current frame paint the double-tap ripple before heavy work.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openOriginalArticle(article);
+
+        if (!article.isRead) {
+          unawaited(UndoService.markAsRead(article, showSuccess: false));
+        }
+      });
+    }
+```
+通过这种极其细粒度的帧调度，既消除了单点多工引发的卡顿假象，也避免了因强加人为延时带来的迟滞感。

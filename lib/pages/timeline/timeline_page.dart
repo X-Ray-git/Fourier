@@ -197,11 +197,15 @@ class _TimelinePageState extends State<TimelinePage> {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       _selectRelativeArticle(1);
-      _openOriginalArticle(article);
 
-      if (!article.isRead) {
-        unawaited(UndoService.markAsRead(article, showSuccess: false));
-      }
+      // Let the current frame paint the double-tap ripple before heavy work.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openOriginalArticle(article);
+
+        if (!article.isRead) {
+          unawaited(UndoService.markAsRead(article, showSuccess: false));
+        }
+      });
     }
   }
 

@@ -4230,3 +4230,18 @@ if (!isCurrentRoute) {
     }
 ```
 通过这种极其细粒度的帧调度，既消除了单点多工引发的卡顿假象，也避免了因强加人为延时带来的迟滞感。
+
+## 114. Worktree 安全合并检查点（2026-06-08）
+
+本轮用户要求重新检查所有 worktree，并先合并确认安全的小改动，再处理两个需求真实但实现需要重做的分支。已合入 `main` 的内容包括：
+1. `debug-macos-navigation-logic`：统一 macOS 端 `M` 快捷键、工具栏按钮与浮动按钮的标记已读/跳转行为，并修复垃圾拦截页 `K/M` 后总是回到剩余列表第一篇的问题。
+2. `fix-macos-card-navigation`：macOS 双击文章卡片打开原文时，先选中下一篇文章，再执行打开外链与标记已读流程。
+3. `fix-macos-card-animation`：在主时间线双击流程中，将打开外链和静默标记已读延后一帧执行，避免水波纹反馈与重型同步/外链操作争抢同一帧。
+
+暂未合入的两个分支仍然代表真实需求，但不能原样合并：
+1. `fix-macos-undo-focus-navigation`：撤销后自动聚焦恢复文章的需求成立，但原实现硬绑 `TimelineController`，无法覆盖垃圾拦截页等拥有私有选中态的页面。后续应让 `UndoService` 返回或广播恢复的文章，由当前页面自己决定选中与滚动。
+2. `cosmic-cosmos-darts-14h23`：卡片进入/退出动画需求成立，但原 `ImplicitlyAnimatedList` 内部维护 `_items` 的同时，外部 builder 又使用外部列表 index 取文章，动画插入/删除期间可能错位或越界。后续应重写为 builder 直接接收内部真实 item，并用稳定文章 id 驱动动画。
+
+验证结果：
+- `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
+- `/opt/homebrew/bin/flutter test --no-pub`：通过。

@@ -203,7 +203,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       }
     }
     final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
-    final int currentIndex = _articles.indexWhere((a) => a.entryId == article.entryId);
+    final int currentIndex = _articles.indexWhere(
+      (a) => a.entryId == article.entryId,
+    );
 
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
 
@@ -258,7 +260,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     unawaited(ReadSyncService.syncPendingReads());
     ArticleStateNotifier.tick(article.entryId);
     final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
-    final int currentIndex = _articles.indexWhere((a) => a.entryId == article.entryId);
+    final int currentIndex = _articles.indexWhere(
+      (a) => a.entryId == article.entryId,
+    );
 
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
 

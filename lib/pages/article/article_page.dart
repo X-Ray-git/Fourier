@@ -679,7 +679,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
   bool _handleHardwareKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
-    if (_hasShortcutModifierPressed()) return false;
 
     if (!mounted) return false;
     final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
@@ -706,16 +705,19 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     if (key == LogicalKeyboardKey.arrowLeft && widget.onPrevious != null) {
+      if (_hasShortcutModifierPressed()) return false;
       widget.onPrevious!();
       return true;
     }
 
     if (key == LogicalKeyboardKey.arrowRight && widget.onNext != null) {
+      if (_hasShortcutModifierPressed()) return false;
       widget.onNext!();
       return true;
     }
 
     if (key == LogicalKeyboardKey.arrowUp) {
+      if (_hasShortcutModifierPressed()) return false;
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.offset - 150,
@@ -727,6 +729,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     if (key == LogicalKeyboardKey.arrowDown) {
+      if (_hasShortcutModifierPressed()) return false;
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.offset + 150,
@@ -1236,11 +1239,16 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 if (event is KeyDownEvent || event is KeyRepeatEvent) {
                   final key = event.logicalKey;
                   if (key == LogicalKeyboardKey.escape ||
-                      key == LogicalKeyboardKey.arrowLeft ||
+                      key == LogicalKeyboardKey.keyM) {
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.arrowLeft ||
                       key == LogicalKeyboardKey.arrowRight ||
                       key == LogicalKeyboardKey.arrowUp ||
-                      key == LogicalKeyboardKey.arrowDown ||
-                      key == LogicalKeyboardKey.keyM) {
+                      key == LogicalKeyboardKey.arrowDown) {
+                    if (_hasShortcutModifierPressed()) {
+                      return KeyEventResult.ignored;
+                    }
                     return KeyEventResult.handled;
                   }
                 }

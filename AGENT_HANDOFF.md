@@ -4272,3 +4272,7 @@ if (!isCurrentRoute) {
 - `/opt/homebrew/bin/dart format lib/services/undo_service.dart lib/pages/timeline/timeline_page.dart lib/pages/timeline/filter_review_page.dart lib/common/widgets/implicitly_animated_list.dart`：通过。
 - `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
 - `/opt/homebrew/bin/flutter test --no-pub`：通过。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*

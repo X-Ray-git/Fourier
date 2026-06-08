@@ -4918,3 +4918,95 @@ flutter analyze lib/utils/image_clipboard.dart lib/pages/article/widgets/image_g
 1. 在 macOS 垃圾拦截页点击"移除"按钮 → 文章应自动从列表消失，选中下一篇并滚动到可见。
 2. 移除后按 ←/→ 方向键 → 应切换上/下一篇，不出现文本选择光标。
 3. `dart analyze lib/` 通过。
+
+## 124. macOS 右侧文章详情面板滚动条跳动修复（2026-06-08）
+
+### 124.1 问题报告
+
+用户反馈：macOS 右侧文章详情面板（ArticlePageView，分栏视图右半部分）的叠加式滚动条，在**使用触控板/鼠标滚动时**会出现间歇性的「拇指忽大忽小、位置跳跃」现象。
+
+### 124.2 根因分析
+
+**物理原因**：macOS 上 Flutter 默认使用叠加式（overlay）滚动条，其拇指大小 = `视口高度 / maxScrollExtent`。当 `maxScrollExtent` 在滚动过程中发生变化，拇指的尺寸和位置就会跳动。
+
+**三层源码根因**（`lib/pages/article/article_page.dart` 中的 `_ArticlePageViewState`）：
+
+| 根因 | 代码位置 (旧) | 机制 |
+|------|---------------|------|
+| **渐进式构建 setState** | `_scheduleProgressiveBuild()` / `_buildNextBatch()` | 滚动时定期调用 `setState` 将占位 `SizedBox` 替换为真实 `HtmlChunkCard` → 布局重排 → `maxScrollExtent` 变化 |
+| **虚拟化/非虚拟化模式切换** | `_shouldUseVirtualizedBody()` / `_usesVirtualizedBody` | 根据内容量（80 chunk / 10000px 阈值）自动在 `SliverList`(虚拟化) 与 `SliverToBoxAdapter+Column`(全量渲染) 间切换 → 滚动结构整体替换 |
+| **_MeasuredSize 实时测量** | `_updateMeasuredChunkHeight()` / `_estimatedBodyExtent` | `_MeasuredSize` 在滚动时测量每个进入视口的 chunk 实际高度，更新 `_estimatedBodyExtent` 用于进度条 → 同时 `RenderViewport` 的 `maxScrollExtent` 也被影响 |
+
+### 124.3 修复方案
+
+去除了所有导致 `maxScrollExtent` 不稳定的结构，将文章详情正文改用**纯虚拟化 `SliverList.builder`**：
+
+#### 删除（共 ~150 行，7 个状态变量 + 5 个方法）
+
+- `_builtCount` — 建了多少个 chunk
+- `_lastActiveChunkCount` — 上一帧的 chunk 总数
+- `_lastShowTranslation` — 上一次是否显示译文
+- `_progressiveBuildScheduled` — 渐进构建调度锁
+- `_usesVirtualizedBody` — 当前是否虚拟化模式
+- `_estimatedBodyExtent` — 正文预估总高度（用于进度条）
+- `_measuredChunkHeights` — 每个 chunk 测量到的真实高度缓存
+- `_initialBuildCount` / `_buildBatchSize` / `_virtualChunkThreshold` / `_virtualExtentThreshold` / `_metadataExtentEstimate` / `_bottomExtent` — 构建设置常量
+- `_scheduleProgressiveBuild()` — 调度渐进构建
+- `_buildNextBatch()` — 分批构建下一批
+- `_shouldUseVirtualizedBody()` — 虚拟化阈值判定
+- `_estimatedExtentFor()` / `_rawEstimatedExtentFor()` — 预估总高度计算
+- `_updateMeasuredChunkHeight()` — 测量回调
+- `_MeasuredSize` / `_MeasuredSizeState` — 测量包装组件
+- 非虚拟化分支：`SliverToBoxAdapter + Column + 占位 SizedBox` 全部渲染路径
+- 翻译切换状态刷新逻辑：`contentChanged` / `_measuredChunkHeights.clear()`
+
+#### 简化的代码
+
+- `_updateScrollProgress(ScrollMetrics)`：从「虚拟化用 `_estimatedBodyExtent` 估算，非虚拟化用 `metrics.maxScrollExtent`」的双路计算降为统一用 `metrics.maxScrollExtent` 的单路计算
+- `initState()`：删除 `_builtCount` 初始化和 `_initialBuildCount` 读取
+- `dispose()`：删除隐式状态清理
+- 移除了 `GStorage` / `StorageKeys` 的相关导入（不再读 `articleInitialChunkBuildCount` 设置，因该设置已无意义）
+
+#### 保留的代码
+
+- `CustomScrollView` + 元数据 `SliverToBoxAdapter` + 底部间距 `SliverPadding`
+- `ScrollController` 管理和键盘快捷键
+- `_scrollProgress` 进度条 `ValueNotifier`
+- `NotificationListener<ScrollNotification>` 滚动通知
+- `TranslationService` 驱动的原文/译文切换逻辑（通过 `Obx` 响应式切换，不再重建列表结构）
+- 本轮合并时与第 122 节链接悬停预览、第 123 节显式焦点管理手工合成：统一 `SliverList.builder` 分支保留 `hoveredUrl: _hoveredUrl`，`initState()/dispose()/Focus(...)` 保留 `_focusNode`。
+
+### 124.4 行为变化对照
+
+| 场景 | 旧行为 | 新行为 |
+|------|--------|--------|
+| 滚动中触发渐进构建 | `setState` 替换占位符 → 布局重排 → `maxScrollExtent` 变 → 滚动条跳动 | 无渐进构建，所有 chunk 由 `SliverList` 按需虚拟化渲染 |
+| 内容量超过阈值 | `SliverList` ↔ `Column` 模式切换 → 滚动结构整体替换 | 始终 `SliverList.builder`，无模式切换 |
+| 滚动条表现 | 拇指忽大忽小，位置跳跃 | 拇指尺寸在 `maxScrollExtent` 稳定后固定（新 chunk 首次构建时仍轻微变化，但远优于旧行为） |
+| 阅读进度条 | 用 `_estimatedBodyExtent` 估算，有时不准 | 直接用 `metrics.maxScrollExtent` 计算，始终准确 |
+
+### 124.5 验证结果
+
+- `flutter analyze --no-fatal-infos`：No issues found
+- `flutter test`：All 6 tests passed
+- 代码量：+13 / -248 行（大幅简化）
+
+### 124.6 修改文件清单
+
+- `lib/pages/article/article_page.dart` — 去除渐进构建、模式切换、实时测量，统一用 `SliverList.builder`（+13 / -248）
+
+### 124.7 遗留风险与改进空间
+
+1. **SliverList 首次构建时的 maxScrollExtent 仍会变化**：`SliverList` 在未指定 `itemExtent`/`prototypeItem` 时，仍会按第一个渲染的 item 高度与 itemCount 推算总高度，后续 item 首次进入视口时才测量实际高度并调整 `maxScrollExtent`。方案尝试使用 `prototypeItem` 但当前 Flutter SDK 版本（`flutter_html_table` 约束版本）未暴露该参数，故暂不启用。用户若仍感知到微跳，可考虑：
+   - 升级 Flutter 版本后使用 `SliverChildBuilderDelegate.prototypeItem`
+   - 在 `ArticlePageView` 初始化时预渲染一个 `HtmlChunkCard` 作为原型，手动传入固定高度
+2. **存储设置键残留`StorageKeys.articleInitialChunkBuildCount`**：该 key 不再被任何代码读取，但 Hive 中用户数据仍存有此值。不影响运行，如需清理可在设置页增加"清除过期设置"功能时一并处理。
+
+### 124.8 讨论过程摘要
+
+用户报告「macOS 右侧滑动条依然会出现间断性地跳跃」后：
+1. 先完整阅读仓库确认是 Flutter RSS 阅读器，定位到 `_ArticlePageViewState`（`article_page.dart:572`）。
+2. 通过 Query 确认是**文章详情面板（右面板）**的滚动条，跳动发生在**主动滚动时**。
+3. 讨论四种修复方向（稳定虚拟化模式 / 滚动时暂停测量 / 自定义 Scrollbar / 暂停渐进构建），用户要求先用中文讨论后再定方案。
+4. 解释各方案优劣后，用户选择「直接在项目中进行改动」。
+5. 实施：删除渐进构建 + 模式切换 + 实时测量三大不稳定源，统一为纯 `SliverList.builder` 虚拟化渲染。

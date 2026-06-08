@@ -22,7 +22,6 @@ import '../../services/article_state_notifier.dart';
 import '../../utils/article_content_utils.dart';
 import '../../utils/html_chunk_parser.dart';
 import '../../utils/security_utils.dart';
-import '../../common/constants/constants.dart';
 import '../../utils/storage.dart';
 import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
@@ -50,8 +49,6 @@ class ArticleController extends GetxController {
   final isFetchingReadability = false.obs;
   final isFetchingContent = false.obs;
   final isParsingContent = false.obs;
-
-  final DateTime _initTime = DateTime.now();
 
   ArticleController(this.article);
 
@@ -578,31 +575,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   final ValueNotifier<double> _scrollProgress = ValueNotifier(0.0);
   final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null);
 
-  // 延迟 build：首帧只真正构建前 N 个 HtmlChunkCard，其余用 SizedBox 占位。
-  // 后续逐批替换为真正的卡片，替换后不回收（保持 Column 架构不变）。
-  int _builtCount = 0;
-  int _lastActiveChunkCount = 0;
-  bool? _lastShowTranslation;
-  bool _progressiveBuildScheduled = false;
-  bool _usesVirtualizedBody = false;
-  double _estimatedBodyExtent = 0;
-  final Map<int, double> _measuredChunkHeights = {};
-
-  static int get _initialBuildCount {
-    final raw = GStorage.setting.get(
-      StorageKeys.articleInitialChunkBuildCount,
-      defaultValue: 5,
-    );
-    if (raw is int && raw >= 3 && raw <= 20) return raw;
-    return 5;
-  }
-
-  static const int _buildBatchSize = 10; // 每批多构建 10 个块
-  static const int _virtualChunkThreshold = 80;
-  static const double _virtualExtentThreshold = 10000;
-  static const double _metadataExtentEstimate = 280;
-  static const double _bottomExtent = 80;
-
   @override
   void initState() {
     super.initState();
@@ -610,7 +582,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     controller = Get.put(ArticleController(widget.article), tag: _tag);
     _scrollController = ScrollController();
     _focusNode = FocusNode();
-    _builtCount = _initialBuildCount;
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
@@ -636,54 +607,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       Get.delete<ArticleController>(tag: _tag);
     }
     super.dispose();
-  }
-
-  /// 首帧提交后，分批构建剩余的占位块。
-  /// 每批之间有 50ms 间隔，让 UI 线程呼吸。
-  void _scheduleProgressiveBuild() {
-    if (_progressiveBuildScheduled) return;
-    _progressiveBuildScheduled = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      // 等待页面转场动画结束（约 300ms），避免在动画期间主线程排版 HTML 导致掉帧
-      final elapsed = DateTime.now()
-          .difference(controller._initTime)
-          .inMilliseconds;
-      if (elapsed < 350) {
-        await Future.delayed(Duration(milliseconds: 350 - elapsed));
-      }
-      if (!mounted) return;
-
-      _buildNextBatch();
-    });
-  }
-
-  void _buildNextBatch() {
-    if (!mounted) return;
-    final total = _lastActiveChunkCount;
-    if (_builtCount >= total) {
-      _progressiveBuildScheduled = false;
-      return;
-    }
-
-    setState(() {
-      _builtCount = (_builtCount + _buildBatchSize).clamp(0, total);
-    });
-
-    if (_builtCount < total) {
-      Future.delayed(const Duration(milliseconds: 50), () {
-        if (mounted) _buildNextBatch();
-      });
-    } else {
-      _progressiveBuildScheduled = false;
-    }
-  }
-
-  bool _shouldUseVirtualizedBody(List<HtmlChunk> chunks) {
-    if (chunks.length >= _virtualChunkThreshold) return true;
-    return _rawEstimatedExtentFor(chunks) >= _virtualExtentThreshold;
   }
 
   bool get _usesGlobalShortcuts => Platform.isMacOS && widget.isSplitView;
@@ -792,67 +715,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
   }
 
-  double _estimatedExtentFor(List<HtmlChunk> chunks) {
-    var total = 0.0;
-    for (var i = 0; i < chunks.length; i++) {
-      total += _measuredChunkHeights[i] ?? chunks[i].estimatedHeight;
-    }
-    return total;
-  }
-
-  double _rawEstimatedExtentFor(List<HtmlChunk> chunks) {
-    var total = 0.0;
-    for (final chunk in chunks) {
-      total += chunk.estimatedHeight;
-    }
-    return total;
-  }
-
-  void _updateMeasuredChunkHeight(
-    int index,
-    Size size,
-    double estimatedHeight,
-  ) {
-    final height = size.height;
-    if (height <= 0) return;
-
-    final previous = _measuredChunkHeights[index];
-    if (previous != null && (previous - height).abs() < 1) return;
-    _measuredChunkHeights[index] = height;
-    if (_usesVirtualizedBody) {
-      _estimatedBodyExtent =
-          (_estimatedBodyExtent - (previous ?? estimatedHeight)) + height;
-    }
-  }
-
   void _updateScrollProgress(ScrollMetrics metrics) {
     if (metrics.axis != Axis.vertical) return;
-
-    if (_usesVirtualizedBody && _estimatedBodyExtent > 0) {
-      if (metrics.extentAfter <= 8) {
-        _scrollProgress.value = 1.0;
-        return;
-      }
-      if (metrics.pixels <= 0) {
-        _scrollProgress.value = 0.0;
-        return;
-      }
-
-      final estimatedContentExtent =
-          _metadataExtentEstimate + _estimatedBodyExtent + _bottomExtent;
-      final estimatedMaxScroll =
-          estimatedContentExtent - metrics.viewportDimension;
-      if (estimatedMaxScroll <= 0) {
-        _scrollProgress.value = 1.0;
-        return;
-      }
-
-      _scrollProgress.value = (metrics.pixels / estimatedMaxScroll).clamp(
-        0.0,
-        1.0,
-      );
-      return;
-    }
 
     final maxScroll = metrics.maxScrollExtent;
     final currentScroll = metrics.pixels;
@@ -1185,86 +1049,23 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                     );
                   }
 
-                  // 延迟 build：首帧只真正构建前 _builtCount 个 HtmlChunkCard，
-                  // 其余用 estimatedHeight 的 SizedBox 占位。首帧提交后分批补全，
-                  // 补全后不回收（保持 Column 架构不变，进度条准确）。
                   final totalChunks = activeChunks.length;
                   final showTrans = controller.showTranslation.value;
-                  final contentChanged =
-                      _lastShowTranslation != showTrans ||
-                      _lastActiveChunkCount != totalChunks;
 
-                  // 翻译切换 → 重置构建计数（内容变了，缓存失效）
-                  if (contentChanged) {
-                    _lastShowTranslation = showTrans;
-                    _builtCount = _initialBuildCount.clamp(0, totalChunks);
-                    _progressiveBuildScheduled = false;
-                    _measuredChunkHeights.clear();
-                  }
-                  _lastActiveChunkCount = totalChunks;
-                  _estimatedBodyExtent = _estimatedExtentFor(activeChunks);
-                  final useVirtualizedBody = _shouldUseVirtualizedBody(
-                    activeChunks,
-                  );
-                  _usesVirtualizedBody = useVirtualizedBody;
-
-                  if (useVirtualizedBody) {
-                    return SliverList.builder(
-                      itemCount: totalChunks,
-                      itemBuilder: (context, idx) {
-                        final chunk = activeChunks[idx];
-                        return _MeasuredSize(
-                          onChange: (size) => _updateMeasuredChunkHeight(
-                            idx,
-                            size,
-                            chunk.estimatedHeight,
-                          ),
-                          child: HtmlChunkCard(
-                            key: ValueKey(
-                              'virtual_${showTrans ? "trans" : "orig"}_$idx',
-                            ),
-                            chunk: chunk,
-                            maxWidth: maxWidth,
-                            keepAlive: false,
-                            hoveredUrl: _hoveredUrl,
-                            onImageTap: (url) =>
-                                controller.openImagePreview(url, context),
-                          ),
-                        );
-                      },
-                    );
-                  }
-
-                  // 存在未构建的占位块 → 安排渐进构建
-                  if (_builtCount < totalChunks) {
-                    _scheduleProgressiveBuild();
-                  }
-
-                  return SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: List.generate(totalChunks, (idx) {
-                        final chunk = activeChunks[idx];
-                        if (idx < _builtCount) {
-                          return HtmlChunkCard(
-                            key: ValueKey(
-                              '${showTrans ? "trans" : "orig"}_$idx',
-                            ),
-                            chunk: chunk,
-                            maxWidth: maxWidth,
-                            hoveredUrl: _hoveredUrl,
-                            onImageTap: (url) =>
-                                controller.openImagePreview(url, context),
-                          );
-                        }
-                        // 占位：用预估高度撑开 Column，避免后续替换时大幅跳布局
-                        return SizedBox(
-                          key: ValueKey('placeholder_$idx'),
-                          height: chunk.estimatedHeight,
-                          child: const Center(),
-                        );
-                      }),
-                    ),
+                  return SliverList.builder(
+                    itemCount: totalChunks,
+                    itemBuilder: (context, idx) {
+                      final chunk = activeChunks[idx];
+                      return HtmlChunkCard(
+                        key: ValueKey('${showTrans ? "trans" : "orig"}_$idx'),
+                        chunk: chunk,
+                        maxWidth: maxWidth,
+                        keepAlive: false,
+                        hoveredUrl: _hoveredUrl,
+                        onImageTap: (url) =>
+                            controller.openImagePreview(url, context),
+                      );
+                    },
                   );
                 }),
               ),
@@ -1331,36 +1132,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             child: scaffold,
           )
         : scaffold;
-  }
-}
-
-class _MeasuredSize extends StatefulWidget {
-  final Widget child;
-  final ValueChanged<Size> onChange;
-
-  const _MeasuredSize({required this.child, required this.onChange});
-
-  @override
-  State<_MeasuredSize> createState() => _MeasuredSizeState();
-}
-
-class _MeasuredSizeState extends State<_MeasuredSize> {
-  Size? _oldSize;
-
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final renderObject = context.findRenderObject();
-      if (renderObject is! RenderBox || !renderObject.hasSize) return;
-
-      final newSize = renderObject.size;
-      if (_oldSize == newSize) return;
-      _oldSize = newSize;
-      widget.onChange(newSize);
-    });
-
-    return widget.child;
   }
 }
 

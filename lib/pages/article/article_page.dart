@@ -891,9 +891,20 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                         : colorScheme.primary,
                     onPressed: isUpdating
                         ? null
-                        : (isRead
-                              ? controller.markAsUnread
-                              : controller.markAsRead),
+                        : () {
+                            if (isRead) {
+                              controller.markAsUnread();
+                            } else {
+                              if (widget.onMKeyPressed != null) {
+                                widget.onMKeyPressed!();
+                              } else {
+                                controller.markAsRead();
+                                if (widget.onNext != null) {
+                                  widget.onNext!();
+                                }
+                              }
+                            }
+                          },
                   );
                 }),
                 const SizedBox(width: 8),
@@ -935,9 +946,20 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 child: FloatingActionButton(
                   onPressed: isUpdating
                       ? null
-                      : (isRead
-                            ? controller.markAsUnread
-                            : controller.markAsRead),
+                      : () {
+                          if (isRead) {
+                            controller.markAsUnread();
+                          } else {
+                            if (widget.onMKeyPressed != null) {
+                              widget.onMKeyPressed!();
+                            } else {
+                              controller.markAsRead();
+                              if (widget.onNext != null) {
+                                widget.onNext!();
+                              }
+                            }
+                          }
+                        },
                   tooltip: isRead ? '恢复未读' : '标为已读',
                   child: Icon(isRead ? Icons.undo : Icons.check),
                 ),

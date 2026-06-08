@@ -4147,3 +4147,31 @@ if (!isCurrentRoute) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.13 -m "- 修复 GitHub Actions 发布任务中的 annotated tag 校验，避免 tag push checkout 环境误判导致 Release 发布失败\n- 重新触发 Android APK 与 macOS arm64 内部发布打包" --push`*
+
+## 111. 统一 macOS 端文章处理快捷键与 UI 按钮跳转逻辑 (2026-06-08)
+
+### 111.1 背景与问题发现
+用户在使用 macOS 端的“垃圾拦截”（`FilterReviewPage`）页面时发现：按下快捷键 `m`（移除）或 `k`（保留）后，系统会自动跳转到下一篇文章；而直接点击 UI 列表上的对应按钮（“保留”或“移除”），则仅将当前文章从列表中剔除，右侧阅读面板变为空白，并未自动跳转下一篇。快捷键与 UI 按钮行为不等效。
+
+在全面排查后，我们发现在常规的主阅读视图（`ArticlePage`）中也存在类似的不一致：按下快捷键 `m` 标记文章已读时（原状态为未读），会自动跳转到下一篇；而点击工具栏中的“标为已读 (M)”按钮，则仅更改已读状态，不触发跳转。
+
+### 111.2 逻辑溯源与缺陷分析
+1. **`FilterReviewPage`（垃圾拦截页）**:
+    - **UI 按钮**：直接调用 `_keep` 或 `_reject`，这俩方法仅将处理掉的文章从 `_articles` 列表中移除，如果移除的是当前高亮文章，则将其状态置为 `null`（导致右侧留白）。
+    - **快捷键**：分别在处理键盘事件的回调中先调用 `_keep(selected)` / `_reject(selected)`，然后再调用 `_selectRelativeArticle(1)`。
+    - **隐藏缺陷**：这种快捷键做法其实有逻辑错误。因为 `_keep(selected)` 已经清空了 `_selectedArticle.value`，随后的 `_selectRelativeArticle(1)` 寻找当前索引时返回 `-1`，计算得出下一个索引为 `0`。这就导致快捷键其实总是跳回**剩余列表的第一篇**，而非**相对位置的下一篇**。
+2. **`ArticlePage`（主阅读视图）**:
+    - **UI 按钮**：`onPressed` 直接硬编码执行 `controller.markAsRead()` 或 `controller.markAsUnread()`。
+    - **快捷键**：会判断如果是从未读变为已读，自动调用外层传入的 `widget.onNext!()`。若存在 `onMKeyPressed`（例如在垃圾拦截页上下文中），则调用它。
+
+### 111.3 统一与修复方案
+为了彻底保证全局交互的唯一性并修复跳转缺陷，将两处的分散逻辑下沉并统一：
+
+1. **统一 `FilterReviewPage` 逻辑**：
+   - 重构 `_keep` 和 `_reject`：在删除操作前预先记录文章的 `index`；执行删除后，如果发现操作的是当前高亮文章，则根据预先记录的 `index`（配合 `clamp` 防越界），精准选中替补到原位置的下一篇文章。如果是列表最后一篇，则往前移位；若列表已空则置 `null`。
+   - 剔除 `FilterReviewPage` 中快捷键事件的冗余 `_selectRelativeArticle(1)` 调用，统一委托底层的 `_keep` / `_reject` 完成状态过渡。
+
+2. **统一 `ArticlePage` 逻辑**：
+   - 重构 macOS 顶部栏和移动端悬浮窗的“标为已读”按钮点击事件，使其与 `m` 快捷键行为等效：如果有 `widget.onMKeyPressed`，则优先调用（适配垃圾拦截场景）；如果是从未读改已读，则在标记后自动调用 `widget.onNext!()` 触发前进。
+
+通过以上调整，整个应用无论通过快捷键还是鼠标点击 UI 工具栏/列表按钮处理文章，都会获得完全等效且平滑的连续阅读跳转体验。

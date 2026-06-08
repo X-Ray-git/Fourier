@@ -95,7 +95,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         final selected = _selectedArticle.value;
         if (selected != null) {
           _keep(selected);
-          _selectRelativeArticle(1);
           return true;
         }
       }
@@ -203,9 +202,19 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         }
       }
     }
+    final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
+    final int currentIndex = _articles.indexWhere((a) => a.entryId == article.entryId);
+
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
-    if (_selectedArticle.value?.entryId == article.entryId) {
-      _selectedArticle.value = null;
+
+    if (isSelected) {
+      if (_articles.isEmpty) {
+        _selectedArticle.value = null;
+      } else {
+        final nextIndex = currentIndex.clamp(0, _articles.length - 1);
+        _selectedArticle.value = _articles[nextIndex];
+        _scrollToArticle(_articles[nextIndex].entryId);
+      }
     }
   }
 
@@ -248,9 +257,19 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     );
     unawaited(ReadSyncService.syncPendingReads());
     ArticleStateNotifier.tick(article.entryId);
+    final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
+    final int currentIndex = _articles.indexWhere((a) => a.entryId == article.entryId);
+
     setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
-    if (_selectedArticle.value?.entryId == article.entryId) {
-      _selectedArticle.value = null;
+
+    if (isSelected) {
+      if (_articles.isEmpty) {
+        _selectedArticle.value = null;
+      } else {
+        final nextIndex = currentIndex.clamp(0, _articles.length - 1);
+        _selectedArticle.value = _articles[nextIndex];
+        _scrollToArticle(_articles[nextIndex].entryId);
+      }
     }
   }
 
@@ -548,7 +567,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 onNext: () => _selectRelativeArticle(1),
                 onMKeyPressed: () {
                   _reject(selected);
-                  _selectRelativeArticle(1);
                 },
               );
             }),

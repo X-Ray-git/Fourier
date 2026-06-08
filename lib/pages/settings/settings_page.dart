@@ -524,6 +524,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
                     _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
                     _buildShortcutItem(context, '← / →', '切换上一篇 / 下一篇文章'),
+                    _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
                     _buildShortcutItem(context, 'M', '切换文章已读 / 未读状态'),
                   ],
                 ),

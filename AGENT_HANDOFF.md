@@ -5010,3 +5010,57 @@ flutter analyze lib/utils/image_clipboard.dart lib/pages/article/widgets/image_g
 3. 讨论四种修复方向（稳定虚拟化模式 / 滚动时暂停测量 / 自定义 Scrollbar / 暂停渐进构建），用户要求先用中文讨论后再定方案。
 4. 解释各方案优劣后，用户选择「直接在项目中进行改动」。
 5. 实施：删除渐进构建 + 模式切换 + 实时测量三大不稳定源，统一为纯 `SliverList.builder` 虚拟化渲染。
+
+## 125. 1.1.15 beta 合并验证上下文（2026-06-08）
+
+### 125.1 背景
+
+用户希望把当前剩余 worktree 的真实需求先合入主分支，提交并触发一个 beta 版打包，再通过 GitHub Release 产物验证实际体验。用户特别要求：能安全合并的优先用 merge，不再像此前某次整合那样直接把改动在 main 上重写；对于有冲突或需要互相协调的功能，由当前 agent 负责检查、修复并合入。
+
+### 125.2 合入顺序
+
+本轮使用 `git merge --no-ff` 合入以下 worktree 分支：
+
+1. `opencode/witty-sailor`：撤销已读后清理本地 readStatus 覆盖，避免撤销与时间线状态竞争。
+2. `opencode/shiny-moon`：垃圾拦截页右侧按钮执行保留/移除前先选中对应行，避免按钮操作目标与右侧详情不一致。
+3. `opencode/tidy-mountain`：修复 macOS 垃圾拦截页 M 键偶发失效，缩小组合键拦截范围。
+4. `opencode/sunny-forest`：新增 macOS Cmd+R 全局刷新快捷键，并补充设置页快捷键说明。
+5. `opencode/sunny-orchid`：macOS 图片右键复制图片数据到系统剪贴板，覆盖图片画廊和文章内联图片。
+6. `opencode/gentle-forest`：重做行内 `<code>` 渲染，使代码文字基线和正文对齐。
+7. `opencode/curious-knight`：文章正文链接悬停时显示手型光标，并在底部状态栏预览 URL。
+8. `opencode/cosmic-eagle`：垃圾拦截页移除后自动推进下一篇，并通过显式 `FocusNode` 避免方向键被 `SelectionArea` 抢走。
+9. `opencode/cosmic-meadow`：文章详情正文去除渐进构建/模式切换/实时测量，统一使用 `SliverList.builder` 缓解 macOS 右侧滚动条跳动。
+
+### 125.3 关键冲突与手工合成
+
+1. `AGENT_HANDOFF.md` 多个分支都把说明插在 v1.1.14 release footprint 后，统一按时间顺序编号为 119-125。
+2. `html_chunk_card.dart` 同时涉及行内代码扩展和链接扩展。最终 `_buildCommonExtensions()` 同时保留图片扩展、表格扩展、`InlineCodeExtension` 和 `_InteractiveLinkExtension`，避免其中一个分支覆盖另一个分支。
+3. `article_page.dart` 同时涉及 `_hoveredUrl`、`_focusNode` 和正文渲染策略。最终保留 `_hoveredUrl` 的底部 URL 预览、保留 `_focusNode` 的显式焦点管理，并采用 `cosmic-meadow` 的统一 `SliverList.builder`；构建 `HtmlChunkCard` 时保留 `hoveredUrl: _hoveredUrl`。
+4. `filter_review_page.dart` 保留 `cosmic-eagle` 对 `_keep()` / `_reject()` 的 RxList 直接移除方案，以及 `_scrollToArticle()` 的 220ms 延迟滚动。这个延迟依赖 `ImplicitlyAnimatedList` 默认 180ms 移除动画，若后续动画时长调整，需要同步检查。
+
+### 125.4 发布前验证
+
+已通过：
+
+```bash
+git diff --check
+/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test
+/opt/homebrew/bin/flutter test --no-pub
+```
+
+本机 macOS debug build 未通过，原因仍是本机缺少 CocoaPods：
+
+```bash
+/opt/homebrew/bin/flutter build macos --debug --no-pub
+# CocoaPods not installed or not in valid state.
+```
+
+这与此前本机验证情况一致，不代表 Dart 代码或合并冲突失败；最终 macOS/Android 打包仍依赖 GitHub Actions 的 release workflow 验证。
+
+### 125.5 发布计划
+
+下一步使用 release 脚本发布 `v1.1.15`，pubspec 将从 `1.1.14+16` 自动推进到 `1.1.15+17`。这次版本定位为 beta 验证版，重点验证：
+
+1. macOS 文章详情：长文滚动条是否明显稳定，链接悬停、底部 URL 预览、行内代码基线和图片右键复制是否同时正常。
+2. macOS 垃圾拦截页：按钮保留/移除、M 键、方向键、移除后自动推进下一篇是否协调工作。
+3. Android 基础体验：时间线、文章详情和 APK 安装签名流程是否保持正常。

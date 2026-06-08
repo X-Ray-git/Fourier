@@ -794,20 +794,13 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             valueListenable: _scrollProgress,
             builder: (context, progress, child) {
               return progress > 0.0
-                  ? TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 0.0, end: progress),
-                      duration: const Duration(milliseconds: 50),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, _) {
-                        return LinearProgressIndicator(
-                          value: value,
-                          minHeight: 1.0,
-                          backgroundColor: Colors.transparent,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            colorScheme.primary,
-                          ),
-                        );
-                      },
+                  ? LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 1.0,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        colorScheme.primary,
+                      ),
                     )
                   : const SizedBox.shrink();
             },
@@ -1052,20 +1045,21 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   final totalChunks = activeChunks.length;
                   final showTrans = controller.showTranslation.value;
 
-                  return SliverList.builder(
-                    itemCount: totalChunks,
-                    itemBuilder: (context, idx) {
-                      final chunk = activeChunks[idx];
-                      return HtmlChunkCard(
-                        key: ValueKey('${showTrans ? "trans" : "orig"}_$idx'),
-                        chunk: chunk,
-                        maxWidth: maxWidth,
-                        keepAlive: false,
-                        hoveredUrl: _hoveredUrl,
-                        onImageTap: (url) =>
-                            controller.openImagePreview(url, context),
-                      );
-                    },
+                  return SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: List.generate(totalChunks, (idx) {
+                        final chunk = activeChunks[idx];
+                        return HtmlChunkCard(
+                          key: ValueKey('${showTrans ? "trans" : "orig"}_$idx'),
+                          chunk: chunk,
+                          maxWidth: maxWidth,
+                          hoveredUrl: _hoveredUrl,
+                          onImageTap: (url) =>
+                              controller.openImagePreview(url, context),
+                        );
+                      }),
+                    ),
                   );
                 }),
               ),

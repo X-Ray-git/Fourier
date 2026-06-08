@@ -594,6 +594,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         }
 
         final renderWidth = explicitWidth ?? widget.maxWidth;
+        final fallbackHeight = (widget.maxWidth * 0.6)
+            .clamp(160.0, 420.0)
+            .toDouble();
+        final renderHeight =
+            explicitHeight ?? (explicitWidth ?? fallbackHeight);
         final cacheWidth = (renderWidth * dpr).round();
 
         return ClipRRect(
@@ -603,15 +608,15 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             cacheKey: 'v2_$imageUrl',
             httpHeaders: ArticleImageService.httpHeaders,
             fit: BoxFit.contain,
-            width: explicitWidth,
-            height: explicitHeight,
+            width: renderWidth,
+            height: renderHeight,
             memCacheWidth: cacheWidth,
             maxWidthDiskCache: cacheWidth * 2,
             fadeInDuration: const Duration(milliseconds: 80),
             fadeOutDuration: const Duration(milliseconds: 80),
             placeholder: (context, url) => Container(
-              width: explicitWidth ?? 60,
-              height: explicitHeight ?? explicitWidth ?? 60,
+              width: renderWidth,
+              height: renderHeight,
               color: Theme.of(
                 context,
               ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -624,8 +629,8 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
               ),
             ),
             errorWidget: (context, url, error) => Container(
-              width: explicitWidth ?? 60,
-              height: explicitHeight ?? explicitWidth ?? 60,
+              width: renderWidth,
+              height: renderHeight,
               color: Theme.of(
                 context,
               ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
@@ -645,7 +650,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
                         imageUrl,
                       )
                     : null,
-                child: Image(image: imageProvider, fit: BoxFit.contain),
+                child: SizedBox(
+                  width: renderWidth,
+                  height: renderHeight,
+                  child: Image(image: imageProvider, fit: BoxFit.contain),
+                ),
               );
               return gesture;
             },
@@ -709,6 +718,11 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
     final aspectRatio = hasRealDimensions
         ? widget.imageWidth! / widget.imageHeight!
         : null;
+    final displayHeight = hasRealDimensions
+        ? (widget.maxWidth / aspectRatio!).clamp(40.0, 420.0).toDouble()
+        : (isCutOff
+              ? 220.0
+              : (widget.maxWidth * 0.6).clamp(180.0, 420.0).toDouble());
 
     final canTap = widget.onTap != null;
     final imageUrl = ArticleImageService.appendRetryStamp(
@@ -724,21 +738,14 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
         httpHeaders: ArticleImageService.httpHeaders,
         fit: BoxFit.contain,
         width: widget.maxWidth,
-        // 有可靠尺寸时用 AspectRatio 精确控制；否则不设 height，自适应
-        height: hasRealDimensions
-            ? (widget.maxWidth / aspectRatio!).clamp(40.0, 420.0)
-            : null,
+        height: displayHeight,
         memCacheWidth: cacheWidth,
         maxWidthDiskCache: cacheWidth * 2,
         fadeInDuration: const Duration(milliseconds: 250),
         fadeOutDuration: const Duration(milliseconds: 80),
         placeholder: (context, url) => SizedBox(
           width: widget.maxWidth,
-          height: hasRealDimensions
-              ? (widget.maxWidth / aspectRatio!).clamp(40.0, 420.0)
-              : (isCutOff
-                    ? 220.0
-                    : widget.maxWidth * 0.6), // 为未知高度的图片设置一个更合理的默认高度，减少突兀跳动
+          height: displayHeight,
           child: const Center(
             child: SizedBox(
               width: 24,
@@ -998,10 +1005,10 @@ class _InteractiveLinkExtension extends HtmlExtension {
     String? url,
   ) {
     void onTap() => context.parser.internalOnAnchorTap?.call(
-          url,
-          context.attributes,
-          context.node is dom.Element ? context.node as dom.Element : null,
-        );
+      url,
+      context.attributes,
+      context.node is dom.Element ? context.node as dom.Element : null,
+    );
 
     if (childSpan is TextSpan) {
       return TextSpan(
@@ -1020,8 +1027,10 @@ class _InteractiveLinkExtension extends HtmlExtension {
         spellOut: childSpan.spellOut,
       );
     } else {
-      final alignment = context.style?.verticalAlign
-              .toPlaceholderAlignment(context.style?.display) ??
+      final alignment =
+          context.style?.verticalAlign.toPlaceholderAlignment(
+            context.style?.display,
+          ) ??
           PlaceholderAlignment.baseline;
       return WidgetSpan(
         alignment: alignment,

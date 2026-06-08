@@ -162,7 +162,38 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     final selected = _selectedArticle.value;
     if (selected == null) return;
     if (_articles.any((a) => a.entryId == selected.entryId)) return;
-    _selectedArticle.value = null;
+    _selectedArticle.value = _articles.isEmpty ? null : _articles.first;
+  }
+
+  ArticleModel? _nextArticleAfterRemoving(String entryId) {
+    final index = _articles.indexWhere((a) => a.entryId == entryId);
+    if (index < 0 || _articles.length <= 1) return null;
+
+    final nextIndex = index < _articles.length - 1 ? index + 1 : index - 1;
+    return _articles[nextIndex];
+  }
+
+  void _removeReviewedArticle(String entryId) {
+    _articles.removeWhere((a) => a.entryId == entryId);
+    _itemKeys.remove(entryId);
+  }
+
+  void _selectReviewedSuccessor(ArticleModel? nextArticle) {
+    if (nextArticle == null) {
+      _selectedArticle.value = null;
+      return;
+    }
+
+    ArticleModel selected = nextArticle;
+    for (final article in _articles) {
+      if (article.entryId == nextArticle.entryId) {
+        selected = article;
+        break;
+      }
+    }
+
+    _selectedArticle.value = selected;
+    _scrollToArticle(selected.entryId);
   }
 
   void _selectRelativeArticle(int delta) {
@@ -179,13 +210,22 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _scrollToArticle(String entryId) {
-    // 等待 ImplicitlyAnimatedList 的移除动画完成 (默认 180ms) + 一帧渲染
-    Future.delayed(const Duration(milliseconds: 220), () {
-      if (!mounted) return;
-      final key = _itemKeys[entryId];
-      if (key != null && key.currentContext != null) {
-        ScrollUtils.ensureVisible(key.currentContext!);
-      }
+    _scrollToArticleWhenReady(entryId);
+  }
+
+  void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
+    if (!mounted) return;
+    final key = _itemKeys[entryId];
+    if (key != null && key.currentContext != null) {
+      ScrollUtils.ensureVisible(key.currentContext!);
+      return;
+    }
+    if (attempt >= 8) return;
+
+    // AnimatedList 删除动画会让下一项的 GlobalKey 延后挂载，逐帧短轮询比固定
+    // 220ms 延迟更稳，也不会在动画时长调整后失效。
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _scrollToArticleWhenReady(entryId, attempt: attempt + 1);
     });
   }
 
@@ -216,8 +256,13 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _keep(ArticleModel article) {
+    final bool shouldAdvance =
+        _selectedArticle.value?.entryId == article.entryId;
+    final ArticleModel? nextArticle = shouldAdvance
+        ? _nextArticleAfterRemoving(article.entryId)
+        : null;
+
     UndoService.recordFilterAction(article, UndoActionType.filterKeep);
-    ArticleStateNotifier.tick(article.entryId);
     AutoFilterWorker.unReject(article.entryId);
     // 清除遗留的 readStatus 覆盖（不应写入 false，用户只是保留文章，不是标未读）
     GStorage.readStatus.delete(article.entryId);
@@ -237,25 +282,20 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         }
       }
     }
-    final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
-    final int currentIndex = _articles.indexWhere(
-      (a) => a.entryId == article.entryId,
-    );
 
-    _articles.removeWhere((a) => a.entryId == article.entryId);
-
-    if (isSelected) {
-      if (_articles.isEmpty) {
-        _selectedArticle.value = null;
-      } else {
-        final nextIndex = currentIndex.clamp(0, _articles.length - 1);
-        _selectedArticle.value = _articles[nextIndex];
-        _scrollToArticle(_articles[nextIndex].entryId);
-      }
+    _removeReviewedArticle(article.entryId);
+    if (shouldAdvance) {
+      _selectReviewedSuccessor(nextArticle);
     }
   }
 
   void _reject(ArticleModel article) {
+    final bool shouldAdvance =
+        _selectedArticle.value?.entryId == article.entryId;
+    final ArticleModel? nextArticle = shouldAdvance
+        ? _nextArticleAfterRemoving(article.entryId)
+        : null;
+
     UndoService.recordFilterAction(article, UndoActionType.filterReject);
     LocalArticleDbService.upsertOne(
       ArticleModel(
@@ -294,21 +334,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     );
     unawaited(ReadSyncService.syncPendingReads());
     ArticleStateNotifier.tick(article.entryId);
-    final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
-    final int currentIndex = _articles.indexWhere(
-      (a) => a.entryId == article.entryId,
-    );
 
-    _articles.removeWhere((a) => a.entryId == article.entryId);
-
-    if (isSelected) {
-      if (_articles.isEmpty) {
-        _selectedArticle.value = null;
-      } else {
-        final nextIndex = currentIndex.clamp(0, _articles.length - 1);
-        _selectedArticle.value = _articles[nextIndex];
-        _scrollToArticle(_articles[nextIndex].entryId);
-      }
+    _removeReviewedArticle(article.entryId);
+    if (shouldAdvance) {
+      _selectReviewedSuccessor(nextArticle);
     }
   }
 

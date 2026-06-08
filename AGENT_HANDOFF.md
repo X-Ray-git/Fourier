@@ -5068,3 +5068,61 @@ git diff --check
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.15 -m "- beta: merge macOS article interaction, image copy, shortcut and filter review fixes\n- beta: unify article body rendering with SliverList to validate scrollbar stability\n- beta: keep Android and macOS internal release packaging on GitHub Actions" --push`*
+
+## 126. v1.1.15 beta 验证失败后的滚动与垃圾拦截推进修复（2026-06-08）
+
+### 126.1 用户反馈
+
+用户下载并验证 `v1.1.15` 后反馈两个问题仍然存在：
+
+1. macOS 右侧文章详情滚动条仍会间断性跳跃；同时顶部橙色阅读进度条在 macOS 和 Android 上都会剧烈抖动。
+2. macOS 垃圾拦截页点击“移除”后仍无法跳转到下一篇，并且右侧文章详情失去焦点，随后按左右方向键会出现 Flutter `SelectionArea` 的文本选择光标。
+
+### 126.2 滚动条与进度条根因
+
+第 124 节把正文统一改为 `SliverList.builder`，删除了渐进构建、模式切换和实时测量，但这个方案仍不够：
+
+1. `SliverList.builder` 对变量高度 item 仍会随着 item 首次进入视口而持续修正 `maxScrollExtent`。macOS 叠加式滚动条的拇指大小和位置直接依赖 `maxScrollExtent`，所以仍会跳。
+2. 顶部阅读进度条直接使用 `metrics.pixels / metrics.maxScrollExtent`。当 `maxScrollExtent` 因 SliverList 估算修正或图片加载改变高度时，进度值会跟着跳。
+3. 进度条外层使用 `TweenAnimationBuilder(begin: 0.0, end: progress, duration: 50ms)`，滚动过程中每次 value 更新都会创建新的 tween，进一步放大视觉抖动。
+4. 无明确宽高的图片加载完成后会从 placeholder 高度切换到图片 intrinsic 高度，也会再次改变页面总高度。
+
+### 126.3 滚动修复
+
+本轮改动：
+
+1. `article_page.dart`：正文渲染从 `SliverList.builder` 改回 `SliverToBoxAdapter + Column`。虽然牺牲一点长文首屏构建性能，但可以一次性完成主体布局，避免 SliverList 按需估算导致 `maxScrollExtent` 在滚动中变化。
+2. `article_page.dart`：顶部进度条删除 `TweenAnimationBuilder`，直接用 `LinearProgressIndicator(value: progress)` 显示当前值，避免动画 tween 在高频滚动通知中不断重启。
+3. `html_chunk_card.dart`：文章独立图片 `_ArticleInlineImage` 对无真实尺寸的图片也固定 `displayHeight`，placeholder 和最终图片使用同一高度。
+4. `html_chunk_card.dart`：HTML 内嵌图片扩展也统一给无尺寸图片设置 `renderWidth/renderHeight`，placeholder、errorWidget 和最终图片保持相同盒子尺寸。
+
+注意：这次更偏向稳定阅读体验，而不是继续追求虚拟化。后续如果用户反馈超长文章首屏变慢，再考虑“先完整预估固定 item 高度”或“分批预排版后再显示”的方案，但不要再回到会动态修正 `maxScrollExtent` 的变量高度 SliverList。
+
+### 126.4 垃圾拦截页推进失败根因
+
+`FilterReviewPage._reject()` 旧逻辑在调用 `TimelineController.markAsReadLocal()` 后才计算 `isSelected/currentIndex`。但 `markAsReadLocal()` 会同步调用 `ArticleStateNotifier.tick(entryId)`，触发审核页自己的 `_syncArticleFromDb(entryId)`，导致当前文章先从 `_articles` 移除、`_pruneInvalidSelection()` 再把 `_selectedArticle` 清空。等 `_reject()` 回来继续执行时，`isSelected` 已经变成 false，后续“选择下一篇”的分支不会执行。
+
+`_keep()` 也有同类问题：它在一开始就调用 `ArticleStateNotifier.tick()` / `AutoFilterWorker.unReject()`，状态通知可能抢在本函数后半段之前修改列表和选中态。
+
+### 126.5 垃圾拦截页修复
+
+本轮改动：
+
+1. `_keep()` / `_reject()` 在任何数据库写入、read state 更新、`ArticleStateNotifier.tick()` 之前，先根据当前 `_articles` 和 `_selectedArticle` 计算 `shouldAdvance` 与 `nextArticle`。
+2. 状态修改完成后统一调用 `_removeReviewedArticle(entryId)` 移除当前项并清理 `_itemKeys`。
+3. 如果原本处理的是当前选中文章，最后强制 `_selectReviewedSuccessor(nextArticle)`，从当前 `_articles` 中重新取同 entryId 的对象并滚动到它。
+4. `_pruneInvalidSelection()` 不再简单清空；当当前选中项已经不在列表但列表仍有内容时，补选第一篇，避免右侧详情变空白。
+5. `_scrollToArticle()` 从固定 220ms 延迟改成最多 8 次、每 50ms 的短轮询，等 AnimatedList 删除动画后目标 `GlobalKey.currentContext` 真正可用再滚动。
+6. `_keep()` 删除了最前面的重复 `ArticleStateNotifier.tick()`，保留 `AutoFilterWorker.unReject()` 内部的状态通知。
+
+### 126.6 验证
+
+本地已通过：
+
+```bash
+git diff --check
+/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test
+/opt/homebrew/bin/flutter test --no-pub
+```
+
+本机 macOS native build 仍受本机未安装 CocoaPods 限制，最终需通过 GitHub Actions release 包验证。

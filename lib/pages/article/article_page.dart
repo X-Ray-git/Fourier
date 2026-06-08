@@ -572,6 +572,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   late final String _tag;
   late final ArticleController controller;
   late final ScrollController _scrollController;
+  late final FocusNode _focusNode;
 
   // 1. 改为使用 ValueNotifier 以实现局部刷新
   final ValueNotifier<double> _scrollProgress = ValueNotifier(0.0);
@@ -608,11 +609,18 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _tag = widget.article.entryId;
     controller = Get.put(ArticleController(widget.article), tag: _tag);
     _scrollController = ScrollController();
+    _focusNode = FocusNode();
     _builtCount = _initialBuildCount;
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     }
+    // 请求焦点以确保方向键导航生效，防止焦点落在 SelectionArea 內容上
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   @override
@@ -623,6 +631,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _scrollController.dispose();
     _scrollProgress.dispose();
     _hoveredUrl.dispose();
+    _focusNode.dispose();
     if (Get.isRegistered<ArticleController>(tag: _tag)) {
       Get.delete<ArticleController>(tag: _tag);
     }
@@ -1270,7 +1279,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
     return Platform.isMacOS
         ? Focus(
-            autofocus: true,
+            focusNode: _focusNode,
             onKeyEvent: (node, event) {
               if (_usesGlobalShortcuts) {
                 if (event is KeyDownEvent || event is KeyRepeatEvent) {

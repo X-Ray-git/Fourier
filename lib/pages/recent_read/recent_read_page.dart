@@ -103,6 +103,7 @@ class _RecentReadPageState extends State<RecentReadPage> {
     if (isDoubleTap) {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
+      _selectRelativeArticle(1);
       _openOriginalArticle(article);
 
       if (!article.isRead) {

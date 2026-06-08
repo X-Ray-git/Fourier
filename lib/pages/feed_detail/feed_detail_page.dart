@@ -150,6 +150,7 @@ class FeedDetailController extends GetxController {
     if (isDoubleTap) {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
+      selectRelativeArticle(1);
       openOriginalArticle(article);
 
       if (!article.isRead) {

@@ -4119,3 +4119,7 @@ if (!isCurrentRoute) {
 
 ### 109.3 后续发布约束
 正常发布继续使用 `./scripts/release.sh <version> -m "<版本摘要>" --push`。如果 tag workflow 因 CI 配置问题失败，不要复用并移动同一个 tag 来补救；应修好 workflow 后发布下一个小版本 tag。这样可以保证 tag 注释、release notes 和发布产物三者保持一致。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.12 -m "- 修复 macOS 分栏快捷键归属判断，恢复垃圾拦截、订阅详情和最近阅读页的 M/方向键/Esc 响应\n- 发布流程拒绝轻量 tag 或空注释 tag，防止 Release Notes 退化为提交信息" --push`*

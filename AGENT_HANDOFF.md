@@ -5126,3 +5126,7 @@ git diff --check
 ```
 
 本机 macOS native build 仍受本机未安装 CocoaPods 限制，最终需通过 GitHub Actions release 包验证。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.16 -m "- fix: stabilize article detail scrollbar and reading progress rendering\n- fix: keep filter review selection advancing after remove/keep actions\n- beta: rebuild Android and macOS packages for focused regression validation" --push`*

@@ -19,6 +19,7 @@ import '../main/main_controller.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
+import '../../common/widgets/implicitly_animated_list.dart';
 import '../../utils/scroll_utils.dart';
 
 class FilterReviewPage extends StatefulWidget {
@@ -35,6 +36,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final Map<String, GlobalKey> _itemKeys = {};
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
+  Worker? _undoRestoreWorker;
 
   @override
   void initState() {
@@ -55,6 +57,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         (_) => _loadArticles(),
       );
     }
+    _undoRestoreWorker = ever(
+      UndoService.restoredAction,
+      _handleUndoRestoreEvent,
+    );
     AutoFilterWorker.onRejected = (entryId, title, reason) {
       if (!mounted) return;
       if (_seenIds.contains(entryId)) return;
@@ -80,6 +86,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     AutoFilterWorker.onRejected = null;
     _articleStateWorker?.dispose();
     _filterCountWorker?.dispose();
+    _undoRestoreWorker?.dispose();
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     super.dispose();
   }
@@ -177,6 +184,32 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       if (key != null && key.currentContext != null) {
         ScrollUtils.ensureVisible(key.currentContext!);
       }
+    });
+  }
+
+  bool get _isActiveMacReviewPage {
+    if (!Platform.isMacOS) return false;
+    if (!Get.isRegistered<MainController>()) return true;
+    return Get.find<MainController>().currentIndex.value == 1;
+  }
+
+  void _handleUndoRestoreEvent(UndoRestoreEvent? event) {
+    if (!mounted || event == null || !_isActiveMacReviewPage) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isActiveMacReviewPage) return;
+
+      var index = _articles.indexWhere(
+        (a) => a.entryId == event.article.entryId,
+      );
+      if (index < 0) {
+        _loadArticles();
+        index = _articles.indexWhere((a) => a.entryId == event.article.entryId);
+      }
+      if (index < 0) return;
+
+      final article = _articles[index];
+      _selectedArticle.value = article;
+      _scrollToArticle(article.entryId);
     });
   }
 
@@ -509,37 +542,28 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                     final p = AutoFilterWorker.processingCount.value;
                     final llmActive = q > 0 || p > 0;
 
-                    if (_articles.isEmpty) {
-                      return _buildEmptyState(
-                        cs,
-                        llmActive: llmActive,
-                        llmCount: q + p,
-                      );
-                    }
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
-                      itemCount: _articles.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 4),
-                      itemBuilder: (context, index) {
-                        final article = _articles[index];
-                        return Obx(() {
-                          final selected =
-                              _selectedArticle.value?.entryId ==
-                              article.entryId;
-                          return _MacReviewRow(
-                            key: _itemKeys.putIfAbsent(
-                              article.entryId,
-                              () => GlobalKey(),
+                    return Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ImplicitlyAnimatedList<ArticleModel>(
+                            items: _articles.toList(),
+                            itemKey: (article) => article.entryId,
+                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 4),
+                            itemBuilder: _buildAnimatedReviewRow,
+                            removedItemBuilder: _buildRemovedReviewRow,
+                          ),
+                        ),
+                        if (_articles.isEmpty)
+                          Positioned.fill(
+                            child: _buildEmptyState(
+                              cs,
+                              llmActive: llmActive,
+                              llmCount: q + p,
                             ),
-                            article: article,
-                            selected: selected,
-                            onTap: () => _selectedArticle.value = article,
-                            onKeep: () => _keep(article),
-                            onReject: () => _reject(article),
-                          );
-                        });
-                      },
+                          ),
+                      ],
                     );
                   }),
                 ),
@@ -600,6 +624,55 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             _LlmPill(cs: cs, count: llmCount),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedReviewRow(
+    BuildContext context,
+    ArticleModel article,
+    int index,
+    Animation<double> animation,
+  ) {
+    return SizeTransition(
+      sizeFactor: animation,
+      axisAlignment: 1,
+      child: FadeTransition(
+        opacity: animation,
+        child: Obx(() {
+          final selected = _selectedArticle.value?.entryId == article.entryId;
+          return _MacReviewRow(
+            key: _itemKeys.putIfAbsent(article.entryId, () => GlobalKey()),
+            article: article,
+            selected: selected,
+            onTap: () => _selectedArticle.value = article,
+            onKeep: () => _keep(article),
+            onReject: () => _reject(article),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildRemovedReviewRow(
+    BuildContext context,
+    ArticleModel article,
+    int index,
+    Animation<double> animation,
+  ) {
+    return SizeTransition(
+      sizeFactor: animation,
+      axisAlignment: -1,
+      child: FadeTransition(
+        opacity: animation,
+        child: _MacReviewRow(
+          key: ValueKey('removed-${article.entryId}'),
+          article: article,
+          selected: false,
+          onTap: () {},
+          onKeep: () {},
+          onReject: () {},
+        ),
       ),
     );
   }

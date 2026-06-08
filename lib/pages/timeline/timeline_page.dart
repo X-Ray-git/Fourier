@@ -10,6 +10,7 @@ import '../../common/widgets/refresh_aware_scroll_physics.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
+import '../../common/widgets/implicitly_animated_list.dart';
 
 import '../../http/init.dart';
 import '../../models/article.dart';
@@ -53,18 +54,24 @@ class _TimelinePageState extends State<TimelinePage> {
   String? _lastArticleTapEntryId;
   DateTime? _lastArticleTapAt;
   final Map<String, GlobalKey> _itemKeys = {};
+  Worker? _undoRestoreWorker;
 
   @override
   void initState() {
     super.initState();
     controller = Get.put(TimelineController());
     controller.bindScrollToTopHandler(_scrollToTop);
+    _undoRestoreWorker = ever(
+      UndoService.restoredAction,
+      _handleUndoRestoreEvent,
+    );
     _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     controller.bindScrollToTopHandler(null);
+    _undoRestoreWorker?.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
@@ -163,6 +170,26 @@ class _TimelinePageState extends State<TimelinePage> {
       if (key != null && key.currentContext != null) {
         ScrollUtils.ensureVisible(key.currentContext!);
       }
+    });
+  }
+
+  bool get _isActiveMacTimeline {
+    if (!Platform.isMacOS) return false;
+    if (!Get.isRegistered<MainController>()) return true;
+    return Get.find<MainController>().currentIndex.value == 0;
+  }
+
+  void _handleUndoRestoreEvent(UndoRestoreEvent? event) {
+    if (!mounted || event == null || !_isActiveMacTimeline) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isActiveMacTimeline) return;
+      final index = controller.articles.indexWhere(
+        (a) => a.entryId == event.article.entryId,
+      );
+      if (index < 0) return;
+      final article = controller.articles[index];
+      controller.selectedArticle.value = article;
+      _scrollToArticle(article.entryId);
     });
   }
 
@@ -378,90 +405,152 @@ class _TimelinePageState extends State<TimelinePage> {
       ArticleStateNotifier.version.value; // 订阅变更通知
       final filterCount = controller.filterCount.value;
       final filterBarCount = Platform.isMacOS ? 0 : 1;
-      return ScrollConfiguration(
-        behavior: const NoOverscrollIndicatorBehavior(),
-        child: controller.articles.isEmpty
-            ? ListView(
-                physics: _refreshPhysics,
-                padding: EdgeInsets.only(
-                  top: Platform.isMacOS ? 0 : MediaQuery.paddingOf(context).top,
-                  bottom:
-                      8 +
-                      (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
-                      MediaQuery.of(context).padding.bottom,
-                ),
-                children: [
-                  if (!Platform.isMacOS) _buildFilterBar(filterCount),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 64),
-                    child: _EmptyView(
-                      message: controller.emptyMessage,
-                      onRetry: controller.loadFeedsThenArticles,
-                    ),
-                  ),
-                ],
-              )
-            : ListView.builder(
+      Widget content;
+      if (Platform.isMacOS) {
+        content = Stack(
+          children: [
+            Positioned.fill(
+              child: ImplicitlyAnimatedList<ArticleModel>(
                 physics: _refreshPhysics,
                 controller: _scrollController,
                 padding: EdgeInsets.only(
-                  top: Platform.isMacOS ? 0 : MediaQuery.paddingOf(context).top,
-                  bottom:
-                      8 +
-                      (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
-                      MediaQuery.of(context).padding.bottom,
+                  bottom: 8 + MediaQuery.of(context).padding.bottom,
                 ),
-                itemCount: controller.articles.length + filterBarCount,
-                itemBuilder: (context, index) {
-                  if (!Platform.isMacOS && index == 0) {
-                    return _buildFilterBar(filterCount);
-                  }
-                  final articleIndex = index - filterBarCount;
-                  if (articleIndex == controller.articles.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    );
-                  }
-                  final article = controller.articles[articleIndex];
-                  final articleKey = _itemKeys.putIfAbsent(
-                    article.entryId,
-                    () => GlobalKey(),
-                  );
-                  return Obx(() {
-                    final selectedId =
-                        controller.selectedArticle.value?.entryId;
-                    return ArticleCard(
-                      key: articleKey,
-                      article: article,
-                      isSelected:
-                          Platform.isMacOS && selectedId == article.entryId,
-                      onTap: () {
-                        if (Platform.isMacOS) {
-                          _handleMacArticleTap(article);
-                        } else {
-                          Get.toNamed(
-                            Routes.article,
-                            arguments: {
-                              'article': article,
-                              'sequence': controller.articles.toList(),
-                              'index': articleIndex,
-                            },
-                          );
-                        }
-                      },
-                    );
-                  });
-                },
+                items: controller.articles.toList(),
+                itemKey: (article) => article.entryId,
+                itemBuilder: _buildAnimatedTimelineItem,
+                removedItemBuilder: _buildRemovedTimelineItem,
               ),
+            ),
+            if (controller.articles.isEmpty)
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 64),
+                  child: _EmptyView(
+                    message: controller.emptyMessage,
+                    onRetry: controller.loadFeedsThenArticles,
+                  ),
+                ),
+              ),
+          ],
+        );
+      } else if (controller.articles.isEmpty) {
+        content = ListView(
+          physics: _refreshPhysics,
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top,
+            bottom:
+                8 +
+                kBottomNavigationBarHeight +
+                MediaQuery.of(context).padding.bottom,
+          ),
+          children: [
+            _buildFilterBar(filterCount),
+            Padding(
+              padding: const EdgeInsets.only(top: 64),
+              child: _EmptyView(
+                message: controller.emptyMessage,
+                onRetry: controller.loadFeedsThenArticles,
+              ),
+            ),
+          ],
+        );
+      } else {
+        content = ListView.builder(
+          physics: _refreshPhysics,
+          controller: _scrollController,
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top,
+            bottom:
+                8 +
+                kBottomNavigationBarHeight +
+                MediaQuery.of(context).padding.bottom,
+          ),
+          itemCount: controller.articles.length + filterBarCount,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return _buildFilterBar(filterCount);
+            }
+            final articleIndex = index - filterBarCount;
+            final article = controller.articles[articleIndex];
+            final articleKey = _itemKeys.putIfAbsent(
+              article.entryId,
+              () => GlobalKey(),
+            );
+            return ArticleCard(
+              key: articleKey,
+              article: article,
+              isSelected: false,
+              onTap: () {
+                Get.toNamed(
+                  Routes.article,
+                  arguments: {
+                    'article': article,
+                    'sequence': controller.articles.toList(),
+                    'index': articleIndex,
+                  },
+                );
+              },
+            );
+          },
+        );
+      }
+
+      return ScrollConfiguration(
+        behavior: const NoOverscrollIndicatorBehavior(),
+        child: content,
       );
     });
+  }
+
+  Widget _buildAnimatedTimelineItem(
+    BuildContext context,
+    ArticleModel article,
+    int index,
+    Animation<double> animation,
+  ) {
+    final articleKey = _itemKeys.putIfAbsent(
+      article.entryId,
+      () => GlobalKey(),
+    );
+    return SizeTransition(
+      sizeFactor: animation,
+      axisAlignment: 1,
+      child: FadeTransition(
+        opacity: animation,
+        child: Obx(() {
+          final selectedId = controller.selectedArticle.value?.entryId;
+          return ArticleCard(
+            key: articleKey,
+            article: article,
+            isSelected: selectedId == article.entryId,
+            onTap: () => _handleMacArticleTap(article),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildRemovedTimelineItem(
+    BuildContext context,
+    ArticleModel article,
+    int index,
+    Animation<double> animation,
+  ) {
+    return SizeTransition(
+      sizeFactor: animation,
+      axisAlignment: -1,
+      child: FadeTransition(
+        opacity: animation,
+        child: ArticleCard(
+          key: ValueKey('removed-${article.entryId}'),
+          article: article,
+          isSelected:
+              controller.selectedArticle.value?.entryId == article.entryId,
+          onTap: () {},
+        ),
+      ),
+    );
   }
 }
 

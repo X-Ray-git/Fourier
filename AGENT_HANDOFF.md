@@ -4245,3 +4245,30 @@ if (!isCurrentRoute) {
 验证结果：
 - `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
 - `/opt/homebrew/bin/flutter test --no-pub`：通过。
+
+## 115. 撤销聚焦与 macOS 卡片进入/退出动画重做（2026-06-08）
+
+第 114 节中暂缓合并的两个需求本轮已重做并合入，保留需求但没有原样采用原 worktree 代码。
+
+### 115.1 撤销后聚焦恢复文章
+原 `fix-macos-undo-focus-navigation` 分支把撤销后的选中与滚动硬绑到 `TimelineController`，这会让 `FilterReviewPage` 等拥有私有选中态的页面无法正确恢复焦点。最终实现改为：
+1. `UndoService.undoLastAction()` 返回 `Future<ArticleModel?>`，并在本地乐观恢复成功时发出 `UndoRestoreEvent`。
+2. `UndoService` 只广播“哪篇文章被恢复、来自哪种撤销动作”，不直接操作任何页面滚动或选中态。
+3. `TimelinePage` 仅在 macOS 且当前主分栏 index 为 0 时响应事件：如果恢复文章存在于当前可见列表，就设置 `selectedArticle` 并滚动到对应卡片。
+4. `FilterReviewPage` 仅在 macOS 且当前主分栏 index 为 1 时响应事件：必要时重新读取审核列表，然后选中并滚动到恢复文章。
+
+这样撤销行为不会让后台页面偷偷抢状态，也避免把页面私有 UI 状态塞进全局 service。
+
+### 115.2 macOS 卡片进入/退出动画
+原 `cosmic-cosmos-darts-14h23` 分支新增的 `ImplicitlyAnimatedList` 方向可取，但它的 builder 仍让调用方用外部列表 index 重新取 article。`AnimatedList` 在删除/插入动画期间内部列表与外部列表会短暂不同步，这会造成错位或越界。
+
+最终实现新增 `lib/common/widgets/implicitly_animated_list.dart`：
+1. 组件内部维护 `_items`，并用 `itemKey` 对比插入、删除与简单移动。
+2. `itemBuilder` 和 `removedItemBuilder` 都直接接收内部真实 `item`，删除动画使用删除瞬间捕获的旧 article。
+3. 主时间线与垃圾拦截页的 macOS 列表接入该组件，移动端列表保持原实现。
+4. macOS 下即使列表从 1 篇变为 0 篇，也继续保留动画列表，空态作为覆盖层显示，避免最后一张卡片退出动画被空态切换打断。
+
+验证结果：
+- `/opt/homebrew/bin/dart format lib/services/undo_service.dart lib/pages/timeline/timeline_page.dart lib/pages/timeline/filter_review_page.dart lib/common/widgets/implicitly_animated_list.dart`：通过。
+- `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
+- `/opt/homebrew/bin/flutter test --no-pub`：通过。

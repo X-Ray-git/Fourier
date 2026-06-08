@@ -10,11 +10,7 @@ import '../http/init.dart';
 import '../common/widgets/feedback_toast.dart';
 import '../utils/storage.dart';
 
-enum UndoActionType {
-  read,
-  filterReject,
-  filterKeep,
-}
+enum UndoActionType { read, filterReject, filterKeep }
 
 class UndoAction {
   final UndoActionType type;
@@ -23,10 +19,25 @@ class UndoAction {
   UndoAction(this.type, this.article);
 }
 
+class UndoRestoreEvent {
+  final int sequence;
+  final UndoActionType type;
+  final ArticleModel article;
+
+  const UndoRestoreEvent({
+    required this.sequence,
+    required this.type,
+    required this.article,
+  });
+}
+
 class UndoService {
   static UndoAction? _lastAction;
+  static int _restoreSequence = 0;
+  static final restoredAction = Rxn<UndoRestoreEvent>();
 
-  static ArticleModel? get lastReadArticle => _lastAction?.type == UndoActionType.read ? _lastAction?.article : null;
+  static ArticleModel? get lastReadArticle =>
+      _lastAction?.type == UndoActionType.read ? _lastAction?.article : null;
 
   static void recordRead(ArticleModel article) {
     _lastAction = UndoAction(UndoActionType.read, article);
@@ -44,6 +55,14 @@ class UndoService {
     if (_lastAction?.article.entryId == entryId) {
       _lastAction = null;
     }
+  }
+
+  static void _notifyRestored(UndoAction action) {
+    restoredAction.value = UndoRestoreEvent(
+      sequence: ++_restoreSequence,
+      type: action.type,
+      article: action.article,
+    );
   }
 
   static Future<void> markAsRead(
@@ -100,9 +119,9 @@ class UndoService {
     }
   }
 
-  static Future<void> undoLastAction() async {
+  static Future<ArticleModel?> undoLastAction() async {
     final action = _lastAction;
-    if (action == null) return;
+    if (action == null) return null;
     _lastAction = null;
 
     final article = action.article;
@@ -112,25 +131,34 @@ class UndoService {
       LocalArticleDbService.upsertOne(article);
       if (Get.isRegistered<TimelineController>()) {
         final tc = Get.find<TimelineController>();
-        final idx = tc.allArticles.indexWhere((a) => a.entryId == article.entryId);
+        final idx = tc.allArticles.indexWhere(
+          (a) => a.entryId == article.entryId,
+        );
         if (idx >= 0) {
           tc.allArticles[idx] = article;
           tc.allArticles.refresh();
         }
       }
       ArticleStateNotifier.tick(article.entryId);
+      _notifyRestored(action);
       AppFeedback.success('已撤销', '文章已重新移入拦截列表');
-      return;
+      return article;
     }
 
     // Both 'read' and 'filterReject' mark the article as read. We must revert to unread.
     if (action.type == UndoActionType.filterReject) {
-      LocalArticleDbService.upsertOne(article); // Restore to original filterReviewed:false state
+      // Restore to the original filterReviewed:false state.
+      LocalArticleDbService.upsertOne(article);
     }
 
     if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
-      await Get.find<ArticleController>(tag: article.entryId).markAsUnread();
-      return;
+      final controller = Get.find<ArticleController>(tag: article.entryId);
+      await controller.markAsUnread();
+      if (!controller.isRead.value) {
+        _notifyRestored(action);
+        return article;
+      }
+      return null;
     }
 
     if (Get.isRegistered<TimelineController>()) {
@@ -139,6 +167,7 @@ class UndoService {
       LocalArticleDbService.setReadState(article.entryId, false);
       ArticleStateNotifier.tick(article.entryId);
     }
+    _notifyRestored(action);
 
     final ok = await _retrySync(
       action: () => FeedHttp.markUnread(entryId: article.entryId),
@@ -179,10 +208,11 @@ class UndoService {
         );
       }
       AppFeedback.error('撤销失败', '网络请求失败，已恢复为已读');
-      return;
+      return null;
     }
 
     AppFeedback.success('已撤销', '文章已恢复为未读状态');
+    return article;
   }
 
   static Future<bool> _retrySync({

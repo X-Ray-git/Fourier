@@ -4276,3 +4276,72 @@ if (!isCurrentRoute) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*
+
+## 116. macOS Cmd+R 全局刷新快捷键（2026-06-08）
+
+### 116.1 需求背景
+
+用户希望 macOS 端支持 Cmd+R 快捷键触发刷新（重新拉取文章列表），效果完全等效于时间线 AppBar 右侧的同步按钮。
+
+### 116.2 现状分析
+
+1. **macOS 无下拉刷新**：`timeline_page.dart:389-400` 中 macOS 分支不包裹 `RefreshIndicator`，无法靠下拉手势触发刷新。
+2. **macOS 的唯一刷新入口**：时间线 AppBar 的 `_MacSyncButton`（`timeline_page.dart:888-954`），点击后调用 `TimelineController.loadFeedsThenArticles()`。
+3. **全局快捷键已有基础**：`main.dart:174-186` 使用 Flutter 的 `Shortcuts` + `SingleActivator` 机制实现了 `Cmd+Z`（撤销）和 `Cmd+,`（打开设置）两个全局快捷键。
+
+### 116.3 方案选择与理由
+
+采用与 `Cmd+Z` / `Cmd+,` 一致的全局 `Shortcuts` 方案（而非某个页面的 `HardwareKeyboard` 监听）：
+
+| 方案 | 说明 | 选择 |
+|------|------|------|
+| 全局 Shortcuts | 在 `main.dart` 添加 `RefreshTimelineIntent`，macOS only，与现有快捷键模式一致 | ✅ |
+| 页面 HardwareKeyboard | 侵入 timeline_page 或 article_page 的 keyboard handler | ❌ 与 Cmd+Z/Cmd+, 不一致 |
+
+理由：
+- `TimelineController` 已全局注册，可从任何页面直接 `Get.find` 访问
+- 不受焦点影响，不管用户在时间线、设置页、审核页按下 Cmd+R 均可触发
+- 不需要侵入页面级的 keyboard handler，避免与方向键、M 键等已有快捷键冲突
+- 与 `Cmd+Z`（UndoReadIntent）、`Cmd+,`（OpenSettingsIntent）保持代码风格一致
+
+### 116.4 实现细节
+
+**文件 1：`lib/main.dart`**
+
+- 新增 `import 'pages/timeline/timeline_controller.dart'`（第 5 行）
+- 新增 `RefreshTimelineIntent` 类（第 31-33 行），位于 `OpenSettingsIntent` 之后
+- `Shortcuts` 新增（macOS only）:
+  ```dart
+  if (Platform.isMacOS)
+    SingleActivator(
+      LogicalKeyboardKey.keyR,
+      meta: true,
+    ): const RefreshTimelineIntent(),
+  ```
+- `Actions` 新增 `RefreshTimelineIntent` 处理器：
+  - 守卫 `EditableText` 焦点（与 UndoReadIntent 相同的保护逻辑），避免在输入框中按 Cmd+R 误触发
+  - 调用 `Get.find<TimelineController>().loadFeedsThenArticles()`
+
+**文件 2：`lib/pages/settings/settings_page.dart`**
+
+- 快捷键列表新增 `Cmd + R` → `刷新文章列表`（第 527 行），排在 `Cmd + ,` 和 `Cmd + Z` 之后、`M` 之前
+
+### 116.5 与同步按钮的关系
+
+Cmd+R 仅调用核心刷新方法 `loadFeedsThenArticles()`，不含 `_MacSyncButton` 的 UI 层效果：
+- **不做**：旋转动画（`RotationTransition`）、450ms 最低反馈窗口、按钮禁用防重复
+- **做**：与点击按钮完全等同的数据刷新流程
+
+这是因为快捷键不需要 UI 层面的动画反馈，核心数据刷新行为一致即可。
+
+### 116.6 影响文件
+
+- `lib/main.dart` — RefreshIntent + Shortcuts + Actions
+- `lib/pages/settings/settings_page.dart` — 快捷键说明列表
+
+### 116.7 验证结果
+
+```bash
+flutter analyze lib/main.dart lib/pages/settings/settings_page.dart
+# No issues found!
+```

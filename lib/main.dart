@@ -15,6 +15,7 @@ import 'common/widgets/loading_widget.dart';
 import 'http/init.dart';
 import 'router/app_pages.dart';
 import 'pages/main/main_controller.dart';
+import 'pages/timeline/timeline_controller.dart';
 import 'services/account_service.dart';
 import 'services/app_version_service.dart';
 import 'utils/storage.dart';
@@ -26,6 +27,10 @@ class UndoReadIntent extends Intent {
 
 class OpenSettingsIntent extends Intent {
   const OpenSettingsIntent();
+}
+
+class RefreshTimelineIntent extends Intent {
+  const RefreshTimelineIntent();
 }
 
 void main() async {
@@ -183,6 +188,11 @@ class AutoFoloApp extends StatelessWidget {
                 LogicalKeyboardKey.comma,
                 meta: true,
               ): const OpenSettingsIntent(),
+            if (Platform.isMacOS)
+              SingleActivator(
+                LogicalKeyboardKey.keyR,
+                meta: true,
+              ): const RefreshTimelineIntent(),
           },
           child: Actions(
             actions: <Type, Action<Intent>>{
@@ -206,6 +216,23 @@ class AutoFoloApp extends StatelessWidget {
                   }
                   if (Get.isRegistered<MainController>()) {
                     Get.find<MainController>().changeIndex(3);
+                  }
+                  return null;
+                },
+              ),
+              RefreshTimelineIntent: CallbackAction<RefreshTimelineIntent>(
+                onInvoke: (intent) {
+                  final focusContext =
+                      FocusManager.instance.primaryFocus?.context;
+                  if (focusContext
+                          ?.findAncestorWidgetOfExactType<EditableText>() !=
+                      null) {
+                    return null;
+                  }
+                  if (Get.isRegistered<TimelineController>()) {
+                    unawaited(
+                      Get.find<TimelineController>().loadFeedsThenArticles(),
+                    );
                   }
                   return null;
                 },

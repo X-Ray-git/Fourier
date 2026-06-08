@@ -4424,13 +4424,13 @@ void markAsUnreadLocal(String entryId) {
 
 ---
 
-## 116. 审核页 UI 按钮与快捷键行为不等效修复（2026-06-08）
+## 117. 审核页 UI 按钮与快捷键行为不等效修复（2026-06-08）
 
-### 116.1 问题描述
+### 117.1 问题描述
 
 用户在 macOS 端的垃圾拦截页面（FilterReviewPage）发现：按 `k`（保留）或 `m`（移除）快捷键时，文章会自动跳转到下一篇；但点击 UI 上对应的「保留」或「移除」按钮时，不会自动跳转。
 
-### 116.2 根因分析
+### 117.2 根因分析
 
 核心差异在于**快捷键始终操作「当前选中文章」，而 UI 按钮操作的是「该行绑定的文章对象」**。
 
@@ -4480,7 +4480,7 @@ if (isSelected) {  // 只有 isSelected=true 才跳下一篇
 4. 因此点击按钮时，`_selectedArticle` 可能并非当前行的文章
 5. `_keep`/`_reject` 中 `isSelected = false` → 不跳转下一篇
 
-### 116.3 修复方案
+### 117.3 修复方案
 
 在 `_buildAnimatedReviewRow` 中，点击「保留」或「移除」按钮时，**先将 `_selectedArticle` 设为当前行的文章**，再执行 `_keep`/`_reject`：
 
@@ -4497,7 +4497,7 @@ onReject: () {
 
 这样 `_keep`/`_reject` 内部的 `isSelected` 判断就会为 `true`，自动跳转到下一篇，行为与 `k`/`m` 快捷键一致。
 
-### 116.4 行为变化对照
+### 117.4 行为变化对照
 
 | 场景 | 修复前 | 修复后 |
 |------|--------|--------|
@@ -4508,13 +4508,129 @@ onReject: () {
 | 点击「移除」按钮（选中行） | 跳转下一篇 | 不变 |
 | 点击「移除」按钮（非选中行） | 不跳转 | 跳转下一篇 |
 
-### 116.5 影响文件
+### 117.5 影响文件
 
 - `lib/pages/timeline/filter_review_page.dart` — `_buildAnimatedReviewRow` 方法（+6 行）
 
-### 116.6 验证
+### 117.6 验证
 
 - `flutter analyze lib/pages/timeline/filter_review_page.dart`：No issues found
+
+## 118. macOS M 键快捷键偶尔失效修复（2026-06-08）
+
+### 118.1 用户问题报告
+
+用户反馈：在 macOS 时间线页面上，**双击**文章卡片总能稳定触发退场动画（标记已读 + 自动跳到下一篇），但**按 M 键**却偶尔不触发任何效果。问题同样存在日志 "垃圾拦截"（审核）页面的 M 键（拒绝）和 K 键（保留）场景。
+
+用户要求排查范围：
+| | 时间线页面 (tab 0) | 审核页面 (tab 1) |
+|---|---|---|
+| 双击 | ✅ 总是有效 | ❌ 未实现双击 dismiss |
+| M 键快捷键 | ⚠️ 偶尔失效 | ⚠️ 偶尔失效 |
+| UI 按钮 | ✅ 有效 | ✅ 有效 (保留/移除按钮) |
+
+### 118.2 完整代码审查与根因排查
+
+经过对 `article_page.dart`、`timeline_page.dart`、`filter_review_page.dart`、`implicitly_animated_list.dart`、`main_page.dart` 全部相关文件的逐一审查，识别出两个并发的根因和两个次要因素。
+
+#### 根因 1（主要）：`_hasShortcutModifierPressed()` 全局捕获 M 键
+
+位置：`lib/pages/article/article_page.dart:682`（修复前）
+
+```dart
+bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (_hasShortcutModifierPressed()) return false; // ← HERE
+    ...
+}
+```
+
+`_hasShortcutModifierPressed()` 检查 `HardwareKeyboard.instance.isMetaPressed`（macOS 上的 Command 键）。如果用户在此之前使用过任何修饰键组合（最常见的是 Cmd+Z 撤销），macOS 的底层键盘驱动可能在修饰键物理抬起后仍有几个毫秒继续报告 `isMetaPressed == true`。在此期间按 M 键 → handler 在入口处直接返回 `false`，整条链路被切断。
+
+这解释了"偶尔失效"的非确定特征 —— 取决于用户在上一次 Cmd+Z 之后是否给系统足够的时间刷新修饰键状态。
+
+#### 根因 2（放大器）：Focus widget 无条件吞掉事件
+
+位置：`lib/pages/article/article_page.dart:1234-1248`（修复前）
+
+当 `_usesGlobalShortcuts` 为 `true` 时（即 macOS 分栏视图），`ArticlePageView` 外层包裹的 `Focus` widget 在 `onKeyEvent` 中对 M 键**无条件**返回 `KeyEventResult.handled`：
+
+```dart
+if (key == LogicalKeyboardKey.escape ||
+    key == LogicalKeyboardKey.arrowLeft ||
+    key == LogicalKeyboardKey.arrowRight ||
+    key == LogicalKeyboardKey.arrowUp ||
+    key == LogicalKeyboardKey.arrowDown ||
+    key == LogicalKeyboardKey.keyM) {
+  return KeyEventResult.handled; // ← 不检查修饰键，吞掉
+}
+```
+
+它的设计意图是防止快捷键事件从 `HardwareKeyboard` handler 向上冒泡——当 handler 已处理事件后应当吞掉。但当根因 1 导致 handler **未处理**事件（`return false`）时，Focus widget 仍然吞掉了事件。结果：M 键被两个层先后丢弃，用户看不到任何效果，属于**完全静默失败**。
+
+#### 根因 3（次要）：`isUpdatingReadState` 阻塞快速连续操作
+
+位置：`article_page.dart:748`（修复后行号）
+
+```dart
+if (controller.isUpdatingReadState.value) return true;
+```
+
+当上一篇文章的 `markAsRead` 网络同步尚未完成（最多 5 次重试，每次间隔 800ms）时，后续 M 键被吞掉，仅返回 `true` 而没有任何操作。由于用户切换文章后，旧的 `ArticleController` 会被 dispose、新的 `ArticleController` 被创建，此问题在实际使用中发生的概率较低，因此本轮不做修改。
+
+#### 根因 4（架构层面）：`IndexedStack` 令多个 `ArticlePageView` 同时存活
+
+`main_page.dart:101` 使用 `IndexedStack`，导致 timeline tab（index 0）和 review tab（index 1）内的 `ArticlePageView` 同时注册 `HardwareKeyboard.instance.addHandler`。两者都依赖 `isActive()` 和 `isSelectedArticle()` 闭包做早期退出判断，在 page 切换边界的边缘窗口内可能发生竞争，增加"偶尔失效"的概率。由于 `IndexedStack` 是本应用的核心布局决策，本轮未修改此架构。
+
+### 118.3 为什么双击总是有效
+
+双击流程（`timeline_page.dart:212 _handleMacArticleTap`）完全不走 `HardwareKeyboard` 栈：
+- 它是 Flutter `GestureDetector.onTap` 的 mouse/trackpad 事件
+- 不触发 `_hasShortcutModifierPressed()` 检查
+- 不涉及 Focus 的 `onKeyEvent`
+
+两者路径完全正交，因此双击始终稳定生效。
+
+### 118.4 修复方案
+
+在 `lib/pages/article/article_page.dart` 中修改了两处：
+
+#### 修改 1：`_handleHardwareKeyEvent` —— 定向修饰键检查
+
+**删除**入口处的全局 `if (_hasShortcutModifierPressed()) return false;`，改为**仅对四个方向键**各自独立执行修饰键检查。M 键和 Escape 键不再受修饰键状态影响。
+
+方向键需要保留修饰键检查，因为 macOS 上 Cmd+Up/Down/Left/Right 具有全局或内置含义（首行/末行滚动、行首/行尾），与箭头键我们的语义冲突。M 键不存在此冲突：Cmd+M 由窗口管理器（最小化）拦截，根本不会到达应用层；独立的 M 键始终是用户的主动意图。
+
+#### 修改 2：Focus widget `onKeyEvent` —— 与 handler 逻辑对齐
+
+在 `_usesGlobalShortcuts` 分支中，将键列表拆分为两组：
+1. **Escape + M**：无修饰键检查，始终返回 `KeyEventResult.handled`
+2. **四个方向键**：调用 `_hasShortcutModifierPressed()`，修饰键按下时返回 `ignored`（允许冒泡给系统），否则返回 `handled`
+
+这使得 Focus widget 与 `_handleHardwareKeyEvent` 的行为精确一致，不再出现 handler 跳过 + Focus 吞噬形成静默丢失的情况。
+
+### 118.5 变更范围
+
+仅修改 1 个文件：`lib/pages/article/article_page.dart`，共 +12/-4 行。
+
+### 118.6 受影响的手势路径总结
+
+| 触发方式 | 页面 | 行为 | 受影响？ |
+|----------|------|------|----------|
+| 双击卡片 | 时间线 | 标记已读 + 跳到下一篇 | ❌ 不受影响（非键盘路径） |
+| M 键 | 时间线 | 标记已读 + 跳到下一篇 | ✅ 本次修复 |
+| M 键 | 审核页 | 调用 `_reject(selected)` | ✅ 本次修复 |
+| K 键 | 审核页 | 调用 `_keep(selected)` | ❌ 不受影响（K 键原本未进入 `_hasShortcutModifierPressed` 检查范围） |
+| UI 按钮 (AppBar 勾号) | 时间线 | 标记已读 + 跳到下一篇 | ❌ 不受影响（onPressed 回调） |
+| UI 按钮 (保留/移除) | 审核页 | 执行 keep/reject | ❌ 不受影响（onPressed 回调） |
+
+### 118.7 未修改的已知问题
+
+1. **`isUpdatingReadState` 阻塞**（§118.2 根因 3）：在极快速的连续 M 键操作时仍可能被静默吞掉，但切换文章后 controller 被 dispose 重建，实际出现概率极低。当前 `return true` 保留，避免事件继续冒泡导致意想不到的副作用。
+
+2. **`IndexedStack` 多 page 并存**（§118.2 根因 4）：多个 `ArticlePageView` 同时注册 `HardwareKeyboard` handler 的架构问题未修改，其边缘竞争概率本身就很低，且 `isActive()` + `isSelectedArticle()` 双重守卫已经足够健壮。
+
+3. **K 键在 `_handleHardwareKeyEvent` 中的路径**：K 键仅由 `FilterReviewPage` 的 `_handleHardwareKeyEvent`（第 101 行）直接处理，绕过 `ArticlePageView` 的 handler。如果将来有人将 K 键逻辑迁移到 `ArticlePageView` 内，需要在 Focus widget 中同步增加对应的键列表项。
 
 ---
 

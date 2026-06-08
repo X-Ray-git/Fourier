@@ -4123,3 +4123,23 @@ if (!isCurrentRoute) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.12 -m "- 修复 macOS 分栏快捷键归属判断，恢复垃圾拦截、订阅详情和最近阅读页的 M/方向键/Esc 响应\n- 发布流程拒绝轻量 tag 或空注释 tag，防止 Release Notes 退化为提交信息" --push`*
+
+## 110. v1.1.12 Release Job 的 annotated tag 校验修复（2026-06-08）
+
+### 110.1 失败现象
+`v1.1.12` tag 推送后，Android APK、macOS App 和前置校验均完成，但最后的 `Publish GitHub Release` job 失败：
+`refs/tags/v1.1.12^{tag}: expected tag type, but the object dereferences to tree type`
+
+本地与远端均确认 `v1.1.12` 本身是 annotated tag，且 tag annotation 正确。因此这不是发布脚本创建了错误 tag，而是第 109 节新增的 workflow 校验写法在 GitHub Actions checkout 的 tag push 工作区里不够稳。
+
+### 110.2 根因与修复
+原校验直接执行：
+`git rev-parse -q --verify "refs/tags/$TAG_NAME^{tag}"`
+
+在 tag push 触发的 Actions checkout 环境中，本地 ref 形态可能并不等同于完整仓库里的远端 tag ref，导致 `^{tag}` 校验误判。修复为：
+1. 在 release job 中先显式执行 `git fetch --force --no-tags origin "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME"`，把远端 tag ref 拉到本地同名 tag。
+2. 再用 `git cat-file -t "refs/tags/$TAG_NAME"` 判断对象类型是否为 `tag`。
+3. 保留 annotation 非空校验。
+
+### 110.3 发布处理
+不要移动或复用已经失败的 `v1.1.12` tag。因为 GitHub Actions rerun 会使用该 tag 指向提交里的旧 workflow，无法获得本次修复。正确处理是提交 workflow 修复后，发布下一个 patch tag `v1.1.13`。

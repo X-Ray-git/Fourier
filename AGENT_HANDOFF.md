@@ -4273,6 +4273,155 @@ if (!isCurrentRoute) {
 - `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
 - `/opt/homebrew/bin/flutter test --no-pub`：通过。
 
+## 116. Cmd+Z 撤销已读状态不立即恢复的竞态条件修复（2026-06-08）
+
+### 116.1 问题报告
+
+用户在 macOS 时间线页面的「未读」视图下，标记一篇文章为已读（文章从列表中消失），随后按下 `Cmd+Z` 撤销：
+
+- **症状 1（有时不恢复）**：文章没有立即重新出现在未读列表中，必须手动点击同步按钮刷新才能重新加载回来。
+- **症状 2（恢复后不聚焦）**：即使恢复了，右侧文章面板也不会自动聚焦到该文章。
+- **概率性**：有时正常，有时异常——取决于用户按 `Cmd+Z` 的时机。
+
+### 116.2 根因分析
+
+问题出在一个竞态条件（race condition），涉及三个组件的时间线交互：
+
+**正常时间线（T0→T3）：**
+
+```
+T0: 用户标记已读
+    → UndoService.markAsRead()
+    → markAsReadLocal: GStorage.readStatus.put(entryId, true) ← 写入乐观已读覆盖
+    → 异步 _retrySync 开始（最多 12 秒，5 次重试×800ms）
+
+T1: _retrySync 成功完成
+    → GStorage.readStatus.delete(entryId) ← 清理乐观覆盖
+
+T2: 用户按 Cmd+Z
+    → UndoService.undoLastAction()
+    → markAsUnreadLocal: DB 写 false, allArticles 更新, articles 过滤重建 ✓
+    → ArticleStateNotifier.tick(entryId) ← 触发 _syncSingleArticleFromDb
+    → _syncSingleArticleFromDb: GStorage.readStatus.get(entryId) → null
+    → mergedRead = null == true ? true : false → false ✓ 一切正常
+```
+
+**异常时间线（竞态触发）：**
+
+```
+T0: 用户标记已读
+    → markAsReadLocal: GStorage.readStatus.put(entryId, true)
+
+T1 (只过了 2 秒): 用户按 Cmd+Z（_retrySync 尚未完成！）
+    → UndoService.undoLastAction()
+    → markAsUnreadLocal: DB 写 false, allArticles 正确更新为 isRead=false ✓
+    → ArticleStateNotifier.tick(entryId) ← 触发 _syncSingleArticleFromDb
+    → _syncSingleArticleFromDb: GStorage.readStatus.get(entryId) → true (仍然残留！)
+    → localOverride == true → mergedRead = true ⚡ 覆盖回已读！
+    → _applyFilter() 再次把文章从 articles 列表移除 ⚡
+```
+
+**关键代码**（`timeline_controller.dart` 旧版，修复前）：
+
+```dart
+// markAsReadLocal (line 353-363):
+void markAsReadLocal(String entryId, {bool recordHistory = true}) {
+    GStorage.readStatus.put(entryId, true);  // 写入乐观覆盖
+    LocalArticleDbService.setReadState(entryId, true, ...);
+    _updateReadStateInMemory(entryId, true);
+    ArticleStateNotifier.tick(entryId);
+}
+
+// markAsUnreadLocal (line 365-371): — 没有清理 readStatus！
+void markAsUnreadLocal(String entryId) {
+    // 不再写入 readStatus=false；只更新本地缓存，信任服务端为最终权威
+    LocalArticleDbService.setReadState(entryId, false);
+    _updateReadStateInMemory(entryId, false);
+    ArticleStateNotifier.tick(entryId);
+    // ⚡ GStorage.readStatus 仍然是 true！
+}
+
+// _syncSingleArticleFromDb (line 464-503):
+void _syncSingleArticleFromDb(String entryId) {
+    ...
+    final localOverride = GStorage.readStatus.get(entryId);  // 读到残留的 true
+    final mergedRead = localOverride == true ? true : updatedFromDb.isRead;
+    // 即使 DB 是 false，mergedRead 被覆盖为 true！
+    allArticles[idx] = finalUpdated;  // 用错误的 isRead=true 覆盖了正确的值
+    allArticles.refresh();
+    _applyFilter();  // 文章从 articles 中被移除
+    ...
+}
+```
+
+**为什么 ReadStatus 会残留？**
+
+当 `UndoService.markAsRead()` 调用 `markAsReadLocal` 时，它在 `GStorage.readStatus` 中写入了 `true`。然后它启动一个异步的 `_retrySync`。如果网络正常，约 2-12 秒后同步完成时 `GStorage.readStatus.delete()` 会清理它。如果用户在此窗口内按下 `Cmd+Z`，`markAsUnreadLocal` 没有清理 `readStatus`——因为第 63 节的重构有意不再写入 `readStatus=false`（"信任服务端为最终权威"），导致这个 `true` 值残留。
+
+由于 `markAsUnreadLocal` 调用了 `ArticleStateNotifier.tick(entryId)`，而 `TimelineController` 在 `onInit` 中注册了 `ever(ArticleStateNotifier.version, ...)` 监听器，后者调用 `_syncSingleArticleFromDb`。此方法将 `readStatus` 视为权威覆盖层（`localOverride == true → mergedRead = true`），并立即将正确的 `isRead=false` 覆盖回 `isRead=true`，然后调用 `_applyFilter()` 将文章从未读列表中移除。
+
+**为什么"_handleUndoRestoreEvent"有时没有聚焦？**
+
+`_handleUndoRestoreEvent`（位于 `timeline_page.dart`）通过 `WidgetsBinding.instance.addPostFrameCallback` 在下一帧扫描 `controller.articles` 以定位恢复的文章。如果 `_syncSingleArticleFromDb` 的覆盖在当前帧已经将文章从列表中移除，则 `indexWhere` 返回 `-1`，处理函数静默返回——文章不会被选中，也不会滚动到。
+
+**为什么有时恢复正常？**
+
+如果用户在按 `Cmd+Z` 之前等待足够长（等待原始 `_retrySync` 完成），`GStorage.readStatus` 会被清理。此时 `_syncSingleArticleFromDb` 读到 `null`，使用 DB 中的 `isRead=false`——因此一切正常。这与用户观察到的"有时候正常，有时候不正常"完全吻合。
+
+### 116.3 设计讨论
+
+讨论了几种修复方案：
+
+| 方案 | 描述 | 采纳 |
+|------|------|------|
+| 方案一 | 在 `markAsUnreadLocal` 中加 `GStorage.readStatus.delete(entryId)` | ✅ |
+| 方案二 | 在 `_syncSingleArticleFromDb` 中让 readStatus 仅作为"已读覆盖"，不作为双向权重 | ❌ 改变语义 |
+| 方案三 | 在 `undoLastAction` 中调用 markAsUnreadLocal 前显式清理 readStatus | ❌ 治标不治本 |
+
+**选择方案一的原因**：当本地标记为未读时，清除已有的已读乐观覆盖在语义上是正确的——不再需要保护锁了。这个修复覆盖了调用 `markAsUnreadLocal` 的所有路径（`UndoService.undoLastAction`、`ArticleController.markAsUnread`），且不改变 `_syncSingleArticleFromDb` 中 readStatus 合并的行为逻辑。
+
+### 116.4 修复实现
+
+**文件**：`lib/pages/timeline/timeline_controller.dart`
+
+**改动**：在 `markAsUnreadLocal` 开头添加 `GStorage.readStatus.delete(entryId)`，移除旧的"不再写入 readStatus=false"注释：
+
+```dart
+void markAsUnreadLocal(String entryId) {
+    if (entryId.trim().isEmpty) return;
+    GStorage.readStatus.delete(entryId);  // 新增：清除乐观已读覆盖
+    LocalArticleDbService.setReadState(entryId, false);
+    _updateReadStateInMemory(entryId, false);
+    ArticleStateNotifier.tick(entryId);
+}
+```
+
+### 116.5 行为变化对比
+
+| 场景 | 修复前 | 修复后 |
+|------|--------|--------|
+| 等待同步完成后 Cmd+Z 撤销 | ✅ 正常（readStatus 已清理） | ✅ 正常（无变化） |
+| 快速 Cmd+Z（同步尚未完成） | ❌ 文章被 _syncSingleArticleFromDb 重新标记为已读 | ✅ 正常恢复，readStatus 在 markAsUnreadLocal 中清理 |
+| 切换到已读视图确认 | ❌ 文章显示为已读（错误） | ✅ 文章正确显示为未读 |
+| 聚焦/滚动到恢复文章 | ❌ 文章在 articles 中找不到，静默跳过 | ✅ 正确找到、选中并滚动 |
+
+### 116.6 涉及文件
+
+- `lib/pages/timeline/timeline_controller.dart` — `markAsUnreadLocal` 添加 `GStorage.readStatus.delete(entryId)`。
+
+未修改但相关的文件（供后续参考）：
+
+- `lib/services/undo_service.dart` — `undoLastAction()` 调用链。
+- `lib/services/article_state_notifier.dart` — `tick()` 触发 `_syncSingleArticleFromDb`。
+- `lib/pages/timeline/timeline_page.dart` — `_handleUndoRestoreEvent` 现在可正确找到并聚焦已恢复文章。
+- `lib/pages/article/article_page.dart` — `ArticleController.markAsUnread()` 也调用 `markAsUnreadLocal`，该路径同样受益。
+
+### 116.7 后续注意事项
+
+- `readStatus` 的语义在第 63 节核心重构中已明确：仅作为用户操作时的乐观覆盖层（`true` only），同步完成后立即释放。本修复与此设计一致——标记为未读时清理乐观覆盖在语义上正确。
+- 如果未来添加新的"批量标记未读"路径，请确保也调用 `GStorage.readStatus.delete()`，或者更安全的方式是让该路径也走 `markAsUnreadLocal` 方法。
+- `markAsUnreadLocal` 中的 `ArticleStateNotifier.tick()` 仍会触发 `_syncSingleArticleFromDb`，由于 `readStatus` 已清理，合并逻辑现在正确地从 DB 读取 `isRead=false`。
+
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*

@@ -364,7 +364,7 @@ class TimelineController extends GetxController {
 
   void markAsUnreadLocal(String entryId) {
     if (entryId.trim().isEmpty) return;
-    // 不再写入 readStatus=false；只更新本地缓存，信任服务端为最终权威
+    GStorage.readStatus.delete(entryId);
     LocalArticleDbService.setReadState(entryId, false);
     _updateReadStateInMemory(entryId, false);
     ArticleStateNotifier.tick(entryId);

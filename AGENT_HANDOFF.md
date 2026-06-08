@@ -4637,19 +4637,19 @@ if (controller.isUpdatingReadState.value) return true;
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*
 
-## 116. macOS Cmd+R 全局刷新快捷键（2026-06-08）
+## 119. macOS Cmd+R 全局刷新快捷键（2026-06-08）
 
-### 116.1 需求背景
+### 119.1 需求背景
 
 用户希望 macOS 端支持 Cmd+R 快捷键触发刷新（重新拉取文章列表），效果完全等效于时间线 AppBar 右侧的同步按钮。
 
-### 116.2 现状分析
+### 119.2 现状分析
 
 1. **macOS 无下拉刷新**：`timeline_page.dart:389-400` 中 macOS 分支不包裹 `RefreshIndicator`，无法靠下拉手势触发刷新。
 2. **macOS 的唯一刷新入口**：时间线 AppBar 的 `_MacSyncButton`（`timeline_page.dart:888-954`），点击后调用 `TimelineController.loadFeedsThenArticles()`。
 3. **全局快捷键已有基础**：`main.dart:174-186` 使用 Flutter 的 `Shortcuts` + `SingleActivator` 机制实现了 `Cmd+Z`（撤销）和 `Cmd+,`（打开设置）两个全局快捷键。
 
-### 116.3 方案选择与理由
+### 119.3 方案选择与理由
 
 采用与 `Cmd+Z` / `Cmd+,` 一致的全局 `Shortcuts` 方案（而非某个页面的 `HardwareKeyboard` 监听）：
 
@@ -4664,7 +4664,7 @@ if (controller.isUpdatingReadState.value) return true;
 - 不需要侵入页面级的 keyboard handler，避免与方向键、M 键等已有快捷键冲突
 - 与 `Cmd+Z`（UndoReadIntent）、`Cmd+,`（OpenSettingsIntent）保持代码风格一致
 
-### 116.4 实现细节
+### 119.4 实现细节
 
 **文件 1：`lib/main.dart`**
 
@@ -4686,7 +4686,7 @@ if (controller.isUpdatingReadState.value) return true;
 
 - 快捷键列表新增 `Cmd + R` → `刷新文章列表`（第 527 行），排在 `Cmd + ,` 和 `Cmd + Z` 之后、`M` 之前
 
-### 116.5 与同步按钮的关系
+### 119.5 与同步按钮的关系
 
 Cmd+R 仅调用核心刷新方法 `loadFeedsThenArticles()`，不含 `_MacSyncButton` 的 UI 层效果：
 - **不做**：旋转动画（`RotationTransition`）、450ms 最低反馈窗口、按钮禁用防重复
@@ -4694,14 +4694,71 @@ Cmd+R 仅调用核心刷新方法 `loadFeedsThenArticles()`，不含 `_MacSyncBu
 
 这是因为快捷键不需要 UI 层面的动画反馈，核心数据刷新行为一致即可。
 
-### 116.6 影响文件
+### 119.6 影响文件
 
 - `lib/main.dart` — RefreshIntent + Shortcuts + Actions
 - `lib/pages/settings/settings_page.dart` — 快捷键说明列表
 
-### 116.7 验证结果
+### 119.7 验证结果
 
 ```bash
 flutter analyze lib/main.dart lib/pages/settings/settings_page.dart
 # No issues found!
 ```
+## 120. macOS 图片右键复制功能 (2026-06-08)
+
+### 120.1 需求背景
+
+在 macOS 上对图片右键点击时没有任何反应，无法复制图片到剪贴板。用户希望在图片画廊和文章内联图片上都支持 macOS 右键菜单，交互方式与现有 macOS 右键模式（article_card 中的 `onSecondaryTapDown` + `showMenu`）完全一致。
+
+### 120.2 讨论与决策
+
+用户确认三项关键设计选择：
+1. **生效范围**：图片画廊和文章内联图片都支持右键菜单
+2. **复制行为**：复制图片数据（bitmap）到系统剪贴板，而非仅复制 URL（原有"复制链接"选项仍在）
+3. **移动端**：仅 macOS 右键，mobile 长按菜单保持不变
+
+### 120.3 技术方案
+
+#### 核心挑战：Flutter 不支持图片剪贴板
+Flutter 的 `Clipboard` 类只支持 `ClipboardData(text: ...)`，无法写入图片数据。最终方案采用 **MethodChannel + Swift NSPasteboard**（方案 A）：
+- Dart 侧通过 `MethodChannel('com.autofolo/image_clipboard')` 发送图片 bytes
+- macOS Swift 侧用 `NSPasteboard.general.clearContents()` + `NSPasteboard.general.writeObjects([NSImage])` 写入
+- 复用项目中已有的 MethodChannel 模式（参考 `AppBadger`、`MoveToBackground`）
+
+#### 三个改动点
+
+| 位置 | 改动 |
+|------|------|
+| **图片画廊** `image_gallery_page.dart` | `GestureDetector` 新增 `onSecondaryTapDown`（仅 macOS），弹出 `showMenu` 菜单（复制图片 / 分享 / 保存 / 复制链接） |
+| **内联图片** `html_chunk_card.dart` `_ArticleInlineImage` | 包裹 `GestureDetector.onSecondaryTapDown`（仅 macOS），共用 `showInlineImageContextMenu` 函数 |
+| **HTML 内嵌图片** `html_chunk_card.dart` `ImageExtension._imageExtension` | 已有 GestureDetector（onTap）增加 `onSecondaryTapDown`（仅 macOS），共用同一菜单函数 |
+
+#### 菜单函数共享
+新增顶层函数 `showInlineImageContextMenu()` — 展示 2 项菜单（复制图片 / 复制链接），下载图片后用 `ImageClipboard.copyImageToClipboard()` 写入系统剪贴板，同时给图片画廊和所有内联图片复用。
+
+### 120.4 修改文件清单
+
+#### 新增
+- `lib/utils/image_clipboard.dart` — MethodChannel 封装 + Dio 下载工具
+
+#### 修改
+- `lib/pages/article/widgets/image_gallery_page.dart` — macOS 右键菜单 + `_copyImage()` + `_showImageContextMenu()`
+- `lib/pages/article/widgets/html_chunk_card.dart` — `_ArticleInlineImage` 和 `ImageExtension` 添加右键菜单 + 顶层 `showInlineImageContextMenu()` 函数
+- `macos/Runner/AppDelegate.swift` — 新增 `com.autofolo/image_clipboard` MethodChannel 处理器
+
+### 120.5 交互模式
+
+| 平台 | 图片画廊 | 内联图片 |
+|------|---------|---------|
+| **macOS** | 右键 → `showMenu` 光标位置弹出（复制图片/分享/保存/复制链接） | 右键 → `showMenu` 光标位置弹出（复制图片/复制链接） |
+| **移动端** | 长按 → BottomSheet（不变） | 无菜单（不变） |
+
+### 120.6 验证结果
+
+```bash
+flutter analyze lib/utils/image_clipboard.dart lib/pages/article/widgets/image_gallery_page.dart lib/pages/article/widgets/html_chunk_card.dart
+# No issues found!
+```
+
+---

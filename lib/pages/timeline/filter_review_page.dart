@@ -538,7 +538,11 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 key: ValueKey(selected.entryId),
                 article: selected,
                 isSplitView: true,
-                isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 1,
+                isActive: () =>
+                    !Get.isRegistered<MainController>() ||
+                    Get.find<MainController>().currentIndex.value == 1,
+                isSelectedArticle: (entryId) =>
+                    _selectedArticle.value?.entryId == entryId,
                 onClose: () => _selectedArticle.value = null,
                 onPrevious: () => _selectRelativeArticle(-1),
                 onNext: () => _selectRelativeArticle(1),

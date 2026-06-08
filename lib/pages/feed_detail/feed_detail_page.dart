@@ -871,6 +871,8 @@ class FeedDetailPage extends StatelessWidget {
                 key: ValueKey(selected.entryId),
                 article: selected,
                 isSplitView: true,
+                isSelectedArticle: (entryId) =>
+                    controller.selectedArticle.value?.entryId == entryId,
                 onClose: () => controller.selectedArticle.value = null,
                 onPrevious: () => controller.selectRelativeArticle(-1),
                 onNext: () => controller.selectRelativeArticle(1),

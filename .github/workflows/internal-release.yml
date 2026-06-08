@@ -183,7 +183,15 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
+          if ! git rev-parse -q --verify "refs/tags/$TAG_NAME^{tag}" >/dev/null; then
+            echo "$TAG_NAME must be an annotated tag. Use scripts/release.sh to create releases."
+            exit 1
+          fi
           ANNOTATION="$(git tag -l --format='%(contents)' "$TAG_NAME")"
+          if [ -z "$(printf '%s' "$ANNOTATION" | tr -d '[:space:]')" ]; then
+            echo "$TAG_NAME has an empty annotation. Refusing to create release notes from a commit message."
+            exit 1
+          fi
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" dist/* --clobber
           else

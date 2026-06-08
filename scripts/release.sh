@@ -81,11 +81,13 @@ fi
 
 perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml
 
+footprint_message="${message//$'\n'/\\n}"
+
 cat <<EOF >> AGENT_HANDOFF.md
 
 ---
-*🤖 Automated Release Footprint:* 
-*执行指令: \`./scripts/release.sh $version -m "$message"$( [[ "$push_remote" == true ]] && echo " --push" )\`*
+*🤖 Automated Release Footprint:*
+*执行指令: \`./scripts/release.sh $version -m "$footprint_message"$( [[ "$push_remote" == true ]] && echo " --push" )\`*
 EOF
 
 git add pubspec.yaml AGENT_HANDOFF.md

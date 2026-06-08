@@ -468,7 +468,7 @@ if (socialReadResult is Success<List<ArticleModel>>) {
 
 参考工程中 **inbox 不是独立页面，而是一种文章 category**，与 'feeds' 和 'social' 平级。在未读列表中，需要同时拉取：
 - view=0 feeds
-- view=1 social  
+- view=1 social
 - 所有 inbox 的条目
 
 ### 12.2 实现
@@ -4046,6 +4046,9 @@ if (!isCurrentRoute) {
 这一极短的时间既足以在人类视觉神经上实现“无滞后”的跟手感，又能为 UI 渲染保留最低限度的平滑过渡。由于这是跨平台共享的 Dart 侧 UI 代码，该项修改默认将在 iOS/macOS 与 Android 等所有端同步生效。
 
 
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.10 -m "- 优化文章行内代码块的视觉样式\n- 修复审核拦截页已读状态同步延迟问题\n- macOS 桌面端新增拦截页 M/K 快捷键批量操作与自动跳转\n- 重构全局撤销服务，支持拦截页的复杂状态撤销回滚\n- 修复阅读页顶部进度条动画滞后不跟手的问题" --push`*
 
 
 ## 107. 行内代码文本基线向上浮动问题修复 (2026-06-07)
@@ -4097,10 +4100,22 @@ if (!isCurrentRoute) {
 3. 在 `TimelinePage` 中传入：`isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 0`。
 4. 在 `FilterReviewPage` 中传入：`isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 1`。
 
-
 ---
-*🤖 Automated Release Footprint:* 
-
----
-*🤖 Automated Release Footprint:* 
+*🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.11 -m "- 修复行内代码块底部边距导致文本轻微向上浮动不对齐的问题\n- 修复 macOS 分屏模式下垃圾拦截页的快捷键事件泄漏导致主时间线文章被误标已读的严重缺陷" --push`*
+
+## 109. macOS 分栏快捷键归属泛化与发布 notes 防错 (2026-06-08)
+
+### 109.1 背景
+复查 `v1.1.11` 后发现两个相关问题：
+1. 第 108 节虽然为 `ArticlePageView` 增加了 `isActive`，避免隐藏的 `TimelinePage` 继续处理 `FilterReviewPage` 的按键，但 `ArticlePageView` 内部仍然无条件读取 `TimelineController.selectedArticle` 做“当前文章”校验。这个校验只适合主时间线，在垃圾拦截页、订阅详情页和最近阅读页中会误判右侧文章不是当前文章，从而导致 `M`、方向键、`Esc` 等 macOS 分栏快捷键被忽略。
+2. 用户在 GitHub Release 页面看到 `v1.1.11` 的描述变成了 `ci: fix checkout crash on tag pushes by using fetch-depth 0 instead of fetch-tags`。本地与远端 tag 均确认是 annotated tag，且 tag 注释是正确的中文 notes；但 `v1.1.11` tag 指向的是后续 CI 修复提交 `3402f77`。经过本地验证，如果 workflow 中的 `git tag -l --format='%(contents)'` 遇到轻量 tag，它会输出被打 tag 的 commit message，正好会得到这条 `ci:` 文本。因此根因不是 release 脚本最初写错 message，而是复用/移动同一个 release tag 的异常补救流程叠加 workflow 缺少 tag 类型防御。
+
+### 109.2 本次修复
+1. 在 `ArticlePageView` 增加 `isSelectedArticle: (entryId) => bool` 回调，替换原先硬编码读取 `TimelineController.selectedArticle` 的校验。
+2. `TimelinePage`、`FilterReviewPage`、`FeedDetailPage`、`RecentReadPage` 四个 macOS 分栏入口均传入自己的选中文章状态。这样保留“只有当前右栏文章响应全局快捷键”的防抖能力，同时不再把所有页面都误绑到主时间线状态。
+3. `.github/workflows/internal-release.yml` 的 release job 在读取 `ANNOTATION` 前增加前置校验：`refs/tags/$TAG_NAME^{tag}` 必须存在，且 tag annotation 去空白后不能为空。若未来误用了轻量 tag 或空注释 tag，CI 会直接失败，不会创建 notes 来自 commit message 的 release。
+4. `scripts/release.sh` 在写入 `AGENT_HANDOFF.md` 的执行足迹时，会把 message 内的真实换行转义成 `\n`。这样 tag annotation 和 GitHub Release Notes 可以继续使用真实多行文本，而 handoff 里的命令记录不会被换行打散。
+
+### 109.3 后续发布约束
+正常发布继续使用 `./scripts/release.sh <version> -m "<版本摘要>" --push`。如果 tag workflow 因 CI 配置问题失败，不要复用并移动同一个 tag 来补救；应修好 workflow 后发布下一个小版本 tag。这样可以保证 tag 注释、release notes 和发布产物三者保持一致。

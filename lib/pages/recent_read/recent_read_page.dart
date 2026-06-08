@@ -163,6 +163,8 @@ class _RecentReadPageState extends State<RecentReadPage> {
                     key: ValueKey(selected.entryId),
                     article: selected,
                     isSplitView: true,
+                    isSelectedArticle: (entryId) =>
+                        selectedArticle.value?.entryId == entryId,
                     onClose: () => selectedArticle.value = null,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),

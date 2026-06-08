@@ -334,7 +334,11 @@ class _TimelinePageState extends State<TimelinePage> {
                     key: ValueKey(selected.entryId),
                     article: selected,
                     isSplitView: true,
-                    isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 0,
+                    isActive: () =>
+                        !Get.isRegistered<MainController>() ||
+                        Get.find<MainController>().currentIndex.value == 0,
+                    isSelectedArticle: (entryId) =>
+                        controller.selectedArticle.value?.entryId == entryId,
                     onClose: () => controller.selectedArticle.value = null,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),

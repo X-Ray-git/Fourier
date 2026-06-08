@@ -549,6 +549,7 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onNext;
   final VoidCallback? onMKeyPressed;
   final bool Function()? isActive;
+  final bool Function(String entryId)? isSelectedArticle;
 
   const ArticlePageView({
     super.key,
@@ -560,6 +561,7 @@ class ArticlePageView extends StatefulWidget {
     this.onNext,
     this.onMKeyPressed,
     this.isActive,
+    this.isSelectedArticle,
   });
 
   @override
@@ -689,13 +691,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       return false;
     }
 
-    // 前置安全校验：只有当前组件对应的是当前选中的文章时，才响应快捷键。
-    // 这样可以彻底免疫组件交替销毁时的遗留监听器导致多重触发。
-    if (Get.isRegistered<TimelineController>()) {
-      final tc = Get.find<TimelineController>();
-      if (tc.selectedArticle.value?.entryId != widget.article.entryId) {
-        return false;
-      }
+    // 只有当前组件对应外层页面选中的文章时才响应快捷键，避免同一路由内
+    // 已失活的分栏 ArticlePageView 残留监听器误处理按键。
+    final isSelectedArticle = widget.isSelectedArticle;
+    if (isSelectedArticle != null &&
+        !isSelectedArticle(widget.article.entryId)) {
+      return false;
     }
 
     final key = event.logicalKey;

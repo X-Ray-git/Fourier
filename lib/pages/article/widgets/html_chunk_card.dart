@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html_table/flutter_html_table.dart';
+import 'package:html/dom.dart' as html;
 
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
@@ -177,23 +178,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     return [
       _imageExtension(context),
       TableHtmlExtension(),
-      TagWrapExtension(
-        tagsToWrap: {'code'},
-        builder: (child) {
-          return Transform.translate(
-            offset: const Offset(0, 1.5),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: child,
-            ),
-          );
-        },
-      ),
+      InlineCodeExtension(colorScheme: cs),
     ];
   }
 
@@ -781,4 +766,73 @@ class _ImageErrorWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 行内代码自定义扩展 — 使用 alphabetic baseline 对齐，
+/// 替代 TagWrapExtension 的 bottom 对齐 + Transform.translate 补偿方案。
+class InlineCodeExtension extends HtmlExtension {
+  final ColorScheme colorScheme;
+  const InlineCodeExtension({required this.colorScheme});
+
+  @override
+  Set<String> get supportedTags => {'code'};
+
+  @override
+  bool matches(ExtensionContext context) {
+    switch (context.currentStep) {
+      case CurrentStep.preparing:
+        return super.matches(context);
+      case CurrentStep.preStyling:
+      case CurrentStep.preProcessing:
+        return false;
+      case CurrentStep.building:
+        return context.styledElement is _InlineCodeWrapperElement;
+    }
+  }
+
+  @override
+  StyledElement prepare(
+    ExtensionContext context,
+    List<StyledElement> children,
+  ) {
+    return _InlineCodeWrapperElement(
+      child: context.parser.prepareFromExtension(
+        context,
+        children,
+        extensionsToIgnore: {this},
+      ),
+    );
+  }
+
+  @override
+  InlineSpan build(ExtensionContext context) {
+    final child = CssBoxWidget.withInlineSpanChildren(
+      children: context.inlineSpanChildren!,
+      style: context.style!,
+    );
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _InlineCodeWrapperElement extends StyledElement {
+  _InlineCodeWrapperElement({required StyledElement child})
+    : super(
+        node: html.Element.tag("inline-code-wrapper"),
+        style: Style(),
+        children: [child],
+        name: "[inline-code-wrapper]",
+      );
 }

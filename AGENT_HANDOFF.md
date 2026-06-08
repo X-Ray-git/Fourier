@@ -4276,3 +4276,52 @@ if (!isCurrentRoute) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*
+
+## 116. 行内代码文本基线对齐彻底修复 (2026-06-08)
+
+### 116.1 问题背景
+用户反馈文章详情页中，行内代码（`<code>` 标签包裹的文本）的文字基线与周围正文没有对齐，视觉上出现了"上浮"现象。具体表现为：行内代码的**边框下沿**与周围文字对齐，但边框下沿到边框内文字之间有 padding 间隙，导致代码文字在视觉上高于其他文字。
+
+### 116.2 历史修复回顾
+该问题此前已有两次相关修复：
+1. **第87条 (v1.1.8左右)**：修复了行内 `<code>` 被错误拆成独立代码块的问题，引入了启发式分类（`_isBlockCode`），让短 `<code>` 保持行内渲染。
+2. **第107条 (v1.1.11)**：尝试修复行内代码"往上浮"的问题。在 `TagWrapExtension` 中对 `Container` 加了 `Transform.translate(offset: Offset(0, 1.5))`，试图用视觉偏移补偿底部 padding 造成的基线偏移。
+
+### 116.3 根因分析
+第107条的修复方案存在根本性缺陷：
+- **硬编码偏移量不可靠**：`Transform.translate(offset: Offset(0, 1.5))` 是固定像素值，但实际对齐偏差受字体大小（14px vs 16px）、`lineHeight`、`vertical padding`、以及不同设备渲染差异影响，1.5px 不可能在所有情况下完美对齐。
+- **`WidgetSpan` 的基线对齐机制**：`TagWrapExtension` 将 `code` 转为 `WidgetSpan`，Flutter 的 `WidgetSpan` 默认使用 `PlaceholderAlignment.bottom` 对齐，即将**容器的底边**（包含 padding）对齐到文本基线。`Container` 底部的 2px padding 会将内部文字向上推，而 `Transform.translate` 只是视觉偏移，不影响布局计算。
+- **字体大小差异**：行内代码 14px 比正文 16px 小，即使基线对齐了，x-height 也会不同，视觉上仍然会感觉不对称。
+
+### 116.4 修复方案讨论
+讨论了两种方案：
+- **方案 A（推荐）**：废弃 `TagWrapExtension`，改写自定义 `HtmlExtension`，在内部用 `WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic)` 包裹。这样 `code` 内的文字基线会直接与周围正文基线对齐，无需任何 `Transform.translate` hack。
+- **方案 B（轻量）**：保留 `TagWrapExtension`，但去掉 `Transform.translate`，改为给 `Container` 设置不对称的 padding（如 `top: 3, bottom: 1`），通过减少底部 padding 来缩小偏移。但这只是视觉近似，不如方案 A 精确。
+
+最终选择了**方案 A**。
+
+### 116.5 性能评估
+用户担心方案 A 是否有性能问题。分析结论：**几乎没有差异**。
+- 渲染路径相同：`TagWrapExtension` 内部生成 `WidgetSpan`，自定义扩展也是生成 `WidgetSpan`——Flutter 的 `Text` widget 行内渲染只有这一条路。
+- 差异仅在枚举值：`PlaceholderAlignment.bottom` vs `PlaceholderAlignment.baseline`，是 layout 阶段的一个 enum 比较，不是额外的布局计算。
+- 无额外 widget 树深度：自定义扩展不会增加 widget 树的嵌套层级。
+
+### 116.6 影响范围评估
+用户确认改动非常小且集中：
+- **只涉及一个文件**：`html_chunk_card.dart` 的 `_buildCommonExtensions` 方法
+- **具体变化**：删掉 `TagWrapExtension`（10行），新增自定义 `HtmlExtension` 类（~55行）
+- **不受影响的部分**：`html_chunk_parser.dart` 的启发式分类逻辑、块级代码块渲染、`article_content_utils.dart` 的清洗逻辑、chunk 缓存、`AutomaticKeepAliveClientMixin`、`RepaintBoundary`、所有其他 chunk type 的渲染
+
+### 116.7 实现细节
+1. 新增 `import 'package:html/dom.dart' as html;`（用于 `_InlineCodeWrapperElement`）
+2. 在 `_buildCommonExtensions` 中将 `TagWrapExtension(tagsToWrap: {'code'}, builder: ...)` 替换为 `InlineCodeExtension(colorScheme: cs)`
+3. 新增 `InlineCodeExtension` 类，继承 `HtmlExtension`：
+   - `supportedTags` 返回 `{'code'}`
+   - `matches` 方法处理扩展生命周期
+   - `prepare` 方法创建 `_InlineCodeWrapperElement` 包装元素
+   - `build` 方法返回 `WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic)`，内部包裹 `CssBoxWidget.withInlineSpanChildren` + 相同视觉样式的 `Container`
+4. 新增 `_InlineCodeWrapperElement` 私有类，继承 `StyledElement`，作为扩展的内部包装元素
+
+### 116.8 验证
+- `dart analyze lib/pages/article/widgets/html_chunk_card.dart`：通过，无任何问题
+- 视觉样式（padding、背景色、圆角、margin）完全不变，仅对齐方式从"容器底边对齐"变为"文字基线对齐"

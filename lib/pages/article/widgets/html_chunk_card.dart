@@ -170,7 +170,12 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         'em': Style(fontStyle: FontStyle.italic),
         'code': Style(
           fontFamily: 'monospace',
-          fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier'],
+          fontFamilyFallback: const [
+            'Menlo',
+            'Monaco',
+            'Courier New',
+            'Courier',
+          ],
           fontSize: FontSize(14),
         ),
       },
@@ -178,7 +183,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     );
   }
 
-  List<HtmlExtension> _buildCommonExtensions(BuildContext context, ColorScheme cs) {
+  List<HtmlExtension> _buildCommonExtensions(
+    BuildContext context,
+    ColorScheme cs,
+  ) {
     return [
       _imageExtension(context),
       TableHtmlExtension(),
@@ -336,7 +344,12 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         'em': Style(fontStyle: FontStyle.italic),
         'code': Style(
           fontFamily: 'monospace',
-          fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier'],
+          fontFamilyFallback: const [
+            'Menlo',
+            'Monaco',
+            'Courier New',
+            'Courier',
+          ],
           fontSize: FontSize(14),
         ),
         'ul': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
@@ -629,10 +642,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
                     : null,
                 onSecondaryTapDown: Platform.isMacOS
                     ? (details) => showInlineImageContextMenu(
-                          ctx,
-                          details.globalPosition,
-                          imageUrl,
-                        )
+                        ctx,
+                        details.globalPosition,
+                        imageUrl,
+                      )
                     : null,
                 child: Image(image: imageProvider, fit: BoxFit.contain),
               );

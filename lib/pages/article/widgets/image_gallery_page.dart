@@ -445,10 +445,8 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                     onDoubleTap: _onDoubleTap,
                     onLongPress: () => _showImageMenu(url),
                     onSecondaryTapDown: Platform.isMacOS
-                        ? (details) => _showImageContextMenu(
-                              details.globalPosition,
-                              url,
-                            )
+                        ? (details) =>
+                              _showImageContextMenu(details.globalPosition, url)
                         : null,
                     child: Center(
                       child: Hero(

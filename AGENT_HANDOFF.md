@@ -4276,3 +4276,58 @@ if (!isCurrentRoute) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*
+
+## 116. macOS 文章正文超链接交互反馈（悬停光标 + 底部 URL 预览）(2026-06-08)
+
+### 116.1 需求背景
+用户在 macOS 端阅读 RSS 文章时，期望正文中的可点击超链接能提供类似浏览器的交互反馈：
+1. **鼠标悬停时指针变为手型**（`SystemMouseCursors.click`），提示该区域可点击。
+2. **悬停时在合适位置展示目标 URL**，方便用户在点击前了解链接去向。
+
+### 116.2 技术调研与方案讨论
+
+#### 问题定位
+文章正文由 `HtmlChunkCard`（`lib/pages/article/widgets/html_chunk_card.dart`）内的 `flutter_html` v3 `Html()` widget 渲染。经过代码追踪，`<a>` 标签的渲染由 `InteractiveElementBuiltIn`（flutter_html 内置扩展）负责，它生成 `TextSpan` + `TapGestureRecognizer`，但 `TextSpan` 的 `mouseCursor`、`onEnter`、`onExit` 属性均为空，hover 时无任何视觉反馈。
+
+#### 排除的方案
+1. **通过 `Style` 添加光标属性**：`flutter_html` 的 `Style` 类没有任何 cursor 相关的字段，不支持扩展。
+2. **使用 `TagWrapExtension` 包裹 `<a>`**：该扩展会将内联元素转为 block-level 的 `WidgetSpan`，这会破坏 inline 文本流，导致链接与周围文字断开换行。
+3. **浮动 tooltip 展示 URL**：tooltip 会遮挡密集 RSS 正文中的多处链接，且点击 tooltip 区域可能误触无关链接。不符合 macOS 浏览器用户习惯。
+
+#### 选定的方案：自定义 `HtmlExtension` + 底部状态栏
+- **光标反馈**：编写自定义 `HtmlExtension` 取代 `InteractiveElementBuiltIn` 对 `<a>` 的处理，在生成的 `TextSpan` 和 `WidgetSpan` 中注入 `mouseCursor: SystemMouseCursors.click` 以及 `onEnter`/`onExit` 回调。
+- **URL 预览位置**：底部状态栏（`Scaffold.bottomNavigationBar`），与 Safari/Chrome 底部的状态栏一致，不遮挡正文且符合用户预期。
+- **flutter_html `Extension` 优先级高于 `builtIn`**，只需在 `extensions` 列表中加入自定义扩展即可自动取代 `InteractiveElementBuiltIn` 对 `<a>` 的处理，无需额外的禁用配置。
+- **`ValueNotifier<String?>` 状态管理**：悬停 URL 从 `HtmlChunkCard` 向上传递到 `ArticlePageView`，采用 `ValueNotifier` 而非 `setState` 确保仅刷新底部状态栏 widget，不会在悬停时重建整个文章页组件树。
+
+### 116.3 实现细节
+
+#### 文件：`lib/pages/article/widgets/html_chunk_card.dart`
+- `HtmlChunkCard` 新增可选参数 `final ValueNotifier<String?>? hoveredUrl`。
+- 新增 `_InteractiveLinkExtension` 类：
+  - `supportedTags` 返回 `{'a'}`，`matches` 过滤仅含 `href` 属性的 `<a>` 标签。
+  - `prepare()` 返回 `InteractiveElement`，保留原有链接样式 `Style(color: Colors.blue, textDecoration: TextDecoration.underline)`。注意：外层 `Html` widget 的 `style` 参数中 `'a': Style(color: cs.primary, textDecoration: TextDecoration.none)` 会覆盖此默认样式，最终链接颜色由外层决定，与修改前一致。
+  - `build()` 遍历 `context.inlineSpanChildren`，对每个子 span 递归处理：
+    - **`TextSpan` 分支**：复制原有属性，添加 `mouseCursor: SystemMouseCursors.click`、`onEnter`/`onExit` 回调（更新 `hoveredUrl.value`）、`TapGestureRecognizer`（委托 `context.parser.internalOnAnchorTap`，与 flutter_html 原有 `onLinkTap` 兼容）。
+    - **`WidgetSpan` 分支**：包裹 `MouseRegion(cursor: SystemMouseCursors.click, onEnter: ..., onExit: ...) > GestureDetector(onTap: ...)`，保留原 child widget。
+- `_linkExtension` getter 在 `hoveredUrl` 为 null 时返回 null，确保不传入 `hoveredUrl` 的调用点（如文章列表卡片预览）不附带链接交互扩展。
+- 将 `_InteractiveLinkExtension` 通过 `_linkExtension` 挂载到所有 `Html()` widget 实例（heading / paragraph / blockquote / table / list / rawHtml 共 6 处），分别在 `_buildHtmlParagraph` 的 `extensions` 参数和 `_buildCommonExtensions` 的返回值中注入。
+
+#### 文件：`lib/pages/article/article_page.dart`
+- `_ArticlePageViewState` 新增 `final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null)`，在 `dispose()` 中释放。
+- 所有 `HtmlChunkCard(...)` 构建处传入 `hoveredUrl: _hoveredUrl`（共 2 处：主 body 构建和 `keepAlive: false` 的延迟构建分支）。
+- 在 `Scaffold` 新增 `bottomNavigationBar`：
+  - 使用 `ValueListenableBuilder<String?>` 监听 `_hoveredUrl`。
+  - URL 非空时显示 32px 高的 `Container`，顶部带 `outlineVariant` 分割线，使用 `surfaceContainerHighest` 背景。
+  - 内部为 `Row(Icon(Icons.link) + Expanded(Text(url, overflow: ellipsis)))`，图标尺寸 13、文本字号 11、颜色 `onSurfaceVariant`。
+  - URL 为空或 null 时返回 `SizedBox.shrink()`，不占用底部空间。
+
+### 116.4 关键决策与边界说明
+1. **不平台守卫**：`MouseRegion` 和 `SystemMouseCursors.click` 仅在桌面端（macOS/Windows/Linux）生效，移动端无 hover 概念，自然不触发。无需 `Platform.isMacOS` 判断。
+2. **不影响原有点击行为**：`onLinkTap` 回调保持不变（委托 `url_launcher` 打开外部浏览器），`_InteractiveLinkExtension` 中的 `onTap` 委托 `context.parser.internalOnAnchorTap`，与原行为等效。
+3. **仅影响文章正文**：`_InteractiveLinkExtension` 仅挂载在 `HtmlChunkCard` 内部的 `Html()` 上，不涉及文章列表卡片、摘要卡片、元数据区等其他位置的链接。
+4. **性能考量**：`_InteractiveLinkExtension` 会递归遍历 `inlineSpanChildren` 并复制 `TextSpan`/`WidgetSpan`，但 `<a>` 标签的嵌套深度通常有限（`<a><b>text</b></a>` 为典型场景），开销可忽略。
+
+### 116.5 验证
+- `dart analyze lib/`：零问题通过。
+- `flutter test --no-pub`：通过。

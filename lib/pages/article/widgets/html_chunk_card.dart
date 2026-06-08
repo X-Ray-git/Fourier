@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html_table/flutter_html_table.dart';
+import 'package:html/dom.dart' as dom;
 
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
@@ -20,6 +22,7 @@ class HtmlChunkCard extends StatefulWidget {
   final double maxWidth;
   final void Function(String imageUrl)? onImageTap;
   final bool keepAlive;
+  final ValueNotifier<String?>? hoveredUrl;
 
   const HtmlChunkCard({
     super.key,
@@ -27,6 +30,7 @@ class HtmlChunkCard extends StatefulWidget {
     required this.maxWidth,
     this.onImageTap,
     this.keepAlive = true,
+    this.hoveredUrl,
   });
 
   @override
@@ -43,6 +47,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   // 同一篇文章内 chunk 内容不变、主题不变 → 缓存 hit，build 耗时从 ms 级降到 ns 级。
   Widget? _cachedWidget;
   Brightness? _cachedBrightness;
+
+  HtmlExtension? get _linkExtension {
+    if (widget.hoveredUrl == null) return null;
+    return _InteractiveLinkExtension(hoveredUrl: widget.hoveredUrl);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +130,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     if (Theme.of(context).brightness == Brightness.dark) {
       htmlData = HtmlContrastUtils.adjustHtmlContrast(htmlData, cs.surface);
     }
+    final ext = _linkExtension;
     return Html(
       data: htmlData,
       onLinkTap: _handleLinkTap,
@@ -135,6 +145,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         ),
         'a': Style(color: cs.primary, textDecoration: TextDecoration.none),
       },
+      extensions: ext != null ? [ext] : const [],
     );
   }
 
@@ -174,7 +185,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   }
 
   List<HtmlExtension> _buildCommonExtensions(BuildContext context, ColorScheme cs) {
-    return [
+    final exts = <HtmlExtension>[
       _imageExtension(context),
       TableHtmlExtension(),
       TagWrapExtension(
@@ -195,6 +206,9 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         },
       ),
     ];
+    final linkExt = _linkExtension;
+    if (linkExt != null) exts.add(linkExt);
+    return exts;
   }
 
   // ── 图片 ──
@@ -780,5 +794,96 @@ class _ImageErrorWidget extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 自定义 flutter_html 扩展：替换 `<a>` 标签的默认渲染，
+/// 添加鼠标悬停手势 (SystemMouseCursors.click) 和链接 URL 预览回调。
+class _InteractiveLinkExtension extends HtmlExtension {
+  final ValueNotifier<String?>? hoveredUrl;
+
+  _InteractiveLinkExtension({this.hoveredUrl});
+
+  @override
+  Set<String> get supportedTags => {'a'};
+
+  @override
+  bool matches(ExtensionContext context) {
+    return context.elementName == 'a' && context.attributes.containsKey('href');
+  }
+
+  @override
+  StyledElement prepare(
+    ExtensionContext context,
+    List<StyledElement> children,
+  ) {
+    return InteractiveElement(
+      name: context.elementName,
+      children: children,
+      href: context.attributes['href'],
+      style: Style(
+        color: Colors.blue,
+        textDecoration: TextDecoration.underline,
+      ),
+      node: context.node,
+      elementId: context.id,
+    );
+  }
+
+  @override
+  InlineSpan build(ExtensionContext context) {
+    final url = context.attributes['href'];
+    return TextSpan(
+      children: context.inlineSpanChildren!.map((childSpan) {
+        return _processChild(context, childSpan, url);
+      }).toList(),
+    );
+  }
+
+  InlineSpan _processChild(
+    ExtensionContext context,
+    InlineSpan childSpan,
+    String? url,
+  ) {
+    void onTap() => context.parser.internalOnAnchorTap?.call(
+          url,
+          context.attributes,
+          context.node is dom.Element ? context.node as dom.Element : null,
+        );
+
+    if (childSpan is TextSpan) {
+      return TextSpan(
+        text: childSpan.text,
+        children: childSpan.children
+            ?.map((e) => _processChild(context, e, url))
+            .toList(),
+        recognizer: TapGestureRecognizer()..onTap = onTap,
+        style:
+            context.styledElement?.style.generateTextStyle() ?? childSpan.style,
+        semanticsLabel: childSpan.semanticsLabel,
+        locale: childSpan.locale,
+        mouseCursor: SystemMouseCursors.click,
+        onEnter: (_) => hoveredUrl?.value = url,
+        onExit: (_) => hoveredUrl?.value = null,
+        spellOut: childSpan.spellOut,
+      );
+    } else {
+      final alignment = context.style?.verticalAlign
+              .toPlaceholderAlignment(context.style?.display) ??
+          PlaceholderAlignment.baseline;
+      return WidgetSpan(
+        alignment: alignment,
+        baseline: TextBaseline.alphabetic,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => hoveredUrl?.value = url,
+          onExit: (_) => hoveredUrl?.value = null,
+          child: GestureDetector(
+            onTap: onTap,
+            child: (childSpan as WidgetSpan).child,
+          ),
+        ),
+      );
+    }
   }
 }

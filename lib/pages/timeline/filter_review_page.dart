@@ -646,8 +646,14 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             article: article,
             selected: selected,
             onTap: () => _selectedArticle.value = article,
-            onKeep: () => _keep(article),
-            onReject: () => _reject(article),
+            onKeep: () {
+              _selectedArticle.value = article;
+              _keep(article);
+            },
+            onReject: () {
+              _selectedArticle.value = article;
+              _reject(article);
+            },
           );
         }),
       ),

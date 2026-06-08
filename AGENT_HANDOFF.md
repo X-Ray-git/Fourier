@@ -4274,5 +4274,100 @@ if (!isCurrentRoute) {
 - `/opt/homebrew/bin/flutter test --no-pub`：通过。
 
 ---
+
+## 116. 审核页 UI 按钮与快捷键行为不等效修复（2026-06-08）
+
+### 116.1 问题描述
+
+用户在 macOS 端的垃圾拦截页面（FilterReviewPage）发现：按 `k`（保留）或 `m`（移除）快捷键时，文章会自动跳转到下一篇；但点击 UI 上对应的「保留」或「移除」按钮时，不会自动跳转。
+
+### 116.2 根因分析
+
+核心差异在于**快捷键始终操作「当前选中文章」，而 UI 按钮操作的是「该行绑定的文章对象」**。
+
+#### 快捷键路径
+
+`k` 快捷键（`filter_review_page.dart:100-108`）：
+```dart
+if (event.logicalKey == LogicalKeyboardKey.keyK) {
+  final selected = _selectedArticle.value;  // 始终取当前选中文章
+  if (selected != null) {
+    _keep(selected);
+    return true;
+  }
+}
+```
+
+`m` 快捷键（通过 `ArticlePageView` 的 `onMKeyPressed` 回调）：
+```dart
+onMKeyPressed: () {
+  _reject(selected);  // selected 是 Obx 闭包中捕获的当前选中文章
+},
+```
+
+两条路径都操作 `_selectedArticle.value`，因此 `_keep`/`_reject` 内部的 `isSelected` 判断始终为 `true`，自动跳转下一篇。
+
+#### UI 按钮路径（修复前）
+
+`_buildAnimatedReviewRow` 中：
+```dart
+onKeep: () => _keep(article),   // article 是该行的文章对象
+onReject: () => _reject(article),
+```
+
+`_keep`/`_reject` 内部的关键逻辑：
+```dart
+final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
+// ...
+if (isSelected) {  // 只有 isSelected=true 才跳下一篇
+  _selectedArticle.value = _articles[nextIndex];
+}
+```
+
+问题链条：
+1. `_MacReviewRow` 的 `IconButton` 被外层 `InkWell` 包裹
+2. Flutter 手势竞技场中，内层 `IconButton` 的 `InkWell` 赢得 tap 手势
+3. 外层 `InkWell.onTap`（即行选中逻辑 `_selectedArticle.value = article`）**不会被触发**
+4. 因此点击按钮时，`_selectedArticle` 可能并非当前行的文章
+5. `_keep`/`_reject` 中 `isSelected = false` → 不跳转下一篇
+
+### 116.3 修复方案
+
+在 `_buildAnimatedReviewRow` 中，点击「保留」或「移除」按钮时，**先将 `_selectedArticle` 设为当前行的文章**，再执行 `_keep`/`_reject`：
+
+```dart
+onKeep: () {
+  _selectedArticle.value = article;
+  _keep(article);
+},
+onReject: () {
+  _selectedArticle.value = article;
+  _reject(article);
+},
+```
+
+这样 `_keep`/`_reject` 内部的 `isSelected` 判断就会为 `true`，自动跳转到下一篇，行为与 `k`/`m` 快捷键一致。
+
+### 116.4 行为变化对照
+
+| 场景 | 修复前 | 修复后 |
+|------|--------|--------|
+| `k` 键 | 始终跳转下一篇 | 不变 |
+| `m` 键 | 始终跳转下一篇 | 不变 |
+| 点击「保留」按钮（选中行） | 跳转下一篇 | 不变 |
+| 点击「保留」按钮（非选中行） | 不跳转 | 跳转下一篇 |
+| 点击「移除」按钮（选中行） | 跳转下一篇 | 不变 |
+| 点击「移除」按钮（非选中行） | 不跳转 | 跳转下一篇 |
+
+### 116.5 影响文件
+
+- `lib/pages/timeline/filter_review_page.dart` — `_buildAnimatedReviewRow` 方法（+6 行）
+
+### 116.6 验证
+
+- `flutter analyze lib/pages/timeline/filter_review_page.dart`：No issues found
+
+---
+
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*

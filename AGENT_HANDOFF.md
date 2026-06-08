@@ -4143,3 +4143,7 @@ if (!isCurrentRoute) {
 
 ### 110.3 发布处理
 不要移动或复用已经失败的 `v1.1.12` tag。因为 GitHub Actions rerun 会使用该 tag 指向提交里的旧 workflow，无法获得本次修复。正确处理是提交 workflow 修复后，发布下一个 patch tag `v1.1.13`。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.13 -m "- 修复 GitHub Actions 发布任务中的 annotated tag 校验，避免 tag push checkout 环境误判导致 Release 发布失败\n- 重新触发 Android APK 与 macOS arm64 内部发布打包" --push`*

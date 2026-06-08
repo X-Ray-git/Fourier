@@ -4273,6 +4273,60 @@ if (!isCurrentRoute) {
 - `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
 - `/opt/homebrew/bin/flutter test --no-pub`：通过。
 
+## 116. macOS 图片右键复制功能 (2026-06-08)
+
+### 116.1 需求背景
+
+在 macOS 上对图片右键点击时没有任何反应，无法复制图片到剪贴板。用户希望在图片画廊和文章内联图片上都支持 macOS 右键菜单，交互方式与现有 macOS 右键模式（article_card 中的 `onSecondaryTapDown` + `showMenu`）完全一致。
+
+### 116.2 讨论与决策
+
+用户确认三项关键设计选择：
+1. **生效范围**：图片画廊和文章内联图片都支持右键菜单
+2. **复制行为**：复制图片数据（bitmap）到系统剪贴板，而非仅复制 URL（原有"复制链接"选项仍在）
+3. **移动端**：仅 macOS 右键，mobile 长按菜单保持不变
+
+### 116.3 技术方案
+
+#### 核心挑战：Flutter 不支持图片剪贴板
+Flutter 的 `Clipboard` 类只支持 `ClipboardData(text: ...)`，无法写入图片数据。最终方案采用 **MethodChannel + Swift NSPasteboard**（方案 A）：
+- Dart 侧通过 `MethodChannel('com.autofolo/image_clipboard')` 发送图片 bytes
+- macOS Swift 侧用 `NSPasteboard.general.clearContents()` + `NSPasteboard.general.writeObjects([NSImage])` 写入
+- 复用项目中已有的 MethodChannel 模式（参考 `AppBadger`、`MoveToBackground`）
+
+#### 三个改动点
+
+| 位置 | 改动 |
+|------|------|
+| **图片画廊** `image_gallery_page.dart` | `GestureDetector` 新增 `onSecondaryTapDown`（仅 macOS），弹出 `showMenu` 菜单（复制图片 / 分享 / 保存 / 复制链接） |
+| **内联图片** `html_chunk_card.dart` `_ArticleInlineImage` | 包裹 `GestureDetector.onSecondaryTapDown`（仅 macOS），共用 `showInlineImageContextMenu` 函数 |
+| **HTML 内嵌图片** `html_chunk_card.dart` `ImageExtension._imageExtension` | 已有 GestureDetector（onTap）增加 `onSecondaryTapDown`（仅 macOS），共用同一菜单函数 |
+
+#### 菜单函数共享
+新增顶层函数 `showInlineImageContextMenu()` — 展示 2 项菜单（复制图片 / 复制链接），下载图片后用 `ImageClipboard.copyImageToClipboard()` 写入系统剪贴板，同时给图片画廊和所有内联图片复用。
+
+### 116.4 修改文件清单
+
+#### 新增
+- `lib/utils/image_clipboard.dart` — MethodChannel 封装 + Dio 下载工具
+
+#### 修改
+- `lib/pages/article/widgets/image_gallery_page.dart` — macOS 右键菜单 + `_copyImage()` + `_showImageContextMenu()`
+- `lib/pages/article/widgets/html_chunk_card.dart` — `_ArticleInlineImage` 和 `ImageExtension` 添加右键菜单 + 顶层 `showInlineImageContextMenu()` 函数
+- `macos/Runner/AppDelegate.swift` — 新增 `com.autofolo/image_clipboard` MethodChannel 处理器
+
+### 116.5 交互模式
+
+| 平台 | 图片画廊 | 内联图片 |
+|------|---------|---------|
+| **macOS** | 右键 → `showMenu` 光标位置弹出（复制图片/分享/保存/复制链接） | 右键 → `showMenu` 光标位置弹出（复制图片/复制链接） |
+| **移动端** | 长按 → BottomSheet（不变） | 无菜单（不变） |
+
+### 116.6 验证结果
+
+```bash
+flutter analyze lib/utils/image_clipboard.dart lib/pages/article/widgets/image_gallery_page.dart lib/pages/article/widgets/html_chunk_card.dart
+# No issues found!
+```
+
 ---
-*🤖 Automated Release Footprint:*
-*执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*

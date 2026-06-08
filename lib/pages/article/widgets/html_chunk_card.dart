@@ -1,13 +1,18 @@
+import 'dart:io';
 import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html_table/flutter_html_table.dart';
 
+import '../../../common/widgets/feedback_toast.dart';
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
 import '../../../utils/html_contrast_utils.dart';
+import '../../../utils/image_clipboard.dart';
 import '../../../services/article_image_service.dart';
 import 'inline_video_player.dart';
 
@@ -617,14 +622,21 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
                 child: Icon(Icons.broken_image_outlined, size: 20),
               ),
             ),
-            imageBuilder: (context, imageProvider) {
-              if (widget.onImageTap != null) {
-                return GestureDetector(
-                  onTap: () => widget.onImageTap!(imageUrl),
-                  child: Image(image: imageProvider, fit: BoxFit.contain),
-                );
-              }
-              return Image(image: imageProvider, fit: BoxFit.contain);
+            imageBuilder: (ctx, imageProvider) {
+              final gesture = GestureDetector(
+                onTap: widget.onImageTap != null
+                    ? () => widget.onImageTap!(imageUrl)
+                    : null,
+                onSecondaryTapDown: Platform.isMacOS
+                    ? (details) => showInlineImageContextMenu(
+                          ctx,
+                          details.globalPosition,
+                          imageUrl,
+                        )
+                    : null,
+                child: Image(image: imageProvider, fit: BoxFit.contain),
+              );
+              return gesture;
             },
           ),
         );
@@ -737,6 +749,16 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
         child: image,
       );
     }
+    if (Platform.isMacOS) {
+      image = GestureDetector(
+        onSecondaryTapDown: (details) => showInlineImageContextMenu(
+          context,
+          details.globalPosition,
+          widget.imageUrl,
+        ),
+        child: image,
+      );
+    }
 
     return ConstrainedBox(
       constraints: BoxConstraints(
@@ -753,6 +775,70 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
       ),
     );
   }
+}
+
+void showInlineImageContextMenu(
+  BuildContext context,
+  Offset position,
+  String imageUrl,
+) {
+  showMenu<String>(
+    context: context,
+    position: RelativeRect.fromLTRB(
+      position.dx,
+      position.dy,
+      position.dx,
+      position.dy,
+    ),
+    items: [
+      const PopupMenuItem(
+        value: 'copy',
+        child: Row(
+          children: [
+            Icon(Icons.copy_rounded, size: 18),
+            SizedBox(width: 8),
+            Text('复制图片'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: 'copyLink',
+        child: Row(
+          children: [
+            Icon(Icons.link_rounded, size: 18),
+            SizedBox(width: 8),
+            Text('复制链接'),
+          ],
+        ),
+      ),
+    ],
+  ).then((value) async {
+    switch (value) {
+      case 'copy':
+        final bytes = await ImageClipboard.downloadBytes(imageUrl);
+        if (bytes == null) {
+          if (context.mounted) {
+            AppFeedback.error('复制失败', '无法下载图片数据');
+          }
+          return;
+        }
+        final ok = await ImageClipboard.copyImageToClipboard(bytes);
+        if (ok) {
+          if (context.mounted) {
+            AppFeedback.success('已复制', '图片已复制到剪贴板');
+          }
+        } else {
+          if (context.mounted) {
+            AppFeedback.error('复制失败', '请稍后重试');
+          }
+        }
+      case 'copyLink':
+        Clipboard.setData(ClipboardData(text: imageUrl));
+        if (context.mounted) {
+          AppFeedback.success('已复制', '图片链接已复制到剪贴板');
+        }
+    }
+  });
 }
 
 class _ImageErrorWidget extends StatelessWidget {

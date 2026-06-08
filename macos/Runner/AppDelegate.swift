@@ -37,8 +37,9 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
     mainFlutterWindow?.delegate = self
 
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(name: "com.autofolo/badge", binaryMessenger: controller.engine.binaryMessenger)
-    channel.setMethodCallHandler { (call, result) in
+
+    let badgeChannel = FlutterMethodChannel(name: "com.autofolo/badge", binaryMessenger: controller.engine.binaryMessenger)
+    badgeChannel.setMethodCallHandler { (call, result) in
       if call.method == "updateBadge" {
         if let args = call.arguments as? [String: Any], let count = args["count"] as? Int {
           NSApp.dockTile.badgeLabel = count > 0 ? String(count) : nil
@@ -49,6 +50,26 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       } else if call.method == "removeBadge" {
         NSApp.dockTile.badgeLabel = nil
         result(nil)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    let imageChannel = FlutterMethodChannel(name: "com.autofolo/image_clipboard", binaryMessenger: controller.engine.binaryMessenger)
+    imageChannel.setMethodCallHandler { (call, result) in
+      if call.method == "copyImage" {
+        if let typedData = call.arguments as? FlutterStandardTypedData {
+          let image = NSImage(data: typedData.data)
+          if let img = image {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([img])
+            result(true)
+          } else {
+            result(FlutterError(code: "INVALID_IMAGE", message: "Failed to create NSImage from data", details: nil))
+          }
+        } else {
+          result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected FlutterStandardTypedData", details: nil))
+        }
       } else {
         result(FlutterMethodNotImplemented)
       }

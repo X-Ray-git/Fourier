@@ -2930,7 +2930,7 @@ macOS debug 构建产物确认：`build/macos/Build/Products/Debug/Auto Folo.app
 
 ### 78.4 关于工程目录名的建议
 
-- 不建议在当前 Codex worktree 内直接重命名 `<historical-codex-worktree>`，这会影响当前会话和 Git worktree 路径。
+- 不建议在当前 Codex worktree 内直接重命名 `<current-codex-worktree>`，这会影响当前会话和 Git worktree 路径。
 - 如果主仓库要改名，建议仓库/clone 目录改为 `auto-folo`，比 `autofolo-mobile` 更符合当前 Android + macOS 双端定位。
 - 不建议把 Dart package name 改成 `auto_folo`，除非愿意承担 import 路径、测试、CI、发布脚本和原生工程引用的额外迁移成本；当前 `package:autofolo/...` 是稳定内部标识。
 
@@ -3208,8 +3208,8 @@ flutter test --no-pub
 - Release URL：`GitHub Release v1.1.2`
 - Release assets：
   - `Auto-Folo-android-v1.1.2.apk`
-      - `Auto-Folo-macOS-arm64-v1.1.2.zip`
-    
+  - `Auto-Folo-macOS-arm64-v1.1.2.zip`
+
 发布中仍出现 GitHub Actions 的 Node.js 20 deprecation warning：
 
 - 来源：`actions/checkout@v4`、`actions/setup-java@v4`、`actions/upload-artifact@v4`、`actions/download-artifact@v4`。
@@ -3245,24 +3245,15 @@ flutter test --no-pub
 signingConfig = signingConfigs.getByName("debug")
 ```
 
-debug keystore 通常与构建环境相关：
-
-- - - 换机器、删掉 debug keystore、换 runner，都可能导致签名不同
+debug keystore 通常与构建环境相关：本机构建和 GitHub Actions runner 可能使用不同证书。换机器、删掉本地调试 keystore、换 runner，都可能导致签名不同。
 
 因此用户本机 `flutter run` 安装的包和 GitHub Actions 构建的 release APK 可能同包名但签名不同，从而无法覆盖安装。
 
 ### 82.3 用户确认的修复策略
 
-用户基本只自用，并确认目前只通过“本机”和“GitHub Actions”两种方式安装/打包过。经过讨论后，采用：
+用户基本只自用，并确认目前只通过“本机”和“GitHub Actions”两种方式安装/打包过。经过讨论后，采用固定 Android 内部测试签名材料，并通过 GitHub Secrets 提供给 CI；签名材料、别名、口令、证书指纹等敏感细节不得写入仓库文档。
 
-- 使用固定 Android 内部测试签名材料
-- 将签名材料写入 GitHub Secrets，而不是提交到仓库
-- GitHub Actions 以后 tag 构建的 Android APK 使用同一套固定内部测试签名
-
-
-
-写入 GitHub Secrets 的项目：
-
+GitHub Actions 使用的 Secrets 项目名保留在 workflow 中；本文档只记录策略，不记录 secret 值、key 指纹或本机 keystore 路径。
 
 注意：
 
@@ -3311,7 +3302,6 @@ flutter build apk --release --no-pub
 - `flutter build apk --release --no-pub`：通过
 - `apksigner verify --print-certs`：通过，并确认 APK 使用预期的固定内部测试签名证书。证书指纹不记录在仓库文档中。
 
-
 ### 82.6 v1.1.3 发布预期
 
 版本计划：
@@ -3330,15 +3320,14 @@ flutter build apk --release --no-pub
 ### 82.7 v1.1.3 远端发布结果
 
 - tag：`v1.1.3`
-- tag 指向提交：`8f366a8 fix(android): use fixed signing key for internal releases`
-- GitHub Actions run：已通过，具体 run id 不写入仓库文档
 - 结果：`Android APK`、`macOS App`、`Publish GitHub Release` 全部通过。
 - Release URL：`GitHub Release v1.1.3`
 - Release assets：
   - `Auto-Folo-android-v1.1.3.apk`
-        - 已下载到被 Git 忽略的临时目录并用 `apksigner verify --print-certs` 验证签名
-          - `Auto-Folo-macOS-arm64-v1.1.3.zip`
-    
+    - 已下载到被 Git 忽略的临时目录并用 `apksigner verify --print-certs` 验证签名
+    - 确认 APK 使用预期的固定内部测试签名证书；证书指纹不记录在仓库文档中
+  - `Auto-Folo-macOS-arm64-v1.1.3.zip`
+
 结论：`v1.1.3` GitHub Android APK 已确认使用固定内部测试签名。若用户手机上现有安装包来自同一签名，应可直接覆盖安装；若仍报签名冲突，说明手机上现有包来自另一把签名，需要卸载一次后再装。
 
 ## 83. Android 时间线灰屏修复与 v1.1.4 发布（2026-06-02）
@@ -3428,8 +3417,8 @@ apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk
 - `dart analyze lib test` 通过。
 - `flutter test --no-pub` 通过，包含新增 `ArticleCard renders when local AI caches are not hydrated`。
 - 本地 Android release APK 构建成功。
-- 本地 APK 签名仍是第 82 节记录的本机 debug keystore：
-    
+- 本地 Android release APK 构建成功，并确认使用预期的固定内部测试签名；证书指纹不写入仓库文档。
+
 ### 83.6 GitHub Actions 发布结果
 
 提交：

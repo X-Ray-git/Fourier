@@ -184,15 +184,11 @@ class AutoFoloApp extends StatelessWidget {
               control: !Platform.isMacOS,
             ): const UndoReadIntent(),
             if (Platform.isMacOS)
-              SingleActivator(
-                LogicalKeyboardKey.comma,
-                meta: true,
-              ): const OpenSettingsIntent(),
+              SingleActivator(LogicalKeyboardKey.comma, meta: true):
+                  const OpenSettingsIntent(),
             if (Platform.isMacOS)
-              SingleActivator(
-                LogicalKeyboardKey.keyR,
-                meta: true,
-              ): const RefreshTimelineIntent(),
+              SingleActivator(LogicalKeyboardKey.keyR, meta: true):
+                  const RefreshTimelineIntent(),
           },
           child: Actions(
             actions: <Type, Action<Intent>>{

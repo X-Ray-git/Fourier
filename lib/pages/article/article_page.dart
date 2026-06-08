@@ -575,6 +575,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
   // 1. 改为使用 ValueNotifier 以实现局部刷新
   final ValueNotifier<double> _scrollProgress = ValueNotifier(0.0);
+  final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null);
 
   // 延迟 build：首帧只真正构建前 N 个 HtmlChunkCard，其余用 SizedBox 占位。
   // 后续逐批替换为真正的卡片，替换后不回收（保持 Column 架构不变）。
@@ -621,6 +622,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
     _scrollController.dispose();
     _scrollProgress.dispose();
+    _hoveredUrl.dispose();
     if (Get.isRegistered<ArticleController>(tag: _tag)) {
       Get.delete<ArticleController>(tag: _tag);
     }
@@ -968,6 +970,39 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 ),
               );
             }),
+      bottomNavigationBar: ValueListenableBuilder<String?>(
+        valueListenable: _hoveredUrl,
+        builder: (context, url, child) {
+          if (url == null || url.isEmpty) return const SizedBox.shrink();
+          return Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              border: Border(
+                top: BorderSide(color: colorScheme.outlineVariant),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.link, size: 13, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    url,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
       body: SelectionArea(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -1182,6 +1217,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                             chunk: chunk,
                             maxWidth: maxWidth,
                             keepAlive: false,
+                            hoveredUrl: _hoveredUrl,
                             onImageTap: (url) =>
                                 controller.openImagePreview(url, context),
                           ),
@@ -1207,6 +1243,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                             ),
                             chunk: chunk,
                             maxWidth: maxWidth,
+                            hoveredUrl: _hoveredUrl,
                             onImageTap: (url) =>
                                 controller.openImagePreview(url, context),
                           );

@@ -179,7 +179,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _scrollToArticle(String entryId) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // 等待 ImplicitlyAnimatedList 的移除动画完成 (默认 180ms) + 一帧渲染
+    Future.delayed(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
       final key = _itemKeys[entryId];
       if (key != null && key.currentContext != null) {
         ScrollUtils.ensureVisible(key.currentContext!);
@@ -240,7 +242,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       (a) => a.entryId == article.entryId,
     );
 
-    setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
+    _articles.removeWhere((a) => a.entryId == article.entryId);
 
     if (isSelected) {
       if (_articles.isEmpty) {
@@ -297,7 +299,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       (a) => a.entryId == article.entryId,
     );
 
-    setState(() => _articles.removeWhere((a) => a.entryId == article.entryId));
+    _articles.removeWhere((a) => a.entryId == article.entryId);
 
     if (isSelected) {
       if (_articles.isEmpty) {

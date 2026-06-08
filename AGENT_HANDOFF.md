@@ -4276,3 +4276,56 @@ if (!isCurrentRoute) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*
+
+## 116. 垃圾拦截页"移除"后不跳转下一篇 & 焦点丢失修复（2026-06-08）
+
+### 116.1 问题现象
+
+用户在 macOS 垃圾拦截页（`FilterReviewPage`）反馈两个问题：
+1. **不自动跳转下一篇**：点击"移除"(拒绝)按钮后，文章被删除但未自动选中下一篇，右侧阅读面板变为空白。
+2. **焦点丢失导致文本选择光标**：移除后焦点丢失，按 ←/→ 方向键时 Flutter 的 `SelectionArea`（文章正文）捕获了键盘事件，出现文本选择光标，而非切换上/下一篇。
+
+### 116.2 根因分析（与第 111 节不同）
+
+第 111 节修复的是快捷键与 UI 按钮行为不一致（快捷键能跳转、UI 按钮不能），但本轮修复覆盖第 111 节未涉及的两个更深层问题：
+
+| 根因 | 位置 | 说明 |
+|------|------|------|
+| **RxList + setState 双重驱动** | `_keep()` / `_reject()` — 第 216-311 行 | `_articles` 是 `RxList`（`.obs`），但 `removeWhere` 被包在 `setState(() => ...)` 中。RxList 自身已触发 Obx 重建，setState 又额外触发一次重建，导致选中态更新（`_selectedArticle.value = _articles[nextIndex]`）与被重建的 UI 产生时序竞争。 |
+| **滚动时机与动画冲突** | `_scrollToArticle()` — 第 181-188 行 | 使用 `addPostFrameCallback` 滚动到新选中项，但 `ImplicitlyAnimatedList` 的移除动画（默认 180ms）正在进行中，目标项的 `GlobalKey.currentContext` 尚未就绪，滚动静默失效。 |
+| **焦点未显式转移** | `ArticlePageView.build()` — 第 1240-1287 行 | `Focus(autofocus: true)` 在文章切换时（`ValueKey` 变化触发新实例）依赖 Flutter 自动抢焦，但 `SelectionArea`（文章内容）可能抢先夺走焦点。方向键因此被 `SelectionArea` 捕获，显示文本选择光标。 |
+
+### 116.3 修改内容
+
+#### 文件 1：`lib/pages/timeline/filter_review_page.dart`
+
+| 修改点 | 改前 | 改后 |
+|--------|------|------|
+| `_keep()` 第 243 行 | `setState(() => _articles.removeWhere(...))` | `_articles.removeWhere(...)` — 直接操作 RxList |
+| `_reject()` 第 300 行 | `setState(() => _articles.removeWhere(...))` | `_articles.removeWhere(...)` — 直接操作 RxList |
+| `_scrollToArticle()` 第 182 行 | `WidgetsBinding.instance.addPostFrameCallback(...)` | `Future.delayed(const Duration(milliseconds: 220), ...)` — 等待 `ImplicitlyAnimatedList` 移除动画（180ms）完成后 + 一帧渲染再滚动 |
+
+#### 文件 2：`lib/pages/article/article_page.dart`
+
+| 修改点 | 改前 | 改后 |
+|--------|------|------|
+| `_ArticlePageViewState` | 无 `FocusNode` | 新增 `late final FocusNode _focusNode` |
+| `initState()` | — | 初始化 `_focusNode`；`addPostFrameCallback` 中调用 `_focusNode.requestFocus()` 确保焦点落到导航层 |
+| `dispose()` | — | 新增 `_focusNode.dispose()` |
+| `build()` 第 1242 行 | `Focus(autofocus: true, ...)` | `Focus(focusNode: _focusNode, ...)` — 用显式 FocusNode 替代 autofocus，确保每次文章切换后都能程序化请求焦点 |
+
+### 116.4 修复原理
+
+1. **跳转失效**：移除 `setState` 后，RxList 的 `removeWhere` 触发 Obx 重建与 `_selectedArticle.value = _articles[nextIndex]` 在同一次微任务中按序执行，不再被 setState 冲乱。`Future.delayed(220ms)` 确保 `ImplicitlyAnimatedList` 完成收起动画后再滚动，此时目标 `GlobalKey` 已就绪。
+2. **焦点丢失**：`FocusNode` + 显式 `requestFocus()` 确保每次 `ArticlePageView` 重建（文章切换）后，焦点落在处理导航键的 `Focus` widget 上，而非 `SelectionArea` 内容中。
+
+### 116.5 影响文件
+
+- `lib/pages/timeline/filter_review_page.dart` — 3 处改动
+- `lib/pages/article/article_page.dart` — 3 处改动
+
+### 116.6 验收要点
+
+1. 在 macOS 垃圾拦截页点击"移除"按钮 → 文章应自动从列表消失，选中下一篇并滚动到可见。
+2. 移除后按 ←/→ 方向键 → 应切换上/下一篇，不出现文本选择光标。
+3. `dart analyze lib/` 通过。

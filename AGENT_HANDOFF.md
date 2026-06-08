@@ -5064,3 +5064,7 @@ git diff --check
 1. macOS 文章详情：长文滚动条是否明显稳定，链接悬停、底部 URL 预览、行内代码基线和图片右键复制是否同时正常。
 2. macOS 垃圾拦截页：按钮保留/移除、M 键、方向键、移除后自动推进下一篇是否协调工作。
 3. Android 基础体验：时间线、文章详情和 APK 安装签名流程是否保持正常。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.15 -m "- beta: merge macOS article interaction, image copy, shortcut and filter review fixes\n- beta: unify article body rendering with SliverList to validate scrollbar stability\n- beta: keep Android and macOS internal release packaging on GitHub Actions" --push`*

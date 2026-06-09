@@ -5115,7 +5115,74 @@ git diff --check
 ```
 
 本机 macOS native build 仍受本机未安装 CocoaPods 限制，最终需通过 GitHub Actions release 包验证。
-
 ---
+
 *🤖 Automated Release Footprint:*
+
 *执行指令: `./scripts/release.sh 1.1.16 -m "- fix: stabilize article detail scrollbar and reading progress rendering\n- fix: keep filter review selection advancing after remove/keep actions\n- beta: rebuild Android and macOS packages for focused regression validation" --push`*
+
+## 127. README 精简与图标美化
+
+### 127.1 背景与动机
+
+用户反馈原 README（123 行）过于技术化，包含了大量不应出现在面向用户的 README 中的内容：
+- 功能矩阵表 11 行，每行带有实现细节（如"SliverList 逐块渲染 60fps""RepaintBoundary 隔离"）
+- 技术栈表列出具体库名与版本（GetX、Dio、Hive box 名称等）
+- 完整的 `lib/` 目录结构树（83+ 文件，逐行注释说明）
+- Folo API 端点文档（/subscriptions、/entries 等）
+- dart analyze / flutter test 质量检查命令
+
+这些内容属于开发者文档范畴，不应出现在项目 README 中。该项目已有 `AGENT_HANDOFF.md`（5121 行）承载这些细节。
+
+同时，原 README 顶部图标 `assets/icon.png`（848×836）被 HTML 强制拉伸为 96×96 显示，无 alpha 通道、无圆角、无 macOS 风格处理，视觉效果差。用户希望换成类似 macOS 应用图标的样式——带圆角 squircle 轮廓和顶部玻璃光泽反射效果。
+
+### 127.2 关键发现与讨论
+
+**README 路径问题**：初版修改在"安装"小节引入了 `git clone <repo-url>` 和 `cd calm-circuit`，但 `<repo-url>` 是无效占位符，`cd calm-circuit` 也只对 GitHub 上以 `calm-circuit` 命名的目录有效。用户指出这些路径不正确，改为直接 `flutter pub get && flutter run`，去掉 git clone 相关步骤。
+
+**图标生成的技术挑战与演进**：
+
+1. **环境问题**：macOS 上 Python 3.13 环境为 externally-managed，不能用系统 pip。解决方案：创建 venv（`/tmp/icon-venv`）安装 Pillow 12.2.0。
+
+2. **ImageDraw 导入 hang**：在 `python -c` 内联模式下 `from PIL import ImageDraw` 会超时，但写成 `.py` 文件后正常运行。根因未查明，疑为 bash 工具转义相关问题。最终方案是将生成逻辑写成独立文件 `tool/gen_readme_icon.py`。
+
+3. **顶部半透明横线**（第一次迭代）：脚本在渐变光泽之外单独画了一条高亮条 `sd.rounded_rectangle((6,6, SIZE-7,14), fill=(255,255,255,120), radius=shine_radius)`。由于高亮条位于图标顶部圆角收缩区域，而 `shine_radius` 与 mask `radius` 不一致，形成了一条肉眼可见的横向半透明线。修复：去掉独立高亮条，仅保留渐变光泽。
+
+4. **`shine.putalpha(mask)` 导致花屏**（第二次迭代）：想用 `putalpha(mask)` 把光泽限制在圆角范围内，但该方法用二值 mask（0 或 255）直接替换整个 alpha 通道，抹掉了渐变光泽中精心计算的 0~60 过渡 alpha，结果图标变成黑白色块。修复：改为 `shine_clipped.paste(shine, (0,0), mask)`，mask 只控制裁剪范围，不破坏原有 alpha。但这个方案引入了新问题。
+
+5. **边缘未对齐**（第三次迭代的核心问题）：
+   - 第一次和第二次迭代中，光泽通过 `for i in range(SIZE // 3)` 循环画 170 条 1px 高的 `rounded_rectangle` 水平条带实现。每条条带独立做圆角（`radius=sr-2`），导致：
+     - 每个条带的圆角曲线随 y 坐标变化，条带之间的曲线无法连成完整一致的弧线
+     - 条带的圆角半径（110）与 mask 的圆角半径（115）不匹配
+     - `paste` 在 RGBA 图像上配合 mask 时，双重 alpha 的处理存在已知问题
+   - **最终方案**：改为先创建平直渐变 alpha 图（`grad`，L 模式，纯垂直渐变），再用 `ImageMath.unsafe_eval('a * b / 255', a=grad, b=mask)` 逐像素将渐变乘以圆角 mask。圆角计算仅发生在 mask 上（一次），光泽 alpha 通过乘积自然继承同一曲线，彻底消除了条带间和条带与 mask 之间的对齐偏差。
+
+### 127.3 最终实现
+
+**README 变更**（123 行 → 52 行）：
+- 砍掉了：技术栈表、目录结构树、API 端点表、质量检查命令
+- 功能矩阵从 11 行表格式改为 7 条简洁列表
+- "安装"改回"快速开始"，去掉 git clone 等无效路径
+- 图标引用从 `<img src="assets/icon.png" width="96" height="96">` 改为 `<img src="assets/readme-icon.png" alt="Auto Folo" width="256">`
+- 新增 CHANGELOG.md 链接
+
+**图标生成脚本** `tool/gen_readme_icon.py`：
+- 源图：`macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png`（1024×1024）
+- 输出：`assets/readme-icon.png`（580×580，含 margin 和 shadow）
+- 处理流程：
+  1. 加载 1024px 源图，缩放至 512×512
+  2. 创建 squircle 圆角 mask（半径 22.5%，约 115px）
+  3. 用 mask 裁剪源图获得圆角图标
+  4. 生成平直垂直渐变 alpha（顶部 60→底部 0，`**0.5` 非线性曲线）
+  5. `ImageMath.unsafe_eval('a * b / 255')` 将渐变 alpha 与 mask 逐像素相乘
+  6. 白色光泽层（255,255,255）应用上述 masked alpha，alpha_composite 叠加到图标
+  7. 生成高斯模糊下拉阴影（偏移 y+8，模糊半径 10，alpha 70）
+  8. 裁剪透明边距，添加 24px margin 保存
+
+### 127.4 注意事项
+
+- 环境依赖：生成图标需要 Python venv（Pillow），命令为 `/tmp/icon-venv/bin/python tool/gen_readme_icon.py`。如 venv 被清理需重新创建：`python3 -m venv /tmp/icon-venv && /tmp/icon-venv/bin/pip install Pillow`
+- `ImageMath.unsafe_eval` 是 Pillow 12.2.0 中的 API（旧版为 `ImageMath.eval`），需注意版本兼容
+- `rounded_rectangle` 在 `python -c` 内联模式下可能超时，应写为 `.py` 文件运行
+- `assets/icon.png` 原始文件（848×836，无 alpha）未被修改或删除，保留为备用
+- 如后续需要调整光泽强度或圆角半径，修改脚本中的 `int(60 * ...)` 透明度上限和 `radius = int(SIZE * 0.225)` 即可

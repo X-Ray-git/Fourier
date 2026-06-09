@@ -836,39 +836,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 ),
               );
             }),
-      bottomNavigationBar: ValueListenableBuilder<String?>(
-        valueListenable: _hoveredUrl,
-        builder: (context, url, child) {
-          if (url == null || url.isEmpty) return const SizedBox.shrink();
-          return Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              border: Border(
-                top: BorderSide(color: colorScheme.outlineVariant),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.link, size: 13, color: colorScheme.primary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    url,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
       body: SelectionArea(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -1072,6 +1039,50 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       ),
     );
 
+    final result = Stack(
+      children: [
+        scaffold,
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: ValueListenableBuilder<String?>(
+            valueListenable: _hoveredUrl,
+            builder: (context, url, child) {
+              if (url == null || url.isEmpty) return const SizedBox.shrink();
+              return Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  border: Border(
+                    top: BorderSide(color: colorScheme.outlineVariant),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.link, size: 13, color: colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        url,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+
     return Platform.isMacOS
         ? Focus(
             focusNode: _focusNode,
@@ -1123,9 +1134,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               }
               return KeyEventResult.ignored;
             },
-            child: scaffold,
+            child: result,
           )
-        : scaffold;
+        : result;
   }
 }
 

@@ -5117,5 +5117,115 @@ git diff --check
 本机 macOS native build 仍受本机未安装 CocoaPods 限制，最终需通过 GitHub Actions release 包验证。
 
 ---
+
+## 127. macOS 端鼠标悬浮链接导致进度条抖动修复（2026-06-09）
+
+### 127.1 问题描述
+
+用户反馈：macOS 端阅读文章时，鼠标滑过（hover）正文中的链接，顶部 AppBar 下方的橙色阅读进度条（`LinearProgressIndicator`）会发生肉眼可见的抖动（jitter）。鼠标反复划过多个链接时，进度条前后跳动非常明显。
+
+### 127.2 问题诊断
+
+#### 触发链路
+
+整个问题链涉及两条原本互相独立的代码路径，它们在 Scaffold 的 viewport 尺寸上意外耦合：
+
+**路径 1 — 链接 hover 驱动底部 URL 显示栏**
+
+`lib/pages/article/article_page.dart` 中的 `_hoveredUrl`（`ValueNotifier<String?>`）在鼠标滑过链接时被置为 URL 字符串，滑出时置为 `null`。该 notifier 通过 `Scaffold.bottomNavigationBar` 中的 `ValueListenableBuilder` 驱动一个 32px 高的链接栏显示/隐藏：
+
+```
+hover 链接 → _hoveredUrl.value = url → bottomNavigationBar 出现（32px）
+离开链接 → _hoveredUrl.value = null → bottomNavigationBar 消失（SizedBox.shrink，0px）
+```
+
+**路径 2 — 滚动进度基于 `maxScrollExtent` 计算**
+
+```dart
+void _updateScrollProgress(ScrollMetrics metrics) {
+  _scrollProgress.value = (pixels / maxScrollExtent).clamp(0.0, 1.0);
+}
+```
+
+`maxScrollExtent` = 可滚动内容总高度 - viewport 高度。当 `bottomNavigationBar` 出现/消失时，Scaffold body 的 viewport 高度变化 ±32px，导致 `maxScrollExtent` 同步变化 ±32px。
+
+#### 抖动发生的精确机制
+
+```
+hover 链接 → bottomBar 出现(32px) → viewport -32px → maxScrollExtent +32px
+→ progress = pixels / (max+32) → 进度值突然变小 → 进度条后跳
+
+离开链接 → bottomBar 消失 → viewport +32px → maxScrollExtent -32px
+→ progress = pixels / (max-32) → 进度值突然变大 → 进度条前跳
+```
+
+用户在链接上快速移动鼠标时，这个"后跳→前跳"的反复就是肉眼所见的抖动。
+
+### 127.3 讨论与决策
+
+确认了三种修复方向：
+
+| 方案 | 描述 | 评估 |
+|------|------|------|
+| A. 底部栏改为 overlay | 脱离 Scaffold body 空间，不影响 viewport | 最简洁，从根因切断 |
+| B. 进度使用固定内容高度 | 不用实时 `maxScrollExtent`，改为预估算 | 已有长文模式用近似方案，但不精确 |
+| C. 给进度值加防抖/动画 | 视觉上抹平抖动 | 治标，且已有 50ms TweenAnimation |
+
+**选择方案 A**：将 `bottomNavigationBar` 从 Scaffold 中移除，改为在 Scaffold 外层套 `Stack`，用 `Positioned(bottom: 0)` 悬浮放置链接栏。这样链接栏不再挤占 Scaffold body 的空间，viewport 高度保持恒定，`maxScrollExtent` 不受影响，进度计算稳定。
+
+唯一的副作用是链接栏从"占据空间"变为"浮层覆盖"，会叠在文章最底部 32px 内容之上——但这 32px 之前本就因 `bottomNavigationBar` 被遮挡，用户不可见，实际无影响。
+
+### 127.4 代码改动
+
+**文件**：`lib/pages/article/article_page.dart`
+
+**改动前**：
+```dart
+Widget scaffold = Scaffold(
+  appBar: ...,
+  bottomNavigationBar: ValueListenableBuilder<String?>(...),  // 挤占 body 空间
+  body: CustomScrollView(...),
+);
+return Platform.isMacOS ? Focus(child: scaffold) : scaffold;
+```
+
+**改动后**：
+```dart
+Widget scaffold = Scaffold(
+  appBar: ...,
+  // bottomNavigationBar 已移除
+  body: CustomScrollView(...),
+);
+
+final result = Stack(
+  children: [
+    scaffold,
+    Positioned(
+      bottom: 0, left: 0, right: 0,
+      child: ValueListenableBuilder<String?>(...),  // 悬浮覆盖，不影响 viewport
+    ),
+  ],
+);
+
+return Platform.isMacOS ? Focus(child: result) : result;
+```
+
+链接栏的内容、样式、交互保持不变，仅改变其在 widget 树中的挂载位置。
+
+### 127.5 影响范围
+
+- 仅 `lib/pages/article/article_page.dart` 一个文件
+- 桌面端（macOS/Windows/Linux）和移动端均受影响，因为 `_hoveredUrl` + `bottomNavigationBar` 逻辑不区分平台（虽然 hover 主要在桌面端触发）
+- 进度条计算逻辑（`_updateScrollProgress`）完全不变
+- 链接 hover 交互、链接栏样式、`HtmlChunkCard` 中的 `_InteractiveLinkExtension` 均不变
+
+### 127.6 验证
+
+```bash
+flutter analyze lib/pages/article/article_page.dart  # No issues found
+```
+
+---
+
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.16 -m "- fix: stabilize article detail scrollbar and reading progress rendering\n- fix: keep filter review selection advancing after remove/keep actions\n- beta: rebuild Android and macOS packages for focused regression validation" --push`*

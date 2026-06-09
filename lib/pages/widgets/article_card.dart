@@ -67,7 +67,7 @@ class _ArticleCardState extends State<ArticleCard> {
   }
 }
 
-class _ArticleCardContent extends StatelessWidget {
+class _ArticleCardContent extends StatefulWidget {
   final ArticleModel article;
   final VoidCallback? onTap;
   final VoidCallback? onTranslate;
@@ -89,8 +89,44 @@ class _ArticleCardContent extends StatelessWidget {
   });
 
   @override
+  State<_ArticleCardContent> createState() => _ArticleCardContentState();
+}
+
+class _ArticleCardContentState extends State<_ArticleCardContent> {
+  ArticleModel get article => widget.article;
+  VoidCallback? get onTap => widget.onTap;
+  VoidCallback? get onTranslate => widget.onTranslate;
+  bool get showFeedTitle => widget.showFeedTitle;
+  bool get showSummary => widget.showSummary;
+  bool get isTranslated => widget.isTranslated;
+  bool get isSelected => widget.isSelected;
+  VoidCallback? get onTranslateSuccess => widget.onTranslateSuccess;
+
+  bool _isPressed = false;
+  Offset? _pressPosition;
+
+  static const _pressInDuration = Duration(milliseconds: 80);
+  static const _pressOutDuration = Duration(milliseconds: 350);
+
+  void _onTapDown(TapDownDetails d) {
+    setState(() {
+      _isPressed = true;
+      _pressPosition = d.localPosition;
+    });
+  }
+
+  void _onTapUp(TapUpDetails d) {
+    setState(() => _isPressed = false);
+  }
+
+  void _onTapCancel() {
+    setState(() => _isPressed = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
     final viewLabel = SourceTaxonomy.viewLabelFromCategory(article.category);
     final viewColor = SourceTaxonomy.viewColorFromCategory(article.category);
     final categoryLabel = article.subscriptionCategory.trim();
@@ -104,28 +140,23 @@ class _ArticleCardContent extends StatelessWidget {
       final displayTitle = TranslationService.displayTitleFor(article);
 
       return RepaintBoundary(
-        child: Card(
-          margin: EdgeInsets.symmetric(
-            horizontal: Platform.isMacOS ? 8 : 12,
-            vertical: Platform.isMacOS ? 2 : 6,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(
+            begin: _isPressed ? 1.0 : 0.985,
+            end: _isPressed ? 0.985 : 1.0,
           ),
-          clipBehavior: Clip.antiAlias, // 确保内部带色条的 Container 会被完美裁切圆角
-          elevation: 0,
-          color: isSelected
-              ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-              : (Platform.isMacOS ? Colors.transparent : null),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
-            side: Platform.isMacOS && !isSelected
-                ? BorderSide.none
-                : BorderSide(
-                    color: isSelected
-                        ? colorScheme.primary.withValues(alpha: 0.5)
-                        : colorScheme.outlineVariant.withValues(alpha: 0.35),
-                    width: 1,
-                  ),
-          ),
+          duration: _isPressed ? _pressInDuration : _pressOutDuration,
+          curve: _isPressed ? Curves.easeOut : Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
           child: GestureDetector(
+            onTapDown: _onTapDown,
+            onTapUp: _onTapUp,
+            onTapCancel: _onTapCancel,
+            onTap: onTap,
+            onLongPress: Platform.isMacOS
+                ? null
+                : () => _showTranslateMenu(context, isTranslated, isPending),
             onSecondaryTapDown: Platform.isMacOS
                 ? (details) {
                     _showMacOSContextMenu(
@@ -136,277 +167,300 @@ class _ArticleCardContent extends StatelessWidget {
                     );
                   }
                 : null,
-            child: InkWell(
-              onTap: onTap,
-              onLongPress: Platform.isMacOS
-                  ? null
-                  : () => _showTranslateMenu(context, isTranslated, isPending),
-              child: Container(
-                // 将 AI 拒文左侧色条移至 InkWell 内部，水波纹现在可正常覆盖全卡片
-                decoration: article.isRejectedByAi
-                    ? BoxDecoration(
-                        border: Border(
-                          left: BorderSide(
-                            color: colorScheme.primary,
-                            width: 4,
-                          ),
-                        ),
-                      )
-                    : null,
-                padding: EdgeInsets.all(Platform.isMacOS ? 12 : 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // AI 拒文标记优化显示
-                    if (article.isRejectedByAi && article.filterReason != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer.withValues(
-                              alpha: 0.4,
+            child: Card(
+              margin: EdgeInsets.symmetric(
+                horizontal: Platform.isMacOS ? 8 : 12,
+                vertical: Platform.isMacOS ? 2 : 6,
+              ),
+              clipBehavior: Clip.antiAlias,
+              elevation: 0,
+              color: isSelected
+                  ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                  : (Platform.isMacOS ? Colors.transparent : null),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
+                side: Platform.isMacOS && !isSelected
+                    ? BorderSide.none
+                    : BorderSide(
+                        color: isSelected
+                            ? colorScheme.primary.withValues(alpha: 0.5)
+                            : colorScheme.outlineVariant.withValues(
+                                alpha: 0.35,
+                              ),
+                        width: 1,
+                      ),
+              ),
+              child: Stack(
+                children: [
+                  Container(
+                    decoration: article.isRejectedByAi
+                        ? BoxDecoration(
+                            border: Border(
+                              left: BorderSide(
+                                color: colorScheme.primary,
+                                width: 4,
+                              ),
                             ),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: colorScheme.primary.withValues(
-                                alpha: 0.15,
+                          )
+                        : null,
+                    padding: EdgeInsets.all(Platform.isMacOS ? 12 : 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (article.isRejectedByAi &&
+                            article.filterReason != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer.withValues(
+                                  alpha: 0.4,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                ),
+                              ),
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 4,
+                                        ),
+                                        child: Icon(
+                                          Icons.auto_awesome,
+                                          size: 14,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: article.filterReason!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 4),
-                                    child: Icon(
-                                      Icons.auto_awesome,
-                                      size: 14,
-                                      color: colorScheme.primary,
-                                    ),
-                                  ),
-                                ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text.rich(
                                 TextSpan(
-                                  text: article.filterReason!,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                  children: [
+                                    if (!article.isRead)
+                                      WidgetSpan(
+                                        alignment: PlaceholderAlignment.middle,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 6,
+                                          ),
+                                          child: Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.primary,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    TextSpan(
+                                      text: displayTitle,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        height: 1.4,
+                                        fontWeight: article.isRead
+                                            ? FontWeight.w400
+                                            : FontWeight.w600,
+                                        color: article.isRead
+                                            ? colorScheme.onSurface.withValues(
+                                                alpha: 0.7,
+                                              )
+                                            : colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isPending) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '翻译中',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else if (isTranslated) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer
+                                      .withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Tooltip(
+                                  message: '已翻译',
+                                  child: Icon(
+                                    Icons.translate,
+                                    size: 16,
                                     color: colorScheme.primary,
                                   ),
                                 ),
-                              ],
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (article.author != null &&
+                            article.author!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            article.author!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          // 使用 Text.rich 和 WidgetSpan 确保红点与文字第一行绝对对齐，不受字体缩放影响
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                if (!article.isRead)
-                                  WidgetSpan(
-                                    alignment: PlaceholderAlignment.middle,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.primary,
-                                          shape: BoxShape.circle,
-                                        ),
+                        ],
+                        if (showSummary)
+                          _buildSummaryBlock(colorScheme, article.entryId),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    flex: 0,
+                                    child: PillTag(
+                                      label: viewLabel,
+                                      backgroundColor: viewColor.withValues(
+                                        alpha: 0.14,
                                       ),
+                                      foregroundColor: viewColor,
                                     ),
                                   ),
-                                TextSpan(
-                                  text: displayTitle,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    height: 1.4,
-                                    fontWeight: article.isRead
-                                        ? FontWeight.w400
-                                        : FontWeight.w600,
-                                    color: article.isRead
-                                        ? colorScheme.onSurface.withValues(
-                                            alpha: 0.7,
-                                          )
-                                        : colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
+                                  if (categoryLabel.isNotEmpty) ...[
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      flex: 0,
+                                      child: PillTag(
+                                        label: categoryLabel,
+                                        backgroundColor:
+                                            colorScheme.surfaceContainerHighest,
+                                        foregroundColor:
+                                            colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        // 翻译状态标签，移除了生硬的透明度叠加，改用规范的 Material 颜色
-                        if (isPending) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
+                            const SizedBox(width: 12),
+                            Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(
-                                  width: 10,
-                                  height: 10,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
+                                Icon(
+                                  Icons.access_time,
+                                  size: 14,
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 Text(
-                                  '翻译中',
+                                  _formatTime(article.publishedAt),
                                   style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.onPrimaryContainer,
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant
+                                        .withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                        ] else if (isTranslated) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer.withValues(
-                                alpha: 0.4,
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Tooltip(
-                              message: '已翻译',
-                              child: Icon(
-                                Icons.translate,
-                                size: 16,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (article.author != null &&
-                        article.author!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        article.author!,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    if (showSummary)
-                      _buildSummaryBlock(colorScheme, article.entryId),
-                    const SizedBox(height: 12),
-                    // 底部元信息区域重构：放弃 Wrap 与硬编码宽度，改用 Row + Flexible，保证时间永不换行
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                flex: 0,
-                                child: PillTag(
-                                  label: viewLabel,
-                                  backgroundColor: viewColor.withValues(
-                                    alpha: 0.14,
-                                  ),
-                                  foregroundColor: viewColor,
-                                ),
-                              ),
-                              if (categoryLabel.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  flex: 0,
-                                  child: PillTag(
-                                    label: categoryLabel,
-                                    backgroundColor:
-                                        colorScheme.surfaceContainerHighest,
-                                    foregroundColor:
-                                        colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 14,
-                              color: colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _formatTime(article.publishedAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurfaceVariant.withValues(
-                                  alpha: 0.6,
-                                ),
-                              ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    if (showFeedTitle) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          _FeedIcon(imageUrl: article.feedImage, size: 14),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              article.feedTitle,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: colorScheme.onSurfaceVariant.withValues(
-                                  alpha: 0.8,
+                        if (showFeedTitle) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              _FeedIcon(imageUrl: article.feedImage, size: 14),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  article.feedTitle,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: colorScheme.onSurfaceVariant
+                                        .withValues(alpha: 0.8),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            ],
                           ),
                         ],
-                      ),
-                    ],
-                  ],
-                ),
+                      ],
+                    ),
+                  ),
+                  if (_isPressed && _pressPosition != null)
+                    _GlassHighlight(
+                      pressPosition: _pressPosition!,
+                      brightness: brightness,
+                    ),
+                ],
               ),
             ),
           ),
@@ -437,7 +491,6 @@ class _ArticleCardContent extends StatelessWidget {
       textColor = cs.error.withValues(alpha: 0.6);
       icon = Icons.error_outline;
     } else {
-      // idle or null — 请求尚未发出
       displayContent = '排队等待摘要…';
       textColor = cs.onSurfaceVariant.withValues(alpha: 0.4);
       icon = Icons.hourglass_empty;
@@ -520,7 +573,7 @@ class _ArticleCardContent extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
-      showDragHandle: true, // 增加顶部的现代拖拽指示条
+      showDragHandle: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -652,6 +705,53 @@ class _ArticleCardContent extends StatelessWidget {
       return isoTime;
     }
   }
+}
+
+class _GlassHighlight extends StatelessWidget {
+  final Offset pressPosition;
+  final Brightness brightness;
+
+  const _GlassHighlight({
+    required this.pressPosition,
+    required this.brightness,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: _GlassHighlightPainter(
+          position: pressPosition,
+          color: brightness == Brightness.dark ? Colors.white : Colors.black,
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassHighlightPainter extends CustomPainter {
+  final Offset position;
+  final Color color;
+
+  const _GlassHighlightPainter({required this.position, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..shader =
+          RadialGradient(
+            colors: [color.withValues(alpha: 0.05), Colors.transparent],
+            stops: const [0.0, 1.0],
+            radius: 0.7,
+          ).createShader(
+            Rect.fromCircle(center: position, radius: size.width * 0.7),
+          );
+    canvas.drawRect(Offset.zero & size, paint);
+  }
+
+  @override
+  bool shouldRepaint(_GlassHighlightPainter old) =>
+      position != old.position || color != old.color;
 }
 
 // ─── 订阅源小图标 ─────────────────────────────

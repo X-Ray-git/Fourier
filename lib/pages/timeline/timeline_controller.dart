@@ -113,7 +113,9 @@ class TimelineController extends GetxController {
       }
 
       final dataFuture = loadData();
-      final minDuration = Future<void>.delayed(const Duration(milliseconds: 450));
+      final minDuration = Future<void>.delayed(
+        const Duration(milliseconds: 450),
+      );
       await Future.wait([dataFuture, minDuration]);
 
       if (showToast) {

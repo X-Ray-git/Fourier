@@ -18,6 +18,46 @@ import '../../../utils/image_clipboard.dart';
 import '../../../services/article_image_service.dart';
 import 'inline_video_player.dart';
 
+double _fallbackImageHeight(double width) =>
+    (width * 0.6).clamp(180.0, 420.0).toDouble();
+
+double _maxStableImageHeight(double width) =>
+    (width * 3.0).clamp(420.0, 1400.0).toDouble();
+
+double _boundedImageHeight(double height, double width) =>
+    height.clamp(40.0, _maxStableImageHeight(width)).toDouble();
+
+double? _stylePixelHeight(String? style) {
+  if (style == null || style.isEmpty) return null;
+  final match = RegExp(
+    r'(?:max-height|height)\s*:\s*(\d+(?:\.\d+)?)\s*px',
+    caseSensitive: false,
+  ).firstMatch(style);
+  if (match == null) return null;
+  return double.tryParse(match.group(1)!);
+}
+
+double _stableImageHeight(
+  double width, {
+  double? imageWidth,
+  double? imageHeight,
+  String? style,
+}) {
+  if (imageWidth != null &&
+      imageHeight != null &&
+      imageWidth > 0 &&
+      imageHeight > 0) {
+    return _boundedImageHeight(width * imageHeight / imageWidth, width);
+  }
+
+  final styleHeight = _stylePixelHeight(style);
+  if (styleHeight != null && styleHeight > 0) {
+    return _boundedImageHeight(styleHeight, width);
+  }
+
+  return _fallbackImageHeight(width);
+}
+
 /// 单块渲染器 — 根据 HtmlChunkType 渲染对应 Widget，
 /// 自动包裹 RepaintBoundary。
 /// 修改为 StatefulWidget 并混入 AutomaticKeepAliveClientMixin，
@@ -594,11 +634,12 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         }
 
         final renderWidth = explicitWidth ?? widget.maxWidth;
-        final fallbackHeight = (widget.maxWidth * 0.6)
-            .clamp(160.0, 420.0)
-            .toDouble();
-        final renderHeight =
-            explicitHeight ?? (explicitWidth ?? fallbackHeight);
+        final renderHeight = _stableImageHeight(
+          renderWidth,
+          imageWidth: explicitWidth,
+          imageHeight: explicitHeight,
+          style: attrs['style'],
+        );
         final cacheWidth = (renderWidth * dpr).round();
 
         return ClipRRect(
@@ -703,26 +744,12 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
     final cs = Theme.of(context).colorScheme;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cacheWidth = (widget.maxWidth * dpr).round();
-    final hasHeightStyle = RegExp(
-      r'max-height\s*:|height\s*:',
-    ).hasMatch(widget.style ?? '');
-    final isCutOff =
-        (widget.className ?? '').contains('cut-off') || hasHeightStyle;
-
-    // 仅在有可靠像素尺寸时约束比例；否则让图片自适应
-    final hasRealDimensions =
-        widget.imageWidth != null &&
-        widget.imageHeight != null &&
-        widget.imageHeight! > 0 &&
-        widget.imageWidth! > 0;
-    final aspectRatio = hasRealDimensions
-        ? widget.imageWidth! / widget.imageHeight!
-        : null;
-    final displayHeight = hasRealDimensions
-        ? (widget.maxWidth / aspectRatio!).clamp(40.0, 420.0).toDouble()
-        : (isCutOff
-              ? 220.0
-              : (widget.maxWidth * 0.6).clamp(180.0, 420.0).toDouble());
+    final displayHeight = _stableImageHeight(
+      widget.maxWidth,
+      imageWidth: widget.imageWidth,
+      imageHeight: widget.imageHeight,
+      style: widget.style,
+    );
 
     final canTap = widget.onTap != null;
     final imageUrl = ArticleImageService.appendRetryStamp(
@@ -778,18 +805,11 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
       );
     }
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: widget.maxWidth,
-        maxHeight: isCutOff ? 260.0 : 420.0,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Material(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-          // 3. 修复：移除 IntrinsicHeight 和 Stack，直接返回 image
-          child: image,
-        ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Material(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        child: image,
       ),
     );
   }

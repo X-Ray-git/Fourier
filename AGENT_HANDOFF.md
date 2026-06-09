@@ -5258,3 +5258,7 @@ flutter test --no-pub
 ```
 
 结果：`AGENT_HANDOFF.md` 隐私模式扫描无命中，diff 检查无输出，`dart analyze lib test` 无问题，`flutter test --no-pub` 全部通过。`flutter test` 首次在沙箱内被 Flutter SDK cache 写入限制拦截，授权后重跑通过。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.17 -m "- feat: merge README refresh, Cmd+R sync feedback, link hover progress stabilization, and article card tap feedback\n- fix: keep article image heights stable while allowing taller images\n- beta: rebuild Android and macOS packages for regression validation" --push`*

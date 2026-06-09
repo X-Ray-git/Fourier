@@ -156,11 +156,13 @@ abstract final class HtmlChunkParser {
     if (tag == 'code') {
       if (element.text.contains('\n')) return true;
       final className = element.attributes['class'] ?? '';
-      if (className.contains('language-') || className.contains('hljs'))
+      if (className.contains('language-') || className.contains('hljs')) {
         return true;
+      }
       final style = element.attributes['style'] ?? '';
-      if (style.contains('display: block') || style.contains('display:block'))
+      if (style.contains('display: block') || style.contains('display:block')) {
         return true;
+      }
     }
     return false;
   }
@@ -301,8 +303,9 @@ abstract final class HtmlChunkParser {
         _emitMediaChildren(element, chunks);
         return;
       }
-      if (element.text.trim().isEmpty)
+      if (element.text.trim().isEmpty) {
         return; // skip empty spacers like <h3><span><br></span></h3>
+      }
       final htmlContent = element.innerHtml.trim();
       chunks.add(
         HtmlChunk(

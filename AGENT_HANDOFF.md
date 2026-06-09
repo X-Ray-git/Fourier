@@ -5186,3 +5186,75 @@ git diff --check
 - `rounded_rectangle` 在 `python -c` 内联模式下可能超时，应写为 `.py` 文件运行
 - `assets/icon.png` 原始文件（848×836，无 alpha）未被修改或删除，保留为备用
 - 如后续需要调整光泽强度或圆角半径，修改脚本中的 `int(60 * ...)` 透明度上限和 `radius = int(SIZE * 0.225)` 即可
+
+## 128. 2026-06-09 worktree 审查、合并与图片高度策略修正
+
+### 128.1 背景
+
+用户要求检查当前所有 worktree。主分支内容只确认状态，不重新评判；其他分支的需求都来自用户，但实现方式需要审查是否必要、规范、合理，以及是否可能引入 bug。
+
+检查时共有 5 个 worktree：
+
+1. `main`：当前确认基线。
+2. `opencode/calm-circuit`：README 精简与 README 图标美化。
+3. `opencode/clever-canyon`：Cmd+R 刷新反馈闭环。
+4. `opencode/quick-meadow`：macOS 链接 hover 导致阅读进度条抖动修复。
+5. `opencode/hidden-wizard`：文章卡片点击反馈，并夹带图片高度策略调整。
+
+所有 worktree 的工作区均为干净状态。对各分支的 `AGENT_HANDOFF.md` 做过敏感模式扫描，未发现此前清理过的路径、签名、密钥、指纹、账号等信息回流。
+
+### 128.2 审查结论
+
+`opencode/calm-circuit` 可以合并。它主要修改 `README.md`、新增 `assets/readme-icon.png` 和 `tool/gen_readme_icon.py`，代码运行面很小。图标文件已人工查看，PNG 正常。脚本依赖 Pillow，定位为一次性资源生成工具，不进入 App 构建链。
+
+`opencode/clever-canyon` 可以合并。它把同步状态从 `_MacSyncButton` 的局部 state 提升到 `TimelineController.isSyncing`，让按钮点击、Cmd+R、下拉刷新和错误重试共享防抖状态。这个方向正确，能解决快捷键绕过按钮动画的问题。需要注意的体验变化是：默认调用 `loadFeedsThenArticles()` 会弹刷新完成 Toast；首次初始化通过 `showToast: false` 避免启动即弹窗。
+
+`opencode/quick-meadow` 可以合并。它把 hover URL 栏从 `Scaffold.bottomNavigationBar` 移到 `Stack + Positioned` 覆盖层。根因判断成立：原先 hover 链接时底栏出现/消失会改变 body viewport 高度，进而改变 `maxScrollExtent`，导致顶部进度条按 `pixels / maxScrollExtent` 计算时前后跳动。覆盖层方案不再挤占 body，符合当前滚动稳定目标。
+
+`opencode/hidden-wizard` 不能原样合并。文章卡片点击反馈本身可接受，但同一分支里还包含“移除图片高度上限”的改动：无尺寸图片先以 200px placeholder 渲染，加载后再按自然高度展开；有真实尺寸的极端长图也不再有保护上限。这会和第 126 节刚修过的滚动条/进度条稳定目标互相冲突，可能重新造成 macOS 右侧滚动条和顶部阅读进度条跳动。
+
+### 128.3 实际合并方式
+
+本轮合并优先使用真实 merge，而不是把分支改动直接复制到主分支。已完成以下 merge commit：
+
+1. `Merge branch 'opencode/calm-circuit'`
+2. `Merge branch 'opencode/clever-canyon'`
+3. `Merge branch 'opencode/quick-meadow'`
+4. `Merge branch 'opencode/hidden-wizard'`
+
+多个分支都在 `AGENT_HANDOFF.md` 末尾追加了同编号章节，分支之间合并时必然产生文档冲突。处理策略是：合并代码时暂时保留主分支文档版本，避免重复编号和冲突标记进入历史；所有功能合并完成后，手工追加本节作为统一交接记录。
+
+### 128.4 `hidden-wizard` 修正后的图片高度策略
+
+为了兼顾“不要普通裁切长图”和“滚动高度必须稳定”，最终没有采纳分支中完全移除高度约束的实现，而是改为稳定预留高度：
+
+1. 新增 `_stableImageHeight()`：所有文章图片在渲染前都得到一个确定高度。
+2. 有真实宽高时，按 `renderWidth * imageHeight / imageWidth` 计算显示高度。
+3. 高度通过 `_boundedImageHeight()` 保护，最小 40px，最大为图片宽度的 3 倍，并整体限制在 420px 到 1400px 的范围内。
+4. 有 `height` / `max-height` 内联样式时，按样式高度预留，但同样进入保护范围。
+5. 无真实尺寸、无样式高度时，回到稳定 fallback：`width * 0.6`，并 clamp 到 180px 到 420px。
+6. placeholder、errorWidget 和最终图片都使用同一个高度，避免加载完成后改变页面总高度。
+7. `HtmlChunk.estimatedHeight` 中图片高度估算也恢复保护：按 340px 宽度估算比例，高度 clamp 到 40px 到 1020px，再加垂直间距。
+
+这个策略的取舍是：普通长图比旧的 420px 上限更不容易被压扁或裁切，但极端长图不会无限撑高页面；无尺寸图片不会在加载完成后突然撑开文章正文。
+
+### 128.5 需要重点回归的功能
+
+1. macOS 文章详情：在有多张图片、长图、无尺寸图片的文章中上下滚动，观察右侧滚动条和顶部橙色进度条是否仍稳定。
+2. macOS 文章详情：鼠标反复 hover 正文链接，确认底部 URL 浮层出现/消失时不再带动顶部进度条抖动。
+3. macOS 时间线：点击同步按钮和按 Cmd+R 都应触发同一个旋转动画、防抖和完成 Toast。
+4. Android 时间线：下拉刷新会因为共享 `loadFeedsThenArticles()` 而出现完成 Toast；如体验上觉得多余，可后续把下拉刷新调用改为 `showToast: false`。
+5. 文章卡片：点击时应有轻微缩放与径向高亮反馈；长按翻译菜单和 macOS 右键菜单仍需正常。
+
+### 128.6 已完成的本地检查
+
+本轮合并前分别对三个 Dart 功能分支跑过针对性 `dart analyze`，均通过。合并后已继续完成：
+
+```bash
+rg -n '<privacy scan patterns>' AGENT_HANDOFF.md
+git diff --check
+dart analyze lib test
+flutter test --no-pub
+```
+
+结果：`AGENT_HANDOFF.md` 隐私模式扫描无命中，diff 检查无输出，`dart analyze lib test` 无问题，`flutter test --no-pub` 全部通过。`flutter test` 首次在沙箱内被 Flutter SDK cache 写入限制拦截，授权后重跑通过。

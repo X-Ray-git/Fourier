@@ -5119,3 +5119,74 @@ git diff --check
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.16 -m "- fix: stabilize article detail scrollbar and reading progress rendering\n- fix: keep filter review selection advancing after remove/keep actions\n- beta: rebuild Android and macOS packages for focused regression validation" --push`*
+
+## 127. 文章图片显示对标 PiliPlus（2026-06-09）
+
+### 127.1 需求
+
+用户反馈文章内图片显示效果"不太对"，要求**完全对标**参考工程 PiliPlus 的图片展示策略。同时确认 GIF 动图与视频的区分逻辑。
+
+### 127.2 GIF vs 视频区分（已确认正确）
+
+经完整审查，当前实现是**正确区分**的：
+
+| HTML 来源 | 解析类型 | 渲染方式 |
+|-----------|----------|----------|
+| `<img src="...xxx.gif">` | `HtmlChunkType.image` | `CachedNetworkImage`（原生支持 GIF 动画） |
+| `<video src="xxx.mp4">` | `HtmlChunkType.iframeVideo` + `mediaTag: 'video'` | `InlineVideoPlayer`（`VideoPlayerController`） |
+| `<iframe src="...">` | `HtmlChunkType.iframeVideo`（无 mediaTag） | 静态占位卡片 + 浏览器打开 |
+
+关键代码：`html_chunk_parser.dart:280-318` 和 `html_chunk_card.dart:368-395`。无需修改。
+
+### 127.3 PiliPlus 的图片尺寸策略（参考目标）
+
+PiliPlus 图片渲染极其简洁，**不对图片高度做任何 clamp**：
+
+| 场景 | PiliPlus 做法 | Folo 旧做法 |
+|------|--------------|-------------|
+| 已知像素尺寸 | `height = width × imgHeight / imgWidth`，无上限 | `(maxWidth / ratio).clamp(40, 420)`，硬上限 420px |
+| 尺寸未知 | `height: null`，让 CachedNetworkImage 自适配 | `(maxWidth × 0.6).clamp(180, 420)` 或 `220` |
+| cut-off 长图 | 从 CSS style 提取 `max-height` 像素值直接使用 | 固定 260px（`ConstrainedBox maxHeight`） |
+| ConstrainedBox | 不存在 | `maxHeight: isCutOff ? 260 : 420` |
+
+关键差异：PiliPlus 的 `html_render.dart:62` 对普通图片写 `height: null`，完全让图片按原始比例自适应；`opus_content.dart:221-223` 有尺寸时精确计算。无任何 clamp。
+
+PiliPlus 内部常数 `StyleString.imgMaxRatio = 22/9 ≈ 2.44`，仅用于多图网格中判断"长图"标记，不影响单图渲染。
+
+### 127.4 实施改动
+
+#### 文件 1：`lib/pages/article/widgets/html_chunk_card.dart`
+
+**`_ArticleInlineImage` 组件（独立图片块，行 695-794）**：
+
+1. **移除 `displayHeight` 的 `.clamp(40, 420)`**：已知尺寸时按 `maxWidth × imgHeight / imgWidth` 自由计算，`displayHeight` 类型从 `double` 改为 `double?`
+2. **移除 `ConstrainedBox(maxHeight: xxx)` 包裹**：不再限制图片最大高度
+3. **cut-off 图片处理**：改为从 CSS `style` 属性提取 `max-height: Npx` 值（对齐 PiliPlus）
+4. **未知尺寸时 `displayHeight = null`**：让 `CachedNetworkImage` 自适应，placeholder 高度 fallback 为 200
+5. **移除未使用的 `aspectRatio` 变量**
+
+**`_imageExtension`（段落内联图片，行 596-598）**：
+
+1. **移除 `fallbackHeight` 及 `.clamp(160, 420)`**：`renderHeight` 类型改为 `double?`，仅取 HTML 属性的显式 `height`；无属性时 `null`（自适配）
+2. **placeholder / errorWidget 高度 fallback 为 200**
+
+#### 文件 2：`lib/utils/html_chunk_parser.dart`
+
+**`estimatedHeight` getter（行 78-79）**：
+
+此 getter 在整个项目中**从未被调用**（死代码），顺手去掉 `.clamp(40, 420)`，改为 `340 * ratio + 24`。
+
+### 127.5 与 §126 滚动稳定性修复的冲突说明
+
+**背景**：第 126 节为了让滚动条/进度条稳定，特意给 `_ArticleInlineImage` 的无尺寸图片固定 `displayHeight`，确保 placeholder 和最终图片高度一致，避免 `maxScrollExtent` 在图片加载过程中变化导致滚动抖动。
+
+**本轮改动**：尺寸未知时 `displayHeight = null`（对齐 PiliPlus），图片加载完成后高度会从 200（placeholder）跳变到 intrinsic 高度，**会导致 `maxScrollExtent` 变化、滚动条/进度条在一次加载中发生抖动**。
+
+**用户明确接受此代价**："由于加载导致的跳变不影响我使用，只要所有图片都加载好后，不会出现新的跳变就行"。
+
+换言之：加载过程中可以跳，加载完成后必须稳定。这是有意牺牲加载期的滚动稳定性，换取图片显示效果完全对标 PiliPlus。
+
+### 127.6 影响文件
+
+- `lib/pages/article/widgets/html_chunk_card.dart` — `_ArticleInlineImage.build()` + `_imageExtension()` 去 clamp
+- `lib/utils/html_chunk_parser.dart` — `estimatedHeight` 去 clamp

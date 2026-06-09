@@ -594,11 +594,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         }
 
         final renderWidth = explicitWidth ?? widget.maxWidth;
-        final fallbackHeight = (widget.maxWidth * 0.6)
-            .clamp(160.0, 420.0)
-            .toDouble();
-        final renderHeight =
-            explicitHeight ?? (explicitWidth ?? fallbackHeight);
+        double? renderHeight = explicitHeight;
         final cacheWidth = (renderWidth * dpr).round();
 
         return ClipRRect(
@@ -616,7 +612,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             fadeOutDuration: const Duration(milliseconds: 80),
             placeholder: (context, url) => Container(
               width: renderWidth,
-              height: renderHeight,
+              height: renderHeight ?? 200,
               color: Theme.of(
                 context,
               ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -630,7 +626,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             ),
             errorWidget: (context, url, error) => Container(
               width: renderWidth,
-              height: renderHeight,
+              height: renderHeight ?? 200,
               color: Theme.of(
                 context,
               ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
@@ -715,14 +711,24 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
         widget.imageHeight != null &&
         widget.imageHeight! > 0 &&
         widget.imageWidth! > 0;
-    final aspectRatio = hasRealDimensions
-        ? widget.imageWidth! / widget.imageHeight!
-        : null;
-    final displayHeight = hasRealDimensions
-        ? (widget.maxWidth / aspectRatio!).clamp(40.0, 420.0).toDouble()
-        : (isCutOff
-              ? 220.0
-              : (widget.maxWidth * 0.6).clamp(180.0, 420.0).toDouble());
+
+    double? cutOffHeight;
+    if (isCutOff && hasHeightStyle) {
+      final m = RegExp(
+        r'max-height\s*:\s*(\d+(?:\.\d+)?)\s*px',
+      ).firstMatch(widget.style ?? '');
+      if (m != null) {
+        cutOffHeight = double.tryParse(m.group(1)!);
+      }
+    }
+
+    double? displayHeight;
+    if (hasRealDimensions) {
+      displayHeight =
+          widget.maxWidth * widget.imageHeight! / widget.imageWidth!;
+    } else if (cutOffHeight != null) {
+      displayHeight = cutOffHeight;
+    }
 
     final canTap = widget.onTap != null;
     final imageUrl = ArticleImageService.appendRetryStamp(
@@ -745,7 +751,7 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
         fadeOutDuration: const Duration(milliseconds: 80),
         placeholder: (context, url) => SizedBox(
           width: widget.maxWidth,
-          height: displayHeight,
+          height: displayHeight ?? 200,
           child: const Center(
             child: SizedBox(
               width: 24,
@@ -778,18 +784,11 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
       );
     }
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: widget.maxWidth,
-        maxHeight: isCutOff ? 260.0 : 420.0,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Material(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-          // 3. 修复：移除 IntrinsicHeight 和 Stack，直接返回 image
-          child: image,
-        ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Material(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        child: image,
       ),
     );
   }

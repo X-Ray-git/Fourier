@@ -75,11 +75,10 @@ class HtmlChunk {
             imageHeight != null &&
             imageHeight! > 0 &&
             imageWidth! > 0) {
-          // 有实际尺寸 → 按比例估算渲染高度
           final ratio = imageHeight! / imageWidth!;
-          return (340 * ratio).clamp(40, 420) + 24;
+          return 340 * ratio + 24;
         }
-        return 220; // 无尺寸 → 保守默认值
+        return 220;
       case HtmlChunkType.codeBlock:
         final lines = content.split('\n').length.clamp(1, 50).toDouble();
         return lines * 20 + 24;

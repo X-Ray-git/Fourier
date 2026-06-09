@@ -5190,3 +5190,55 @@ PiliPlus 内部常数 `StyleString.imgMaxRatio = 22/9 ≈ 2.44`，仅用于多�
 
 - `lib/pages/article/widgets/html_chunk_card.dart` — `_ArticleInlineImage.build()` + `_imageExtension()` 去 clamp
 - `lib/utils/html_chunk_parser.dart` — `estimatedHeight` 去 clamp
+
+## 128. 文章卡片液态玻璃点击反馈（2026-06-09）
+
+### 128.1 问题
+
+macOS 文章卡片使用 `InkWell`（Material Design 水波纹），点击效果被 `isSelected` 状态变化触发的橙色边框/背景色过渡动画抢占，水波纹无法完整展现。用户要求"又快又适合液态玻璃"的动画方案。
+
+### 128.2 参考研究
+
+调研了 workspace `reference/` 下三个液态玻璃工程（`flutter_liquid_glass`、`liquid_glass_demo`、`liquid_glass_widgets`），核心发现：
+
+```
+液态玻璃点按 = 三层叠加 + 错峰衰减
+  TweenAnimationBuilder<scale>: 0.985 (80ms easeOut) → 1.0 (350ms easeOutCubic)
+  CustomPaint<RadialGradient>: 点按位置辐射高光，5% 透明度
+  GestureDetector: 替代 InkWell，跟踪 onTapDown/Up/Cancel
+```
+
+参考 `glass_list_tile.dart`（最简方案）：`GestureDetector` + `AnimatedContainer`，150ms `easeOutCubic`。
+
+### 128.3 实施
+
+**架构变更**：`_ArticleCardContent` 从 `StatelessWidget` 改为 `StatefulWidget`，通过 `State` 跟踪本地 `_isPressed` / `_pressPosition` 状态（不依赖外部 `isSelected`）。
+
+**新的 widget 树**：
+```
+RepaintBoundary
+  └── TweenAnimationBuilder<double>            ← 缩放动画（80ms 压 / 350ms 弹）
+        └── Transform.scale(0.985 ↔ 1.0)
+              └── GestureDetector               ← 统一处理 tap / longPress / secondaryTap
+                    └── Card(...)
+                          └── Stack
+                                ├── Container → Column → 原有内容
+                                └── _GlassHighlight (CustomPaint)   ← 点按辐射高光
+```
+
+**与 InkWell 对比**：
+
+| 维度 | InkWell (旧) | Liquid Glass (新) |
+|------|-------------|-------------------|
+| 触发时机 | onTap 后播放 splash（延迟） | `onTapDown` 立即反馈（同步） |
+| 动画时长 | ~400ms（Material ripple） | 80ms 压入 + 350ms 弹回（错峰） |
+| 视觉语言 | Material Design 水纹 | 变换缩放 + 点按高光（玻璃语言） |
+| 与 selected 冲突 | ✅ 被抢占 | ❌ 无冲突（独立状态） |
+| macOS 右键 | `onSecondaryTapDown` 在外层 `GestureDetector` | 合并到同一 `GestureDetector` |
+| 移动端长按 | `onLongPress` 在 `InkWell` | 合并到同一 `GestureDetector` |
+
+**高光绘制** (`_GlassHighlightPainter`)：`CustomPainter` 以点按位置为圆心绘制 `RadialGradient`，亮色模式用 5% 黑色、暗色模式用 5% 白色，`radius: 0.7`（相对尺寸）。不创建额外 widget 节点，性能极轻。
+
+### 128.4 影响文件
+
+- `lib/pages/widgets/article_card.dart` — `_ArticleCardContent` 重构为 StatefulWidget，新增 `_GlassHighlight` + `_GlassHighlightPainter`

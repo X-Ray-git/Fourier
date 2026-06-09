@@ -898,7 +898,7 @@ class _MacSyncButton extends StatefulWidget {
 class _MacSyncButtonState extends State<_MacSyncButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _spinController;
-  bool _isSyncing = false;
+  StreamSubscription? _syncSub;
 
   @override
   void initState() {
@@ -907,49 +907,44 @@ class _MacSyncButtonState extends State<_MacSyncButton>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    _syncSub = widget.controller.isSyncing.listen((syncing) {
+      if (syncing) {
+        _spinController.repeat();
+      } else {
+        _spinController.stop();
+        _spinController.reset();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _syncSub?.cancel();
     _spinController.dispose();
     super.dispose();
-  }
-
-  Future<void> _sync() async {
-    if (_isSyncing) return;
-    setState(() => _isSyncing = true);
-    _spinController.repeat();
-
-    try {
-      await Future.wait([
-        widget.controller.loadFeedsThenArticles(),
-        Future<void>.delayed(const Duration(milliseconds: 450)),
-      ]);
-    } finally {
-      if (mounted) {
-        _spinController.stop();
-        _spinController.reset();
-        setState(() => _isSyncing = false);
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = widget.colorScheme;
-    return IconButton(
-      icon: RotationTransition(
-        turns: ReverseAnimation(_spinController),
-        child: Icon(
-          Icons.sync,
-          size: 20,
-          color: _isSyncing ? cs.primary : cs.onSurfaceVariant,
+    return Obx(() {
+      final syncing = widget.controller.isSyncing.value;
+      return IconButton(
+        icon: RotationTransition(
+          turns: ReverseAnimation(_spinController),
+          child: Icon(
+            Icons.sync,
+            size: 20,
+            color: syncing ? cs.primary : cs.onSurfaceVariant,
+          ),
         ),
-      ),
-      tooltip: _isSyncing ? '同步中' : '同步',
-      visualDensity: VisualDensity.compact,
-      onPressed: _isSyncing ? null : _sync,
-    );
+        tooltip: syncing ? '同步中' : '同步',
+        visualDensity: VisualDensity.compact,
+        onPressed: syncing
+            ? null
+            : () => widget.controller.loadFeedsThenArticles(),
+      );
+    });
   }
 }
 

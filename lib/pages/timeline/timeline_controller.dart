@@ -33,6 +33,7 @@ class TimelineController extends GetxController {
   final selectedFeedId = RxnString();
   final selectedCategory = RxnString();
   final filterCount = 0.obs;
+  final isSyncing = false.obs;
 
   String? _cursor;
   bool _isLoadingMore = false;
@@ -66,45 +67,62 @@ class TimelineController extends GetxController {
       }
     });
 
-    loadFeedsThenArticles();
+    loadFeedsThenArticles(showToast: false);
   }
 
   /// 先加载订阅源映射，再加载文章
-  Future<void> loadFeedsThenArticles() async {
-    if (!AccountService.instance.isLoggedIn.value) {
-      articles.clear();
-      loadingState.value = const LoadError('请先在“设置”页配置 Folo Token');
+  Future<void> loadFeedsThenArticles({bool showToast = true}) async {
+    if (isSyncing.value) {
+      if (showToast) AppFeedback.info('请稍后', '同步正在进行中');
       return;
     }
 
-    if (!_feedsLoaded) {
-      final cachedFeeds = ContentCacheService.readSubscriptions();
-      final cachedInboxFeeds = cachedFeeds
-          .where((feed) => feed.isInbox)
-          .toList();
-      for (final feed in cachedFeeds) {
-        _feedMap[feed.feedId] = feed;
-      }
-
-      final needRefresh =
-          _feedMap.isEmpty || !ContentCacheService.isSubscriptionsFresh();
-      if (needRefresh) {
-        final feedResult = await FeedHttp.getSubscriptions();
-        if (feedResult is Success<List<FeedModel>>) {
-          final merged = <FeedModel>[
-            ...feedResult.response,
-            ...cachedInboxFeeds,
-          ];
-          for (final f in merged) {
-            _feedMap[f.feedId] = f;
-          }
-          ContentCacheService.saveSubscriptions(merged);
-        }
-      }
-      _feedsLoaded = true;
+    if (!AccountService.instance.isLoggedIn.value) {
+      articles.clear();
+      loadingState.value = const LoadError('请先在"设置"页配置 Folo Token');
+      return;
     }
 
-    await loadData();
+    isSyncing.value = true;
+    try {
+      if (!_feedsLoaded) {
+        final cachedFeeds = ContentCacheService.readSubscriptions();
+        final cachedInboxFeeds = cachedFeeds
+            .where((feed) => feed.isInbox)
+            .toList();
+        for (final feed in cachedFeeds) {
+          _feedMap[feed.feedId] = feed;
+        }
+
+        final needRefresh =
+            _feedMap.isEmpty || !ContentCacheService.isSubscriptionsFresh();
+        if (needRefresh) {
+          final feedResult = await FeedHttp.getSubscriptions();
+          if (feedResult is Success<List<FeedModel>>) {
+            final merged = <FeedModel>[
+              ...feedResult.response,
+              ...cachedInboxFeeds,
+            ];
+            for (final f in merged) {
+              _feedMap[f.feedId] = f;
+            }
+            ContentCacheService.saveSubscriptions(merged);
+          }
+        }
+        _feedsLoaded = true;
+      }
+
+      final dataFuture = loadData();
+      final minDuration = Future<void>.delayed(const Duration(milliseconds: 450));
+      await Future.wait([dataFuture, minDuration]);
+
+      if (showToast) {
+        final count = unreadCount;
+        AppFeedback.success('已刷新', '$count 篇未读');
+      }
+    } finally {
+      isSyncing.value = false;
+    }
   }
 
   Future<void> loadData() async {

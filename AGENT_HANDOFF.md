@@ -5119,3 +5119,83 @@ git diff --check
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.16 -m "- fix: stabilize article detail scrollbar and reading progress rendering\n- fix: keep filter review selection advancing after remove/keep actions\n- beta: rebuild Android and macOS packages for focused regression validation" --push`*
+
+## 127. Cmd+R 刷新快捷键反馈闭环：按钮动画 + Toast + 防抖（2026-06-09）
+
+### 127.1 问题描述
+
+第 119 节实现的 Cmd+R 全局刷新快捷键虽然能正确触发数据刷新，但缺少用户可见的反馈：
+1. **按钮不转动**：时间线 AppBar 右侧的同步按钮（`_MacSyncButton`）不会旋转。
+2. **没有 Toast 弹窗**：刷新完成后无任何提示，用户不知道刷新是否成功。
+3. **可被连按**：快捷键绕过了按钮的本地 `_isSyncing` 锁，快速连按会导致重复网络请求。
+
+### 127.2 根因分析
+
+| 根因 | 位置 | 说明 |
+|------|------|------|
+| **快捷键绕过按钮的本地动画状态** | `main.dart:219-234` (RefreshTimelineIntent) + `timeline_page.dart:888-954` (_MacSyncButton) | Cmd+R 直接调用 `TimelineController.loadFeedsThenArticles()`，不经过 `_MacSyncButton`。按钮的 `_isSyncing` 本地状态和 `_spinController` 旋转动画完全不被触发 |
+| **loadFeedsThenArticles 成功后无 Toast** | `timeline_controller.dart:73-109` | `loadFeedsThenArticles()` → `loadData()` 成功后设置了 `loadingState` 但无任何 `AppFeedback` 提示 |
+| **无并发防抖** | `timeline_controller.dart:73` | `loadFeedsThenArticles()` 无入口守卫，快速连按 Cmd+R 会发起多个并发网络请求 |
+
+### 127.3 修复方案
+
+核心思路：将 `isSyncing` 状态从 `_MacSyncButton` 的局部状态提升到 `TimelineController`（RxBool），让快捷键和按钮共享同一状态源。
+
+### 127.4 具体改动
+
+#### 文件 1：`lib/pages/timeline/timeline_controller.dart`
+
+| 修改点 | 改前 | 改后 |
+|--------|------|------|
+| 新增字段 | — | `final isSyncing = false.obs;`（RxBool） |
+| `loadFeedsThenArticles` 签名 | `Future<void> loadFeedsThenArticles() async` | `Future<void> loadFeedsThenArticles({bool showToast = true}) async` |
+| 入口守卫 | 无 | `if (isSyncing.value) { if (showToast) AppFeedback.info(...); return; }` |
+| 状态管理 | — | `isSyncing.value = true;` 在 try 块首，`isSyncing.value = false;` 在 finally |
+| 最小时长 | — | `await Future.wait([dataFuture, Future.delayed(450ms)]);` — 确保按钮至少旋转 450ms |
+| 成功反馈 | 无 | `AppFeedback.success('已刷新', '$count 篇未读');` |
+| `onInit()` 调用 | `loadFeedsThenArticles();` | `loadFeedsThenArticles(showToast: false);` — 首次加载不弹 Toast |
+
+#### 文件 2：`lib/pages/timeline/timeline_page.dart`
+
+`_MacSyncButton` 重构：
+
+| 修改点 | 改前 | 改后 |
+|--------|------|------|
+| 本地同步状态 | `bool _isSyncing = false;` | 删除，改为读取 `widget.controller.isSyncing` |
+| 动画驱动 | `_sync()` 方法内手动 `repeat()`/`stop()/reset()` | `_syncSub = widget.controller.isSyncing.listen(...)` — 通过 GetX RxBool 的 `listen` 流式监听 |
+| `_sync()` 方法 | 独立方法，内含 `Future.wait` + 450ms delay | 删除，直接调用 `widget.controller.loadFeedsThenArticles()` |
+| `build()` | 直接读 `_isSyncing` | 用 `Obx(() { ... })` 读取 `widget.controller.isSyncing.value` |
+
+#### 文件 3：`lib/main.dart`
+
+无改动。Cmd+R action 原本就调用 `loadFeedsThenArticles()`，现在自动受益于 controller 层的防抖和 Toast。
+
+### 127.5 行为变化对照
+
+| 场景 | 改前 | 改后 |
+|------|------|------|
+| Cmd+R 按键 | 数据刷新，按钮不转，无提示 | 数据刷新，按钮旋转，Toast 显示"已刷新 · N 篇未读" |
+| 点同步按钮 | 按钮转动约 0.5s，完成停止 | 不变（行为一致） |
+| 连按 Cmd+R | 多个并发网络请求 | 仅第一个生效，后续弹出"同步正在进行中" |
+| 初始加载 | 无影响 | 无影响（`showToast: false`） |
+| Android 下拉刷新 | 调用 `loadFeedsThenArticles()` | 同样受防抖保护 + Toast 反馈 |
+| 错误页"重新加载"按钮 | 调用 `loadFeedsThenArticles()` | 同上 |
+
+### 127.6 设计决策
+
+- **为什么把 `isSyncing` 放在 Controller 而不是继续留在 Widget 里**：Cmd+R 走全局 `Shortcuts`/`Actions` 机制，无法访问 `_MacSyncButton` 的 StatefulWidget 局部状态。Controller 是 GetX 单例，无论从哪里调用都共享同一状态。
+- **为什么用 `listen` 而不是 `ever`**：`ever` 只在值变化时触发，但 `listen` 可以确保订阅周期和 Widget 生命周期同步（`dispose` 时 `_syncSub?.cancel()`）。
+- **为什么新增 `showToast` 参数**：首次加载（`onInit`）不应弹 Toast，否则用户每次打开 App 都看到"已刷新"提示。
+
+### 127.7 影响文件
+
+- `lib/pages/timeline/timeline_controller.dart` — 新增 `isSyncing` RxBool，重构 `loadFeedsThenArticles`
+- `lib/pages/timeline/timeline_page.dart` — `_MacSyncButton` 从本地状态改为读取 controller 状态
+- `lib/main.dart` — 无需改动（自动受益）
+
+### 127.8 验证
+
+```bash
+flutter analyze lib/pages/timeline/timeline_controller.dart lib/pages/timeline/timeline_page.dart lib/main.dart
+# No issues found!
+```

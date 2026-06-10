@@ -5482,3 +5482,36 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*
+
+## 132. macOS 端垃圾拦截卡片按钮点击失效修复
+
+### 132.1 任务背景
+用户反馈在 macOS 端，垃圾拦截页面（`FilterReviewPage`）中，文章卡片（`_MacReviewRow`）最右侧的两个操作按钮（“保留”和“移除”）无法点击。点击时既没有按下的视觉反馈，也无法触发对应的业务逻辑（`onKeep` / `onReject`），但整个卡片本身是可以被点击选中的。
+
+### 132.2 问题定位与排查
+经过对代码结构的梳理，发现问题的根源在于新引入的统一点按交互组件 `CardPressEffect`（`lib/common/widgets/card_press_effect.dart`）。
+
+- 在 `_MacReviewRow` 的布局中，外层使用了 `CardPressEffect` 组件，内部包含 `Material` 以及底部的 `IconButton`。
+- `CardPressEffect` 为了实现鼠标悬停（Hover）或按下（Press）时的高亮和阴影覆盖层，使用了 `Stack`，并在其最后（即最顶层）添加了一个 `Positioned.fill` 图层（由 `ClipRRect` 和 `CustomPaint` 组成）。
+- 在 Flutter 桌面的事件分发机制中，这个动态展示在顶层的 `Positioned.fill` 纯视觉图层阻断了命中测试（Hit Testing），导致处于该图层下方的 `IconButton` 无法接收到鼠标事件。
+- 同时，由于 `CardPressEffect` 的最外层包裹了一个设置了 `behavior: HitTestBehavior.opaque` 的 `GestureDetector`，该层在事件冒泡或父级兜底时成功捕获了原本应该穿透的点击，使得外层的卡片自身 `onTap` 得以触发（表现为卡片仍可选中），而内部的按钮被彻底“屏蔽”。
+
+### 132.3 实施的修改方案
+最优且最标准的处理方式是在 `lib/common/widgets/card_press_effect.dart` 中，将用于呈现视觉效果的覆盖层包裹在 `IgnorePointer` 内部。这样可以强制 Flutter 事件树在进行命中测试时完全忽略该图层，将指针事件顺畅地放行并传递给其下方的可交互组件。
+
+```dart
+              if (_showHover || _showEffect)
+                Positioned.fill(
+                  child: IgnorePointer( // 新增：防止纯视觉图层吞噬指针事件
+                    child: ClipRRect(
+                      borderRadius: widget.borderRadius,
+                      child: CustomPaint( ... ),
+                    ),
+                  ),
+                ),
+```
+
+### 132.4 关键设计决策与后续建议
+- **关键决策**：没有破坏 `_MacReviewRow` 和 `CardPressEffect` 已有的嵌套布局，保持了组件的高内聚和复用性，仅通过解决图层穿透问题完成了极低风险的精确修复。
+- **后续建议**：后续再使用 `Stack` 进行任何顶层修饰或动效覆盖时，需将纯视觉组件默认使用 `IgnorePointer` 囊括，以避免在复杂的 Desktop / Web 环境下再现类似的事件拦截问题。
+

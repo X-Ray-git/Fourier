@@ -500,10 +500,16 @@ class _CategoryItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
+                      fontWeight: FontWeight.w500,
                       color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                      shadows: isSelected
+                          ? [
+                              Shadow(
+                                color: cs.primary,
+                                offset: const Offset(0.3, 0),
+                              ),
+                            ]
+                          : null,
                     ),
                   ),
                 ),
@@ -584,10 +590,16 @@ class _SidebarItem extends StatelessWidget {
                     label,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
+                      fontWeight: FontWeight.w500,
                       color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                      shadows: isSelected
+                          ? [
+                              Shadow(
+                                color: cs.primary,
+                                offset: const Offset(0.3, 0),
+                              ),
+                            ]
+                          : null,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

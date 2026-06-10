@@ -5479,6 +5479,41 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 3. 移动端 `Dismissible` 左滑/右滑时，`ArticleCard` 的按压缩放理论上也会触发；如果觉得干扰手势，可给移动端 `CardPressEffect` 传 `enablePress: false`。
 
 
+## 132. 修复 macOS 侧边栏选中项文本排版跳动
+
+### 132.1 问题描述
+
+用户反馈在 macOS 端选中侧边栏的卡片/项目时，标题会产生略微的抖动或跳变。
+经排查发现，侧边栏（`macos_sidebar.dart`）中的 `_CategoryItem` 和 `_SidebarItem` 标题在选中（`isSelected`）时，`fontWeight` 会从 `w500` 动态切换为 `w600`。
+在非等宽字体的渲染逻辑中，由于粗体字符的占位宽度大于常规体字符，这种动态的字重切换会强制排版引擎重新计算字符度量（Metrics），导致文本的总渲染宽度及内部字符间距发生物理改变，从而在视觉上产生抖动或跳变。
+
+### 132.2 解决方案讨论与权衡
+
+我们讨论了以下几种思路：
+1. **完全移除字重变化（原生标准做法）**：彻底固定 `w500`，完全依靠背景色和文字高亮色区分选中态。符合 macOS HIG，彻底消灭跳变，但会丢失原有加粗特效。
+2. **文字阴影伪造加粗（最终采用方案）**：在固定底层排版字重（`w500`）不变的前提下，通过叠加细微的同色文字阴影（`Shadow`）来产生像素重叠，实现视觉加粗。这是一种典型的 UI Hack 手段。代价是牺牲了部分亚像素抗锯齿带来的极高锐利度，但能够完美实现“既加粗，又绝对不跳变”的两全其美。
+3. **字距补偿法**：变粗时减小 `letterSpacing` 抵消膨胀。但此法只能维持总宽度，字符内部仍会产生蠕动，不能彻底解决像素级跳变问题。
+4. **可变字体（Variable Font GRAD 轴）**：使用支持 GRAD 的字体（如 Roboto Flex）。效果最完美，但需要引入非原生字体库，增加包体积并破坏 Mac 端原生旧有字体生态。
+
+最终确认使用**方案 2（文字阴影法）**来实现。
+
+### 132.3 实现细节
+
+- **修改文件**：`lib/pages/main/widgets/macos_sidebar.dart`
+- **修改目标**：`_CategoryItem` (约 503 行) 与 `_SidebarItem` (约 587 行) 的 `TextStyle`
+- **代码重构逻辑**：
+  ```dart
+  fontWeight: FontWeight.w500, // 永久固定排版宽度，防跳变
+  shadows: isSelected
+      ? [
+          Shadow(
+            color: cs.primary,
+            offset: const Offset(0.3, 0), // 水平平移 0.3 像素伪造加粗
+          ),
+        ]
+      : null,
+  ```
+
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*

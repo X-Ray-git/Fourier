@@ -5263,6 +5263,7 @@ flutter test --no-pub
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.17 -m "- feat: merge README refresh, Cmd+R sync feedback, link hover progress stabilization, and article card tap feedback\n- fix: keep article image heights stable while allowing taller images\n- beta: rebuild Android and macOS packages for regression validation" --push`*
 
+
 ## 129. 翻译与摘要的自动重试机制实现
 
 ### 129.1 需求背景
@@ -5287,3 +5288,27 @@ flutter test --no-pub
 ### 129.4 注意事项
 - 原地重试属于阻塞重试，单次网络请求较耗时的话，会在 UI 层保持 Loading 状态较长时间。
 - 对于极端情况（例如应用进程被强杀），此原地任务也会被中断，但对当前产品形态来说可以接受（重启后可重新手动触发）。
+## 130. 文章内联链接 Hover 样式优化 (2026-06-10)
+
+### 130.1 需求背景与原始诉求
+用户提出原有的文章内联链接样式（橙色文本+白色下划线）不够优雅，希望将其优化为：鼠标悬停（Hover）时展现类似行内代码块的“圆角矩形背景”，并且背景和下划线的出现都需要有 150ms 的过渡动画。
+
+### 130.2 技术方案探讨与取舍（关键上下文）
+在深入分析 Flutter 的富文本（`Text.rich` / `flutter_html`）渲染机制后，发现原需求存在严重的体验冲突：
+1. **换行破坏问题（致命缺陷）**：要在文本内联插入带圆角的背景框，必须使用 `WidgetSpan`。然而，`WidgetSpan` 会被 Flutter 作为一个不可分割的整体区块处理，**无法在行尾自然换行（Line Wrapping）**。如果正文中存在较长的文本链接，会导致大面积留白或 UI 溢出，这对于一款纯阅读类应用是不可接受的。
+2. **性能开销问题**：`TextSpan` 是不可变的，要实现 150ms 的渐变动画，需要在 150ms 内以 60FPS 的频率高频触发整个 HTML Chunk 的解析和重绘。对于包含大量图文的富文本组件而言，这会带来极高的 CPU 开销和发热，容易引起列表滑动卡顿。
+
+经过与用户的充分讨论，决定**放弃“圆角背景”与“150ms过渡动画”**，采取“优先保证阅读排版与性能，提供瞬时优雅反馈”的轻量化方案。
+
+### 130.3 最终实现方案
+1. **视觉表现重构**：
+   - **常态**：保留主题主色（橙色），但**彻底移除默认下划线**，使得大段正文阅读时视觉更加纯净、无干扰。
+   - **悬停态（Hover）**：文字颜色保持不变，瞬间浮现与文字同色的下划线，提供清晰干脆的交互反馈，摒弃了突兀的白色下划线。
+2. **局部重绘优化（`HtmlChunkCard`）**：
+   - 避免了整篇文章的重绘。利用已有的底部状态栏预览 URL 的 `ValueNotifier<String?> hoveredUrl`，在 `_HtmlChunkCardState.build` 中，按需使用 `ValueListenableBuilder` 包裹局部的 HTML 渲染逻辑。
+   - 当用户悬停或移出特定链接时，仅触发包含该链接的局部 Html Chunk 重绘（耗时极低），兼顾了状态更新与滚动性能。
+3. **`flutter_html` 扩展调整（`_InteractiveLinkExtension`）**：
+   - 彻底移除了 `WidgetSpan`，全面回归 `TextSpan`，完美保证了长链接的自然换行。
+   - 扩展接收 `currentHoveredUrl`，在 `prepare` 阶段通过精准的 CSS Style 覆盖，按状态动态赋予 `TextDecoration.underline`。
+
+

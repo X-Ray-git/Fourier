@@ -5479,6 +5479,7 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 3. 移动端 `Dismissible` 左滑/右滑时，`ArticleCard` 的按压缩放理论上也会触发；如果觉得干扰手势，可给移动端 `CardPressEffect` 传 `enablePress: false`。
 
 
+
 ## 132. 修复 macOS 侧边栏选中项文本排版跳动
 
 ### 132.1 问题描述
@@ -5509,6 +5510,44 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
   ```dart
   fontWeight: FontWeight.w500, // 永久固定排版宽度，彻底移除随 isSelected/selected 变化的加粗逻辑以及后续尝试的阴影 hack
   ```
+
+## 136. 修复 macOS 卡片进出场动画闪现问题 (2026-06-10)
+
+### 136.1 需求与问题描述
+用户反馈：**在 macOS 端，卡片的进出场动画（特别是双击或被标记已读等操作导致的列表项移除动画）有时会完全失效，直接“闪现”消失或突兀变动。**
+
+### 136.2 问题定位与分析
+经过排查 `timeline_page.dart` 和 `ImplicitlyAnimatedList` 及底层滚动逻辑，导致动画“闪现”的根本原因有两个，且两者可能叠加出现：
+1. **组件状态丢失导致渲染闪现（影响所有移除操作）**：在移除动画 `_buildRemovedTimelineItem` 中，代码原本为被移除的 `ArticleCard` 分配了一个全新的 `ValueKey`。这导致 Flutter 将旧卡片（带有 `GlobalKey`）销毁并瞬间重建新卡片，内部所有瞬时状态（如双击残留的 Ripple 水波纹、Hover 状态、CachedNetworkImage 加载状态）全部丢失并重置到默认状态，造成退出动画开始瞬间的突兀闪烁。
+2. **滚动补偿与移除动画的物理冲突（特指双击场景）**：在 `_handleMacArticleTap` 的双击处理逻辑中，程序会通过 `_selectRelativeArticle(1)` 选中下一篇文章，并触发 `ScrollUtils.ensureVisible` 强制列表向下滚动 250ms 以对齐下一篇文章。与此同时，当前文章被标记已读触发移除动画，下方文章自然向上滑动收缩。两股相反的物理运动同时发生，导致视口剧烈跳动，使得正在执行缩小动画的卡片瞬间飞出可视区域，视觉上呈现出“毫无动画直接消失”。
+
+### 136.3 修复实现
+1. **复用 `GlobalKey` 以维持退出动画状态**：在 `_buildRemovedTimelineItem` 中，如果 `_itemKeys` 存在对应的 `GlobalKey`，则在退出动画中直接复用它：`final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');`。这实现了 Element 树的平滑转移挂载（Reparenting），完美保留了卡片的内部渲染状态。
+2. **双击移除时阻断列表跳动滚动**：为 `_selectRelativeArticle` 增加可选参数 `bool scrollTo = true`。在双击逻辑处理时，由于已知当前文章会被移除，下一篇文章会自然滑入视口，因此静默选中下一篇文章而不触发强制滚动：`_selectRelativeArticle(1, scrollTo: false);`。这彻底消除了两股相反物理运动产生的冲突。
+
+### 136.4 补丁：解决掉帧与“M”快捷键带来的冲突
+在初步修复后，进一步发现由于“M”快捷键与双击事件内部的其他同步或平台调用阻塞，偶尔仍会导致动画掉帧或遗漏。
+1. **阻断双击调起浏览器造成的平台线程阻塞**：双击逻辑中调用了 `url_launcher` 打开外部浏览器。这是一个会导致底层平台（Platform Channel）上下文切换的重负载操作，会直接阻塞主线程，导致正在进行的 180ms 移除动画严重掉帧或被完全跨越。**修复方法**：将 `_openOriginalArticle(article)` 包装在 `Future.delayed(200ms)` 中，将其执行推迟到卡片移除动画完全结束之后，确保动画丝滑。
+2. **修复“M”快捷键导致的滚动冲突**：原版中，“M”快捷键被触发时，会调用默认的 `onNext` 方法，而默认的 `onNext`（用于右方向键）执行的是携带 `scrollTo: true` 的滚动选中下一篇逻辑。这导致按下“M”时又一次复现了“移除收缩 vs 向下强制滚动”的物理冲突。**修复方法**：在 `timeline_page.dart` 初始化 `ArticlePageView` 时主动覆盖 `onMKeyPressed`，针对“标记已读”的情景单独执行静默下移 `_selectRelativeArticle(1, scrollTo: false)`，并调用底层 Controller 完成已读操作。
+
+### 136.5 补丁 2：解决连续快速操作时的“闭包变量捕获”导致状态错乱与闪跳
+在修复上述问题后，发现当用户“连续快速按 M 键”或进行其他快速操作，且由于卡片列表缩减自动加载更多文章时，动画效果依然会出现“瞬间消失”或“像PPT一样闪跳”的极端掉帧现象。
+**原理解析与修复**：
+这是由于 `ArticlePageView` 中的 `onMKeyPressed` 回调在构造时，**捕获了当前帧的 `selected` 文章变量**。由于响应式状态（`Obx`）更新 UI 需要经过帧调度（Frame scheduling），当用户手速极快（例如按住 M 键或快速连按），同一帧内 `M` 键被连续触发多次。
+- 第 1 次按下：标记 A 为已读（触发移除动画），代码选中了 B。
+- 第 2 次按下（极快）：此时 UI 还未来得及渲染 B 的右侧详情页，因此 M 键触发的依然是旧闭包！闭包内的 `selected` 依然是 A。代码发现 A 此时已经是“已读”状态，于是执行了 `ac.markAsUnread()`，将 A 又重新放回了列表！
+- 这种极速的移除 -> 恢复 -> 移除的死循环，导致同一个卡片的出入场动画在极短时间内互相覆盖叠加，甚至让 AnimatedList 队列过载，视觉上表现为“疯狂鬼畜闪烁”或“直接消失”。
+**修复方法**：在这两个页面的 `onMKeyPressed` 闭包内，放弃使用外部传入的 `selected` 变量，改为**动态实时从 Controller 状态中获取当前的 `selectedArticle.value`**，从而彻底斩断了多点触控与快速连击带来的 Race Condition。
+
+### 136.6 修改文件清单
+1. `lib/pages/timeline/timeline_page.dart`：
+   - 增加 `_selectRelativeArticle` 的 `scrollTo` 参数。
+   - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`，并延迟执行 `_openOriginalArticle`。
+   - 在 `_buildRemovedTimelineItem` 中复用 `GlobalKey`。
+   - 为 `ArticlePageView` 注入自定义的 `onMKeyPressed` 处理逻辑。
+2. `lib/pages/timeline/filter_review_page.dart`：
+   - 在 `_buildRemovedReviewRow` 中同步应用了 `GlobalKey` 复用逻辑，解决了审核页面卡片移除时的状态丢失闪烁问题。
+
 
 ---
 *🤖 Automated Release Footprint:*

@@ -632,7 +632,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 onPrevious: () => _selectRelativeArticle(-1),
                 onNext: () => _selectRelativeArticle(1),
                 onMKeyPressed: () {
-                  _reject(selected);
+                  final currentSelected = _selectedArticle.value;
+                  if (currentSelected != null) {
+                    _reject(currentSelected);
+                  }
                 },
               );
             }),
@@ -710,7 +713,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       child: FadeTransition(
         opacity: animation,
         child: _MacReviewRow(
-          key: ValueKey('removed-${article.entryId}'),
+          key: _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}'),
           article: article,
           selected: false,
           onTap: () {},

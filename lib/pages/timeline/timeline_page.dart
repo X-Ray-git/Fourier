@@ -105,13 +105,14 @@ class _TimelinePageState extends State<TimelinePage> {
     );
   }
 
-  void _selectRelativeArticle(int delta) {
+  void _selectRelativeArticle(int delta, {bool scrollTo = true}) {
     final list = controller.articles;
     if (list.isEmpty) return;
 
     final selected = controller.selectedArticle.value;
     if (selected == null) {
       controller.selectedArticle.value = list.first;
+      if (scrollTo) _scrollToArticle(list.first.entryId);
       return;
     }
 
@@ -119,7 +120,7 @@ class _TimelinePageState extends State<TimelinePage> {
     if (currentIndex != -1) {
       final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
       controller.selectedArticle.value = list[nextIndex];
-      _scrollToArticle(list[nextIndex].entryId);
+      if (scrollTo) _scrollToArticle(list[nextIndex].entryId);
       return;
     }
 
@@ -137,30 +138,30 @@ class _TimelinePageState extends State<TimelinePage> {
         for (int i = allIndex + 1; i < allList.length; i++) {
           if (listEntryIds.contains(allList[i].entryId)) {
             controller.selectedArticle.value = allList[i];
-            _scrollToArticle(allList[i].entryId);
+            if (scrollTo) _scrollToArticle(allList[i].entryId);
             return;
           }
         }
         // 向后找尽，停留在当前可用列表的最后一篇
         controller.selectedArticle.value = list.last;
-        _scrollToArticle(list.last.entryId);
+        if (scrollTo) _scrollToArticle(list.last.entryId);
       } else {
         // 向前寻找上一个存在的文章
         for (int i = allIndex - 1; i >= 0; i--) {
           if (listEntryIds.contains(allList[i].entryId)) {
             controller.selectedArticle.value = allList[i];
-            _scrollToArticle(allList[i].entryId);
+            if (scrollTo) _scrollToArticle(allList[i].entryId);
             return;
           }
         }
         // 向前找尽，停留在当前可用列表的第一篇
         controller.selectedArticle.value = list.first;
-        _scrollToArticle(list.first.entryId);
+        if (scrollTo) _scrollToArticle(list.first.entryId);
       }
     } else {
       // 极端兜底情况：全量列表里都找不到
       controller.selectedArticle.value = list.first;
-      _scrollToArticle(list.first.entryId);
+      if (scrollTo) _scrollToArticle(list.first.entryId);
     }
   }
 
@@ -223,15 +224,18 @@ class _TimelinePageState extends State<TimelinePage> {
     if (isDoubleTap) {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
-      _selectRelativeArticle(1);
+      _selectRelativeArticle(1, scrollTo: false);
 
       // Let the current frame paint the double-tap ripple before heavy work.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _openOriginalArticle(article);
-
         if (!article.isRead) {
           unawaited(UndoService.markAsRead(article, showSuccess: false));
         }
+
+        // 延迟打开浏览器，避免 platform channel 调用阻塞主线程导致卡片移除动画掉帧
+        Future.delayed(const Duration(milliseconds: 200), () {
+          _openOriginalArticle(article);
+        });
       });
     }
   }
@@ -374,6 +378,24 @@ class _TimelinePageState extends State<TimelinePage> {
                     onClose: () => controller.selectedArticle.value = null,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
+                    onMKeyPressed: () {
+                      final currentSelected = controller.selectedArticle.value;
+                      if (currentSelected == null) return;
+
+                      if (Get.isRegistered<ArticleController>(tag: currentSelected.entryId)) {
+                        final ac = Get.find<ArticleController>(tag: currentSelected.entryId);
+                        if (ac.isUpdatingReadState.value) return;
+                        
+                        final wasUnread = !ac.isRead.value;
+                        if (wasUnread) {
+                          // 静默选中下一篇（不触发滚动），避免与上方卡片的移除收缩动画发生物理冲突
+                          _selectRelativeArticle(1, scrollTo: false);
+                          ac.markAsRead();
+                        } else {
+                          ac.markAsUnread();
+                        }
+                      }
+                    },
                   );
                 }),
               ),
@@ -537,13 +559,14 @@ class _TimelinePageState extends State<TimelinePage> {
     int index,
     Animation<double> animation,
   ) {
+    final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');
     return SizeTransition(
       sizeFactor: animation,
       axisAlignment: -1,
       child: FadeTransition(
         opacity: animation,
         child: ArticleCard(
-          key: ValueKey('removed-${article.entryId}'),
+          key: articleKey,
           article: article,
           isSelected:
               controller.selectedArticle.value?.entryId == article.entryId,

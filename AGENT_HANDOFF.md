@@ -5504,6 +5504,8 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
    - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`，并延迟执行 `_openOriginalArticle`。
    - 在 `_buildRemovedTimelineItem` 中复用 `GlobalKey`。
    - 为 `ArticlePageView` 注入自定义的 `onMKeyPressed` 处理逻辑。
+2. `lib/pages/timeline/filter_review_page.dart`：
+   - 在 `_buildRemovedReviewRow` 中同步应用了 `GlobalKey` 复用逻辑，解决了审核页面卡片移除时的状态丢失闪烁问题。
 
 ---
 *🤖 Automated Release Footprint:*

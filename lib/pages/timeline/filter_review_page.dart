@@ -20,6 +20,7 @@ import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
+import '../../common/widgets/card_press_effect.dart';
 import '../../utils/scroll_utils.dart';
 
 class FilterReviewPage extends StatefulWidget {
@@ -215,16 +216,22 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
     if (!mounted) return;
+
+    if (attempt == 0) {
+      Future.delayed(const Duration(milliseconds: 220), () {
+        _scrollToArticleWhenReady(entryId, attempt: 1);
+      });
+      return;
+    }
+
     final key = _itemKeys[entryId];
     if (key != null && key.currentContext != null) {
       ScrollUtils.ensureVisible(key.currentContext!);
       return;
     }
-    if (attempt >= 8) return;
+    if (attempt >= 4) return;
 
-    // AnimatedList 删除动画会让下一项的 GlobalKey 延后挂载，逐帧短轮询比固定
-    // 220ms 延迟更稳，也不会在动画时长调整后失效。
-    Future.delayed(const Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
       _scrollToArticleWhenReady(entryId, attempt: attempt + 1);
     });
   }
@@ -811,19 +818,22 @@ class _MacReviewRow extends StatelessWidget {
     final feedTitle = article.feedTitle == '?' ? '未知来源' : article.feedTitle;
     final reason = article.filterReason?.trim();
 
-    return Material(
-      color: selected
-          ? cs.primaryContainer.withValues(alpha: 0.5)
-          : Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: selected
-            ? BorderSide(color: cs.primary.withValues(alpha: 0.5), width: 1)
-            : BorderSide.none,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
+    return CardPressEffect(
+      onTap: onTap,
+      enableHover: true,
+      enablePress: true,
+      borderRadius: BorderRadius.circular(8),
+      child: Material(
+        color: selected
+            ? cs.primaryContainer.withValues(alpha: 0.5)
+            : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: selected
+              ? BorderSide(color: cs.primary.withValues(alpha: 0.5), width: 1)
+              : BorderSide.none,
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
           child: Row(

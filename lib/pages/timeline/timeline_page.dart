@@ -105,16 +105,24 @@ class _TimelinePageState extends State<TimelinePage> {
     );
   }
 
-  void _selectRelativeArticle(int delta) {
+  void _selectRelativeArticle(int delta, {bool scrollTo = true}) {
     final list = controller.articles;
     if (list.isEmpty) return;
 
     final selected = controller.selectedArticle.value;
     if (selected == null) {
       controller.selectedArticle.value = list.first;
+      if (scrollTo) _scrollToArticle(list.first.entryId);
       return;
-    final list = controller.articles;
-    if (selected == null || list.isEmpty) return;
+    }
+
+    final currentIndex = list.indexWhere((a) => a.entryId == selected.entryId);
+    if (currentIndex != -1) {
+      final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
+      controller.selectedArticle.value = list[nextIndex];
+      if (scrollTo) _scrollToArticle(list[nextIndex].entryId);
+      return;
+    }
 
     // 在当前过滤后的列表中找不到（通常是因为刚被标记为已读，从未读列表中消失）
     // 回退到未过滤的底层全量列表寻找其绝对坐标
@@ -153,7 +161,7 @@ class _TimelinePageState extends State<TimelinePage> {
     } else {
       // 极端兜底情况：全量列表里都找不到
       controller.selectedArticle.value = list.first;
-      _scrollToArticle(list.first.entryId);
+      if (scrollTo) _scrollToArticle(list.first.entryId);
     }
   }
 

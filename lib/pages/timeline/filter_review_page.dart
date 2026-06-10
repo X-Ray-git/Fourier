@@ -35,6 +35,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
   final Map<String, GlobalKey> _itemKeys = {};
+  final Map<String, GlobalKey> _removingItemKeys = {};
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
   Worker? _undoRestoreWorker;
@@ -176,7 +177,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   void _removeReviewedArticle(String entryId) {
     _articles.removeWhere((a) => a.entryId == entryId);
-    _itemKeys.remove(entryId);
   }
 
   void _selectReviewedSuccessor(ArticleModel? nextArticle) {
@@ -346,6 +346,17 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     if (shouldAdvance) {
       _selectReviewedSuccessor(nextArticle);
     }
+  }
+
+  void _handleReviewRemoveStart(ArticleModel article) {
+    final key = _itemKeys.remove(article.entryId);
+    if (key != null) {
+      _removingItemKeys[article.entryId] = key;
+    }
+  }
+
+  void _handleReviewRemoveEnd(ArticleModel article) {
+    _removingItemKeys.remove(article.entryId);
   }
 
   @override
@@ -591,14 +602,20 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                                 const SizedBox(height: 4),
                             itemBuilder: _buildAnimatedReviewRow,
                             removedItemBuilder: _buildRemovedReviewRow,
+                            onRemoveStart: _handleReviewRemoveStart,
+                            onRemoveEnd: _handleReviewRemoveEnd,
                           ),
                         ),
                         if (_articles.isEmpty)
                           Positioned.fill(
-                            child: _buildEmptyState(
-                              cs,
-                              llmActive: llmActive,
-                              llmCount: q + p,
+                            child: DelayedVisibility(
+                              visible: _articles.isEmpty,
+                              delay: const Duration(milliseconds: 220),
+                              child: _buildEmptyState(
+                                cs,
+                                llmActive: llmActive,
+                                llmCount: q + p,
+                              ),
                             ),
                           ),
                       ],
@@ -713,7 +730,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       child: FadeTransition(
         opacity: animation,
         child: _MacReviewRow(
-          key: _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}'),
+          key:
+              _removingItemKeys[article.entryId] ??
+              _itemKeys[article.entryId] ??
+              ValueKey('removed-${article.entryId}'),
           article: article,
           selected: false,
           onTap: () {},

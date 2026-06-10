@@ -54,6 +54,7 @@ class _TimelinePageState extends State<TimelinePage> {
   String? _lastArticleTapEntryId;
   DateTime? _lastArticleTapAt;
   final Map<String, GlobalKey> _itemKeys = {};
+  final Map<String, GlobalKey> _removingItemKeys = {};
   Worker? _undoRestoreWorker;
 
   @override
@@ -240,6 +241,17 @@ class _TimelinePageState extends State<TimelinePage> {
     }
   }
 
+  void _handleTimelineRemoveStart(ArticleModel article) {
+    final key = _itemKeys.remove(article.entryId);
+    if (key != null) {
+      _removingItemKeys[article.entryId] = key;
+    }
+  }
+
+  void _handleTimelineRemoveEnd(ArticleModel article) {
+    _removingItemKeys.remove(article.entryId);
+  }
+
   Widget _buildFilterBar(int count) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -382,10 +394,14 @@ class _TimelinePageState extends State<TimelinePage> {
                       final currentSelected = controller.selectedArticle.value;
                       if (currentSelected == null) return;
 
-                      if (Get.isRegistered<ArticleController>(tag: currentSelected.entryId)) {
-                        final ac = Get.find<ArticleController>(tag: currentSelected.entryId);
+                      if (Get.isRegistered<ArticleController>(
+                        tag: currentSelected.entryId,
+                      )) {
+                        final ac = Get.find<ArticleController>(
+                          tag: currentSelected.entryId,
+                        );
                         if (ac.isUpdatingReadState.value) return;
-                        
+
                         final wasUnread = !ac.isRead.value;
                         if (wasUnread) {
                           // 静默选中下一篇（不触发滚动），避免与上方卡片的移除收缩动画发生物理冲突
@@ -442,15 +458,21 @@ class _TimelinePageState extends State<TimelinePage> {
                 itemKey: (article) => article.entryId,
                 itemBuilder: _buildAnimatedTimelineItem,
                 removedItemBuilder: _buildRemovedTimelineItem,
+                onRemoveStart: _handleTimelineRemoveStart,
+                onRemoveEnd: _handleTimelineRemoveEnd,
               ),
             ),
             if (controller.articles.isEmpty)
               Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 64),
-                  child: _EmptyView(
-                    message: controller.emptyMessage,
-                    onRetry: controller.loadFeedsThenArticles,
+                child: DelayedVisibility(
+                  visible: controller.articles.isEmpty,
+                  delay: const Duration(milliseconds: 220),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 64),
+                    child: _EmptyView(
+                      message: controller.emptyMessage,
+                      onRetry: controller.loadFeedsThenArticles,
+                    ),
                   ),
                 ),
               ),
@@ -559,7 +581,10 @@ class _TimelinePageState extends State<TimelinePage> {
     int index,
     Animation<double> animation,
   ) {
-    final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');
+    final articleKey =
+        _removingItemKeys[article.entryId] ??
+        _itemKeys[article.entryId] ??
+        ValueKey('removed-${article.entryId}');
     return SizeTransition(
       sizeFactor: animation,
       axisAlignment: -1,

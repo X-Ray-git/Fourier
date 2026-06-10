@@ -5756,5 +5756,67 @@ String _formatDuration(Duration d) {
 
 - **响应式的 Bug 修复（解决气泡未减少）**：
   “全部文章”入口在 `MacOSSidebar` 中一直通过 `timelineController.allArticles.where((a) => !a.isRead).length` 手动算未读，这使得它错误地**包含了**被静默的文章，且 `Obx` 没有追踪到 `FeedSilentSettingsService.version` 的变化。
-  **最终决定**：我们在 `Obx` 内通过 `final _ = FeedSilentSettingsService.version.value;` 强制绑定了对静默状态的响应，并改为直接使用 `timelineController.unreadCount`（这个 getter 内部已在每次获取时将静默源排除在外）。现在每次操作静默，顶部的全部未读气泡都会实时、正确地扣减。
+**最终决定**：我们在 `Obx` 内通过 `final _ = FeedSilentSettingsService.version.value;` 强制绑定了对静默状态的响应，并改为直接使用 `timelineController.unreadCount`（这个 getter 内部已在每次获取时将静默源排除在外）。现在每次操作静默，顶部的全部未读气泡都会实时、正确地扣减。
 
+## 139. macOS 卡片进出场动画随机闪现的状态机修复（2026-06-10）
+
+### 139.1 背景
+
+用户反馈 macOS 端卡片进出场动画仍会随机失效，表现为双击或其他操作时卡片没有退场动画、直接闪现消失。此前已经有多轮提交修复过双击时的滚动冲突、M 键闭包捕获、GlobalKey 重挂载和按钮图层吞噬事件，但问题仍偶发存在。
+
+本轮重新审查后确认：此前修复覆盖了若干触发路径，但没有修掉 `ImplicitlyAnimatedList` 这个列表动画状态机本身的缺陷，因此随机性仍会保留。
+
+### 139.2 新发现的根因
+
+1. `ImplicitlyAnimatedList._syncItems()` 对“已有项换位置”的处理是 `removeItem(..., duration: Duration.zero)` 加 `insertItem(..., duration: Duration.zero)`。这会跳过动画，视觉上就是闪现。位置变化可能来自刷新、筛选、静默订阅源切换、加载更多后的重排等，并不只来自双击。
+2. 垃圾拦截页 `_removeReviewedArticle()` 会提前 `_itemKeys.remove(entryId)`。等 `AnimatedList.removeItem()` 的 removed builder 真正构建退场行时，原 `GlobalKey` 已经丢失，只能退回 `ValueKey('removed-...')`，这会削弱之前“退场时复用 key 保留状态”的修复。
+3. 当最后一张卡片被移除时，空态 overlay 会立即出现在列表上层。即使退场动画还在进行，空态也可能盖住正在收缩/淡出的卡片，造成“最后一张直接消失”的错觉。
+
+### 139.3 修复实现
+
+`lib/common/widgets/implicitly_animated_list.dart`：
+
+- 新增 `AnimatedItemLifecycle<T>`、`onRemoveStart`、`onRemoveEnd`。
+- 删除已有项移动时的零时长 remove/insert。现在已有项重排只更新内部 `_items` 顺序，不再制造 `Duration.zero` 的删除和插入动画。
+- 真正被移除的项仍走 `removeDuration` 和 `removeCurve`。
+- 新增 `DelayedVisibility`，用于让空态延迟显示，避免覆盖最后一张卡片的退场动画。
+
+`lib/pages/timeline/timeline_page.dart`：
+
+- 新增 `_removingItemKeys`。
+- 在 `onRemoveStart` 中把 live `_itemKeys` 转移到 `_removingItemKeys`，退场动画结束后再释放。
+- `_buildRemovedTimelineItem()` 优先使用 `_removingItemKeys` 中的 key。
+- macOS 时间线空态通过 `DelayedVisibility` 延迟 220ms 显示。
+
+`lib/pages/timeline/filter_review_page.dart`：
+
+- 新增 `_removingItemKeys`。
+- `_removeReviewedArticle()` 不再提前删除 `_itemKeys`。
+- 在 `onRemoveStart` 中统一转移 key，`onRemoveEnd` 中释放。
+- `_buildRemovedReviewRow()` 优先使用 `_removingItemKeys` 中的 key。
+- macOS 垃圾拦截空态通过 `DelayedVisibility` 延迟 220ms 显示。
+
+### 139.4 回归测试
+
+新增 `test/implicitly_animated_list_test.dart`：
+
+1. 删除项时，被删除 item 在退出动画期间仍可见，`onRemoveStart` 和 `onRemoveEnd` 顺序正确。
+2. 仅重排已有项时，不触发 remove 生命周期回调，防止未来重新引入零时长 remove/insert。
+
+### 139.5 已完成验证
+
+```bash
+dart analyze lib/common/widgets/implicitly_animated_list.dart lib/pages/timeline/timeline_page.dart lib/pages/timeline/filter_review_page.dart test/implicitly_animated_list_test.dart
+flutter test --no-pub test/implicitly_animated_list_test.dart
+flutter test --no-pub
+dart analyze lib test
+```
+
+结果均通过。`flutter test` 在沙箱内首次会被 Flutter SDK cache 写入限制拦截，授权后重跑通过。
+
+### 139.6 后续人工验证重点
+
+1. macOS 时间线双击文章：左侧卡片应稳定淡出/收缩，不应直接消失。
+2. macOS 时间线连续按 M：不应出现卡片恢复/移除互相覆盖导致的闪跳。
+3. macOS 垃圾拦截页点击保留/移除，以及按 M/K：最后一张卡片退场时不应被空态直接盖掉。
+4. 切换筛选、静默订阅源入口、刷新后列表重排：已有卡片不应因为位置变化出现零时长闪现。

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../utils/duration_extension.dart';
+
 class FullscreenVideoPage extends StatefulWidget {
   final VideoPlayerController controller;
 
@@ -111,11 +113,6 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     setState(() {});
   }
 
-  String _formatDuration(Duration d) {
-    final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final secs = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '${d.inMinutes}:$mins:$secs';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +218,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
                           ),
                           const SizedBox(width: 16),
                           Text(
-                            '${_formatDuration(pos)} / ${_formatDuration(dur)}',
+                            '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 14,

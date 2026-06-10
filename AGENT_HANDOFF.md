@@ -5482,3 +5482,67 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*
+
+## 132. 修复视频播放器总时长显示错误（进位异常）
+
+### 132.1 需求描述
+
+用户反馈，应用中视频播放时总时长（分母）显示经常异常。例如，一个原本只有几分钟的短视频，界面的总时长显示为一个多小时（如 `3:03:00`）。用户推测是格式化时进位计算出现了逻辑问题，要求排查并修复该问题。
+
+### 132.2 根本原因定位
+
+通过审查代码，发现该问题在 `lib/pages/article/widgets/fullscreen_video_page.dart` 和 `lib/pages/article/widgets/inline_video_player.dart` 中都有涉及。原本用于将 `Duration` 格式化为字符串的内部函数 `_formatDuration` 实现如下：
+
+```dart
+String _formatDuration(Duration d) {
+  final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final secs = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '${d.inMinutes}:$mins:$secs';
+}
+```
+
+**问题点**：
+- 第一部分的插值 `${d.inMinutes}` 本意应为“小时数”（对应 `d.inHours`），却错误地使用了 `d.inMinutes`（即视频的总分钟数）。
+- 第二部分 `mins` 使用了对 60 取余的分钟数，第三部分 `secs` 正常取余计算秒数。
+
+这就导致对于一个时长 3 分钟的视频（即 180 秒），`d.inMinutes` 为 3，`mins` 为 03（因为 `3 % 60 = 3`），拼接结果变为 `3:03:00`。在视觉上，这就将 3 分钟的视频错误展示成了 3 小时 3 分钟。
+
+### 132.3 修复实现
+
+针对该格式化逻辑，做出了彻底的修正与代码重构优化：
+
+1. **统一抽离公共扩展**：
+   在 `lib/utils` 目录下新增 `duration_extension.dart`，为 Dart 的 `Duration` 类增加 `toVideoFormatString()` 方法，消除两个播放器组件内的冗余代码。
+   
+2. **动态显隐小时位数**：
+   对于长度不到 1 小时的视频，仅显示 `M:SS`（例如 `3:05`）。对于超过 1 小时的长视频，才进位显示 `H:MM:SS`（例如 `1:05:30`）。
+   代码逻辑：
+   ```dart
+   extension DurationVideoFormat on Duration {
+     String toVideoFormatString() {
+       final hours = inHours;
+       final mins = inMinutes.remainder(60).toString().padLeft(2, '0');
+       final secs = inSeconds.remainder(60).toString().padLeft(2, '0');
+       
+       if (hours > 0) {
+         return '$hours:$mins:$secs';
+       } else {
+         final m = inMinutes.remainder(60).toString();
+         return '$m:$secs';
+       }
+     }
+   }
+   ```
+
+3. **重构播放器组件**：
+   删除了 `FullscreenVideoPage` 和 `InlineVideoPlayer` 中的私有方法 `_formatDuration`。
+   在使用时，直接调用扩展：`'${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}'`。
+
+### 132.4 修改文件清单
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `lib/utils/duration_extension.dart` | **新建** | 增加 `Duration.toVideoFormatString()` 全局扩展方法 |
+| `lib/pages/article/widgets/fullscreen_video_page.dart` | 修改 | 删除冗余函数，引入并使用新的时间格式化扩展 |
+| `lib/pages/article/widgets/inline_video_player.dart` | 修改 | 删除冗余函数，引入并使用新的时间格式化扩展 |
+

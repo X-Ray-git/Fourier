@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/pill_tag.dart';
+import '../../common/widgets/card_press_effect.dart';
 import '../../models/article.dart';
 import '../../services/article_image_service.dart';
 import '../../services/translation_service.dart';
@@ -102,31 +103,9 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
   bool get isSelected => widget.isSelected;
   VoidCallback? get onTranslateSuccess => widget.onTranslateSuccess;
 
-  bool _isPressed = false;
-  Offset? _pressPosition;
-
-  static const _pressInDuration = Duration(milliseconds: 80);
-  static const _pressOutDuration = Duration(milliseconds: 350);
-
-  void _onTapDown(TapDownDetails d) {
-    setState(() {
-      _isPressed = true;
-      _pressPosition = d.localPosition;
-    });
-  }
-
-  void _onTapUp(TapUpDetails d) {
-    setState(() => _isPressed = false);
-  }
-
-  void _onTapCancel() {
-    setState(() => _isPressed = false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final brightness = Theme.of(context).brightness;
     final viewLabel = SourceTaxonomy.viewLabelFromCategory(article.category);
     final viewColor = SourceTaxonomy.viewColorFromCategory(article.category);
     final categoryLabel = article.subscriptionCategory.trim();
@@ -140,34 +119,25 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       final displayTitle = TranslationService.displayTitleFor(article);
 
       return RepaintBoundary(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(
-            begin: _isPressed ? 1.0 : 0.985,
-            end: _isPressed ? 0.985 : 1.0,
-          ),
-          duration: _isPressed ? _pressInDuration : _pressOutDuration,
-          curve: _isPressed ? Curves.easeOut : Curves.easeOutCubic,
-          builder: (context, scale, child) =>
-              Transform.scale(scale: scale, child: child),
-          child: GestureDetector(
-            onTapDown: _onTapDown,
-            onTapUp: _onTapUp,
-            onTapCancel: _onTapCancel,
-            onTap: onTap,
-            onLongPress: Platform.isMacOS
-                ? null
-                : () => _showTranslateMenu(context, isTranslated, isPending),
-            onSecondaryTapDown: Platform.isMacOS
-                ? (details) {
-                    _showMacOSContextMenu(
-                      context,
-                      details.globalPosition,
-                      isTranslated,
-                      isPending,
-                    );
-                  }
-                : null,
-            child: Card(
+        child: CardPressEffect(
+          onTap: onTap,
+          onLongPress: Platform.isMacOS
+              ? null
+              : () => _showTranslateMenu(context, isTranslated, isPending),
+          onSecondaryTapDown: Platform.isMacOS
+              ? (details) {
+                  _showMacOSContextMenu(
+                    context,
+                    details.globalPosition,
+                    isTranslated,
+                    isPending,
+                  );
+                }
+              : null,
+          enableHover: true,
+          enablePress: true,
+          borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
+          child: Card(
               margin: EdgeInsets.symmetric(
                 horizontal: Platform.isMacOS ? 8 : 12,
                 vertical: Platform.isMacOS ? 2 : 6,
@@ -190,9 +160,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                         width: 1,
                       ),
               ),
-              child: Stack(
-                children: [
-                  Container(
+              child: Container(
                     decoration: article.isRejectedByAi
                         ? BoxDecoration(
                             border: Border(
@@ -454,15 +422,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                         ],
                       ],
                     ),
-                  ),
-                  if (_isPressed && _pressPosition != null)
-                    _GlassHighlight(
-                      pressPosition: _pressPosition!,
-                      brightness: brightness,
-                    ),
-                ],
               ),
-            ),
           ),
         ),
       );
@@ -705,53 +665,6 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       return isoTime;
     }
   }
-}
-
-class _GlassHighlight extends StatelessWidget {
-  final Offset pressPosition;
-  final Brightness brightness;
-
-  const _GlassHighlight({
-    required this.pressPosition,
-    required this.brightness,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: CustomPaint(
-        painter: _GlassHighlightPainter(
-          position: pressPosition,
-          color: brightness == Brightness.dark ? Colors.white : Colors.black,
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassHighlightPainter extends CustomPainter {
-  final Offset position;
-  final Color color;
-
-  const _GlassHighlightPainter({required this.position, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader =
-          RadialGradient(
-            colors: [color.withValues(alpha: 0.05), Colors.transparent],
-            stops: const [0.0, 1.0],
-            radius: 0.7,
-          ).createShader(
-            Rect.fromCircle(center: position, radius: size.width * 0.7),
-          );
-    canvas.drawRect(Offset.zero & size, paint);
-  }
-
-  @override
-  bool shouldRepaint(_GlassHighlightPainter old) =>
-      position != old.position || color != old.color;
 }
 
 // ─── 订阅源小图标 ─────────────────────────────

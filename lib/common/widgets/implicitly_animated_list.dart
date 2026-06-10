@@ -17,6 +17,8 @@ class ImplicitlyAnimatedList<T> extends StatefulWidget {
   final Widget Function(BuildContext context, int index)? separatorBuilder;
   final Duration insertDuration;
   final Duration removeDuration;
+  final Curve insertCurve;
+  final Curve removeCurve;
   final EdgeInsetsGeometry? padding;
   final ScrollPhysics? physics;
   final ScrollController? controller;
@@ -31,6 +33,8 @@ class ImplicitlyAnimatedList<T> extends StatefulWidget {
     this.separatorBuilder,
     this.insertDuration = const Duration(milliseconds: 220),
     this.removeDuration = const Duration(milliseconds: 180),
+    this.insertCurve = Curves.easeOutCubic,
+    this.removeCurve = Curves.easeInCubic,
     this.padding,
     this.physics,
     this.controller,
@@ -73,8 +77,15 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
         final removedItem = _items.removeAt(index);
         listState.removeItem(
           index,
-          (context, animation) =>
-              _buildRemovedItem(context, removedItem, index, animation),
+          (context, animation) => _buildRemovedItem(
+            context,
+            removedItem,
+            index,
+            CurvedAnimation(
+              parent: animation,
+              curve: widget.removeCurve,
+            ),
+          ),
           duration: widget.removeDuration,
         );
       }
@@ -157,11 +168,15 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
         if (index < 0 || index >= _items.length) {
           return const SizedBox.shrink();
         }
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: widget.insertCurve,
+        );
         final child = widget.itemBuilder(
           context,
           _items[index],
           index,
-          animation,
+          curved,
         );
         return _withSeparator(context, index, kAlwaysCompleteAnimation, child);
       },

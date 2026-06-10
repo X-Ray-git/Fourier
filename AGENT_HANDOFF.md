@@ -5262,3 +5262,174 @@ flutter test --no-pub
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.17 -m "- feat: merge README refresh, Cmd+R sync feedback, link hover progress stabilization, and article card tap feedback\n- fix: keep article image heights stable while allowing taller images\n- beta: rebuild Android and macOS packages for regression validation" --push`*
+
+## 129. 卡片交互特效统一 (2026-06-10)
+
+### 129.1 需求背景
+
+用户发现 macOS 端两个页面的卡片动画不一致：
+
+| 页面 | 使用组件 | 按压缩放 | 点击高光 | hover 效果 |
+|------|---------|:---:|:---:|:---:|
+| **时间线** | `ArticleCard` | ✅ | ✅ | ❌ |
+| **垃圾拦截** (macOS) | `_MacReviewRow` | ❌ | ❌ | ❌ |
+| **垃圾拦截** (移动端) | `ArticleCard` + `Dismissible` | ✅ | ✅ | ❌ |
+
+用户的核心诉求：
+1. 垃圾拦截页的 macOS 卡片应有和时间线一致的按压特效
+2. 两个卡片的动画效果应该尽可能共享代码，但垃圾拦截保留自己的布局
+3. 增加 hover 效果（首次），参考现有的点击玻璃高光做轻量版
+4. 列表插入/移除动画改为非线性（接近物理直觉）
+5. 发现键盘 ←/→ 导航选中效果体验不佳，最终移除
+
+### 129.2 讨论过程
+
+#### 129.2.1 动画不统一的原因
+
+`ArticleCard` (`lib/pages/widgets/article_card.dart`) 内置了一套本地状态驱动的按压反馈：
+- `_isPressed` / `_pressPosition` 状态 + `TweenAnimationBuilder` 缩放 (1.0↔0.985)
+- `_GlassHighlight` 径向渐变高光在按压位置
+
+`_MacReviewRow` (`lib/pages/timeline/filter_review_page.dart:792`) 是独立实现的 `Material` + `InkWell` 组件，完全没有这些效果。移动端垃圾拦截用的是 `ArticleCard` + `Dismissible`，所以移动端没问题，只有 macOS 端不一致。
+
+#### 129.2.2 设计方案
+
+**抽取共享组件 `CardPressEffect`**：所有按压/hover/高光逻辑集中管理，`ArticleCard` 和 `_MacReviewRow` 都通过它获得统一特效。各自保留不同的内部布局。
+
+**非线性列表动画**：`ImplicitlyAnimatedList` 底层 `AnimatedList` 默认走 `Curves.linear`。建议新增 `insertCurve` / `removeCurve` 参数：
+- 插入：`easeOutCubic` — 快速入场→减速停止
+- 移除：`easeInCubic` — 缓慢启动→加速离开
+
+**hover 高光**：参考现有 `_GlassHighlight`，用相同径向渐变机制，但用更低 alpha（最终定为 0.05）跟随光标位置。
+
+**键盘选中脉冲**：最初实现了 `←`/`→` 切换文章时触发短暂按压脉冲，但用户实测后觉得效果不理想，最终移除。
+
+#### 129.2.3 滚动跳动 BUG
+
+非线性动画上线后，用户反馈垃圾拦截页点"保留"/"移除"时，列表偶发"一步到位闪到目标位置"。
+
+**根因分析**：`_scrollToArticleWhenReady()` 在 attempt 0 立刻找到 key 并调用 `ScrollUtils.ensureVisible()`（触发 250ms 滚动动画），但此时 `AnimatedList.removeItem()` (180ms) 的删除动画尚在进行中。两个动画（滚动位置 + 列表布局）并发运行 → 滚动目标错位 → 视觉上"跳动"。
+
+**修复**：在 `_scrollToArticleWhenReady` 的 attempt 0 强制等待 220ms（> 180ms 删除时长 + easeInCubic 缓冲），确保 AnimatedList 动画完全结束后才开始滚动。后续 attempt 1-4 才做正常查 key → scroll。
+
+### 129.3 实现细节
+
+#### 129.3.1 新建 `CardPressEffect` (`lib/common/widgets/card_press_effect.dart`)
+
+统一的交互反馈包装器：
+
+```
+CardPressEffect
+├── MouseRegion (跟踪 _hoverPosition, 控制 _isHovering)
+├── GestureDetector (onTapDown/Up/Cancel → 控制 _isPressed)
+├── TweenAnimationBuilder (_isPressed → scale 1.0↔0.985)
+│   └── Transform.scale
+│       └── Stack
+│           ├── child (卡片内容本体)
+│           └── ClipRRect(borderRadius)  ← 高光裁剪到卡片圆角
+│               └── CustomPaint(_GlassHighlightPainter)
+│                   hover: RadialGradient at cursor, alpha 0.05
+│                   press: RadialGradient at tap,   alpha 0.06
+```
+
+核心参数：
+- `onTap` / `onLongPress` / `onSecondaryTapDown` — 透传手势
+- `enableHover` / `enablePress` — 开关 hover/按压效果
+- `borderRadius` — 高光裁剪圆角（匹配卡片）
+
+状态管理：
+- `_isHovering` / `_hoverPosition` — hover 跟踪
+- `_isPressed` / `_pressPosition` — 按压跟踪
+- `_showEffect` = `_isPressed && enablePress` — 按压生效
+- `_showHover` = `_isHovering && !_showEffect && enableHover` — hover 只在非按压时显示
+
+动画时长：
+- 按入：80ms `Curves.easeOut`
+- 松开：350ms `Curves.easeOutCubic`
+
+#### 129.3.2 重构 `ArticleCard` (`lib/pages/widgets/article_card.dart`)
+
+**移除**：
+- `_isPressed`, `_pressPosition` 状态
+- `_onTapDown`, `_onTapUp`, `_onTapCancel` 方法
+- `TweenAnimationBuilder` + `GestureDetector` 外层包装
+- `_GlassHighlight`, `_GlassHighlightPainter` 类（迁移到 CardPressEffect）
+- `brightness` 变量（不再需要）
+- `_selectionPulse` / `didUpdateWidget`（用户最终决定去掉）
+
+**改为**：
+- `Stack` → 直接 `Container`（CardPressEffect 处理高光覆盖层）
+- 外面包裹 `CardPressEffect`，透传 `onTap` / `onLongPress` / `onSecondaryTapDown`
+
+#### 129.3.3 重构 `_MacReviewRow` (`lib/pages/timeline/filter_review_page.dart`)
+
+`_MacReviewRow.build()` 从：
+```dart
+Material → InkWell(onTap) → Padding → Row(...)
+```
+改为：
+```dart
+CardPressEffect(onTap, borderRadius:8) → Material → Padding → Row(...)
+```
+- 去掉 `InkWell`，交互由 `CardPressEffect` 接管
+- 右侧 `IconButton`（保留/移除）保持自己的 UI 交互
+
+#### 129.3.4 修改 `ImplicitlyAnimatedList` (`lib/common/widgets/implicitly_animated_list.dart`)
+
+新增参数（向后兼容）：
+- `insertCurve`：默认 `Curves.easeOutCubic`
+- `removeCurve`：默认 `Curves.easeInCubic`
+
+曲线应用点：
+- `build()` 的 `AnimatedList.itemBuilder`：`CurvedAnimation(parent: animation, curve: insertCurve)` 包裹后传给外层 `itemBuilder`
+- `_syncItems()` 的 `listState.removeItem`：同上用 `removeCurve` 包裹
+
+页面侧（`timeline_page.dart`, `filter_review_page.dart`）**零改动**，自动获得非线性曲线。
+
+#### 129.3.5 修复滚动跳动 (`_scrollToArticleWhenReady`)
+
+```dart
+void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
+    if (attempt == 0) {
+      // 等待 AnimatedList 删除动画完成 (180ms + 缓冲)
+      Future.delayed(const Duration(milliseconds: 220), () {
+        _scrollToArticleWhenReady(entryId, attempt: 1);
+      });
+      return;
+    }
+    // attempt 1+：正常查 key → scroll
+    ...
+}
+```
+
+### 129.4 涉及的 UI 效果矩阵
+
+| 效果 | 时间线 | 垃圾拦截(macOS) | 垃圾拦截(移动) | 最近阅读 | 订阅源详情 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| 按压缩放 0.985 | ✅ | ✅ (新) | ✅ | ✅ | ✅ |
+| 点击玻璃高光 | ✅ | ✅ (新) | ✅ | ✅ | ✅ |
+| Hover 跟踪高光 | ✅ (新) | ✅ (新) | — | ✅ (新) | ✅ (新) |
+| 插入 easeOutCubic | ✅ (新) | ✅ (新) | — | — | — |
+| 移除 easeInCubic | ✅ (新) | ✅ (新) | — | — | — |
+
+### 129.5 修改文件清单
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `lib/common/widgets/card_press_effect.dart` | **新建** | 通用卡片按压/hover/高光共享组件 |
+| `lib/common/widgets/implicitly_animated_list.dart` | 修改 | +`insertCurve`/`removeCurve` 参数，默认 `easeOutCubic`/`easeInCubic` |
+| `lib/pages/widgets/article_card.dart` | 重构 | 移除内联按压逻辑，套 `CardPressEffect`；删除 `_GlassHighlight` |
+| `lib/pages/timeline/filter_review_page.dart` | 重构 | `_MacReviewRow` 去掉 `InkWell` → 套 `CardPressEffect`；修复 `_scrollToArticleWhenReady` 跳动 |
+
+### 129.6 关键设计决策
+
+1. **hover 高光颜色**：用和 press 相同的黑白玻璃色（而非 primary），alpha 降到 0.05。避免与 `isSelected` 的 `primaryContainer` 背景色混淆。
+2. **选中脉冲效果**：最初实现了键盘 `←`/`→` 切换文章时触发按压脉冲动画，但用户实测后觉得不好，**最终移除**。`CardPressEffect` 中清理了 `selectionPulse` 参数和 `_isPulsing`/`_triggerPulse` 等全部脉冲相关代码。
+3. **_MacReviewRow 右侧按钮**：保留/移除 `IconButton` 保持自己独立的 Material hover，不受卡片级 `CardPressEffect` 影响。
+4. **滚动跳动修复策略**：没有移除 `ScrollUtils.ensureVisible`（它已有 `addPostFrameCallback` 保护），而是让它在 attempt 0 强制等待 220ms。这样后续 attempt 1-4 的查 key 逻辑和原来行为一致，只是首次调用有保护性延迟。
+
+### 129.7 后续优化建议
+
+1. 如果 hover alpha 0.05 仍然不够明显，可调到 0.06–0.08。当前 press=0.06/hover=0.05。
+2. timeline page 的 `_scrollToArticle()` 使用 `addPostFrameCallback` 一次调用，若后续也出现跳动，可参考 filter review 页面加保护延迟。
+3. 移动端 `Dismissible` 左滑/右滑时，`ArticleCard` 的按压缩放理论上也会触发；如果觉得干扰手势，可给移动端 `CardPressEffect` 传 `enablePress: false`。

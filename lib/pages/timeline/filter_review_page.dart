@@ -850,9 +850,7 @@ class _MacReviewRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         height: 1.3,
-                        fontWeight: selected
-                            ? FontWeight.w700
-                            : FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                         color: selected ? cs.primary : cs.onSurface,
                       ),
                     ),

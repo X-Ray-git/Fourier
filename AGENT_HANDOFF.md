@@ -5499,11 +5499,15 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 
 ### 132.3 实现细节
 
-- **修改文件**：`lib/pages/main/widgets/macos_sidebar.dart`
-- **修改目标**：`_CategoryItem` (约 503 行) 与 `_SidebarItem` (约 587 行) 的 `TextStyle`
+- **修改文件**：
+  1. `lib/pages/main/widgets/macos_sidebar.dart`
+  2. `lib/pages/timeline/filter_review_page.dart`
+- **修改目标**：
+  - 侧边栏的 `_CategoryItem` (约 503 行) 与 `_SidebarItem` (约 587 行) 的 `TextStyle`
+  - 垃圾拦截页面的 `_MacReviewRow` (约 853 行) 卡片标题 `TextStyle`
 - **代码重构逻辑**：
   ```dart
-  fontWeight: FontWeight.w500, // 永久固定排版宽度，彻底移除随 isSelected 变化的加粗逻辑以及后续尝试的阴影 hack
+  fontWeight: FontWeight.w500, // 永久固定排版宽度，彻底移除随 isSelected/selected 变化的加粗逻辑以及后续尝试的阴影 hack
   ```
 
 ---

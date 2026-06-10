@@ -152,6 +152,8 @@ class SubscriptionsController extends GetxController {
     return _unreadCounts[feedId] ?? 0;
   }
 
+  int rawUnreadFor(String feedId) => _unreadCounts[feedId] ?? 0;
+
   int unreadForCategory(String categoryName, List<FeedModel> feeds) {
     int total = 0;
     for (final f in feeds) {
@@ -166,6 +168,16 @@ class SubscriptionsController extends GetxController {
       total += unreadForCategory(cat.name, cat.feeds);
     }
     return total;
+  }
+
+  List<FeedModel> get silentFeeds {
+    final result = <FeedModel>[];
+    for (final view in filteredNodes) {
+      for (final cat in view.categories) {
+        result.addAll(cat.feeds.where((f) => FeedSilentSettingsService.isSilent(f.feedId)));
+      }
+    }
+    return result;
   }
 
   List<SourceViewNode> get sidebarNodes {

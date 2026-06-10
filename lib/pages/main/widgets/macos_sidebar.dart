@@ -80,16 +80,78 @@ class MacOSSidebar extends StatelessWidget {
               final isSelected =
                   currentIndex == 0 &&
                   timelineController.isSilentSelected.value == true;
-              return _SidebarItem(
-                icon: Icons.notifications_off_outlined,
-                label: '静默订阅源',
-                isSelected: isSelected,
+              final silentFeeds = subController.silentFeeds;
+              final isExpanded = subController.isExpanded('silent_feeds_group') || 
+                                 (isSelected && timelineController.selectedFeedId.value != null);
+
+              if (silentFeeds.isEmpty) {
+                return _SidebarItem(
+                  icon: Icons.notifications_off_outlined,
+                  label: '静默订阅源',
+                  isSelected: isSelected,
+                  badgeCount: 0,
+                  onTap: () {
+                    timelineController.isSilentSelected.value = true;
+                    timelineController.selectedFeedId.value = null;
+                    timelineController.selectedCategory.value = null;
+                    onIndexChanged(0);
+                  },
+                );
+              }
+
+              return _CategoryGroup(
+                category: SourceCategoryNode(name: '静默订阅源', feeds: silentFeeds),
+                isExpanded: isExpanded,
+                isSelected: isSelected && timelineController.selectedFeedId.value == null,
                 badgeCount: timelineController.silentUnreadCount,
+                icon: Icons.notifications_off_outlined,
+                expandedIcon: Icons.notifications_off_outlined,
+                onToggle: () {
+                  subController.setExpanded(
+                    'silent_feeds_group',
+                    !subController.isExpanded('silent_feeds_group'),
+                  );
+                },
                 onTap: () {
                   timelineController.isSilentSelected.value = true;
                   timelineController.selectedFeedId.value = null;
                   timelineController.selectedCategory.value = null;
+                  if (!subController.isExpanded('silent_feeds_group')) {
+                    subController.setExpanded('silent_feeds_group', true);
+                  }
                   onIndexChanged(0);
+                },
+                feedBuilder: (feed) {
+                  return Obx(() {
+                    final feedSelected =
+                        currentIndex == 0 &&
+                        timelineController.selectedFeedId.value == feed.feedId &&
+                        timelineController.isSilentSelected.value == true;
+                    return _SidebarItem(
+                      icon: Icons.rss_feed,
+                      imageUrl: feed.image,
+                      label: feed.title,
+                      isSelected: feedSelected,
+                      badgeCount: subController.rawUnreadFor(feed.feedId),
+                      indentLevel: 2,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _FeedAutoReadabilityIcon(feedId: feed.feedId),
+                          const SizedBox(width: 2),
+                          _FeedAutoTranslateIcon(feedId: feed.feedId),
+                          const SizedBox(width: 2),
+                          _FeedSilentIcon(feedId: feed.feedId),
+                        ],
+                      ),
+                      onTap: () {
+                        timelineController.isSilentSelected.value = true;
+                        timelineController.selectedCategory.value = null;
+                        timelineController.selectedFeedId.value = feed.feedId;
+                        onIndexChanged(0);
+                      },
+                    );
+                  });
                 },
               );
             }),
@@ -446,6 +508,8 @@ class _CategoryGroup extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onTap;
   final Widget Function(FeedModel feed) feedBuilder;
+  final IconData icon;
+  final IconData expandedIcon;
 
   const _CategoryGroup({
     required this.category,
@@ -455,6 +519,8 @@ class _CategoryGroup extends StatelessWidget {
     required this.onToggle,
     required this.onTap,
     required this.feedBuilder,
+    this.icon = Icons.folder_outlined,
+    this.expandedIcon = Icons.folder_open_outlined,
   });
 
   @override
@@ -469,6 +535,8 @@ class _CategoryGroup extends StatelessWidget {
           badgeCount: badgeCount,
           onTap: onTap,
           onToggle: onToggle,
+          icon: icon,
+          expandedIcon: expandedIcon,
         ),
         ClipRect(
           child: AnimatedSize(
@@ -495,6 +563,8 @@ class _CategoryItem extends StatelessWidget {
   final int badgeCount;
   final VoidCallback onTap;
   final VoidCallback onToggle;
+  final IconData icon;
+  final IconData expandedIcon;
 
   const _CategoryItem({
     required this.label,
@@ -503,6 +573,8 @@ class _CategoryItem extends StatelessWidget {
     required this.badgeCount,
     required this.onTap,
     required this.onToggle,
+    this.icon = Icons.folder_outlined,
+    this.expandedIcon = Icons.folder_open_outlined,
   });
 
   @override
@@ -540,9 +612,7 @@ class _CategoryItem extends StatelessWidget {
                   onPressed: onToggle,
                 ),
                 Icon(
-                  isExpanded
-                      ? Icons.folder_open_outlined
-                      : Icons.folder_outlined,
+                  isExpanded ? expandedIcon : icon,
                   size: 16,
                   color: isSelected ? cs.primary : cs.onSurfaceVariant,
                 ),

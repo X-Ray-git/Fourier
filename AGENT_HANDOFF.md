@@ -5495,7 +5495,7 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 3. **字距补偿法**：变粗时减小 `letterSpacing` 抵消膨胀。但此法只能维持总宽度，字符内部仍会产生蠕动，不能彻底解决像素级跳变问题。
 4. **可变字体（Variable Font GRAD 轴）**：使用支持 GRAD 的字体（如 Roboto Flex）。效果最完美，但需要引入非原生字体库，增加包体积并破坏 Mac 端原生旧有字体生态。
 
-最终确认使用**方案 2（文字阴影法）**来实现。
+最终确认过程：用户最初选择尝试**方案 2（文字阴影法）**，但实际体验后发现，在深色模式下阴影效果不够理想，且阴影本身依然会让用户产生“字体粗细仍在变化”的错觉。经过第二轮确认，决定彻底退回**方案 1（完全移除字重变化与阴影，纯靠颜色和背景色区分）**。
 
 ### 132.3 实现细节
 
@@ -5503,15 +5503,7 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 - **修改目标**：`_CategoryItem` (约 503 行) 与 `_SidebarItem` (约 587 行) 的 `TextStyle`
 - **代码重构逻辑**：
   ```dart
-  fontWeight: FontWeight.w500, // 永久固定排版宽度，防跳变
-  shadows: isSelected
-      ? [
-          Shadow(
-            color: cs.primary,
-            offset: const Offset(0.3, 0), // 水平平移 0.3 像素伪造加粗
-          ),
-        ]
-      : null,
+  fontWeight: FontWeight.w500, // 永久固定排版宽度，彻底移除随 isSelected 变化的加粗逻辑以及后续尝试的阴影 hack
   ```
 
 ---

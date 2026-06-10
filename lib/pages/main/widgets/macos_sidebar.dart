@@ -502,14 +502,6 @@ class _CategoryItem extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: isSelected ? cs.primary : cs.onSurfaceVariant,
-                      shadows: isSelected
-                          ? [
-                              Shadow(
-                                color: cs.primary,
-                                offset: const Offset(0.3, 0),
-                              ),
-                            ]
-                          : null,
                     ),
                   ),
                 ),
@@ -592,14 +584,6 @@ class _SidebarItem extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: isSelected ? cs.primary : cs.onSurfaceVariant,
-                      shadows: isSelected
-                          ? [
-                              Shadow(
-                                color: cs.primary,
-                                offset: const Offset(0.3, 0),
-                              ),
-                            ]
-                          : null,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

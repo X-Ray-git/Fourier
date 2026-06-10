@@ -710,7 +710,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       child: FadeTransition(
         opacity: animation,
         child: _MacReviewRow(
-          key: ValueKey('removed-${article.entryId}'),
+          key: _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}'),
           article: article,
           selected: false,
           onTap: () {},

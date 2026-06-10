@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import '../../../http/init.dart';
 import '../../../models/feed.dart';
 import '../../../services/feed_readability_settings_service.dart';
+import '../../../services/feed_silent_settings_service.dart';
 import '../../../services/feed_translation_settings_service.dart';
 import '../../subscriptions/subscriptions_controller.dart';
 import '../../timeline/timeline_controller.dart';
@@ -39,6 +40,7 @@ class MacOSSidebar extends StatelessWidget {
             Obx(() {
               final isSelected =
                   currentIndex == 0 &&
+                  timelineController.isSilentSelected.value == false &&
                   timelineController.selectedFeedId.value == null &&
                   timelineController.selectedCategory.value == null;
               final unreadCount = timelineController.allArticles
@@ -50,6 +52,7 @@ class MacOSSidebar extends StatelessWidget {
                 isSelected: isSelected,
                 badgeCount: unreadCount,
                 onTap: () {
+                  timelineController.isSilentSelected.value = false;
                   timelineController.selectedFeedId.value = null;
                   timelineController.selectedCategory.value = null;
                   onIndexChanged(0);
@@ -73,6 +76,23 @@ class MacOSSidebar extends StatelessWidget {
               badgeCount: 0,
               onTap: () => onIndexChanged(2),
             ),
+            Obx(() {
+              final isSelected =
+                  currentIndex == 0 &&
+                  timelineController.isSilentSelected.value == true;
+              return _SidebarItem(
+                icon: Icons.notifications_off_outlined,
+                label: '静默订阅源',
+                isSelected: isSelected,
+                badgeCount: timelineController.silentUnreadCount,
+                onTap: () {
+                  timelineController.isSilentSelected.value = true;
+                  timelineController.selectedFeedId.value = null;
+                  timelineController.selectedCategory.value = null;
+                  onIndexChanged(0);
+                },
+              );
+            }),
             const SizedBox(height: 10),
             const _SectionLabel(label: '订阅源'),
             Expanded(
@@ -90,7 +110,7 @@ class MacOSSidebar extends StatelessWidget {
                   );
                 }
 
-                final nodes = subController.filteredNodes;
+                final nodes = subController.sidebarNodes;
                 if (nodes.isEmpty) {
                   return Center(
                     child: Text(
@@ -147,6 +167,7 @@ class MacOSSidebar extends StatelessWidget {
                                 );
                               },
                               onTap: () {
+                                timelineController.isSilentSelected.value = false;
                                 timelineController.selectedFeedId.value = null;
                                 timelineController.selectedCategory.value =
                                     category.name;
@@ -177,9 +198,14 @@ class MacOSSidebar extends StatelessWidget {
                                         _FeedAutoTranslateIcon(
                                           feedId: feed.feedId,
                                         ),
+                                        const SizedBox(width: 2),
+                                        _FeedSilentIcon(
+                                          feedId: feed.feedId,
+                                        ),
                                       ],
                                     ),
                                     onTap: () {
+                                      timelineController.isSilentSelected.value = false;
                                       timelineController
                                               .selectedCategory
                                               .value =
@@ -246,12 +272,24 @@ class MacOSCollapsedSidebar extends StatelessWidget {
               onTap: onExpand,
             ),
             const SizedBox(height: 10),
-            _RailButton(
-              icon: Icons.article_outlined,
-              tooltip: '全部文章',
-              selected: currentIndex == 0,
-              onTap: () => onIndexChanged(0),
-            ),
+            Obx(() {
+              final timelineController = Get.find<TimelineController>();
+              final isAllSelected = currentIndex == 0 &&
+                  timelineController.isSilentSelected.value == false &&
+                  timelineController.selectedFeedId.value == null &&
+                  timelineController.selectedCategory.value == null;
+              return _RailButton(
+                icon: Icons.article_outlined,
+                tooltip: '全部文章',
+                selected: isAllSelected,
+                onTap: () {
+                  timelineController.isSilentSelected.value = false;
+                  timelineController.selectedFeedId.value = null;
+                  timelineController.selectedCategory.value = null;
+                  onIndexChanged(0);
+                },
+              );
+            }),
             _RailButton(
               icon: Icons.shield_outlined,
               tooltip: '垃圾拦截',
@@ -264,6 +302,22 @@ class MacOSCollapsedSidebar extends StatelessWidget {
               selected: currentIndex == 2,
               onTap: () => onIndexChanged(2),
             ),
+            Obx(() {
+              final timelineController = Get.find<TimelineController>();
+              final isSilentSelected = currentIndex == 0 &&
+                  timelineController.isSilentSelected.value == true;
+              return _RailButton(
+                icon: Icons.notifications_off_outlined,
+                tooltip: '静默订阅源',
+                selected: isSilentSelected,
+                onTap: () {
+                  timelineController.isSilentSelected.value = true;
+                  timelineController.selectedFeedId.value = null;
+                  timelineController.selectedCategory.value = null;
+                  onIndexChanged(0);
+                },
+              );
+            }),
             const Spacer(),
             _RailButton(
               icon: Icons.settings_outlined,
@@ -726,6 +780,52 @@ class _FeedAutoTranslateIconState extends State<_FeedAutoTranslateIcon> {
             size: 14,
             color: _enabled
                 ? cs.primary
+                : cs.onSurfaceVariant.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeedSilentIcon extends StatefulWidget {
+  final String feedId;
+  const _FeedSilentIcon({required this.feedId});
+
+  @override
+  State<_FeedSilentIcon> createState() => _FeedSilentIconState();
+}
+
+class _FeedSilentIconState extends State<_FeedSilentIcon> {
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = FeedSilentSettingsService.isSilent(widget.feedId);
+  }
+
+  void _toggle() {
+    final next = !_enabled;
+    FeedSilentSettingsService.setSilent(widget.feedId, next);
+    setState(() => _enabled = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: _enabled ? '已开启静默' : '设为静默',
+      child: InkWell(
+        onTap: _toggle,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Icon(
+            _enabled ? Icons.notifications_off : Icons.notifications_off_outlined,
+            size: 14,
+            color: _enabled
+                ? cs.error
                 : cs.onSurfaceVariant.withValues(alpha: 0.3),
           ),
         ),

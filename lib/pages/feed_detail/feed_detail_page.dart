@@ -27,6 +27,7 @@ import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
+import '../../services/feed_silent_settings_service.dart';
 import '../../services/feed_translation_settings_service.dart';
 import '../../services/feed_readability_settings_service.dart';
 import '../../services/undo_service.dart';
@@ -54,6 +55,7 @@ class FeedDetailController extends GetxController {
   final articles = <ArticleModel>[].obs;
   final isAutoTranslateEnabled = false.obs;
   final isAutoReadabilityEnabled = false.obs;
+  final isSilentEnabled = false.obs;
   final readFilter = 0.obs; // 0=未读, 1=全部, 2=已读
   final allArticles = <ArticleModel>[].obs; // 全量（含已读）
   final selectedArticle = Rxn<ArticleModel>();
@@ -79,6 +81,7 @@ class FeedDetailController extends GetxController {
         'category:${filterCategory ?? 'view:${filterView ?? 'all'}'}';
     refreshAutoTranslateStatus();
     refreshAutoReadabilityStatus();
+    refreshSilentStatus();
     loadData();
     ever(ArticleStateNotifier.version, (_) => _refreshFromLocal());
   }
@@ -188,6 +191,15 @@ class FeedDetailController extends GetxController {
     }
     isAutoTranslateEnabled.value =
         FeedTranslationSettingsService.isAutoTranslateEnabled(feedId);
+  }
+
+  void refreshSilentStatus() {
+    final feedId = filterFeedId;
+    if (feedId == null || feedId.isEmpty) {
+      isSilentEnabled.value = false;
+      return;
+    }
+    isSilentEnabled.value = FeedSilentSettingsService.isSilent(feedId);
   }
 
   void refreshAutoReadabilityStatus() {
@@ -753,6 +765,28 @@ class FeedDetailPage extends StatelessWidget {
                       },
                     );
                   }),
+                // 静默订阅源
+                if (controller.filterFeedId != null)
+                  Obx(() {
+                    final isEnabled = controller.isSilentEnabled.value;
+                    return IconButton(
+                      icon: Icon(
+                        isEnabled ? Icons.notifications_off : Icons.notifications_off_outlined,
+                        color: isEnabled ? cs.error : cs.onSurfaceVariant,
+                      ),
+                      tooltip: isEnabled ? '已开启静默' : '设为静默',
+                      onPressed: () async {
+                        await FeedSilentSettingsService.toggleSilent(
+                          controller.filterFeedId ?? '',
+                        );
+                        controller.refreshSilentStatus();
+                        AppFeedback.success(
+                          isEnabled ? '已取消静默' : '已设为静默',
+                          '从原分类列表中隔离该订阅源',
+                        );
+                      },
+                    );
+                  }),
                 const SizedBox(width: 8),
               ],
             ),
@@ -1019,6 +1053,27 @@ class _MacFeedHeader extends StatelessWidget {
                       controller.filterFeedId ?? '',
                     );
                     controller.refreshAutoTranslateStatus();
+                  },
+                );
+              }),
+            if (controller.filterFeedId != null)
+              Obx(() {
+                final isEnabled = controller.isSilentEnabled.value;
+                return IconButton(
+                  icon: Icon(
+                    isEnabled ? Icons.notifications_off : Icons.notifications_off_outlined,
+                    size: 20,
+                    color: isEnabled
+                        ? colorScheme.error
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                  tooltip: isEnabled ? '已开启静默' : '设为静默',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () async {
+                    await FeedSilentSettingsService.toggleSilent(
+                      controller.filterFeedId ?? '',
+                    );
+                    controller.refreshSilentStatus();
                   },
                 );
               }),

@@ -5482,3 +5482,48 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*
+
+## 132. 静默订阅源功能实现（v1.19 / 本轮新增）
+
+### 132.1 需求与背景
+用户提出需要增加“静默订阅源”功能：
+- **入口**：在 macOS 侧边栏“最近阅读”下方增加“静默订阅源”入口。
+- **数据隔离**：配置为静默的订阅源，其文章不出现在“全部文章”视图中，不计入“全部文章”统计。
+- **分类排除**：侧边栏的订阅源分类列表直接剔除该源，不再展示其气泡与名称。
+- **拦截兼容**：依然正常执行垃圾拦截逻辑，静默源的被拦截文章依然计入“垃圾拦截”统计数字。
+- **操作方式**：可像配置自动翻译一样，一键将某个订阅源配置成静默类型。
+
+### 132.2 核心实现思路
+
+为最小化开发成本且保持架构的一致性，本功能在以下几个方面做了设计：
+
+1. **复用时间线（TimelinePage）**
+   没有新建路由和页面，而是让“静默订阅源”按钮触发后，设置 `currentIndex = 0`，配合 `TimelineController` 新增的 `isSilentSelected` 布尔状态进行过滤，并实现独立的专属统计 (`silentUnreadCount`)。
+
+2. **视图层物理剔除（分类树优化）**
+   在 `SubscriptionsController` 中新增了 `sidebarNodes`，它在渲染侧边栏树形菜单时，如果探测到某订阅源为静默状态，则直接将其从分类列表中剥离（跳过该节点），从而完美避免了侧边栏被无用分类项占用、出现大量“0气泡”的干扰。保留了原始的 `filteredNodes` 以供“设置 - 订阅源管理”全量列表使用，防止静默后无法被找到。
+
+3. **垃圾拦截逻辑自然兼容**
+   `TimelineController` 的 `_updateFilterCount()` 核心是遍历全量 `allArticles` 的内存数据流。由于静默过滤逻辑被限定在视图层的 `_applyFilter()`，垃圾统计算法依然扫描了包含静默源文章的全集，因此天然覆盖了用户的防垃圾期望，零改动满足需求。
+
+### 132.3 新增与修改细节
+
+#### 服务层：
+- 新增 `lib/services/feed_silent_settings_service.dart`：与自动翻译逻辑相似，使用 `GStorage.setting` (前缀 `feed_silent_`) 管理持久化静默配置，并提供一个响应式 `version` 以触发 UI 重绘。
+
+#### 数据层（`lib/pages/timeline/timeline_controller.dart`）：
+- 引入 `isSilentSelected = false.obs`。
+- 修改 `unreadCount`, `readCount`, `allCount`，使它们扣减掉静默配置的源文章。
+- `_applyFilter()` 中应用互斥逻辑：若 `isSilentSelected == true`，则仅保留静默文章；否则在浏览“全部文章”或相关分类时滤除静默文章。
+
+#### 分类树拦截（`lib/pages/subscriptions/subscriptions_controller.dart`）：
+- 初始化添加对 `FeedSilentSettingsService.version` 的监听。
+- 修改 `unreadFor` 直接对静默源返回 0，以防气泡泄露。
+- 新增 `sidebarNodes` getter 进行节点的静默剔除。
+
+#### 视图层修改：
+- `lib/pages/main/widgets/macos_sidebar.dart`：增加独立的“静默订阅源” `_SidebarItem` 和缩小版 `_RailButton`。精确拆分“全部文章”的 `isSelected` 布尔运算，互斥高亮。在展开的源 `_CategoryGroup` 行尾追加 `_FeedSilentIcon` 通知铃铛。
+- `lib/pages/feed_detail/feed_detail_page.dart`：在 Mac 以及常规页的 SliverAppBar 中，新增专属切换静默状态的图标。
+
+### 132.4 遗留/潜在待优化方向
+- **移动端适配**：当前遵照指示“优先在 macOS 端实现”，移动端底部导航或抽屉暂时没有添加入口，如果有需要可以随时从 `TimelineController` 获取已打好的基建支持。

@@ -379,8 +379,11 @@ class _TimelinePageState extends State<TimelinePage> {
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
                     onMKeyPressed: () {
-                      if (Get.isRegistered<ArticleController>(tag: selected.entryId)) {
-                        final ac = Get.find<ArticleController>(tag: selected.entryId);
+                      final currentSelected = controller.selectedArticle.value;
+                      if (currentSelected == null) return;
+
+                      if (Get.isRegistered<ArticleController>(tag: currentSelected.entryId)) {
+                        final ac = Get.find<ArticleController>(tag: currentSelected.entryId);
                         if (ac.isUpdatingReadState.value) return;
                         
                         final wasUnread = !ac.isRead.value;

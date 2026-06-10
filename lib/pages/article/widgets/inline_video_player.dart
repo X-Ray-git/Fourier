@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../services/article_image_service.dart';
+import '../../../utils/duration_extension.dart';
 import 'fullscreen_video_page.dart';
 
 /// 内联视频播放器 — poster → 加载 → 播放（含进度条 + 拖拽定位）
@@ -139,11 +140,6 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     _startHideTimer();
   }
 
-  String _formatDuration(Duration d) {
-    final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final secs = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '${d.inMinutes}:$mins:$secs';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +234,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
                                 const SizedBox(width: 10),
                                 // 时间
                                 Text(
-                                  '${_formatDuration(pos)} / ${_formatDuration(dur)}',
+                                  '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,

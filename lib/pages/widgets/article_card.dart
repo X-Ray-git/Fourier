@@ -119,29 +119,31 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       final displayTitle = TranslationService.displayTitleFor(article);
 
       return RepaintBoundary(
-        child: CardPressEffect(
-          onTap: onTap,
-          onLongPress: Platform.isMacOS
-              ? null
-              : () => _showTranslateMenu(context, isTranslated, isPending),
-          onSecondaryTapDown: Platform.isMacOS
-              ? (details) {
-                  _showMacOSContextMenu(
-                    context,
-                    details.globalPosition,
-                    isTranslated,
-                    isPending,
-                  );
-                }
-              : null,
-          enableHover: true,
-          enablePress: true,
-          borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
-          child: Card(
-              margin: EdgeInsets.symmetric(
-                horizontal: Platform.isMacOS ? 8 : 12,
-                vertical: Platform.isMacOS ? 2 : 6,
-              ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: Platform.isMacOS ? 8 : 12,
+            vertical: Platform.isMacOS ? 2 : 6,
+          ),
+          child: CardPressEffect(
+            onTap: onTap,
+            onLongPress: Platform.isMacOS
+                ? null
+                : () => _showTranslateMenu(context, isTranslated, isPending),
+            onSecondaryTapDown: Platform.isMacOS
+                ? (details) {
+                    _showMacOSContextMenu(
+                      context,
+                      details.globalPosition,
+                      isTranslated,
+                      isPending,
+                    );
+                  }
+                : null,
+            enableHover: true,
+            enablePress: true,
+            borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
+            child: Card(
+              margin: EdgeInsets.zero,
               clipBehavior: Clip.antiAlias,
               elevation: 0,
               color: isSelected
@@ -161,268 +163,268 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                       ),
               ),
               child: Container(
-                    decoration: article.isRejectedByAi
-                        ? BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: colorScheme.primary,
-                                width: 4,
-                              ),
-                            ),
-                          )
-                        : null,
-                    padding: EdgeInsets.all(Platform.isMacOS ? 12 : 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (article.isRejectedByAi &&
-                            article.filterReason != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primaryContainer.withValues(
-                                  alpha: 0.4,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: colorScheme.primary.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                ),
-                              ),
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 4,
-                                        ),
-                                        child: Icon(
-                                          Icons.auto_awesome,
-                                          size: 14,
-                                          color: colorScheme.primary,
-                                        ),
-                                      ),
-                                    ),
-                                    TextSpan(
-                                      text: article.filterReason!,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                decoration: article.isRejectedByAi
+                    ? BoxDecoration(
+                        border: Border(
+                          left: BorderSide(
+                            color: colorScheme.primary,
+                            width: 4,
                           ),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    if (!article.isRead)
-                                      WidgetSpan(
-                                        alignment: PlaceholderAlignment.middle,
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 6,
-                                          ),
-                                          child: Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: BoxDecoration(
-                                              color: colorScheme.primary,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    TextSpan(
-                                      text: displayTitle,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        height: 1.4,
-                                        fontWeight: article.isRead
-                                            ? FontWeight.w400
-                                            : FontWeight.w600,
-                                        color: article.isRead
-                                            ? colorScheme.onSurface.withValues(
-                                                alpha: 0.7,
-                                              )
-                                            : colorScheme.onSurface,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (isPending) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 10,
-                                      height: 10,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '翻译中',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ] else if (isTranslated) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer
-                                      .withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Tooltip(
-                                  message: '已翻译',
-                                  child: Icon(
-                                    Icons.translate,
-                                    size: 16,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
                         ),
-                        if (article.author != null &&
-                            article.author!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            article.author!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                padding: EdgeInsets.all(Platform.isMacOS ? 12 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (article.isRejectedByAi && article.filterReason != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                        ],
-                        if (showSummary)
-                          _buildSummaryBlock(colorScheme, article.entryId),
-                        const SizedBox(height: 12),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    flex: 0,
-                                    child: PillTag(
-                                      label: viewLabel,
-                                      backgroundColor: viewColor.withValues(
-                                        alpha: 0.14,
-                                      ),
-                                      foregroundColor: viewColor,
-                                    ),
-                                  ),
-                                  if (categoryLabel.isNotEmpty) ...[
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      flex: 0,
-                                      child: PillTag(
-                                        label: categoryLabel,
-                                        backgroundColor:
-                                            colorScheme.surfaceContainerHighest,
-                                        foregroundColor:
-                                            colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer.withValues(
+                              alpha: 0.4,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.15,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                          ),
+                          child: Text.rich(
+                            TextSpan(
                               children: [
-                                Icon(
-                                  Icons.access_time,
-                                  size: 14,
-                                  color: colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 4),
+                                    child: Icon(
+                                      Icons.auto_awesome,
+                                      size: 14,
+                                      color: colorScheme.primary,
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _formatTime(article.publishedAt),
+                                TextSpan(
+                                  text: article.filterReason!,
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.6),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.primary,
                                   ),
                                 ),
                               ],
                             ),
-                          ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        if (showFeedTitle) ...[
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              _FeedIcon(imageUrl: article.feedImage, size: 14),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  article.feedTitle,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.8),
+                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                if (!article.isRead)
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                TextSpan(
+                                  text: displayTitle,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.4,
+                                    fontWeight: article.isRead
+                                        ? FontWeight.w400
+                                        : FontWeight.w600,
+                                    color: article.isRead
+                                        ? colorScheme.onSurface.withValues(
+                                            alpha: 0.7,
+                                          )
+                                        : colorScheme.onSurface,
+                                  ),
                                 ),
+                              ],
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isPending) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '翻译中',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (isTranslated) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer.withValues(
+                                alpha: 0.4,
                               ),
-                            ],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Tooltip(
+                              message: '已翻译',
+                              child: Icon(
+                                Icons.translate,
+                                size: 16,
+                                color: colorScheme.primary,
+                              ),
+                            ),
                           ),
                         ],
                       ],
                     ),
+                    if (article.author != null &&
+                        article.author!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        article.author!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (showSummary)
+                      _buildSummaryBlock(colorScheme, article.entryId),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                flex: 0,
+                                child: PillTag(
+                                  label: viewLabel,
+                                  backgroundColor: viewColor.withValues(
+                                    alpha: 0.14,
+                                  ),
+                                  foregroundColor: viewColor,
+                                ),
+                              ),
+                              if (categoryLabel.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  flex: 0,
+                                  child: PillTag(
+                                    label: categoryLabel,
+                                    backgroundColor:
+                                        colorScheme.surfaceContainerHighest,
+                                    foregroundColor:
+                                        colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTime(article.publishedAt),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    if (showFeedTitle) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _FeedIcon(imageUrl: article.feedImage, size: 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              article.feedTitle,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
+            ),
           ),
         ),
       );

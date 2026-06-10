@@ -13,6 +13,7 @@ import '../../models/feed.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/account_service.dart';
 import '../../services/content_cache_service.dart';
+import '../../services/feed_silent_settings_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
@@ -34,6 +35,7 @@ class TimelineController extends GetxController {
   final selectedCategory = RxnString();
   final filterCount = 0.obs;
   final isSyncing = false.obs;
+  final isSilentSelected = false.obs;
 
   String? _cursor;
   bool _isLoadingMore = false;
@@ -54,6 +56,11 @@ class TimelineController extends GetxController {
       selectedArticle.value = null;
     });
     ever(selectedCategory, (_) {
+      UndoService.clear();
+      _applyFilter();
+      selectedArticle.value = null;
+    });
+    ever(isSilentSelected, (_) {
       UndoService.clear();
       _applyFilter();
       selectedArticle.value = null;
@@ -392,9 +399,13 @@ class TimelineController extends GetxController {
 
   bool get hasMore => selectedMode.value != TimelineViewMode.read && _hasMore;
   bool get isLoadingMore => _isLoadingMore;
-  int get unreadCount => allArticles.where((a) => !a.isRead).length;
-  int get readCount => allArticles.where((a) => a.isRead).length;
-  int get allCount => allArticles.length;
+  int get unreadCount => allArticles.where((a) => !a.isRead && !FeedSilentSettingsService.isSilent(a.feedId)).length;
+  int get readCount => allArticles.where((a) => a.isRead && !FeedSilentSettingsService.isSilent(a.feedId)).length;
+  int get allCount => allArticles.where((a) => !FeedSilentSettingsService.isSilent(a.feedId)).length;
+
+  int get silentUnreadCount => allArticles.where((a) => !a.isRead && FeedSilentSettingsService.isSilent(a.feedId)).length;
+  int get silentReadCount => allArticles.where((a) => a.isRead && FeedSilentSettingsService.isSilent(a.feedId)).length;
+  int get silentAllCount => allArticles.where((a) => FeedSilentSettingsService.isSilent(a.feedId)).length;
 
   void _updateAppBadge() {
     if (Platform.isMacOS) {
@@ -458,8 +469,17 @@ class TimelineController extends GetxController {
     final mode = selectedMode.value;
     final feedId = selectedFeedId.value;
     final category = selectedCategory.value;
+    final silentMode = isSilentSelected.value;
 
     final source = allArticles.where((a) {
+      final isSilent = FeedSilentSettingsService.isSilent(a.feedId);
+
+      if (silentMode) {
+        if (!isSilent) return false;
+      } else {
+        if (feedId == null && isSilent) return false;
+      }
+
       if (feedId != null && a.feedId != feedId) return false;
       if (category != null && a.displayCategory != category) return false;
       return true;

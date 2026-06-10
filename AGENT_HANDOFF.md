@@ -5556,6 +5556,7 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 
 
 
+
 ## 133. 修复极低高度分隔符图片被错误拉伸及过度占位问题 (2026-06-10)
 
 ### 133.1 问题现象与背景
@@ -5695,4 +5696,65 @@ String _formatDuration(Duration d) {
 | `lib/pages/article/widgets/fullscreen_video_page.dart` | 修改 | 删除冗余函数，引入并使用新的时间格式化扩展 |
 | `lib/pages/article/widgets/inline_video_player.dart` | 修改 | 删除冗余函数，引入并使用新的时间格式化扩展 |
 
+
+
+## 138. 静默订阅源功能实现（v1.19 / 本轮新增）
+
+### 138.1 需求与背景
+用户提出需要增加“静默订阅源”功能：
+- **入口**：在 macOS 侧边栏“最近阅读”下方增加“静默订阅源”入口。
+- **数据隔离**：配置为静默的订阅源，其文章不出现在“全部文章”视图中，不计入“全部文章”统计。
+- **分类排除**：侧边栏的订阅源分类列表直接剔除该源，不再展示其气泡与名称。
+- **拦截兼容**：依然正常执行垃圾拦截逻辑，静默源的被拦截文章依然计入“垃圾拦截”统计数字。
+- **操作方式**：可像配置自动翻译一样，一键将某个订阅源配置成静默类型。
+
+### 138.2 核心实现思路
+
+为最小化开发成本且保持架构的一致性，本功能在以下几个方面做了设计：
+
+1. **复用时间线（TimelinePage）**
+   没有新建路由和页面，而是让“静默订阅源”按钮触发后，设置 `currentIndex = 0`，配合 `TimelineController` 新增的 `isSilentSelected` 布尔状态进行过滤，并实现独立的专属统计 (`silentUnreadCount`)。
+
+2. **视图层物理剔除（分类树优化）**
+   在 `SubscriptionsController` 中新增了 `sidebarNodes`，它在渲染侧边栏树形菜单时，如果探测到某订阅源为静默状态，则直接将其从分类列表中剥离（跳过该节点），从而完美避免了侧边栏被无用分类项占用、出现大量“0气泡”的干扰。保留了原始的 `filteredNodes` 以供“设置 - 订阅源管理”全量列表使用，防止静默后无法被找到。
+
+3. **垃圾拦截逻辑自然兼容**
+   `TimelineController` 的 `_updateFilterCount()` 核心是遍历全量 `allArticles` 的内存数据流。由于静默过滤逻辑被限定在视图层的 `_applyFilter()`，垃圾统计算法依然扫描了包含静默源文章的全集，因此天然覆盖了用户的防垃圾期望，零改动满足需求。
+
+### 138.3 新增与修改细节
+
+#### 服务层：
+- 新增 `lib/services/feed_silent_settings_service.dart`：与自动翻译逻辑相似，使用 `GStorage.setting` (前缀 `feed_silent_`) 管理持久化静默配置，并提供一个响应式 `version` 以触发 UI 重绘。
+
+#### 数据层（`lib/pages/timeline/timeline_controller.dart`）：
+- 引入 `isSilentSelected = false.obs`。
+- 修改 `unreadCount`, `readCount`, `allCount`，使它们扣减掉静默配置的源文章。
+- `_applyFilter()` 中应用互斥逻辑：若 `isSilentSelected == true`，则仅保留静默文章；否则在浏览“全部文章”或相关分类时滤除静默文章。
+
+#### 分类树拦截（`lib/pages/subscriptions/subscriptions_controller.dart`）：
+- 初始化添加对 `FeedSilentSettingsService.version` 的监听。
+- 修改 `unreadFor` 直接对静默源返回 0，以防气泡泄露。
+- 新增 `sidebarNodes` getter 进行节点的静默剔除。
+
+#### 视图层修改：
+- `lib/pages/main/widgets/macos_sidebar.dart`：增加独立的“静默订阅源” `_SidebarItem` 和缩小版 `_RailButton`。精确拆分“全部文章”的 `isSelected` 布尔运算，互斥高亮。在展开的源 `_CategoryGroup` 行尾追加 `_FeedSilentIcon` 通知铃铛。
+- `lib/pages/feed_detail/feed_detail_page.dart`：在 Mac 以及常规页的 SliverAppBar 中，新增专属切换静默状态的图标。
+
+### 138.4 遗留/潜在待优化方向
+- **移动端适配**：当前遵照指示“优先在 macOS 端实现”，移动端底部导航或抽屉暂时没有添加入口，如果有需要可以随时从 `TimelineController` 获取已打好的基建支持。
+
+### 138.5 补充更新（UI 交互优化与状态绑定 Bug 修复）
+经过用户反馈，最初的设计有两个问题：
+1. **视觉割裂**：最初将“静默订阅源”做成了带有折叠小箭头（`_CategoryGroup`）的类别形式，但它放置在侧边栏上半部分（全局视图入口区），这与该区域“全部文章”、“垃圾拦截”、“最近阅读”扁平的视觉范式不统一，存在割裂感。
+2. **气泡 Bug**：当将带有未读文章的源标记为“静默”时，分类下的气泡确实扣除了，但顶部最总的“全部文章”上的未读气泡却没有随之减少。
+
+**修复与重构闭环：**
+
+- **交互的无缝折叠（解决视觉割裂）**：
+  我们讨论了是否要将该入口下放至“订阅源”分类树中。权衡后发现，静默是一个“元状态”，跨越了 Feed、Social、Inbox 三个纬度，强行将其下放会混淆原始数据模型。
+  **最终决定**：维持在上半部分，但不使用带有折叠箭头的 `_CategoryGroup`。我们退回到了普通的 `_SidebarItem` 渲染。利用 `AnimatedSize` 对下属的子级静态源进行了包装，并使其只在 `isSelected == true` 时才显示（**点击后自动展开，点走后自动折叠**）。这样，静默订阅源在非选中时外观和“全部文章”等完全一致，完美融入全局入口区。
+
+- **响应式的 Bug 修复（解决气泡未减少）**：
+  “全部文章”入口在 `MacOSSidebar` 中一直通过 `timelineController.allArticles.where((a) => !a.isRead).length` 手动算未读，这使得它错误地**包含了**被静默的文章，且 `Obx` 没有追踪到 `FeedSilentSettingsService.version` 的变化。
+  **最终决定**：我们在 `Obx` 内通过 `final _ = FeedSilentSettingsService.version.value;` 强制绑定了对静默状态的响应，并改为直接使用 `timelineController.unreadCount`（这个 getter 内部已在每次获取时将静默源排除在外）。现在每次操作静默，顶部的全部未读气泡都会实时、正确地扣减。
 

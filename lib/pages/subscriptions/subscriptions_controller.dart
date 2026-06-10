@@ -7,6 +7,7 @@ import '../../services/account_service.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/feed_silent_settings_service.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../utils/storage.dart';
 
@@ -46,6 +47,10 @@ class SubscriptionsController extends GetxController {
     refreshUnreadCounts();
     loadData();
     ever(ArticleStateNotifier.version, (_) => refreshUnreadCounts());
+    ever(FeedSilentSettingsService.version, (_) {
+      refreshUnreadCounts();
+      viewNodes.refresh();
+    });
   }
 
   Future<void> loadData() async {
@@ -142,7 +147,12 @@ class SubscriptionsController extends GetxController {
     _unreadCounts.value = counts;
   }
 
-  int unreadFor(String feedId) => _unreadCounts[feedId] ?? 0;
+  int unreadFor(String feedId) {
+    if (FeedSilentSettingsService.isSilent(feedId)) return 0;
+    return _unreadCounts[feedId] ?? 0;
+  }
+
+  int rawUnreadFor(String feedId) => _unreadCounts[feedId] ?? 0;
 
   int unreadForCategory(String categoryName, List<FeedModel> feeds) {
     int total = 0;
@@ -158,6 +168,35 @@ class SubscriptionsController extends GetxController {
       total += unreadForCategory(cat.name, cat.feeds);
     }
     return total;
+  }
+
+  List<FeedModel> get silentFeeds {
+    final result = <FeedModel>[];
+    for (final view in filteredNodes) {
+      for (final cat in view.categories) {
+        result.addAll(cat.feeds.where((f) => FeedSilentSettingsService.isSilent(f.feedId)));
+      }
+    }
+    return result;
+  }
+
+  List<SourceViewNode> get sidebarNodes {
+    final result = <SourceViewNode>[];
+    for (final view in filteredNodes) {
+      final categories = <SourceCategoryNode>[];
+      for (final cat in view.categories) {
+        final feeds = cat.feeds
+            .where((f) => !FeedSilentSettingsService.isSilent(f.feedId))
+            .toList();
+        if (feeds.isNotEmpty) {
+          categories.add(SourceCategoryNode(name: cat.name, feeds: feeds));
+        }
+      }
+      if (categories.isNotEmpty) {
+        result.add(SourceViewNode(view: view.view, name: view.name, categories: categories));
+      }
+    }
+    return result;
   }
 
   List<SourceViewNode> get filteredNodes {

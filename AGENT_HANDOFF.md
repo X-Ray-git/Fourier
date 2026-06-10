@@ -5514,6 +5514,7 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*
 
+
 ## 133. 修复极低高度分隔符图片被错误拉伸及过度占位问题 (2026-06-10)
 
 ### 133.1 问题现象与背景
@@ -5532,3 +5533,28 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 3. **保障加载时合理占位**：为 `placeholder` 和 `errorWidget` 单独包覆了 `SizedBox(height: displayHeight)` 以应用预估或兜底高度。如此一来：
    - 对于无任何尺寸指引的图片，初期按 fallback 保守高度（如 180~420px）先撑起版面。
    - 图片加载完成后恢复自由尺寸，由内部 `Image` 自身固有的 `intrinsic size` 取代固定占位高度。这会在一瞬间发生一次合理的高度伸缩调整，换取了绝对正确的最终排版呈现。
+
+## 134. macOS 端卡片双重边界缺陷修复 (2026-06-10)
+
+### 134.1 缺陷描述
+用户反馈在 macOS 端选中文章卡片时，视觉上出现了两个不重合的边界：一个表示选中状态的橙色物理边框，以及一个表示悬浮/按压状态的光线交互特效边界。
+
+### 134.2 根本原因定位
+在 `lib/pages/widgets/article_card.dart` 中，负责渲染高光交互的 `CardPressEffect` 嵌套了 `Card` 组件。
+`Card` 组件配置了 `margin: EdgeInsets.symmetric(horizontal: 8, vertical: 2)`。
+在 Flutter 的渲染机制中，`Card` 的布局约束包含了这个 `margin`，但其实际可见的背景、圆角及边框（橙色选中态）是在减去 `margin` 之后的内部区域进行绘制的。
+外层的 `CardPressEffect` 的光线特效（`Positioned.fill`）是完全铺满整个容器（即包含了 `margin` 的大小），并按照统一的 `borderRadius` 进行裁剪。因此，光线特效的范围相比实际的 `Card` 边框范围大出了一圈，导致视觉边界不一致。
+
+### 134.3 修复思路与讨论过程
+在分析问题后，提出了如下解决方案，并直接采纳了其中的最优方案：
+**方案对比**：
+- **方案 A（最优被采纳）**：将 `Card` 原本的 `margin` 属性提取到最外层，使用 `Padding` 组件对 `CardPressEffect` 进行包裹，并将 `Card` 自身的 `margin` 设置为 `EdgeInsets.zero`。
+  - **优势**：保证了 `CardPressEffect` 的布局大小与 `Card` 的物理渲染边界完全等大。由于 `CardPressEffect` 内使用 `Transform.scale` 实现按下动画，这样缩放只影响实体卡片而不会缩放排版间距，在交互反馈上逻辑更为严密，并且无需修改 `CardPressEffect` 的通用封装。
+  - **劣势**：Widget 树嵌套加深一层（对性能影响极微）。
+- **方案 B（未采纳）**：在 `CardPressEffect` 中手动硬编码减去与 `margin` 相同数值的 padding 来缩小绘制高光的区域。破坏组件通用性。
+- **方案 C（未采纳）**：将 `CardPressEffect` 移至 `Card` 组件内部。这会导致光线特效受限于 `Card` 内容区，不仅可能被背景色遮挡，且按下时的 `Transform.scale` 只能缩放内容而不能缩放卡片边框。
+
+### 134.4 修改文件清单
+1. `lib/pages/widgets/article_card.dart`
+   - 重构 `_ArticleCardContentState.build()` 中 `RepaintBoundary` 以下的结构，插入 `Padding` 组件并清零 `Card` 的 `margin`。
+

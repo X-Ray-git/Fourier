@@ -5262,3 +5262,28 @@ flutter test --no-pub
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.17 -m "- feat: merge README refresh, Cmd+R sync feedback, link hover progress stabilization, and article card tap feedback\n- fix: keep article image heights stable while allowing taller images\n- beta: rebuild Android and macOS packages for regression validation" --push`*
+
+## 129. 翻译与摘要的自动重试机制实现
+
+### 129.1 需求背景
+- 用户发现翻译功能未能实现自动重试，希望在请求失败（如网络错误、解析错误）时能自动重试。
+- 摘要功能也需要加入相同的自动重试机制。
+- 自动重试的最大次数应当可以在**设置页面**进行配置。
+
+### 129.2 架构选择与讨论
+- **初步想法**：曾经考虑使用类似于已读同步的后台队列轮询机制。
+- **用户反馈**：用户明确提出“配置重试次数，重试的时候直接已经在队列中了吧？原地重试即可？为什么会需要讨论这么多逻辑？”
+- **最终方案**：根据用户偏好，采用了最轻量的**原地重试（In-place Retry）**方案。抛弃了维护后台持续轮询任务的复杂想法。在发起请求的异步方法底层，如果遇到特定的异常（如 `DioException` 或 JSON 格式错误），并且重试次数未耗尽，则会 `await Future.delayed(1s)` 并在 `for` 循环中再次尝试请求。这在外部看来，任务仍然是 `pending`（加载中），直到重试完全失败才输出 `error`。
+
+### 129.3 具体修改
+1. **`lib/pages/settings/settings_page.dart`**:
+   - 新增 `_autoRetryMaxCount` 并在界面新增“后台任务容错设置”（可选 0, 1, 3, 5 次），使用 `GStorage.setting.put('auto_retry_max_count', ...)` 保存。
+2. **`lib/services/translation_service.dart`**:
+   - `_translateArticleInternal` (全量翻译)：在 API 请求外部包裹了一层重试 `for` 循环，读取配置的最大重试次数。失败时延时 1s 继续下一次尝试。
+   - `_translateInChunks` (分块翻译)：将原先硬编码的 5 次尝试改为了动态读取设置文件里的自动重试次数。
+3. **`lib/services/summary_service.dart`**:
+   - `_summarizeArticleInternal`：同样包裹了一层由配置控制的重试 `for` 循环，并在异常捕获块中执行重试延迟。
+
+### 129.4 注意事项
+- 原地重试属于阻塞重试，单次网络请求较耗时的话，会在 UI 层保持 Loading 状态较长时间。
+- 对于极端情况（例如应用进程被强杀），此原地任务也会被中断，但对当前产品形态来说可以接受（重启后可重新手动触发）。

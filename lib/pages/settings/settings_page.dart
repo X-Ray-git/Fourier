@@ -39,6 +39,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _obscureSessionId = true;
   bool _obscureDeepseekKey = true;
   late String _badgeStrategy;
+  late int _autoRetryMaxCount;
 
   @override
   void initState() {
@@ -58,6 +59,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _badgeStrategy = GStorage.setting.get(
       StorageKeys.badgeStrategy,
       defaultValue: 'unread_count',
+    );
+    _autoRetryMaxCount = GStorage.setting.get(
+      'auto_retry_max_count',
+      defaultValue: 3,
     );
   }
 
@@ -114,6 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     GStorage.setting.put(StorageKeys.readSyncWindowDays, readWindowDays);
     GStorage.setting.put(StorageKeys.badgeStrategy, _badgeStrategy);
+    GStorage.setting.put('auto_retry_max_count', _autoRetryMaxCount);
 
     AppFeedback.success('配置已保存', '设置已更新');
   }
@@ -413,6 +419,42 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+
+          const SizedBox(height: 32),
+
+          // 后台重试设置
+          Text(
+            '后台任务容错设置',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '配置翻译和摘要任务失败时的自动重试次数',
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+
+          DropdownButtonFormField<int>(
+            initialValue: _autoRetryMaxCount,
+            decoration: const InputDecoration(
+              labelText: '自动重试次数',
+              border: OutlineInputBorder(),
+              helperText: '遇到网络或解析错误时的最大原地重试次数。设为 0 表示不重试。',
+            ),
+            items: const [
+              DropdownMenuItem(value: 0, child: Text('0 次（不重试）')),
+              DropdownMenuItem(value: 1, child: Text('1 次')),
+              DropdownMenuItem(value: 3, child: Text('3 次')),
+              DropdownMenuItem(value: 5, child: Text('5 次')),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _autoRetryMaxCount = val);
+            },
           ),
 
           const SizedBox(height: 24),

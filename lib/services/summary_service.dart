@@ -230,81 +230,94 @@ abstract final class SummaryService {
     }
 
     final systemPrompt = getPrompt(targetLang);
+    final maxRetries = GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
-    try {
-      _dio.options.headers['Authorization'] = 'Bearer $apiKey';
-      _dio.options.headers['Content-Type'] = 'application/json';
-
-      final llmConfig = LlmConfig.loadSummary();
-      final requestBody = <String, dynamic>{
-        'messages': [
-          {'role': 'system', 'content': systemPrompt},
-          {
-            'role': 'user',
-            'content':
-                '标题：\n${article.title}\n\nHTML：\n<html>$htmlContent</html>',
-          },
-        ],
-        'response_format': {'type': 'json_object'},
-        'stream': false,
-        ...llmConfig.toRequestBody(),
-      };
-
-      final response = await _dio.post('/chat/completions', data: requestBody);
-
-      final content = _extractMessageContent(response.data);
-      if (content == null || content.trim().isEmpty) {
-        throw StateError('DeepSeek returned an empty summary result');
-      }
-
-      Map<String, dynamic> parsed;
+    for (int attempt = 1; attempt <= totalAttempts; attempt++) {
       try {
-        parsed =
-            jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
-      } on FormatException {
-        final recovered = _extractJsonObject(content);
-        if (recovered != null) {
-          parsed = recovered;
-        } else {
-          rethrow;
+        _dio.options.headers['Authorization'] = 'Bearer $apiKey';
+        _dio.options.headers['Content-Type'] = 'application/json';
+
+        final llmConfig = LlmConfig.loadSummary();
+        final requestBody = <String, dynamic>{
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {
+              'role': 'user',
+              'content':
+                  '标题：\n${article.title}\n\nHTML：\n<html>$htmlContent</html>',
+            },
+          ],
+          'response_format': {'type': 'json_object'},
+          'stream': false,
+          ...llmConfig.toRequestBody(),
+        };
+
+        final response = await _dio.post('/chat/completions', data: requestBody);
+
+        final content = _extractMessageContent(response.data);
+        if (content == null || content.trim().isEmpty) {
+          throw StateError('DeepSeek returned an empty summary result');
         }
-      }
-      final summaryText = (parsed['summary'] ?? '').toString().trim();
 
-      if (summaryText.isEmpty) {
-        throw StateError('DeepSeek summary result missing summary field');
-      }
+        Map<String, dynamic> parsed;
+        try {
+          parsed =
+              jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
+        } on FormatException {
+          final recovered = _extractJsonObject(content);
+          if (recovered != null) {
+            parsed = recovered;
+          } else {
+            rethrow;
+          }
+        }
+        final summaryText = (parsed['summary'] ?? '').toString().trim();
 
-      final record = SummaryRecord(
-        status: SummaryStatus.done,
-        summaryText: summaryText,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      _writeRecord(article.entryId, record);
-      return record;
-    } on DioException catch (e) {
-      final error = e.message ?? 'DeepSeek request failed';
-      _restoreAfterFailure(article.entryId, previous, error);
-      return SummaryRecord(
-        status: SummaryStatus.error,
-        errorMessage: error,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    } on FormatException catch (e) {
-      _restoreAfterFailure(article.entryId, previous, e.message);
-      return SummaryRecord(
-        status: SummaryStatus.error,
-        errorMessage: e.message,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    } on StateError catch (e) {
-      _restoreAfterFailure(article.entryId, previous, e.message);
-      return SummaryRecord(
-        status: SummaryStatus.error,
-        errorMessage: e.message,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
+        if (summaryText.isEmpty) {
+          throw StateError('DeepSeek summary result missing summary field');
+        }
+
+        final record = SummaryRecord(
+          status: SummaryStatus.done,
+          summaryText: summaryText,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        );
+        _writeRecord(article.entryId, record);
+        return record;
+      } catch (e) {
+        if (attempt < totalAttempts) {
+          debugPrint(
+              '[Summary] Attempt $attempt failed for ${article.entryId}, retrying in 1s...');
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        }
+
+        String errorMessage;
+        if (e is DioException) {
+          errorMessage = e.message ?? 'DeepSeek request failed';
+        } else if (e is FormatException) {
+          errorMessage = e.message;
+        } else if (e is StateError) {
+          errorMessage = e.message;
+        } else {
+          errorMessage = e.toString();
+        }
+
+        _restoreAfterFailure(article.entryId, previous, errorMessage);
+        return SummaryRecord(
+          status: SummaryStatus.error,
+          errorMessage: errorMessage,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        );
+      }
     }
+
+    return SummaryRecord(
+      status: SummaryStatus.error,
+      errorMessage: '重试次数已用尽',
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   static void deleteSummary(String entryId) {

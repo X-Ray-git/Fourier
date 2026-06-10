@@ -284,91 +284,98 @@ abstract final class TranslationService {
         'JSON 结构必须是：{"translated_title":"...","translated_html":"..."}\n\n'
         '标题：\n${article.title}\n\nHTML：\n<html>$htmlContent</html>';
 
-    try {
-      _dio.options.headers['Authorization'] = 'Bearer $apiKey';
-      _dio.options.headers['Content-Type'] = 'application/json';
+    final maxRetries = GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
-      final llmConfig = LlmConfig.loadTranslate();
-      final requestBody = <String, dynamic>{
-        'messages': [
-          {'role': 'system', 'content': systemPrompt},
-          {'role': 'user', 'content': userContent},
-        ],
-        'response_format': {'type': 'json_object'},
-        'stream': false,
-        ...llmConfig.toRequestBody(),
-      };
-
-      final response = await _dio.post('/chat/completions', data: requestBody);
-
-      final content = _extractMessageContent(response.data);
-      if (content == null || content.trim().isEmpty) {
-        throw StateError('DeepSeek returned an empty translation result');
-      }
-
-      Map<String, dynamic> parsed;
+    for (int attempt = 1; attempt <= totalAttempts; attempt++) {
       try {
-        parsed =
-            jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
-      } on FormatException {
-        final recovered = _extractJsonObject(content);
-        if (recovered != null) {
-          parsed = recovered;
-        } else {
-          rethrow;
+        _dio.options.headers['Authorization'] = 'Bearer $apiKey';
+        _dio.options.headers['Content-Type'] = 'application/json';
+
+        final llmConfig = LlmConfig.loadTranslate();
+        final requestBody = <String, dynamic>{
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': userContent},
+          ],
+          'response_format': {'type': 'json_object'},
+          'stream': false,
+          ...llmConfig.toRequestBody(),
+        };
+
+        final response = await _dio.post('/chat/completions', data: requestBody);
+
+        final content = _extractMessageContent(response.data);
+        if (content == null || content.trim().isEmpty) {
+          throw StateError('DeepSeek returned an empty translation result');
         }
-      }
-      final translatedTitle =
-          (parsed['translated_title'] ?? parsed['title'] ?? '')
-              .toString()
-              .trim();
-      final translatedHtml =
-          (parsed['translated_html'] ?? parsed['content'] ?? '')
-              .toString()
-              .trim();
 
-      if (translatedHtml.isEmpty) {
-        throw StateError('DeepSeek translation result missing translated_html');
-      }
+        Map<String, dynamic> parsed;
+        try {
+          parsed =
+              jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
+        } on FormatException {
+          final recovered = _extractJsonObject(content);
+          if (recovered != null) {
+            parsed = recovered;
+          } else {
+            rethrow;
+          }
+        }
+        final translatedTitle =
+            (parsed['translated_title'] ?? parsed['title'] ?? '')
+                .toString()
+                .trim();
+        final translatedHtml =
+            (parsed['translated_html'] ?? parsed['content'] ?? '')
+                .toString()
+                .trim();
 
-      final record = TranslationRecord(
-        status: TranslationStatus.done,
-        translatedTitle: translatedTitle.isEmpty ? null : translatedTitle,
-        translatedContent: _cleanTranslatedContent(translatedHtml),
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      _writeRecord(article.entryId, record);
-      return record;
-    } on DioException catch (e) {
-      final error = e.message ?? 'DeepSeek request failed';
-      _restoreAfterFailure(article.entryId, previous, error);
-      return TranslationRecord(
-        status: TranslationStatus.error,
-        errorMessage: error,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    } on FormatException catch (e) {
-      _restoreAfterFailure(article.entryId, previous, e.message);
-      return TranslationRecord(
-        status: TranslationStatus.error,
-        errorMessage: e.message,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    } on StateError catch (e) {
-      _restoreAfterFailure(article.entryId, previous, e.message);
-      return TranslationRecord(
-        status: TranslationStatus.error,
-        errorMessage: e.message,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    } catch (e) {
-      _restoreAfterFailure(article.entryId, previous, e.toString());
-      return TranslationRecord(
-        status: TranslationStatus.error,
-        errorMessage: e.toString(),
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
+        if (translatedHtml.isEmpty) {
+          throw StateError('DeepSeek translation result missing translated_html');
+        }
+
+        final record = TranslationRecord(
+          status: TranslationStatus.done,
+          translatedTitle: translatedTitle.isEmpty ? null : translatedTitle,
+          translatedContent: _cleanTranslatedContent(translatedHtml),
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        );
+        _writeRecord(article.entryId, record);
+        return record;
+      } catch (e) {
+        if (attempt < totalAttempts) {
+          debugPrint(
+              '[Translation] Attempt $attempt failed for ${article.entryId}, retrying in 1s...');
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        }
+
+        String errorMessage;
+        if (e is DioException) {
+          errorMessage = e.message ?? 'DeepSeek request failed';
+        } else if (e is FormatException) {
+          errorMessage = e.message;
+        } else if (e is StateError) {
+          errorMessage = e.message;
+        } else {
+          errorMessage = e.toString();
+        }
+
+        _restoreAfterFailure(article.entryId, previous, errorMessage);
+        return TranslationRecord(
+          status: TranslationStatus.error,
+          errorMessage: errorMessage,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        );
+      }
     }
+
+    return TranslationRecord(
+      status: TranslationStatus.error,
+      errorMessage: '重试次数已用尽',
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   // ─── 分块翻译 ──────────────────────────────────
@@ -384,12 +391,13 @@ abstract final class TranslationService {
   ) async {
     final apiKey = getApiKey()!;
     final chunks = _splitHtmlIntoChunks(htmlContent);
-    const maxAttempts = 5;
+    final maxRetries = GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
     debugPrint('[Translation] 🧩 ${article.entryId}: 切分为 ${chunks.length} 块');
 
     final llmConfig = LlmConfig.loadTranslate();
     String? lastFailureSummary;
-    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    for (var attempt = 1; attempt <= totalAttempts; attempt++) {
       final result = await _translateChunkBatch(
         article: article,
         targetLang: targetLang,
@@ -406,8 +414,8 @@ abstract final class TranslationService {
     }
 
     final errorMessage = lastFailureSummary == null
-        ? '分块翻译失败，已重试5次'
-        : '分块翻译失败，已重试5次；最后一次失败：$lastFailureSummary';
+        ? '分块翻译失败，已重试${totalAttempts - 1}次'
+        : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：$lastFailureSummary';
     _restoreAfterFailure(article.entryId, previous, errorMessage);
     return TranslationRecord(
       status: TranslationStatus.error,

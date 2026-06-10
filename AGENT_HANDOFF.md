@@ -5498,7 +5498,16 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 1. **阻断双击调起浏览器造成的平台线程阻塞**：双击逻辑中调用了 `url_launcher` 打开外部浏览器。这是一个会导致底层平台（Platform Channel）上下文切换的重负载操作，会直接阻塞主线程，导致正在进行的 180ms 移除动画严重掉帧或被完全跨越。**修复方法**：将 `_openOriginalArticle(article)` 包装在 `Future.delayed(200ms)` 中，将其执行推迟到卡片移除动画完全结束之后，确保动画丝滑。
 2. **修复“M”快捷键导致的滚动冲突**：原版中，“M”快捷键被触发时，会调用默认的 `onNext` 方法，而默认的 `onNext`（用于右方向键）执行的是携带 `scrollTo: true` 的滚动选中下一篇逻辑。这导致按下“M”时又一次复现了“移除收缩 vs 向下强制滚动”的物理冲突。**修复方法**：在 `timeline_page.dart` 初始化 `ArticlePageView` 时主动覆盖 `onMKeyPressed`，针对“标记已读”的情景单独执行静默下移 `_selectRelativeArticle(1, scrollTo: false)`，并调用底层 Controller 完成已读操作。
 
-### 132.5 修改文件清单
+### 132.5 补丁 2：解决连续快速操作时的“闭包变量捕获”导致状态错乱与闪跳
+在修复上述问题后，发现当用户“连续快速按 M 键”或进行其他快速操作，且由于卡片列表缩减自动加载更多文章时，动画效果依然会出现“瞬间消失”或“像PPT一样闪跳”的极端掉帧现象。
+**原理解析与修复**：
+这是由于 `ArticlePageView` 中的 `onMKeyPressed` 回调在构造时，**捕获了当前帧的 `selected` 文章变量**。由于响应式状态（`Obx`）更新 UI 需要经过帧调度（Frame scheduling），当用户手速极快（例如按住 M 键或快速连按），同一帧内 `M` 键被连续触发多次。
+- 第 1 次按下：标记 A 为已读（触发移除动画），代码选中了 B。
+- 第 2 次按下（极快）：此时 UI 还未来得及渲染 B 的右侧详情页，因此 M 键触发的依然是旧闭包！闭包内的 `selected` 依然是 A。代码发现 A 此时已经是“已读”状态，于是执行了 `ac.markAsUnread()`，将 A 又重新放回了列表！
+- 这种极速的移除 -> 恢复 -> 移除的死循环，导致同一个卡片的出入场动画在极短时间内互相覆盖叠加，甚至让 AnimatedList 队列过载，视觉上表现为“疯狂鬼畜闪烁”或“直接消失”。
+**修复方法**：在这两个页面的 `onMKeyPressed` 闭包内，放弃使用外部传入的 `selected` 变量，改为**动态实时从 Controller 状态中获取当前的 `selectedArticle.value`**，从而彻底斩断了多点触控与快速连击带来的 Race Condition。
+
+### 132.6 修改文件清单
 1. `lib/pages/timeline/timeline_page.dart`：
    - 增加 `_selectRelativeArticle` 的 `scrollTo` 参数。
    - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`，并延迟执行 `_openOriginalArticle`。

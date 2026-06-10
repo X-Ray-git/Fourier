@@ -5478,3 +5478,7 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 2. timeline page 的 `_scrollToArticle()` 使用 `addPostFrameCallback` 一次调用，若后续也出现跳动，可参考 filter review 页面加保护延迟。
 3. 移动端 `Dismissible` 左滑/右滑时，`ArticleCard` 的按压缩放理论上也会触发；如果觉得干扰手势，可给移动端 `CardPressEffect` 传 `enablePress: false`。
 
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*

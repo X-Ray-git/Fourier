@@ -675,6 +675,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     if (key == LogicalKeyboardKey.keyM) {
+      if (event is KeyRepeatEvent) return true;
       if (widget.onMKeyPressed != null) {
         widget.onMKeyPressed!();
         return true;

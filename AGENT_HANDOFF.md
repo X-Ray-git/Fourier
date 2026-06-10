@@ -5820,3 +5820,43 @@ dart analyze lib test
 2. macOS 时间线连续按 M：不应出现卡片恢复/移除互相覆盖导致的闪跳。
 3. macOS 垃圾拦截页点击保留/移除，以及按 M/K：最后一张卡片退场时不应被空态直接盖掉。
 4. 切换筛选、静默订阅源入口、刷新后列表重排：已有卡片不应因为位置变化出现零时长闪现。
+
+## 140. macOS 时间线 M 键退场动画瞬间结束专项修复（2026-06-10）
+
+### 140.1 用户反馈
+
+用户验证第 139 节修复后反馈：软件已能正常启动，但 macOS 时间线按 `M` 时，卡片退场动画仍会偶发“一瞬间就结束”。双击路径暂未继续验证，本轮只聚焦 `M` 键。
+
+### 140.2 新定位
+
+第 139 节修复的是通用列表动画状态机，但 `M` 键本身仍有两处额外风险：
+
+1. `ArticlePageView._handleHardwareKeyEvent()` 同时接受 `KeyDownEvent` 和 `KeyRepeatEvent`。按住 `M` 或系统产生 repeat 时，会在 180ms 左右的退场动画窗口内连续处理多篇文章，导致多个列表移除动画叠在一起，视觉上像第一张卡片瞬间消失。
+2. 时间线分栏里的 `onMKeyPressed` 通过右侧详情页的 `ArticleController.markAsRead()` 来驱动左侧列表移除。该流程会先切换选中项、重建/销毁右侧 `ArticlePageView` 与旧 `ArticleController`，再由旧 controller 触发时间线列表状态变更。右侧生命周期和左侧列表移除交织在同一帧内，仍可能压缩退场动画的可见时间。
+
+### 140.3 修复实现
+
+`lib/pages/article/article_page.dart`：
+
+- `M` 键只响应真正的 `KeyDownEvent`，遇到 `KeyRepeatEvent` 直接返回 handled，不再重复触发标记已读。
+
+`lib/pages/timeline/timeline_page.dart`：
+
+- 新增 `_isHandlingMacReadShortcut`，用 220ms 冷却窗口防止连续 `M` 事件压进同一个退场动画周期。
+- 新增 `_successorAfterRemoving()`，在移除当前文章前先计算下一篇或上一篇继任文章。
+- 新增 `_handleMacReadShortcut()`，由时间线页面自己完成：
+  1. 读取当前选中文章；
+  2. 如果文章已读，则继续使用当前右侧 `ArticleController.markAsUnread()` 路径恢复未读；
+  3. 如果文章未读，先静默选中继任文章；
+  4. 记录撤销；
+  5. 调用 `TimelineController.markAsReadLocal()` 触发左侧列表移除；
+  6. 写入 `ReadSyncService` 已读同步队列并后台同步。
+
+这样 `M` 键的左侧退场动画不再依赖即将被销毁的右侧详情 controller，事件重复也被限制在动画窗口外。
+
+### 140.4 后续验证重点
+
+1. macOS 时间线单按 `M`：当前卡片应稳定淡出/收缩，右侧切到继任文章。
+2. 连续按 `M`：应按 220ms 节奏逐篇处理，不应一瞬间吞掉多张卡片。
+3. 按住 `M`：系统 repeat 不应在一次退场动画内重复处理。
+4. 已读视图或全部视图中对已读文章按 `M`：恢复未读行为仍应可用。

@@ -19,6 +19,7 @@ import '../../common/widgets/feedback_toast.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/feed_readability_settings_service.dart';
 import '../../services/feed_translation_settings_service.dart';
+import '../../services/read_sync_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
@@ -55,6 +56,7 @@ class _TimelinePageState extends State<TimelinePage> {
   DateTime? _lastArticleTapAt;
   final Map<String, GlobalKey> _itemKeys = {};
   final Map<String, GlobalKey> _removingItemKeys = {};
+  bool _isHandlingMacReadShortcut = false;
   Worker? _undoRestoreWorker;
 
   @override
@@ -166,6 +168,15 @@ class _TimelinePageState extends State<TimelinePage> {
     }
   }
 
+  ArticleModel? _successorAfterRemoving(String entryId) {
+    final list = controller.articles;
+    final index = list.indexWhere((article) => article.entryId == entryId);
+    if (index < 0 || list.length <= 1) return null;
+
+    final nextIndex = index < list.length - 1 ? index + 1 : index - 1;
+    return list[nextIndex];
+  }
+
   void _scrollToArticle(String entryId) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final key = _itemKeys[entryId];
@@ -250,6 +261,48 @@ class _TimelinePageState extends State<TimelinePage> {
 
   void _handleTimelineRemoveEnd(ArticleModel article) {
     _removingItemKeys.remove(article.entryId);
+  }
+
+  void _handleMacReadShortcut() {
+    if (_isHandlingMacReadShortcut) return;
+
+    final currentSelected = controller.selectedArticle.value;
+    if (currentSelected == null) return;
+
+    final currentIndex = controller.allArticles.indexWhere(
+      (article) => article.entryId == currentSelected.entryId,
+    );
+    final current = currentIndex >= 0
+        ? controller.allArticles[currentIndex]
+        : currentSelected;
+
+    _isHandlingMacReadShortcut = true;
+    Future<void>.delayed(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      _isHandlingMacReadShortcut = false;
+    });
+
+    if (current.isRead) {
+      if (Get.isRegistered<ArticleController>(tag: current.entryId)) {
+        unawaited(
+          Get.find<ArticleController>(tag: current.entryId).markAsUnread(),
+        );
+      } else {
+        controller.markAsUnreadLocal(current.entryId);
+      }
+      return;
+    }
+
+    final successor = _successorAfterRemoving(current.entryId);
+    controller.selectedArticle.value = successor;
+
+    UndoService.recordRead(current);
+    controller.markAsReadLocal(current.entryId);
+    ReadSyncService.enqueue(
+      current.entryId,
+      isInbox: current.category == 'inbox',
+    );
+    unawaited(ReadSyncService.syncPendingReads());
   }
 
   Widget _buildFilterBar(int count) {
@@ -390,28 +443,7 @@ class _TimelinePageState extends State<TimelinePage> {
                     onClose: () => controller.selectedArticle.value = null,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
-                    onMKeyPressed: () {
-                      final currentSelected = controller.selectedArticle.value;
-                      if (currentSelected == null) return;
-
-                      if (Get.isRegistered<ArticleController>(
-                        tag: currentSelected.entryId,
-                      )) {
-                        final ac = Get.find<ArticleController>(
-                          tag: currentSelected.entryId,
-                        );
-                        if (ac.isUpdatingReadState.value) return;
-
-                        final wasUnread = !ac.isRead.value;
-                        if (wasUnread) {
-                          // 静默选中下一篇（不触发滚动），避免与上方卡片的移除收缩动画发生物理冲突
-                          _selectRelativeArticle(1, scrollTo: false);
-                          ac.markAsRead();
-                        } else {
-                          ac.markAsUnread();
-                        }
-                      }
-                    },
+                    onMKeyPressed: _handleMacReadShortcut,
                   );
                 }),
               ),

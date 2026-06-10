@@ -106,13 +106,15 @@ class _CardPressEffectState extends State<CardPressEffect> {
               widget.child,
               if (_showHover || _showEffect)
                 Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: widget.borderRadius,
-                    child: CustomPaint(
-                      painter: _GlassHighlightPainter(
-                        position: _showEffect ? _pressPosition : _hoverPosition,
-                        color: highlightColor,
-                        alpha: _showEffect ? 0.06 : 0.05,
+                  child: IgnorePointer(
+                    child: ClipRRect(
+                      borderRadius: widget.borderRadius,
+                      child: CustomPaint(
+                        painter: _GlassHighlightPainter(
+                          position: _showEffect ? _pressPosition : _hoverPosition,
+                          color: highlightColor,
+                          alpha: _showEffect ? 0.06 : 0.05,
+                        ),
                       ),
                     ),
                   ),

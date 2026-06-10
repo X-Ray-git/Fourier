@@ -228,11 +228,14 @@ class _TimelinePageState extends State<TimelinePage> {
 
       // Let the current frame paint the double-tap ripple before heavy work.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _openOriginalArticle(article);
-
         if (!article.isRead) {
           unawaited(UndoService.markAsRead(article, showSuccess: false));
         }
+
+        // 延迟打开浏览器，避免 platform channel 调用阻塞主线程导致卡片移除动画掉帧
+        Future.delayed(const Duration(milliseconds: 200), () {
+          _openOriginalArticle(article);
+        });
       });
     }
   }
@@ -375,6 +378,21 @@ class _TimelinePageState extends State<TimelinePage> {
                     onClose: () => controller.selectedArticle.value = null,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
+                    onMKeyPressed: () {
+                      if (Get.isRegistered<ArticleController>(tag: selected.entryId)) {
+                        final ac = Get.find<ArticleController>(tag: selected.entryId);
+                        if (ac.isUpdatingReadState.value) return;
+                        
+                        final wasUnread = !ac.isRead.value;
+                        if (wasUnread) {
+                          // 静默选中下一篇（不触发滚动），避免与上方卡片的移除收缩动画发生物理冲突
+                          _selectRelativeArticle(1, scrollTo: false);
+                          ac.markAsRead();
+                        } else {
+                          ac.markAsUnread();
+                        }
+                      }
+                    },
                   );
                 }),
               ),

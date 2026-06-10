@@ -5493,11 +5493,17 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 1. **复用 `GlobalKey` 以维持退出动画状态**：在 `_buildRemovedTimelineItem` 中，如果 `_itemKeys` 存在对应的 `GlobalKey`，则在退出动画中直接复用它：`final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');`。这实现了 Element 树的平滑转移挂载（Reparenting），完美保留了卡片的内部渲染状态。
 2. **双击移除时阻断列表跳动滚动**：为 `_selectRelativeArticle` 增加可选参数 `bool scrollTo = true`。在双击逻辑处理时，由于已知当前文章会被移除，下一篇文章会自然滑入视口，因此静默选中下一篇文章而不触发强制滚动：`_selectRelativeArticle(1, scrollTo: false);`。这彻底消除了两股相反物理运动产生的冲突。
 
-### 132.4 修改文件清单
+### 132.4 补丁：解决掉帧与“M”快捷键带来的冲突
+在初步修复后，进一步发现由于“M”快捷键与双击事件内部的其他同步或平台调用阻塞，偶尔仍会导致动画掉帧或遗漏。
+1. **阻断双击调起浏览器造成的平台线程阻塞**：双击逻辑中调用了 `url_launcher` 打开外部浏览器。这是一个会导致底层平台（Platform Channel）上下文切换的重负载操作，会直接阻塞主线程，导致正在进行的 180ms 移除动画严重掉帧或被完全跨越。**修复方法**：将 `_openOriginalArticle(article)` 包装在 `Future.delayed(200ms)` 中，将其执行推迟到卡片移除动画完全结束之后，确保动画丝滑。
+2. **修复“M”快捷键导致的滚动冲突**：原版中，“M”快捷键被触发时，会调用默认的 `onNext` 方法，而默认的 `onNext`（用于右方向键）执行的是携带 `scrollTo: true` 的滚动选中下一篇逻辑。这导致按下“M”时又一次复现了“移除收缩 vs 向下强制滚动”的物理冲突。**修复方法**：在 `timeline_page.dart` 初始化 `ArticlePageView` 时主动覆盖 `onMKeyPressed`，针对“标记已读”的情景单独执行静默下移 `_selectRelativeArticle(1, scrollTo: false)`，并调用底层 Controller 完成已读操作。
+
+### 132.5 修改文件清单
 1. `lib/pages/timeline/timeline_page.dart`：
    - 增加 `_selectRelativeArticle` 的 `scrollTo` 参数。
-   - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`。
+   - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`，并延迟执行 `_openOriginalArticle`。
    - 在 `_buildRemovedTimelineItem` 中复用 `GlobalKey`。
+   - 为 `ArticlePageView` 注入自定义的 `onMKeyPressed` 处理逻辑。
 
 ---
 *🤖 Automated Release Footprint:*

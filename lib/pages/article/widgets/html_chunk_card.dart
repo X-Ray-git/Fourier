@@ -25,7 +25,7 @@ double _maxStableImageHeight(double width) =>
     (width * 3.0).clamp(420.0, 1400.0).toDouble();
 
 double _boundedImageHeight(double height, double width) =>
-    height.clamp(40.0, _maxStableImageHeight(width)).toDouble();
+    height.clamp(0.0, _maxStableImageHeight(width)).toDouble();
 
 double? _stylePixelHeight(String? style) {
   if (style == null || style.isEmpty) return null;
@@ -673,7 +673,6 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             httpHeaders: ArticleImageService.httpHeaders,
             fit: BoxFit.contain,
             width: renderWidth,
-            height: renderHeight,
             memCacheWidth: cacheWidth,
             maxWidthDiskCache: cacheWidth * 2,
             fadeInDuration: const Duration(milliseconds: 80),
@@ -716,7 +715,6 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
                     : null,
                 child: SizedBox(
                   width: renderWidth,
-                  height: renderHeight,
                   child: Image(image: imageProvider, fit: BoxFit.contain),
                 ),
               );
@@ -788,7 +786,6 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
         httpHeaders: ArticleImageService.httpHeaders,
         fit: BoxFit.contain,
         width: widget.maxWidth,
-        height: displayHeight,
         memCacheWidth: cacheWidth,
         maxWidthDiskCache: cacheWidth * 2,
         fadeInDuration: const Duration(milliseconds: 250),
@@ -804,9 +801,13 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
             ),
           ),
         ),
-        errorWidget: (context, url, error) => _ImageErrorWidget(
-          cs: cs,
-          onRetry: () => setState(() => _retryCount++),
+        errorWidget: (context, url, error) => SizedBox(
+          width: widget.maxWidth,
+          height: displayHeight,
+          child: _ImageErrorWidget(
+            cs: cs,
+            onRetry: () => setState(() => _retryCount++),
+          ),
         ),
       ),
     );

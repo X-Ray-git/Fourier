@@ -5527,3 +5527,9 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 
 ### 132.4 遗留/潜在待优化方向
 - **移动端适配**：当前遵照指示“优先在 macOS 端实现”，移动端底部导航或抽屉暂时没有添加入口，如果有需要可以随时从 `TimelineController` 获取已打好的基建支持。
+
+### 132.5 补充更新（静默组展开展示）
+经过后续反馈，发现在 macOS 侧边栏的“静默订阅源”入口无法直观查看和编辑已静默的具体来源。于是我们对其进行了重构：
+1. `SubscriptionsController` 暴露了被静默的子节点集 `silentFeeds`，以及保留其真实未读数字获取方法 `rawUnreadFor`。
+2. 在 `MacOSSidebar` 中，将“静默订阅源”入口由普通的 `_SidebarItem` 升级为使用 `_CategoryGroup` 构建的折叠组。
+3. 如果静默列表不为空，左侧会像普通分类一样显示折叠箭头，展开后即展示各个被静默的具体订阅源及它们的专属铃铛图标，用户点击后依然会跳转到具体的静默详情页。

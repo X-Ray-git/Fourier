@@ -5479,6 +5479,26 @@ void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
 3. 移动端 `Dismissible` 左滑/右滑时，`ArticleCard` 的按压缩放理论上也会触发；如果觉得干扰手势，可给移动端 `CardPressEffect` 传 `enablePress: false`。
 
 
+## 132. 修复 macOS 卡片进出场动画闪现问题 (2026-06-10)
+
+### 132.1 需求与问题描述
+用户反馈：**在 macOS 端，卡片的进出场动画（特别是双击或被标记已读等操作导致的列表项移除动画）有时会完全失效，直接“闪现”消失或突兀变动。**
+
+### 132.2 问题定位与分析
+经过排查 `timeline_page.dart` 和 `ImplicitlyAnimatedList` 及底层滚动逻辑，导致动画“闪现”的根本原因有两个，且两者可能叠加出现：
+1. **组件状态丢失导致渲染闪现（影响所有移除操作）**：在移除动画 `_buildRemovedTimelineItem` 中，代码原本为被移除的 `ArticleCard` 分配了一个全新的 `ValueKey`。这导致 Flutter 将旧卡片（带有 `GlobalKey`）销毁并瞬间重建新卡片，内部所有瞬时状态（如双击残留的 Ripple 水波纹、Hover 状态、CachedNetworkImage 加载状态）全部丢失并重置到默认状态，造成退出动画开始瞬间的突兀闪烁。
+2. **滚动补偿与移除动画的物理冲突（特指双击场景）**：在 `_handleMacArticleTap` 的双击处理逻辑中，程序会通过 `_selectRelativeArticle(1)` 选中下一篇文章，并触发 `ScrollUtils.ensureVisible` 强制列表向下滚动 250ms 以对齐下一篇文章。与此同时，当前文章被标记已读触发移除动画，下方文章自然向上滑动收缩。两股相反的物理运动同时发生，导致视口剧烈跳动，使得正在执行缩小动画的卡片瞬间飞出可视区域，视觉上呈现出“毫无动画直接消失”。
+
+### 132.3 修复实现
+1. **复用 `GlobalKey` 以维持退出动画状态**：在 `_buildRemovedTimelineItem` 中，如果 `_itemKeys` 存在对应的 `GlobalKey`，则在退出动画中直接复用它：`final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');`。这实现了 Element 树的平滑转移挂载（Reparenting），完美保留了卡片的内部渲染状态。
+2. **双击移除时阻断列表跳动滚动**：为 `_selectRelativeArticle` 增加可选参数 `bool scrollTo = true`。在双击逻辑处理时，由于已知当前文章会被移除，下一篇文章会自然滑入视口，因此静默选中下一篇文章而不触发强制滚动：`_selectRelativeArticle(1, scrollTo: false);`。这彻底消除了两股相反物理运动产生的冲突。
+
+### 132.4 修改文件清单
+1. `lib/pages/timeline/timeline_page.dart`：
+   - 增加 `_selectRelativeArticle` 的 `scrollTo` 参数。
+   - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`。
+   - 在 `_buildRemovedTimelineItem` 中复用 `GlobalKey`。
+
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*

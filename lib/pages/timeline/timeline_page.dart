@@ -113,15 +113,8 @@ class _TimelinePageState extends State<TimelinePage> {
     if (selected == null) {
       controller.selectedArticle.value = list.first;
       return;
-    }
-
-    final currentIndex = list.indexWhere((a) => a.entryId == selected.entryId);
-    if (currentIndex != -1) {
-      final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
-      controller.selectedArticle.value = list[nextIndex];
-      _scrollToArticle(list[nextIndex].entryId);
-      return;
-    }
+    final list = controller.articles;
+    if (selected == null || list.isEmpty) return;
 
     // 在当前过滤后的列表中找不到（通常是因为刚被标记为已读，从未读列表中消失）
     // 回退到未过滤的底层全量列表寻找其绝对坐标
@@ -137,25 +130,25 @@ class _TimelinePageState extends State<TimelinePage> {
         for (int i = allIndex + 1; i < allList.length; i++) {
           if (listEntryIds.contains(allList[i].entryId)) {
             controller.selectedArticle.value = allList[i];
-            _scrollToArticle(allList[i].entryId);
+            if (scrollTo) _scrollToArticle(allList[i].entryId);
             return;
           }
         }
         // 向后找尽，停留在当前可用列表的最后一篇
         controller.selectedArticle.value = list.last;
-        _scrollToArticle(list.last.entryId);
+        if (scrollTo) _scrollToArticle(list.last.entryId);
       } else {
         // 向前寻找上一个存在的文章
         for (int i = allIndex - 1; i >= 0; i--) {
           if (listEntryIds.contains(allList[i].entryId)) {
             controller.selectedArticle.value = allList[i];
-            _scrollToArticle(allList[i].entryId);
+            if (scrollTo) _scrollToArticle(allList[i].entryId);
             return;
           }
         }
         // 向前找尽，停留在当前可用列表的第一篇
         controller.selectedArticle.value = list.first;
-        _scrollToArticle(list.first.entryId);
+        if (scrollTo) _scrollToArticle(list.first.entryId);
       }
     } else {
       // 极端兜底情况：全量列表里都找不到
@@ -223,7 +216,7 @@ class _TimelinePageState extends State<TimelinePage> {
     if (isDoubleTap) {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
-      _selectRelativeArticle(1);
+      _selectRelativeArticle(1, scrollTo: false);
 
       // Let the current frame paint the double-tap ripple before heavy work.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -537,13 +530,14 @@ class _TimelinePageState extends State<TimelinePage> {
     int index,
     Animation<double> animation,
   ) {
+    final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');
     return SizeTransition(
       sizeFactor: animation,
       axisAlignment: -1,
       child: FadeTransition(
         opacity: animation,
         child: ArticleCard(
-          key: ValueKey('removed-${article.entryId}'),
+          key: articleKey,
           article: article,
           isSelected:
               controller.selectedArticle.value?.entryId == article.entryId,

@@ -92,21 +92,44 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   // 同一篇文章内 chunk 内容不变、主题不变 → 缓存 hit，build 耗时从 ms 级降到 ns 级。
   Widget? _cachedWidget;
   Brightness? _cachedBrightness;
+  String? _cachedHoveredUrl;
+  String? _currentBuildHoveredUrl;
 
-  HtmlExtension? get _linkExtension {
+  HtmlExtension? _getLinkExtension(BuildContext context) {
     if (widget.hoveredUrl == null) return null;
-    return _InteractiveLinkExtension(hoveredUrl: widget.hoveredUrl);
+    return _InteractiveLinkExtension(
+      hoveredUrlNotifier: widget.hoveredUrl,
+      currentHoveredUrl: _currentBuildHoveredUrl,
+      colorScheme: Theme.of(context).colorScheme,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
+    if (widget.hoveredUrl == null) {
+      return _buildCardContent(context, null);
+    }
+
+    return ValueListenableBuilder<String?>(
+      valueListenable: widget.hoveredUrl!,
+      builder: (context, hoveredUrl, child) {
+        return _buildCardContent(context, hoveredUrl);
+      },
+    );
+  }
+
+  Widget _buildCardContent(BuildContext context, String? currentHoveredUrl) {
     final brightness = Theme.of(context).brightness;
 
-    if (_cachedWidget == null || _cachedBrightness != brightness) {
+    if (_cachedWidget == null || 
+        _cachedBrightness != brightness || 
+        _cachedHoveredUrl != currentHoveredUrl) {
+      _currentBuildHoveredUrl = currentHoveredUrl;
       _cachedWidget = _buildContent(context);
       _cachedBrightness = brightness;
+      _cachedHoveredUrl = currentHoveredUrl;
     }
 
     if (_cachedWidget == null) return const SizedBox.shrink();
@@ -175,7 +198,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     if (Theme.of(context).brightness == Brightness.dark) {
       htmlData = HtmlContrastUtils.adjustHtmlContrast(htmlData, cs.surface);
     }
-    final ext = _linkExtension;
+    final ext = _getLinkExtension(context);
     return Html(
       data: htmlData,
       onLinkTap: _handleLinkTap,
@@ -243,7 +266,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
       TableHtmlExtension(),
       InlineCodeExtension(colorScheme: cs),
     ];
-    final linkExt = _linkExtension;
+    final linkExt = _getLinkExtension(context);
     if (linkExt != null) exts.add(linkExt);
     return exts;
   }
@@ -979,9 +1002,15 @@ class _InlineCodeWrapperElement extends StyledElement {
 /// 自定义 flutter_html 扩展：替换 `<a>` 标签的默认渲染，
 /// 添加鼠标悬停手势 (SystemMouseCursors.click) 和链接 URL 预览回调。
 class _InteractiveLinkExtension extends HtmlExtension {
-  final ValueNotifier<String?>? hoveredUrl;
+  final ValueNotifier<String?>? hoveredUrlNotifier;
+  final String? currentHoveredUrl;
+  final ColorScheme colorScheme;
 
-  _InteractiveLinkExtension({this.hoveredUrl});
+  _InteractiveLinkExtension({
+    this.hoveredUrlNotifier,
+    this.currentHoveredUrl,
+    required this.colorScheme,
+  });
 
   @override
   Set<String> get supportedTags => {'a'};
@@ -996,13 +1025,17 @@ class _InteractiveLinkExtension extends HtmlExtension {
     ExtensionContext context,
     List<StyledElement> children,
   ) {
+    final url = context.attributes['href'];
+    final isHovered = currentHoveredUrl != null && url == currentHoveredUrl;
+
     return InteractiveElement(
       name: context.elementName,
       children: children,
-      href: context.attributes['href'],
+      href: url,
       style: Style(
-        color: Colors.blue,
-        textDecoration: TextDecoration.underline,
+        color: colorScheme.primary,
+        textDecoration: isHovered ? TextDecoration.underline : TextDecoration.none,
+        textDecorationColor: colorScheme.primary,
       ),
       node: context.node,
       elementId: context.id,
@@ -1042,8 +1075,12 @@ class _InteractiveLinkExtension extends HtmlExtension {
         semanticsLabel: childSpan.semanticsLabel,
         locale: childSpan.locale,
         mouseCursor: SystemMouseCursors.click,
-        onEnter: (_) => hoveredUrl?.value = url,
-        onExit: (_) => hoveredUrl?.value = null,
+        onEnter: (_) => hoveredUrlNotifier?.value = url,
+        onExit: (_) {
+          if (hoveredUrlNotifier?.value == url) {
+            hoveredUrlNotifier?.value = null;
+          }
+        },
         spellOut: childSpan.spellOut,
       );
     } else {
@@ -1057,8 +1094,12 @@ class _InteractiveLinkExtension extends HtmlExtension {
         baseline: TextBaseline.alphabetic,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
-          onEnter: (_) => hoveredUrl?.value = url,
-          onExit: (_) => hoveredUrl?.value = null,
+          onEnter: (_) => hoveredUrlNotifier?.value = url,
+          onExit: (_) {
+            if (hoveredUrlNotifier?.value == url) {
+              hoveredUrlNotifier?.value = null;
+            }
+          },
           child: GestureDetector(
             onTap: onTap,
             child: (childSpan as WidgetSpan).child,

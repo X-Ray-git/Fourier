@@ -6005,3 +6005,7 @@ flutter test
 ### 142.4 后续流程
 
 本版本用于让用户在旧应用身份下导出配置。用户安装本临时版本并导出 JSON 后，再继续进行 `com.folo.*` 命名空间整改。整改后的新包将使用同一套导入逻辑恢复配置。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.19 -m "- feat: add clipboard JSON settings export and import\n- chore: prepare migration before package identifier cleanup" --push`*

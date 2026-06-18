@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:isolate';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import '../../http/feed_http.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
+import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/article_image_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -728,11 +730,23 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
   }
 
+  double _articleContentMaxWidth(double availableWidth) {
+    if (!Platform.isMacOS) return availableWidth;
+
+    final raw = GStorage.setting.get(
+      StorageKeys.articleContentMaxWidth,
+      defaultValue: AppConstants.defaultArticleContentMaxWidth,
+    );
+    final configured = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+    final width = configured ?? AppConstants.defaultArticleContentMaxWidth;
+    return math.min(availableWidth, width.clamp(480, 1200).toDouble());
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
-    final maxWidth = widget.isSplitView ? 800.0 : screenWidth - 32;
+    final maxWidth = _articleContentMaxWidth(screenWidth - 32);
 
     Widget scaffold = Scaffold(
       appBar: AppBar(
@@ -850,54 +864,62 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               SliverPadding(
                 padding: const EdgeInsets.all(16),
                 sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      InkWell(
-                        onTap: controller.openInBrowser,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 4,
-                            horizontal: 2,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                controller.article.title,
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.35,
-                                ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: controller.openInBrowser,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 2,
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // 元数据
-                      _MetadataSection(controller: controller, cs: colorScheme),
-                      const SizedBox(height: 8),
-
-                      if (controller.article.publishedAt.isNotEmpty)
-                        Text(
-                          '发布于: ${controller.article.publishedAt}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.7,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    controller.article.title,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 12),
 
-                      const Divider(height: 24),
+                          // 元数据
+                          _MetadataSection(
+                            controller: controller,
+                            cs: colorScheme,
+                          ),
+                          const SizedBox(height: 8),
 
-                      _ToolbarRow(controller: controller, cs: colorScheme),
-                      _SummaryCard(controller: controller),
-                    ],
+                          if (controller.article.publishedAt.isNotEmpty)
+                            Text(
+                              '发布于: ${controller.article.publishedAt}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.7,
+                                ),
+                              ),
+                            ),
+
+                          const Divider(height: 24),
+
+                          _ToolbarRow(controller: controller, cs: colorScheme),
+                          _SummaryCard(controller: controller),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1014,19 +1036,26 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   final showTrans = controller.showTranslation.value;
 
                   return SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: List.generate(totalChunks, (idx) {
-                        final chunk = activeChunks[idx];
-                        return HtmlChunkCard(
-                          key: ValueKey('${showTrans ? "trans" : "orig"}_$idx'),
-                          chunk: chunk,
-                          maxWidth: maxWidth,
-                          hoveredUrl: _hoveredUrl,
-                          onImageTap: (url) =>
-                              controller.openImagePreview(url, context),
-                        );
-                      }),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxWidth),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: List.generate(totalChunks, (idx) {
+                            final chunk = activeChunks[idx];
+                            return HtmlChunkCard(
+                              key: ValueKey(
+                                '${showTrans ? "trans" : "orig"}_$idx',
+                              ),
+                              chunk: chunk,
+                              maxWidth: maxWidth,
+                              hoveredUrl: _hoveredUrl,
+                              onImageTap: (url) =>
+                                  controller.openImagePreview(url, context),
+                            );
+                          }),
+                        ),
+                      ),
                     ),
                   );
                 }),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -35,6 +36,38 @@ double? _stylePixelHeight(String? style) {
   ).firstMatch(style);
   if (match == null) return null;
   return double.tryParse(match.group(1)!);
+}
+
+double? _stylePixelWidth(String? style) {
+  if (style == null || style.isEmpty) return null;
+  final match = RegExp(
+    r'(?:max-width|width)\s*:\s*(\d+(?:\.\d+)?)\s*px',
+    caseSensitive: false,
+  ).firstMatch(style);
+  if (match == null) return null;
+  return double.tryParse(match.group(1)!);
+}
+
+double _imageWidthCap(double maxWidth) {
+  if (maxWidth <= 0) return 0;
+  return maxWidth;
+}
+
+double _resolvedImageWidth(
+  double maxWidth, {
+  double? imageWidth,
+  String? style,
+}) {
+  final cap = _imageWidthCap(maxWidth);
+  if (cap <= 0) return 0;
+
+  final preferredWidth = (imageWidth != null && imageWidth > 0)
+      ? imageWidth
+      : _stylePixelWidth(style);
+  if (preferredWidth != null && preferredWidth > 0) {
+    return preferredWidth.clamp(1.0, cap).toDouble();
+  }
+  return cap;
 }
 
 double _stableImageHeight(
@@ -123,8 +156,8 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   Widget _buildCardContent(BuildContext context, String? currentHoveredUrl) {
     final brightness = Theme.of(context).brightness;
 
-    if (_cachedWidget == null || 
-        _cachedBrightness != brightness || 
+    if (_cachedWidget == null ||
+        _cachedBrightness != brightness ||
         _cachedHoveredUrl != currentHoveredUrl) {
       _currentBuildHoveredUrl = currentHoveredUrl;
       _cachedWidget = _buildContent(context);
@@ -649,23 +682,30 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           );
         }
 
+        final isInlineEmoji =
+            imageUrl.contains('s.w.org/images/core/emoji') ||
+            attrs['class'] == 'emoji';
+
         // 针对常见的 WordPress emoji 等内联小图做默认尺寸约束
-        if (imageUrl.contains('s.w.org/images/core/emoji') ||
-            attrs['class'] == 'emoji') {
+        if (isInlineEmoji) {
           explicitWidth ??= 20.0;
           explicitHeight ??= 20.0;
         }
 
-        final renderWidth = explicitWidth ?? widget.maxWidth;
+        final renderWidth = _resolvedImageWidth(
+          widget.maxWidth,
+          imageWidth: explicitWidth,
+          style: attrs['style'],
+        );
         final renderHeight = _stableImageHeight(
           renderWidth,
           imageWidth: explicitWidth,
           imageHeight: explicitHeight,
           style: attrs['style'],
         );
-        final cacheWidth = (renderWidth * dpr).round();
+        final cacheWidth = math.max(1, (renderWidth * dpr).round());
 
-        return ClipRRect(
+        final imageWidget = ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: CachedNetworkImage(
             imageUrl: imageUrl,
@@ -677,12 +717,9 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             maxWidthDiskCache: cacheWidth * 2,
             fadeInDuration: const Duration(milliseconds: 80),
             fadeOutDuration: const Duration(milliseconds: 80),
-            placeholder: (context, url) => Container(
+            placeholder: (context, url) => SizedBox(
               width: renderWidth,
               height: renderHeight,
-              color: Theme.of(
-                context,
-              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
               child: const Center(
                 child: SizedBox(
                   width: 16,
@@ -722,6 +759,9 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             },
           ),
         );
+
+        if (isInlineEmoji) return imageWidget;
+        return Center(child: imageWidget);
       },
     );
   }
@@ -754,6 +794,7 @@ class _ArticleInlineImage extends StatefulWidget {
 class _ArticleInlineImageState extends State<_ArticleInlineImage>
     with AutomaticKeepAliveClientMixin {
   int _retryCount = 0;
+  bool _isHovered = false;
 
   @override
   bool get wantKeepAlive => true; // 告诉 ListView 不要在滑出屏幕时销毁该组件
@@ -764,9 +805,14 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
 
     final cs = Theme.of(context).colorScheme;
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    final cacheWidth = (widget.maxWidth * dpr).round();
-    final displayHeight = _stableImageHeight(
+    final displayWidth = _resolvedImageWidth(
       widget.maxWidth,
+      imageWidth: widget.imageWidth,
+      style: widget.style,
+    );
+    final cacheWidth = math.max(1, (displayWidth * dpr).round());
+    final displayHeight = _stableImageHeight(
+      displayWidth,
       imageWidth: widget.imageWidth,
       imageHeight: widget.imageHeight,
       style: widget.style,
@@ -785,13 +831,13 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
         cacheKey: 'v2_$imageUrl',
         httpHeaders: ArticleImageService.httpHeaders,
         fit: BoxFit.contain,
-        width: widget.maxWidth,
+        width: displayWidth,
         memCacheWidth: cacheWidth,
         maxWidthDiskCache: cacheWidth * 2,
         fadeInDuration: const Duration(milliseconds: 250),
         fadeOutDuration: const Duration(milliseconds: 80),
         placeholder: (context, url) => SizedBox(
-          width: widget.maxWidth,
+          width: displayWidth,
           height: displayHeight,
           child: const Center(
             child: SizedBox(
@@ -802,7 +848,7 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
           ),
         ),
         errorWidget: (context, url, error) => SizedBox(
-          width: widget.maxWidth,
+          width: displayWidth,
           height: displayHeight,
           child: _ImageErrorWidget(
             cs: cs,
@@ -813,7 +859,7 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
     );
 
     if (canTap) {
-      image = InkWell(
+      image = GestureDetector(
         onTap: () => widget.onTap!(widget.imageUrl),
         child: image,
       );
@@ -829,10 +875,37 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
       );
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Material(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+    image = ClipRRect(borderRadius: BorderRadius.circular(10), child: image);
+
+    if (Platform.isMacOS) {
+      image = MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: _isHovered
+                ? cs.surfaceContainerHighest.withValues(alpha: 0.28)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+            border: _isHovered
+                ? Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.55),
+                    width: 1,
+                  )
+                : null,
+          ),
+          child: image,
+        ),
+      );
+    } else {
+      image = Material(type: MaterialType.transparency, child: image);
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: displayWidth),
         child: image,
       ),
     );
@@ -1035,7 +1108,9 @@ class _InteractiveLinkExtension extends HtmlExtension {
       href: url,
       style: Style(
         color: colorScheme.primary,
-        textDecoration: isHovered ? TextDecoration.underline : TextDecoration.none,
+        textDecoration: isHovered
+            ? TextDecoration.underline
+            : TextDecoration.none,
         textDecorationColor: colorScheme.primary,
       ),
       node: context.node,

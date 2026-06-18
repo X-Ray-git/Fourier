@@ -34,6 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _sessionIdController = TextEditingController();
   final _deepseekApiKeyController = TextEditingController();
   final _readSyncWindowDaysController = TextEditingController();
+  final _articleContentMaxWidthController = TextEditingController();
   bool _obscureToken = true;
   bool _obscureClientId = true;
   bool _obscureSessionId = true;
@@ -56,6 +57,11 @@ class _SettingsPageState extends State<SettingsPage> {
       defaultValue: AppConstants.defaultReadSyncWindowDays,
     );
     _readSyncWindowDaysController.text = readWindowDays.toString();
+    final articleContentMaxWidth = GStorage.setting.get(
+      StorageKeys.articleContentMaxWidth,
+      defaultValue: AppConstants.defaultArticleContentMaxWidth,
+    );
+    _articleContentMaxWidthController.text = articleContentMaxWidth.toString();
     _badgeStrategy = GStorage.setting.get(
       StorageKeys.badgeStrategy,
       defaultValue: 'unread_count',
@@ -73,6 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _sessionIdController.dispose();
     _deepseekApiKeyController.dispose();
     _readSyncWindowDaysController.dispose();
+    _articleContentMaxWidthController.dispose();
     super.dispose();
   }
 
@@ -117,7 +124,20 @@ class _SettingsPageState extends State<SettingsPage> {
       AppFeedback.warning('配置未保存', '已读拉取窗口请填写大于 0 的天数');
       return;
     }
+    final articleContentMaxWidth = int.tryParse(
+      _articleContentMaxWidthController.text.trim(),
+    );
+    if (articleContentMaxWidth == null ||
+        articleContentMaxWidth < 480 ||
+        articleContentMaxWidth > 1200) {
+      AppFeedback.warning('配置未保存', '正文最大宽度请填写 480～1200 之间的整数');
+      return;
+    }
     GStorage.setting.put(StorageKeys.readSyncWindowDays, readWindowDays);
+    GStorage.setting.put(
+      StorageKeys.articleContentMaxWidth,
+      articleContentMaxWidth,
+    );
     GStorage.setting.put(StorageKeys.badgeStrategy, _badgeStrategy);
     GStorage.setting.put('auto_retry_max_count', _autoRetryMaxCount);
 
@@ -367,6 +387,36 @@ class _SettingsPageState extends State<SettingsPage> {
             onChanged: (val) {
               if (val != null) setState(() => _badgeStrategy = val);
             },
+          ),
+
+          const SizedBox(height: 32),
+
+          // 阅读排版
+          Text(
+            '阅读排版',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '控制文章详情页正文与图片的最大显示宽度',
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: _articleContentMaxWidthController,
+            decoration: const InputDecoration(
+              labelText: '正文最大宽度（px）',
+              hintText: '720',
+              border: OutlineInputBorder(),
+              helperText: 'macOS 文章页生效；默认 720，建议 640～800 之间调试',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
 
           const SizedBox(height: 32),

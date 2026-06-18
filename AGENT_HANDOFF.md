@@ -5860,3 +5860,74 @@ dart analyze lib test
 2. 连续按 `M`：应按 220ms 节奏逐篇处理，不应一瞬间吞掉多张卡片。
 3. 按住 `M`：系统 repeat 不应在一次退场动画内重复处理。
 4. 已读视图或全部视图中对已读文章按 `M`：恢复未读行为仍应可用。
+
+## 141. macOS 文章正文与图片宽度可配置（2026-06-19）
+
+### 141.1 背景
+
+用户在外接显示器的大窗口下阅读文章时发现：右侧文章详情区域被撑得很宽，正文图片会等比例放大到接近占满屏幕；同时 macOS 端图片在非 hover 状态下也会显示一层专门的背景框，视觉上过重。
+
+讨论后确认：
+
+1. 图片不应无条件占满横向宽度。
+2. 如果 HTML 中有明确的 `width` 或 `style="width: ...px"`，应尊重图片自己的显示宽度，不主动放大到正文最大宽度。
+3. 如果图片没有明确宽度，则按正文最大宽度显示。
+4. 文字正文与图片应共用一个可配置的最大宽度，默认值先定为 `720px`，便于后续用户实测调整。
+5. macOS 非 hover 状态下不显示图片专门背景框；hover 时再给轻微边框/背景反馈。
+
+### 141.2 实现
+
+`lib/common/constants/constants.dart`：
+
+- 新增 `AppConstants.defaultArticleContentMaxWidth = 720`。
+- 新增 `StorageKeys.articleContentMaxWidth = 'article_content_max_width'`。
+
+`lib/pages/settings/settings_page.dart`：
+
+- 新增“阅读排版”设置区。
+- 新增“正文最大宽度（px）”输入框。
+- 允许范围：`480～1200`。
+- 保存到 `GStorage.setting[StorageKeys.articleContentMaxWidth]`。
+
+`lib/pages/article/article_page.dart`：
+
+- 新增 `_articleContentMaxWidth()`，macOS 从设置读取正文最大宽度并 clamp 到 `480～1200`。
+- Android 仍保持屏幕宽度策略，不受该设置影响。
+- 标题/元数据区域和正文 chunk 区域都包进同一个 `Center + ConstrainedBox(maxWidth: maxWidth)`，保证文字与图片使用同一阅读宽度。
+
+`lib/pages/article/widgets/html_chunk_card.dart`：
+
+- 新增 `_stylePixelWidth()` 和 `_resolvedImageWidth()`。
+- 图片显示宽度规则：
+  - 有显式图片宽度：`min(显式宽度, 正文最大宽度)`。
+  - 无显式图片宽度：使用正文最大宽度。
+  - 表情/内联小图保留小尺寸，不作为块级大图居中。
+- macOS 普通正文图片默认透明背景，只有 hover 时显示轻微背景与边框。
+- 圆角包裹最终图片显示区域，而不是整行宽度。
+
+### 141.3 验证
+
+已执行：
+
+```bash
+dart format lib/common/constants/constants.dart lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/pages/settings/settings_page.dart
+dart analyze lib/common/constants/constants.dart lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/pages/settings/settings_page.dart
+```
+
+结果：`No issues found!`
+
+### 141.4 后续计划
+
+用户随后提出需要规避与 Folo 官方混淆，但不打算隐藏本项目是基于 Folo/Folo API 的个人二次开发客户端，也暂不要求改应用名 `Auto Folo` 或图标。当前共识：
+
+1. 应优先整改 `com.folo.*` 这类官方域名式命名空间，例如 Android `applicationId`、macOS `PRODUCT_BUNDLE_IDENTIFIER` 和 copyright。
+2. 可以保留 `Auto Folo` 展示名和当前差异化图标，但 README/设置页应增加“非官方个人二次开发客户端，不隶属于 Folo/RSSNext”的说明。
+3. 改 Android `applicationId` 后，新包会作为第二个应用安装，不能覆盖旧包；旧设置不会自动共享。
+4. 改 macOS bundle id 后，新 app 会使用新的 sandbox 容器，旧设置也不会自动共享。
+5. 为迁移便利，下一步计划先做“导出配置到剪贴板 / 从剪贴板导入配置”。导出格式使用 JSON 字典，不加额外前缀。
+
+配置导入导出的范围共识：
+
+- 导出“偏好和密钥”，不导出“内容和历史”。
+- 应导出：Folo token/client/session、DeepSeek API key、LLM 参数、Prompt、自动重试、已读拉取窗口、正文最大宽度、角标策略、`feed_auto_translate_*`、`feed_silent_*`、`feed_auto_readability_*`。
+- 不导出：`readability_fetched_*`、`inbox_detail_fetched_*`、`localCache`、`readStatus`、`articleDb`、`translations`、`summaries`、`readHistory`。

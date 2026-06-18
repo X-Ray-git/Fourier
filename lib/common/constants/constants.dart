@@ -13,6 +13,7 @@ abstract final class AppConstants {
   static const int defaultPageSize = 50;
   static const int defaultTimeout = 30000;
   static const int defaultReadSyncWindowDays = 2;
+  static const int defaultArticleContentMaxWidth = 720;
 }
 
 abstract final class StorageKeys {
@@ -27,4 +28,5 @@ abstract final class StorageKeys {
   static const String articleLazyLoading = 'article_lazy_loading'; // deprecated
   static const String articleInitialChunkBuildCount =
       'article_initial_chunk_build_count';
+  static const String articleContentMaxWidth = 'article_content_max_width';
 }

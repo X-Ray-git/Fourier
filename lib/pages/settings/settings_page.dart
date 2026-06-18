@@ -773,6 +773,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '非官方个人二次开发客户端，不隶属于 Folo 或 RSSNext。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.75,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     'Folo API: api.folo.is',

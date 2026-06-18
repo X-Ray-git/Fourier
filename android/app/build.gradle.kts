@@ -16,7 +16,7 @@ if (hasReleaseSigning) {
 }
 
 android {
-    namespace = "com.folo.folo_reader"
+    namespace = "io.github.xraygit.autofolo"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -30,8 +30,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.folo.folo_reader"
+        applicationId = "io.github.xraygit.autofolo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

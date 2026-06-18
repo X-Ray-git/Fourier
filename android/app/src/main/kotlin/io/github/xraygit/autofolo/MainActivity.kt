@@ -1,4 +1,4 @@
-package com.folo.folo_reader
+package io.github.xraygit.autofolo
 
 import android.content.ContentProviderClient
 import android.content.Context
@@ -14,8 +14,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val MOVE_CHANNEL = "com.autofolo/move_to_background"
-    private val BADGE_CHANNEL = "com.autofolo/badge"
+    private val MOVE_CHANNEL = "io.github.xraygit.autofolo/move_to_background"
+    private val BADGE_CHANNEL = "io.github.xraygit.autofolo/badge"
     private val BADGE_NOTIFICATION_ID = 1001
     private val BADGE_CHANNEL_ID = "badge_channel"
 

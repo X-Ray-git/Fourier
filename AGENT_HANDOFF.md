@@ -2,6 +2,7 @@
 
 > **快速上手**：Flutter 3.x + GetX + Hive + Dio 项目。入口 `lib/main.dart`，路由 `lib/router/app_pages.dart`。
 > 当前产品名统一为 **Auto Folo**；Dart package 名仍是 `autofolo`。验证优先使用 `flutter analyze` 与 `flutter test`，不要用裸 `dart analyze lib/` 判断 Flutter 项目健康度。
+> 当前应用标识已迁移为 `io.github.xraygit.autofolo`（Android applicationId/namespace、macOS bundle id、MethodChannel 命名空间）。历史章节中的 `com.folo.*` / `com.autofolo` 仅为旧记录，不能再作为当前实现依据。
 > 常用构建：`flutter build apk --debug`、`flutter build macos --debug`。内部发布走 tag 触发的 GitHub Actions，详见第 80 节；macOS 发布包必须保持 arm64。
 
 ## 项目速览
@@ -6005,6 +6006,105 @@ flutter test
 ### 142.4 后续流程
 
 本版本用于让用户在旧应用身份下导出配置。用户安装本临时版本并导出 JSON 后，再继续进行 `com.folo.*` 命名空间整改。整改后的新包将使用同一套导入逻辑恢复配置。
+
+## 143. 应用命名空间迁移与非官方声明（2026-06-19）
+
+### 143.1 背景与边界
+
+用户确认：本项目不需要隐藏与 Folo 的关系，也不需要把 `Auto Folo` 包装成完全独立品牌；它本质上是基于 Folo/Folo API 的个人二次开发客户端。真正需要规避的是让人误以为这是 Folo/RSSNext 官方应用、授权应用或商业运营产品。
+
+因此本轮不改：
+
+- 应用展示名 `Auto Folo`。
+- 当前差异化图标。
+- Folo API / Folo Token / `api.folo.is` 等事实性说明。
+
+本轮必须改：
+
+- `com.folo.*` 这类官方域名式命名空间。
+- 旧的 `com.autofolo` MethodChannel 命名空间。
+- macOS copyright 中的 `com.folo`。
+- README / 设置页 / 网页中缺少“非官方个人二次开发客户端”的说明。
+
+### 143.2 当前标识
+
+新的统一命名空间：
+
+```text
+io.github.xraygit.autofolo
+```
+
+该命名空间应用于：
+
+- Android `namespace`。
+- Android `applicationId`。
+- Android Kotlin 包声明和文件路径。
+- macOS `PRODUCT_BUNDLE_IDENTIFIER`。
+- macOS RunnerTests bundle id。
+- Flutter MethodChannel：
+  - `io.github.xraygit.autofolo/badge`
+  - `io.github.xraygit.autofolo/move_to_background`
+  - `io.github.xraygit.autofolo/image_clipboard`
+
+### 143.3 实现文件
+
+Android：
+
+- `android/app/build.gradle.kts`
+  - `namespace = "io.github.xraygit.autofolo"`
+  - `applicationId = "io.github.xraygit.autofolo"`
+- `android/app/src/main/kotlin/io/github/xraygit/autofolo/MainActivity.kt`
+  - package 改为 `io.github.xraygit.autofolo`
+  - badge / move-to-background channel 改为新命名空间。
+- 旧路径 `android/app/src/main/kotlin/com/folo/folo_reader/MainActivity.kt` 已移除。
+
+macOS：
+
+- `macos/Runner/Configs/AppInfo.xcconfig`
+  - `PRODUCT_BUNDLE_IDENTIFIER = io.github.xraygit.autofolo`
+  - `PRODUCT_COPYRIGHT = Copyright © 2026 X-Ray. All rights reserved.`
+- `macos/Runner.xcodeproj/project.pbxproj`
+  - RunnerTests bundle id 改为 `io.github.xraygit.autofolo.RunnerTests`
+- `macos/Runner/AppDelegate.swift`
+  - badge / image clipboard channel 改为新命名空间。
+
+Dart：
+
+- `lib/common/widgets/app_badger.dart`
+- `lib/utils/move_to_background.dart`
+- `lib/utils/image_clipboard.dart`
+
+上述 Dart 侧 MethodChannel 均与 Android/macOS 原生侧保持一致。
+
+公开说明：
+
+- `README.md` 顶部新增声明：Auto Folo 是个人用途的非官方二次开发客户端，不隶属于 Folo、RSSNext 或其运营方，也不代表官方发布版本。
+- 设置页“关于”新增同类短声明。
+- `index.html` hero 区新增非官方声明，并将“Folo 官方 img.folo.is 代理”改为“Folo img.folo.is 图片代理”。
+- `lib/services/article_image_service.dart` 注释中去掉“官方”背书式措辞。
+
+### 143.4 安装与数据影响
+
+Android：
+
+- 新 APK 会作为新应用安装，不会覆盖旧 `com.folo.folo_reader`。
+- 旧应用数据不会自动共享。
+- 迁移方式：先在旧 v1.1.19 中导出 JSON 配置，再在新包中从剪贴板导入。
+
+macOS：
+
+- 新 bundle id 会使用新的 sandbox 容器。
+- 旧 `com.folo.autofolo` 容器中的设置不会自动共享。
+- 迁移方式同样使用第 142 节的 JSON 配置导入导出。
+
+### 143.5 后续验证重点
+
+1. Android 安装新包：应与旧包并存，不出现“软件包冲突”。
+2. Android 新包设置页：应能从剪贴板导入 v1.1.19 导出的 JSON。
+3. Android 角标与退到后台 MethodChannel 仍可用。
+4. macOS 新包启动后：bundle id 应为 `io.github.xraygit.autofolo`，设置页能导入 JSON。
+5. macOS Dock badge 与图片复制功能仍可用。
+6. README/设置页/网页明确说明非官方个人二次开发身份。
 
 ---
 *🤖 Automated Release Footprint:*

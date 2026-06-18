@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class ImageClipboard {
-  static const _channel = MethodChannel('com.autofolo/image_clipboard');
+  static const _channel = MethodChannel(
+    'io.github.xraygit.autofolo/image_clipboard',
+  );
 
   static Future<Uint8List?> downloadBytes(String url) async {
     try {

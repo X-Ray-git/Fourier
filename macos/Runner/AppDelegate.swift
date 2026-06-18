@@ -38,7 +38,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
 
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
 
-    let badgeChannel = FlutterMethodChannel(name: "com.autofolo/badge", binaryMessenger: controller.engine.binaryMessenger)
+    let badgeChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/badge", binaryMessenger: controller.engine.binaryMessenger)
     badgeChannel.setMethodCallHandler { (call, result) in
       if call.method == "updateBadge" {
         if let args = call.arguments as? [String: Any], let count = args["count"] as? Int {
@@ -55,7 +55,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       }
     }
 
-    let imageChannel = FlutterMethodChannel(name: "com.autofolo/image_clipboard", binaryMessenger: controller.engine.binaryMessenger)
+    let imageChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/image_clipboard", binaryMessenger: controller.engine.binaryMessenger)
     imageChannel.setMethodCallHandler { (call, result) in
       if call.method == "copyImage" {
         if let typedData = call.arguments as? FlutterStandardTypedData {

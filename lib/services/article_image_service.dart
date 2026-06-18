@@ -3,7 +3,7 @@ import '../utils/security_utils.dart';
 abstract final class ArticleImageService {
   static const String _proxyBase = 'https://img.folo.is';
 
-  /// Folo 官方图片代理域名规则（从 Folo 源码 img-proxy.ts 提取）
+  /// Folo 图片代理域名规则（参考 Folo img-proxy 逻辑）
   /// 仅对需要特定 Referer 才能访问的 CDN 走代理
   static final List<_ProxyRule> _proxyRules = [
     _ProxyRule(
@@ -37,7 +37,7 @@ abstract final class ArticleImageService {
     ),
   ];
 
-  /// 默认请求头（不含 Referer——Folo 代理会按域名补正确的 Referer）
+  /// 默认请求头（不含 Referer，图片代理会按域名补正确的 Referer）
   static const Map<String, String> httpHeaders = {
     'User-Agent':
         'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36',
@@ -64,7 +64,7 @@ abstract final class ArticleImageService {
     return uri.toString();
   }
 
-  /// 对需要特定 Referer 的 CDN 图片，通过 Folo 官方代理加载
+  /// 对需要特定 Referer 的 CDN 图片，通过 Folo 图片代理加载
   static String? toProxiedUrl(String? rawUrl) {
     final normalized = normalizeImageUrl(rawUrl);
     if (normalized == null) return null;

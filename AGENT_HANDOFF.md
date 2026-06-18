@@ -6109,3 +6109,7 @@ macOS：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.19 -m "- feat: add clipboard JSON settings export and import\n- chore: prepare migration before package identifier cleanup" --push`*
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.20 -m "- chore: migrate Android package and macOS bundle identifiers to io.github.xraygit.autofolo\n- docs: clarify Auto Folo is an unofficial personal client" --push`*

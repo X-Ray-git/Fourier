@@ -13,6 +13,10 @@ class AccountService extends GetxController {
     _checkLogin();
   }
 
+  void reload() {
+    _checkLogin();
+  }
+
   void _checkLogin() {
     final token =
         GStorage.setting.get(StorageKeys.sessionToken, defaultValue: '')

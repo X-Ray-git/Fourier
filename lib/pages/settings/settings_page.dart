@@ -10,6 +10,7 @@ import '../../services/account_service.dart';
 import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/llm_config.dart';
+import '../../services/settings_backup_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/translation_service.dart';
 import '../../router/app_pages.dart';
@@ -47,7 +48,10 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _accountService = AccountService.instance;
 
-    // 填入已保存的值
+    _loadPersistedSettings();
+  }
+
+  void _loadPersistedSettings() {
     _tokenController.text = _accountService.sessionToken ?? '';
     _clientIdController.text = _accountService.clientId ?? '';
     _sessionIdController.text = _accountService.sessionId ?? '';
@@ -153,6 +157,79 @@ class _SettingsPageState extends State<SettingsPage> {
     GStorage.setting.delete('deepseek_api_key');
 
     AppFeedback.info('配置已清除', '已移除本地配置');
+  }
+
+  Future<bool> _confirmSettingsExport() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导出配置'),
+        content: const Text(
+          '导出的 JSON 会包含 Folo 登录凭据、DeepSeek API Key、Prompt 和订阅源偏好。'
+          '请只保存或发送给你信任的位置。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Get.back(result: true),
+            child: const Text('导出到剪贴板'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<bool> _confirmSettingsImport() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导入配置'),
+        content: const Text(
+          '将从剪贴板读取 Auto Folo 配置 JSON，并覆盖当前已保存的账号、AI、Prompt 和订阅源偏好设置。'
+          '文章缓存、已读历史、摘要和翻译结果不会被导入。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Get.back(result: true),
+            child: const Text('从剪贴板导入'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _exportSettingsToClipboard() async {
+    if (!await _confirmSettingsExport()) return;
+    try {
+      final summary = await SettingsBackupService.exportToClipboard();
+      AppFeedback.success('配置已导出', '已复制 ${summary.settingCount} 项设置到剪贴板');
+    } catch (e) {
+      AppFeedback.error('导出失败', e.toString());
+    }
+  }
+
+  Future<void> _importSettingsFromClipboard() async {
+    if (!await _confirmSettingsImport()) return;
+    try {
+      final summary = await SettingsBackupService.importFromClipboard();
+      _accountService.reload();
+      setState(_loadPersistedSettings);
+      AppFeedback.success(
+        '配置已导入',
+        '已写入 ${summary.settingCount} 项设置，其中 ${summary.feedPreferenceCount} 项订阅源偏好',
+      );
+    } catch (e) {
+      AppFeedback.error('导入失败', e.toString());
+    }
   }
 
   Widget _buildShortcutItem(BuildContext context, String keys, String desc) {
@@ -520,6 +597,44 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: OutlinedButton(
                   onPressed: _clear,
                   child: const Text('清除'),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // 配置迁移
+          Text(
+            '配置迁移',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '导出和导入账号、AI、Prompt 与订阅源偏好设置',
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _exportSettingsToClipboard,
+                  icon: const Icon(Icons.upload_rounded, size: 18),
+                  label: const Text('导出到剪贴板'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _importSettingsFromClipboard,
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const Text('从剪贴板导入'),
                 ),
               ),
             ],

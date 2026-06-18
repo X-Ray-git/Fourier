@@ -5931,3 +5931,77 @@ dart analyze lib/common/constants/constants.dart lib/pages/article/article_page.
 - 导出“偏好和密钥”，不导出“内容和历史”。
 - 应导出：Folo token/client/session、DeepSeek API key、LLM 参数、Prompt、自动重试、已读拉取窗口、正文最大宽度、角标策略、`feed_auto_translate_*`、`feed_silent_*`、`feed_auto_readability_*`。
 - 不导出：`readability_fetched_*`、`inbox_detail_fetched_*`、`localCache`、`readStatus`、`articleDb`、`translations`、`summaries`、`readHistory`。
+
+## 142. 设置导入/导出到剪贴板（2026-06-19）
+
+### 142.1 背景
+
+由于后续将整改 Android `applicationId` 和 macOS `PRODUCT_BUNDLE_IDENTIFIER`，新安装包会使用新的应用身份和数据容器，旧设置不会自动共享。用户希望先发布一个临时版本，用旧包名安装后导出配置，再在改包名后的版本中导入。
+
+讨论后决定：
+
+1. 使用纯 JSON 字典格式，不包额外前缀。
+2. 只导出“设置、偏好和密钥”，不导出文章内容、已读历史、摘要/翻译缓存。
+3. 手机端和电脑端共用同一套配置格式；平台不使用的配置可以保存但不生效。
+4. 导入时应覆盖当前已保存的受管理设置，形成接近快照恢复的效果。
+
+### 142.2 实现
+
+`lib/services/settings_backup_service.dart`：
+
+- 新增 `SettingsBackupService`。
+- 导出格式：
+
+```json
+{
+  "type": "auto_folo_settings",
+  "version": 1,
+  "exportedAt": "2026-06-19T00:00:00.000Z",
+  "settings": {
+    "session_token": "...",
+    "client_id": "...",
+    "session_id": "..."
+  }
+}
+```
+
+- 导出只收集 allowlist：
+  - 固定 key：Folo 凭据、DeepSeek API key、Prompt、自动重试、已读拉取窗口、角标策略、正文最大宽度。
+  - LLM 前缀：`llm_translate_`、`llm_summary_`、`llm_filter_`。
+  - 订阅源偏好前缀：`feed_auto_translate_`、`feed_silent_`、`feed_auto_readability_`。
+- 导入时校验 `type` 和 `version`。
+- 导入时只接受字符串、数字、布尔等 JSON primitive，并按 key 归一化类型：
+  - `temperature` 写入 double。
+  - `max_tokens` / `concurrency` / 窗口天数 / 正文宽度 / 重试次数写入 int。
+  - `thinking` 和订阅源偏好写入 bool。
+- 导入时先删除所有受管理 key，再写入 JSON 内的设置，避免旧订阅源偏好残留。
+- 导入后刷新 DeepSeek API key 的运行期缓存，并递增静默订阅源版本号以触发 UI 响应。
+
+`lib/pages/settings/settings_page.dart`：
+
+- 新增“配置迁移”区块。
+- 新增“导出到剪贴板”和“从剪贴板导入”按钮。
+- 导出前提示 JSON 包含 Folo 登录凭据、DeepSeek API key、Prompt 和订阅源偏好。
+- 导入前提示会覆盖当前设置，且不会导入文章缓存、已读历史、摘要和翻译结果。
+- 导入成功后刷新设置页表单和 `AccountService` 登录状态。
+
+`lib/services/account_service.dart`：
+
+- 新增 `reload()`，供导入配置后重新计算登录状态。
+
+### 142.3 验证
+
+已执行：
+
+```bash
+dart format lib/services/settings_backup_service.dart lib/services/account_service.dart lib/pages/settings/settings_page.dart
+dart analyze lib/services/settings_backup_service.dart lib/services/account_service.dart lib/pages/settings/settings_page.dart
+flutter analyze --no-fatal-infos lib test
+flutter test
+```
+
+结果均通过。`flutter analyze` 和 `flutter test` 首次被 Flutter SDK cache 写入权限拦截，授权后重跑通过。
+
+### 142.4 后续流程
+
+本版本用于让用户在旧应用身份下导出配置。用户安装本临时版本并导出 JSON 后，再继续进行 `com.folo.*` 命名空间整改。整改后的新包将使用同一套导入逻辑恢复配置。

@@ -794,10 +794,16 @@ class _ArticleInlineImage extends StatefulWidget {
 class _ArticleInlineImageState extends State<_ArticleInlineImage>
     with AutomaticKeepAliveClientMixin {
   int _retryCount = 0;
-  bool _isHovered = false;
+  final ValueNotifier<bool> _isHovered = ValueNotifier<bool>(false);
 
   @override
   bool get wantKeepAlive => true; // 告诉 ListView 不要在滑出屏幕时销毁该组件
+
+  @override
+  void dispose() {
+    _isHovered.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -879,24 +885,45 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
 
     if (Platform.isMacOS) {
       image = MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? cs.surfaceContainerHighest.withValues(alpha: 0.28)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
-            border: _isHovered
-                ? Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.55),
-                    width: 1,
-                  )
-                : null,
-          ),
-          child: image,
+        onEnter: (_) => _isHovered.value = true,
+        onExit: (_) => _isHovered.value = false,
+        child: Stack(
+          children: [
+            ValueListenableBuilder<bool>(
+              valueListenable: _isHovered,
+              child: image,
+              builder: (context, isHovered, child) {
+                return AnimatedScale(
+                  scale: isHovered ? 0.992 : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOut,
+                  child: child,
+                );
+              },
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _isHovered,
+                  builder: (context, isHovered, _) {
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      curve: Curves.easeOut,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isHovered
+                              ? cs.outlineVariant.withValues(alpha: 0.55)
+                              : Colors.transparent,
+                          width: 1,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
       );
     } else {

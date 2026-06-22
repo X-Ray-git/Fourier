@@ -6113,3 +6113,54 @@ macOS：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.20 -m "- chore: migrate Android package and macOS bundle identifiers to io.github.xraygit.autofolo\n- docs: clarify Auto Folo is an unofficial personal client" --push`*
+
+## 144. 迁移验证收口与 macOS 图片 hover 微缩修复（2026-06-22）
+
+### 144.1 当前验证结论
+
+用户已完成 v1.1.20 之后的新应用身份迁移验证，结论是迁移效果良好：
+
+- 新 Android package / macOS bundle id 迁移路径可用。
+- 第 142 节的剪贴板 JSON 配置导入/导出满足本次迁移需求。
+- 旧 `com.folo.*` 应用身份到新 `io.github.xraygit.autofolo` 身份的过渡没有发现需要立即补救的问题。
+
+因此第 143.5 节列出的迁移人工验证重点可视为已通过。后续如再遇到配置遗漏，应优先补充 `SettingsBackupService` allowlist，而不是回退包名迁移。
+
+### 144.2 暂时继续搁置的事项
+
+以下事项本轮确认不继续推进：
+
+1. 静默订阅源移动端入口继续搁置。macOS 端需求已满足，移动端入口后续有实际使用需求再做。
+2. macOS 左侧毛玻璃当前观感良好，不需要继续修改。
+3. 特殊长文/复杂 HTML 的进一步性能优化暂不做。当前未再出现明确性能问题，保留历史性能方案作为储备即可。
+
+### 144.3 macOS 图片 hover 微缩修复
+
+用户反馈：之前某个版本中，macOS 文章正文图片 hover 时会出现轻微缩小效果；后续修复“hover 导致后面文字排版移动”后，这个微缩效果消失。
+
+复盘确认：
+
+- 旧版微缩并不是显式动画，而是 `AnimatedContainer` 在 hover 时从无边框变成 `Border.all(width: 1)` 的布局副作用。
+- `BoxDecoration.border` 会参与容器布局，在固定最大宽度下挤压图片可用空间，所以看起来像图片微微缩小。
+- 同一个副作用也会改变图片块实际布局，导致后续文字轻微移动。
+
+最终修复：
+
+- 保留上轮的 `Stack + Positioned.fill` 覆盖层边框，让 hover 边框不参与布局。
+- 将 hover 状态改为 `ValueNotifier<bool>`，避免 `setState` 重建整张图片。
+- 在图片内容层增加 `AnimatedScale(scale: 0.992)`，只产生视觉缩小，不改变外层布局尺寸。
+
+涉及文件：
+
+- `lib/pages/article/widgets/html_chunk_card.dart`
+
+提交记录：
+
+- `7310cb6 fix(reader): keep image hover scale layout-stable`
+
+验证：
+
+- `dart format lib/pages/article/widgets/html_chunk_card.dart`
+- `flutter analyze --no-fatal-infos lib/pages/article/widgets/html_chunk_card.dart`
+
+结果通过。该修复已经推送到 `main`，但截至本节记录前尚未打 tag；如进行下一次小版本发布，应包含此提交。

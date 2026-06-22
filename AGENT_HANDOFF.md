@@ -6164,3 +6164,7 @@ macOS：
 - `flutter analyze --no-fatal-infos lib/pages/article/widgets/html_chunk_card.dart`
 
 结果通过。该修复已经推送到 `main`，但截至本节记录前尚未打 tag；如进行下一次小版本发布，应包含此提交。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.21 -m "- fix: keep macOS inline image hover scale without moving surrounding text\n- docs: record successful package identity migration validation" --push`*

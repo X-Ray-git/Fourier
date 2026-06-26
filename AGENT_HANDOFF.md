@@ -6289,3 +6289,7 @@ macOS：
 
 - 本轮适合作为 `v1.1.22` 小版本发布。
 - `pubspec.yaml` 应从 `1.1.21+23` 推进到 `1.1.22+24`。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.22 -m "- feat: add macOS article table of contents hover, active state, and anchored morph\n- fix: align table of contents jumps to heading text\n- feat: align summary and translation article actions\n- perf: defer Android article body build until after route transition" --push`*

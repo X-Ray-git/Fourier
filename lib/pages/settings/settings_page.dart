@@ -1007,7 +1007,7 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
       ),
     );
     if (mounted) {
-      AppFeedback.success('${widget.title}已保存', '新翻译将从下一次请求生效');
+      AppFeedback.success('${widget.title}已保存', '新配置将从下一次请求生效');
     }
   }
 

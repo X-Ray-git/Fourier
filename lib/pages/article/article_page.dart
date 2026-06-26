@@ -48,6 +48,7 @@ class ArticleController extends GetxController {
   final summaryText = ''.obs;
   final isSummarized = false.obs;
   final isSummarizing = false.obs;
+  final showSummary = true.obs;
   final isFetchingReadability = false.obs;
   final isFetchingContent = false.obs;
   final isParsingContent = false.obs;
@@ -119,6 +120,7 @@ class ArticleController extends GetxController {
       if (SummaryService.hasSummary(entryId)) {
         isSummarized.value = true;
         summaryText.value = SummaryService.summaryFor(entryId) ?? '';
+        showSummary.value = true;
       }
     } finally {
       isParsingContent.value = false;
@@ -360,6 +362,7 @@ class ArticleController extends GetxController {
       if (record.summaryText != null && record.summaryText!.isNotEmpty) {
         summaryText.value = record.summaryText!;
         isSummarized.value = true;
+        showSummary.value = true;
         AppFeedback.success('摘要完成', '已生成文章摘要');
       } else {
         AppFeedback.error('摘要失败', record.errorMessage ?? '请检查网络连接和 API 配置');
@@ -576,6 +579,11 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   // 1. 改为使用 ValueNotifier 以实现局部刷新
   final ValueNotifier<double> _scrollProgress = ValueNotifier(0.0);
   final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null);
+  final ValueNotifier<String?> _activeTocId = ValueNotifier<String?>(null);
+  bool _allowBodyBuild = Platform.isMacOS;
+  bool _isTocOpen = false;
+  bool _activeTocUpdateScheduled = false;
+  final Map<String, GlobalKey> _headingKeys = {};
 
   @override
   void initState() {
@@ -583,10 +591,18 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _tag = widget.article.entryId;
     controller = Get.put(ArticleController(widget.article), tag: _tag);
     _scrollController = ScrollController();
+    _scrollController.addListener(_scheduleActiveTocUpdate);
     _focusNode = FocusNode();
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
+    }
+    if (!Platform.isMacOS) {
+      Future<void>.delayed(const Duration(milliseconds: 350), () {
+        if (mounted) {
+          setState(() => _allowBodyBuild = true);
+        }
+      });
     }
     // 请求焦点以确保方向键导航生效，防止焦点落在 SelectionArea 內容上
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -604,6 +620,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _scrollController.dispose();
     _scrollProgress.dispose();
     _hoveredUrl.dispose();
+    _activeTocId.dispose();
     _focusNode.dispose();
     if (Get.isRegistered<ArticleController>(tag: _tag)) {
       Get.delete<ArticleController>(tag: _tag);
@@ -740,6 +757,138 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     final configured = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
     final width = configured ?? AppConstants.defaultArticleContentMaxWidth;
     return math.min(availableWidth, width.clamp(480, 1200).toDouble());
+  }
+
+  String _tocIdFor(bool showTranslation, int index) {
+    return '${showTranslation ? "trans" : "orig"}_$index';
+  }
+
+  GlobalKey _headingKeyFor(bool showTranslation, int index) {
+    final key = _tocIdFor(showTranslation, index);
+    return _headingKeys.putIfAbsent(key, GlobalKey.new);
+  }
+
+  List<_ArticleTocEntry> _tocEntriesFor(
+    List<HtmlChunk> chunks,
+    bool showTranslation,
+  ) {
+    final entries = <_ArticleTocEntry>[];
+    for (var i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      if (chunk.type != HtmlChunkType.heading) continue;
+      final title = _plainHeadingText(chunk.content);
+      if (title.isEmpty) continue;
+      entries.add(
+        _ArticleTocEntry(
+          id: _tocIdFor(showTranslation, i),
+          key: _headingKeyFor(showTranslation, i),
+          title: title,
+          level: chunk.headingLevel ?? 2,
+        ),
+      );
+    }
+    return entries;
+  }
+
+  String _plainHeadingText(String html) {
+    final text = html_parser.parseFragment(html).text ?? '';
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  double _tocAnchorY() {
+    return MediaQuery.paddingOf(context).top + kToolbarHeight + 24;
+  }
+
+  Future<void> _scrollToTocEntry(_ArticleTocEntry entry) async {
+    final targetContext = entry.key.currentContext;
+    if (targetContext == null) return;
+    _activeTocId.value = entry.id;
+
+    final renderObject = targetContext.findRenderObject();
+    if (renderObject is RenderBox &&
+        renderObject.attached &&
+        _scrollController.hasClients) {
+      final currentOffset = _scrollController.offset;
+      final targetGlobalY = renderObject.localToGlobal(Offset.zero).dy;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      final target = (currentOffset + targetGlobalY - _tocAnchorY()).clamp(
+        0.0,
+        maxExtent,
+      );
+      await _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      await Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        alignment: 0.08,
+      );
+    }
+    if (mounted) {
+      _focusNode.requestFocus();
+      _scheduleActiveTocUpdate();
+    }
+  }
+
+  List<_ArticleTocEntry> _currentTocEntries() {
+    final showTrans =
+        controller.showTranslation.value &&
+        controller.translatedChunks.isNotEmpty;
+    final activeChunks = showTrans
+        ? controller.translatedChunks
+        : controller.chunks;
+    return _tocEntriesFor(activeChunks, showTrans);
+  }
+
+  void _scheduleActiveTocUpdate() {
+    if (!Platform.isMacOS || !mounted || _activeTocUpdateScheduled) return;
+    _activeTocUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _activeTocUpdateScheduled = false;
+      if (mounted) {
+        _updateActiveTocEntry();
+      }
+    });
+  }
+
+  void _updateActiveTocEntry() {
+    if (!_scrollController.hasClients) return;
+    final entries = _currentTocEntries();
+    if (entries.isEmpty) {
+      if (_activeTocId.value != null) {
+        _activeTocId.value = null;
+      }
+      return;
+    }
+
+    final referenceY = _tocAnchorY();
+    String? activeId;
+    var bestPastY = double.negativeInfinity;
+    String? firstFutureId;
+    var firstFutureY = double.infinity;
+
+    for (final entry in entries) {
+      final entryContext = entry.key.currentContext;
+      final renderObject = entryContext?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.attached) continue;
+      final y = renderObject.localToGlobal(Offset.zero).dy;
+      if (y <= referenceY && y > bestPastY) {
+        activeId = entry.id;
+        bestPastY = y;
+      } else if (y > referenceY && y < firstFutureY) {
+        firstFutureId = entry.id;
+        firstFutureY = y;
+      }
+    }
+
+    activeId ??= firstFutureId;
+    if (_activeTocId.value != activeId) {
+      _activeTocId.value = activeId;
+    }
   }
 
   @override
@@ -930,7 +1079,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: Obx(() {
-                  if (controller.isParsingContent.value) {
+                  if (controller.isParsingContent.value || !_allowBodyBuild) {
                     return SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 64),
@@ -1043,16 +1192,21 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: List.generate(totalChunks, (idx) {
                             final chunk = activeChunks[idx];
-                            return HtmlChunkCard(
+                            final card = HtmlChunkCard(
                               key: ValueKey(
                                 '${showTrans ? "trans" : "orig"}_$idx',
                               ),
                               chunk: chunk,
                               maxWidth: maxWidth,
                               hoveredUrl: _hoveredUrl,
+                              contentAnchorKey:
+                                  chunk.type == HtmlChunkType.heading
+                                  ? _headingKeyFor(showTrans, idx)
+                                  : null,
                               onImageTap: (url) =>
                                   controller.openImagePreview(url, context),
                             );
+                            return card;
                           }),
                         ),
                       ),
@@ -1110,6 +1264,38 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             },
           ),
         ),
+        if (Platform.isMacOS)
+          Obx(() {
+            final showTrans =
+                controller.showTranslation.value &&
+                controller.translatedChunks.isNotEmpty;
+            final activeChunks = showTrans
+                ? controller.translatedChunks
+                : controller.chunks;
+            final entries = _tocEntriesFor(activeChunks, showTrans);
+            if (entries.isEmpty) return const SizedBox.shrink();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _scheduleActiveTocUpdate();
+              }
+            });
+            return Positioned(
+              top: MediaQuery.paddingOf(context).top + kToolbarHeight + 14,
+              right: 18,
+              child: ValueListenableBuilder<String?>(
+                valueListenable: _activeTocId,
+                builder: (context, activeTocId, child) {
+                  return _ArticleTocOverlay(
+                    entries: entries,
+                    activeTocId: activeTocId,
+                    isOpen: _isTocOpen,
+                    onToggle: () => setState(() => _isTocOpen = !_isTocOpen),
+                    onEntryTap: _scrollToTocEntry,
+                  );
+                },
+              ),
+            );
+          }),
       ],
     );
 
@@ -1171,6 +1357,466 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 }
 
 // ─── 小型辅助组件 ─────────────────────────────
+
+class _ArticleTocEntry {
+  final String id;
+  final GlobalKey key;
+  final String title;
+  final int level;
+
+  const _ArticleTocEntry({
+    required this.id,
+    required this.key,
+    required this.title,
+    required this.level,
+  });
+}
+
+class _ArticleTocOverlay extends StatefulWidget {
+  final List<_ArticleTocEntry> entries;
+  final String? activeTocId;
+  final bool isOpen;
+  final VoidCallback onToggle;
+  final ValueChanged<_ArticleTocEntry> onEntryTap;
+
+  const _ArticleTocOverlay({
+    required this.entries,
+    required this.activeTocId,
+    required this.isOpen,
+    required this.onToggle,
+    required this.onEntryTap,
+  });
+
+  @override
+  State<_ArticleTocOverlay> createState() => _ArticleTocOverlayState();
+}
+
+class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
+    with SingleTickerProviderStateMixin {
+  static const double _buttonSize = 34;
+  static const double _panelWidth = 304;
+  static const double _panelMaxHeight = 430;
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+      reverseDuration: const Duration(milliseconds: 210),
+      value: widget.isOpen ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _ArticleTocOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isOpen != oldWidget.isOpen) {
+      if (widget.isOpen) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final panelHeight = math
+        .min(_panelMaxHeight, 58 + widget.entries.length * 36.0)
+        .clamp(96.0, _panelMaxHeight);
+    return SizedBox(
+      width: _panelWidth,
+      height: panelHeight,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final rawT = _controller.value;
+          final sizeT = Curves.easeOutCubic.transform(rawT);
+          final scaleT =
+              1.0 +
+              (rawT > 0 && rawT < 1 ? math.sin(rawT * math.pi) * 0.012 : 0.0);
+          final width = lerpDouble(_buttonSize, _panelWidth, sizeT)!;
+          final height = lerpDouble(_buttonSize, panelHeight, sizeT)!;
+          final radius = lerpDouble(999, 18, sizeT)!;
+          final blurSigma = rawT >= 0.98 ? 22.0 : lerpDouble(8, 16, sizeT)!;
+          final buttonOpacity = (1.0 - (rawT / 0.45)).clamp(0.0, 1.0);
+          final contentOpacity = rawT <= 0.72
+              ? 0.0
+              : ((rawT - 0.72) / 0.28).clamp(0.0, 1.0);
+          final buildContent = rawT > 0.58;
+
+          return Stack(
+            alignment: Alignment.topRight,
+            clipBehavior: Clip.none,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: Transform.scale(
+                  scale: scaleT,
+                  alignment: Alignment.topRight,
+                  child: SizedBox(
+                    width: width,
+                    height: height,
+                    child: _GlassSurface(
+                      borderRadius: radius,
+                      blurSigma: blurSigma,
+                      child: Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          if (buttonOpacity > 0)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: IgnorePointer(
+                                ignoring: rawT > 0.2,
+                                child: Opacity(
+                                  opacity: buttonOpacity,
+                                  child: _TocIconButton(
+                                    icon: Icons.format_list_bulleted_rounded,
+                                    tooltip: '展开目录',
+                                    onTap: widget.onToggle,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (buildContent)
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: Opacity(
+                                opacity: contentOpacity,
+                                child: IgnorePointer(
+                                  ignoring: contentOpacity < 0.95,
+                                  child: SizedBox(
+                                    width: _panelWidth,
+                                    height: panelHeight,
+                                    child: _ArticleTocPanelContent(
+                                      entries: widget.entries,
+                                      activeTocId: widget.activeTocId,
+                                      onToggle: widget.onToggle,
+                                      onEntryTap: widget.onEntryTap,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ArticleTocPanelContent extends StatelessWidget {
+  final List<_ArticleTocEntry> entries;
+  final String? activeTocId;
+  final VoidCallback onToggle;
+  final ValueChanged<_ArticleTocEntry> onEntryTap;
+
+  const _ArticleTocPanelContent({
+    required this.entries,
+    required this.activeTocId,
+    required this.onToggle,
+    required this.onEntryTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
+          child: Row(
+            children: [
+              Icon(
+                Icons.format_list_bulleted_rounded,
+                size: 17,
+                color: cs.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '目录',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ),
+              _TocIconButton(
+                icon: Icons.keyboard_arrow_up_rounded,
+                tooltip: '收起目录',
+                onTap: onToggle,
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.28)),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            itemCount: entries.length,
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              final indent = ((entry.level - 1).clamp(0, 3)) * 12.0;
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: 8 + indent,
+                  right: 8,
+                  top: 1,
+                  bottom: 1,
+                ),
+                child: _ArticleTocItem(
+                  entry: entry,
+                  isActive: entry.id == activeTocId,
+                  onTap: () => onEntryTap(entry),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ArticleTocItem extends StatefulWidget {
+  final _ArticleTocEntry entry;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ArticleTocItem({
+    required this.entry,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  State<_ArticleTocItem> createState() => _ArticleTocItemState();
+}
+
+class _ArticleTocItemState extends State<_ArticleTocItem> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final neutralOverlay = isDark ? Colors.white : Colors.black;
+    final entry = widget.entry;
+    final foreground = widget.isActive
+        ? cs.primary
+        : entry.level <= 2
+        ? cs.onSurface
+        : cs.onSurfaceVariant;
+    final backgroundColor = widget.isActive
+        ? cs.primary.withValues(alpha: isDark ? 0.20 : 0.12)
+        : _isPressed
+        ? neutralOverlay.withValues(alpha: isDark ? 0.12 : 0.08)
+        : _isHovered
+        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.055)
+        : Colors.transparent;
+    final borderColor = widget.isActive
+        ? cs.primary.withValues(alpha: isDark ? 0.24 : 0.18)
+        : _isHovered
+        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.06)
+        : Colors.transparent;
+
+    return Semantics(
+      button: true,
+      selected: widget.isActive,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) => setState(() => _isPressed = false),
+        onTapCancel: () => setState(() => _isPressed = false),
+        onTap: widget.onTap,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() {
+            _isHovered = false;
+            _isPressed = false;
+          }),
+          child: AnimatedScale(
+            scale: _isPressed ? 0.985 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: _isPressed
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor, width: 0.5),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: Text(
+                entry.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: entry.level <= 2 ? 13 : 12,
+                  height: 1.25,
+                  fontWeight: widget.isActive
+                      ? FontWeight.w700
+                      : entry.level <= 2
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                  color: foreground,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TocIconButton extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _TocIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  State<_TocIconButton> createState() => _TocIconButtonState();
+}
+
+class _TocIconButtonState extends State<_TocIconButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final overlay = isDark ? Colors.white : Colors.black;
+    final backgroundColor = _isPressed
+        ? overlay.withValues(alpha: isDark ? 0.14 : 0.08)
+        : _isHovered
+        ? overlay.withValues(alpha: isDark ? 0.09 : 0.055)
+        : Colors.transparent;
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) => setState(() => _isPressed = false),
+        onTapCancel: () => setState(() => _isPressed = false),
+        onTap: widget.onTap,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() {
+            _isHovered = false;
+            _isPressed = false;
+          }),
+          child: AnimatedScale(
+            scale: _isPressed ? 0.96 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: _isPressed
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Icon(widget.icon, size: 18, color: cs.onSurface),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassSurface extends StatelessWidget {
+  final Widget child;
+  final double borderRadius;
+  final double blurSigma;
+
+  const _GlassSurface({
+    required this.child,
+    required this.borderRadius,
+    this.blurSigma = 22,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(borderRadius);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: cs.surface.withValues(alpha: 0.58),
+              borderRadius: radius,
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.36),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.18),
+                  cs.surface.withValues(alpha: 0.34),
+                ],
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _MetadataSection extends StatelessWidget {
   final ArticleController controller;
@@ -1246,7 +1892,11 @@ class _ToolbarRow extends StatelessWidget {
           (rec?.isPending ?? false) || controller.isTranslating.value;
       final hasTranslation = controller.isTranslated.value;
       final isSummarizing = controller.isSummarizing.value;
-      final hasSummary = controller.isSummarized.value;
+      final summaryRecord = SummaryService.recordOf(controller.article.entryId);
+      final summary =
+          (summaryRecord?.summaryText ?? controller.summaryText.value).trim();
+      final hasSummary =
+          summaryRecord?.isSummarized == true && summary.isNotEmpty;
       final isFetchingReadability = controller.isFetchingReadability.value;
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -1274,15 +1924,21 @@ class _ToolbarRow extends StatelessWidget {
               const SizedBox(width: 8),
               _Chip(
                 cs: cs,
-                icon: hasSummary ? Icons.summarize : Icons.summarize_outlined,
+                icon: hasSummary && controller.showSummary.value
+                    ? Icons.summarize
+                    : Icons.summarize_outlined,
                 label: isSummarizing
                     ? '摘要…'
                     : hasSummary
                     ? '已摘要'
                     : '摘要',
-                active: hasSummary || isSummarizing,
+                active:
+                    isSummarizing ||
+                    (hasSummary && controller.showSummary.value),
                 onTap: isSummarizing
                     ? null
+                    : hasSummary
+                    ? () => controller.showSummary.toggle()
                     : () => controller.summarizeArticle(),
               ),
               if (isFetchingReadability) ...[
@@ -1364,6 +2020,7 @@ class _SummaryCard extends StatelessWidget {
       final record = SummaryService.recordOf(controller.article.entryId);
       final summary = (record?.summaryText ?? controller.summaryText.value)
           .trim();
+      if (!controller.showSummary.value) return const SizedBox.shrink();
       if (summary.isEmpty) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),

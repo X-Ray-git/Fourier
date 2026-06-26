@@ -101,6 +101,7 @@ class HtmlChunkCard extends StatefulWidget {
   final void Function(String imageUrl)? onImageTap;
   final bool keepAlive;
   final ValueNotifier<String?>? hoveredUrl;
+  final Key? contentAnchorKey;
 
   const HtmlChunkCard({
     super.key,
@@ -109,6 +110,7 @@ class HtmlChunkCard extends StatefulWidget {
     this.onImageTap,
     this.keepAlive = true,
     this.hoveredUrl,
+    this.contentAnchorKey,
   });
 
   @override
@@ -167,10 +169,13 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
 
     if (_cachedWidget == null) return const SizedBox.shrink();
 
-    return Padding(
-      padding: _paddingForType,
-      child: RepaintBoundary(child: _cachedWidget!),
+    final content = RepaintBoundary(
+      child: widget.contentAnchorKey == null
+          ? _cachedWidget!
+          : KeyedSubtree(key: widget.contentAnchorKey!, child: _cachedWidget!),
     );
+
+    return Padding(padding: _paddingForType, child: content);
   }
 
   // 优化垂直阅读节奏 (Vertical Rhythm)

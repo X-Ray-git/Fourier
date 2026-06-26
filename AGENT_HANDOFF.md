@@ -6168,3 +6168,124 @@ macOS：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.21 -m "- fix: keep macOS inline image hover scale without moving surrounding text\n- docs: record successful package identity migration validation" --push`*
+
+## 145. 文章页目录、摘要/翻译操作与 Android 打开过渡优化（2026-06-26）
+
+### 145.1 本轮背景
+
+用户希望继续打磨文章阅读页，重点包括：
+
+- 摘要与翻译属于同类 LLM 操作，但按钮和菜单体验不够平行。
+- Android 端点开文章时，从右往左进入详情页的过程中会卡顿。
+- macOS 文章详情中已经有初版目录功能，后续希望参考 `reference/liquid_glass_widgets` 的交互思路继续改进，但当前阶段不引入或依赖该参考工程。
+
+重要边界：
+
+- 参考工程只作为设计和实现参考，不作为 package、submodule 或外部依赖引入。
+- 当前仓库 clone 到任意地方仍应独立可构建。
+- 真正 shader 级液态玻璃属于后续 UI 系统重构，不混入本轮小版本。
+
+### 145.2 摘要/翻译体验平行化
+
+涉及文件：
+
+- `lib/pages/article/article_page.dart`
+- `lib/pages/widgets/article_card.dart`
+- `lib/pages/settings/settings_page.dart`
+
+改动要点：
+
+- 文章详情顶部 toolbar 中，已有摘要时点击摘要按钮改为显示/隐藏摘要卡片，而不是重新生成摘要。
+- `ArticleController` 增加 `showSummary` 状态；载入已有摘要或摘要生成成功后默认显示。
+- 时间线文章卡片的移动端长按菜单与 macOS 右键菜单补齐摘要操作：
+  - 生成摘要
+  - 重新摘要
+  - 删除摘要
+- 翻译操作保持同类结构：
+  - 翻译文章
+  - 重新翻译
+  - 删除翻译
+- 手动翻译成功判断改为检查 `record.translatedContent`，避免服务端返回错误记录时仍提示成功。
+- LLM 设置保存提示从“新翻译将从下一次请求生效”改为“新配置将从下一次请求生效”，以同时覆盖翻译和摘要。
+
+### 145.3 Android 打开文章过渡优化
+
+涉及文件：
+
+- `lib/pages/article/article_page.dart`
+
+问题来源：
+
+- 早前为了稳定 macOS 滚动条和顶部阅读进度条，正文渲染从分批构建回到完整 `Column` 构建。
+- 这对 macOS 稳定性有利，但 Android 打开文章详情时会在 route 进入动画期间同时构建大量正文块，导致右向左进入动画出现卡顿。
+
+最终策略：
+
+- macOS 保持完整正文同步构建，避免重新引入滚动条/进度条跳动。
+- 非 macOS 平台进入文章页后延迟约 350ms 再挂载正文主体，让 route 转场先完成。
+- 延迟期间复用“正在排版内容...”加载态。
+
+注意：
+
+- 没有改回虚拟列表或分批列表，因为用户明确担心这会重新导致 Android/macOS 顶部进度条跳动。
+- 这是一个过渡期性能折中，后续如果要彻底优化长文，需要重新设计稳定高度估算或预布局策略。
+
+### 145.4 macOS 目录功能改进
+
+涉及文件：
+
+- `lib/pages/article/article_page.dart`
+- `lib/pages/article/widgets/html_chunk_card.dart`
+
+已实现：
+
+- 仅 macOS 显示悬浮目录按钮/面板。
+- 目录从当前展示的正文块提取标题：
+  - 原文模式使用 `controller.chunks`
+  - 翻译模式且有翻译块时使用 `controller.translatedChunks`
+- 标题文本使用 HTML fragment 解析后提取纯文本。
+- 目录项支持 hover 胶囊高亮、按下反馈、当前阅读位置常驻高亮。
+- 目录展开动画去掉 `AnimatedSwitcher`，改为固定右上角锚点的自包含 morph：
+  - 从 34px 按钮连续长成 304px 面板。
+  - 右上锚点固定，避免展开按钮闪到面板内部。
+  - 展开前半段只绘制玻璃表面，目录内容在后半段再淡入，降低瞬时构建开销。
+  - 动画过程中先使用较轻 blur，接近完成后恢复完整毛玻璃强度。
+- 点击目录项后，焦点回到文章页，继续保证 macOS 左右键、M 键等快捷键可用。
+
+定位修正：
+
+- 用户验证发现：点击目录项后，标题有时落在屏幕中上部而不是预期顶部附近，并且高亮会短暂落在上一个目录项。
+- 原因是旧锚点绑在整个标题卡片外层，而 `HtmlChunkCard` 对 heading 有 `top: 24` 的标题前留白；“卡片顶部”和“标题文字顶部”不是同一个视觉位置。
+- `HtmlChunkCard` 增加 `contentAnchorKey`，让目录锚点绑定到标题内容本身。
+- 点击跳转改为基于标题内容当前屏幕坐标与统一参考线的差值计算目标滚动偏移。
+- 当前目录高亮也使用同一条参考线，避免跳转后高亮和实际标题不同步。
+
+### 145.5 参考工程相关判断
+
+本轮阅读了 `reference/liquid_glass_widgets` 的相关实现，结论：
+
+- 参考工程确实有 shader/renderer 级 Liquid Glass：
+  - 自定义 fragment shaders
+  - `LiquidGlassLayer`
+  - `LiquidGlassBlendGroup`
+  - `GlassMorphController`
+  - `LiquidMorphPhysics`
+- `GlassMenu` 是“小组件液态展开成大组件”的标准参考实现，使用 ghost trigger、menu body、J-curve/spring、内容延迟出现等结构。
+- 本轮只借鉴交互结构，不引入 shader 管线。
+- 后续如果要做全局 macOS UI 液态玻璃重构，应单独开清晰边界的 UI 重构线，而不是混入当前阅读页小修。
+
+### 145.6 验证
+
+已运行并通过：
+
+- `dart analyze lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/pages/widgets/article_card.dart lib/pages/settings/settings_page.dart`
+- `flutter analyze --no-pub --no-fatal-infos lib test`
+
+用户已验证：
+
+- macOS 目录点击跳转位置已正确。
+
+发布建议：
+
+- 本轮适合作为 `v1.1.22` 小版本发布。
+- `pubspec.yaml` 应从 `1.1.21+23` 推进到 `1.1.22+24`。

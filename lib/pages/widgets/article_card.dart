@@ -116,6 +116,11 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       final isTranslated =
           (record?.translatedTitle?.isNotEmpty ?? false) ||
           (record?.translatedContent?.isNotEmpty ?? false);
+      final summaryRecord = SummaryService.recordOf(article.entryId);
+      final isSummaryPending = summaryRecord?.isPending ?? false;
+      final hasSummary =
+          (summaryRecord?.isSummarized ?? false) &&
+          (summaryRecord?.summaryText?.trim().isNotEmpty ?? false);
       final displayTitle = TranslationService.displayTitleFor(article);
 
       return RepaintBoundary(
@@ -128,14 +133,22 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
             onTap: onTap,
             onLongPress: Platform.isMacOS
                 ? null
-                : () => _showTranslateMenu(context, isTranslated, isPending),
+                : () => _showAiActionsMenu(
+                    context,
+                    isTranslated: isTranslated,
+                    isTranslationPending: isPending,
+                    hasSummary: hasSummary,
+                    isSummaryPending: isSummaryPending,
+                  ),
             onSecondaryTapDown: Platform.isMacOS
                 ? (details) {
                     _showMacOSContextMenu(
                       context,
                       details.globalPosition,
-                      isTranslated,
-                      isPending,
+                      isTranslated: isTranslated,
+                      isTranslationPending: isPending,
+                      hasSummary: hasSummary,
+                      isSummaryPending: isSummaryPending,
                     );
                   }
                 : null,
@@ -520,18 +533,39 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
 
   Future<void> _translateArticle() async {
     try {
-      await TranslationService.translateArticle(article);
-      AppFeedback.success('翻译完成', '已生成文章译文');
+      final record = await TranslationService.translateArticle(article);
+      if (record.translatedContent != null &&
+          record.translatedContent!.isNotEmpty) {
+        onTranslateSuccess?.call();
+        AppFeedback.success('翻译完成', '已生成文章译文');
+      } else {
+        AppFeedback.error('翻译失败', record.errorMessage ?? '请检查网络连接和 API 配置');
+      }
     } catch (e) {
       AppFeedback.error('翻译失败', e.toString());
     }
   }
 
-  void _showTranslateMenu(
-    BuildContext context,
-    bool isTranslated,
-    bool isPending,
-  ) {
+  Future<void> _summarizeArticle() async {
+    try {
+      final record = await SummaryService.summarizeArticle(article);
+      if (record.summaryText != null && record.summaryText!.isNotEmpty) {
+        AppFeedback.success('摘要完成', '已生成文章摘要');
+      } else {
+        AppFeedback.error('摘要失败', record.errorMessage ?? '请检查网络连接和 API 配置');
+      }
+    } catch (e) {
+      AppFeedback.error('摘要失败', e.toString());
+    }
+  }
+
+  void _showAiActionsMenu(
+    BuildContext context, {
+    required bool isTranslated,
+    required bool isTranslationPending,
+    required bool hasSummary,
+    required bool isSummaryPending,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
@@ -546,7 +580,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: isPending
+                leading: isTranslationPending
                     ? SizedBox(
                         width: 24,
                         height: 24,
@@ -557,11 +591,13 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                       )
                     : Icon(Icons.translate, color: colorScheme.primary),
                 title: Text(
-                  isPending ? '翻译中...' : (isTranslated ? '重新翻译' : '翻译文章'),
+                  isTranslationPending
+                      ? '翻译中...'
+                      : (isTranslated ? '重新翻译' : '翻译文章'),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
-                enabled: !isPending,
-                onTap: isPending
+                enabled: !isTranslationPending,
+                onTap: isTranslationPending
                     ? null
                     : () {
                         Navigator.pop(context);
@@ -581,6 +617,43 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                   },
                 ),
               ],
+              const Divider(height: 1),
+              ListTile(
+                leading: isSummaryPending
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.secondary,
+                        ),
+                      )
+                    : Icon(Icons.summarize, color: colorScheme.secondary),
+                title: Text(
+                  isSummaryPending ? '摘要中...' : (hasSummary ? '重新摘要' : '生成摘要'),
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                enabled: !isSummaryPending,
+                onTap: isSummaryPending
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                        _summarizeArticle();
+                      },
+              ),
+              if (hasSummary) ...[
+                ListTile(
+                  leading: Icon(Icons.delete_outline, color: colorScheme.error),
+                  title: Text(
+                    '删除摘要',
+                    style: TextStyle(color: colorScheme.error),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    SummaryService.deleteSummary(article.entryId);
+                  },
+                ),
+              ],
               const SizedBox(height: 8),
             ],
           ),
@@ -591,10 +664,12 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
 
   void _showMacOSContextMenu(
     BuildContext context,
-    Offset position,
-    bool isTranslated,
-    bool isPending,
-  ) async {
+    Offset position, {
+    required bool isTranslated,
+    required bool isTranslationPending,
+    required bool hasSummary,
+    required bool isSummaryPending,
+  }) async {
     final colorScheme = Theme.of(context).colorScheme;
 
     final result = await showMenu<String>(
@@ -608,10 +683,10 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       items: [
         PopupMenuItem(
           value: 'translate',
-          enabled: !isPending,
+          enabled: !isTranslationPending,
           child: Row(
             children: [
-              isPending
+              isTranslationPending
                   ? SizedBox(
                       width: 18,
                       height: 18,
@@ -622,7 +697,11 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                     )
                   : Icon(Icons.translate, size: 18, color: colorScheme.primary),
               const SizedBox(width: 8),
-              Text(isPending ? '翻译中...' : (isTranslated ? '重新翻译' : '翻译文章')),
+              Text(
+                isTranslationPending
+                    ? '翻译中...'
+                    : (isTranslated ? '重新翻译' : '翻译文章'),
+              ),
             ],
           ),
         ),
@@ -637,6 +716,44 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
               ],
             ),
           ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'summarize',
+          enabled: !isSummaryPending,
+          child: Row(
+            children: [
+              isSummaryPending
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.secondary,
+                      ),
+                    )
+                  : Icon(
+                      Icons.summarize,
+                      size: 18,
+                      color: colorScheme.secondary,
+                    ),
+              const SizedBox(width: 8),
+              Text(
+                isSummaryPending ? '摘要中...' : (hasSummary ? '重新摘要' : '生成摘要'),
+              ),
+            ],
+          ),
+        ),
+        if (hasSummary)
+          PopupMenuItem(
+            value: 'delete_summary',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
+                const SizedBox(width: 8),
+                Text('删除摘要', style: TextStyle(color: colorScheme.error)),
+              ],
+            ),
+          ),
       ],
     );
 
@@ -644,6 +761,10 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       _translateArticle();
     } else if (result == 'delete_translation') {
       TranslationService.deleteTranslation(article.entryId);
+    } else if (result == 'summarize') {
+      _summarizeArticle();
+    } else if (result == 'delete_summary') {
+      SummaryService.deleteSummary(article.entryId);
     }
   }
 

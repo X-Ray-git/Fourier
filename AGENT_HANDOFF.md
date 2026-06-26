@@ -6417,3 +6417,211 @@ git worktree add ../auto-folo-liquid-glass -b codex/macos-liquid-glass-ui main
 - 不要让目录点击跳转重新绑定到 heading card 外壳；应保持绑定标题内容本身。
 - 不要把参考工程目录作为隐式依赖。
 - 大范围 UI 重构前后都应跑 `flutter analyze --no-pub --no-fatal-infos lib test`。
+
+## 147. macOS Liquid Glass 重构分支阶段记录（2026-06-26）
+
+### 147.1 分支状态与发布边界
+
+当前工作发生在 `codex/liquid-glass` 分支，不是 `main`。本轮目标是开始 macOS Liquid Glass 风格迁移与技术基建验证；用户明确要求暂时不要 tag、不要 release。
+
+当前状态：
+
+- 已经开始把 `reference/liquid_glass_widgets` 的实现按自包含方式迁入本仓库。
+- `reference/` 仍然只是本机参考目录，不作为 git 依赖、不作为 submodule、不要求其他 clone 存在。
+- 迁入代码放在 `lib/common/liquid_glass/`，shader 放在 `shaders/liquid_glass/`，并在 `pubspec.yaml` 中注册。
+- 新增封装层 `lib/common/widgets/app_glass.dart`，业务页面应优先依赖这个封装层，而不是直接散用底层 renderer/shader 细节。
+- 新增 `lib/common/widgets/continuous_rectangle.dart`，用于统一连续圆角/superellipse 路径。
+
+注意：这不是完整的 macOS 全界面重构完成态。本轮主要落地了 macOS 主窗口外框、左侧侧边栏和基础 glass surface；设置页、文章页、列表卡片、弹窗、工具栏等还没有全面迁移到统一 Liquid Glass 设计系统。
+
+### 147.2 为什么这次改为“完整引入参考实现的子集”
+
+此前第 146 节建议先建立封装层，再决定是否迁移 shader 级实现。随后用户进一步明确：
+
+- 希望最终效果对标参考工程，不希望做一个注定返工的半成品。
+- 参考工程只作为参考，不作为外部依赖。
+- 如果引入，就必须复制必要源码、shader、许可说明，让本仓库 clone 到任何地方都能直接构建。
+- 用户后续随时可以重新把参考工程复制到 `reference/`，但仓库本身不能依赖该目录。
+
+因此本轮从参考工程中迁入自包含的 Liquid Glass 子集，包括 renderer、shared widgets、theme/types/utils 和 shader。迁入后仍通过 `AppGlassSurface` 等项目内封装使用，避免业务页面直接绑定参考工程 API。
+
+### 147.3 目前新增的基础组件
+
+新增 `lib/common/widgets/app_glass.dart`：
+
+- `AppGlassSurface`
+  - macOS 默认使用项目内 Liquid Glass / native backdrop 路径。
+  - 非 macOS 走轻量 fallback，避免 Android 被 macOS 玻璃重构牵连。
+  - `nativeBackdrop: true` 用于 macOS 侧边栏这类需要透出系统后方内容的 surface。
+- `AppGlassPanel`
+- `AppGlassIconButton`
+- `AppGlassTone`
+
+新增 `lib/common/widgets/continuous_rectangle.dart`：
+
+- `continuousRectanglePath(Rect rect, double radius)`
+- `ContinuousRectangleClipper`
+- `ContinuousRectangleClip`
+
+用途：
+
+- 避免标准 `RRect` 在圆角进入直边处出现视觉上的曲率突变。
+- 统一全应用外框、侧边栏面板、侧边栏背景挖空、高光 painter 和阴影 painter 的路径。
+- 当前实现基于 Flutter `RoundedSuperellipseBorder`，比随手手写贝塞尔更稳定、更接近 Apple continuous corner。
+
+### 147.4 macOS 主窗口外框与侧边栏改动
+
+涉及文件：
+
+- `lib/pages/main/main_page.dart`
+- `lib/pages/main/widgets/macos_sidebar.dart`
+- `lib/common/widgets/app_glass.dart`
+- `lib/common/widgets/continuous_rectangle.dart`
+- `macos/Runner/MainFlutterWindow.swift`
+
+主窗口：
+
+- `main_page.dart` 中 macOS 根布局从普通 `Row` 改为包在 `ContinuousRectangleClip` 内。
+- 当前 Flutter 内容外框半径为 `_macOSWindowContentRadius = 28.0`。
+- 原 `VerticalDivider` 移除，左侧侧边栏改为悬浮 glass panel，右侧内容区继续使用 `colorScheme.surface`。
+
+侧边栏：
+
+- 展开宽度：`290.0`
+- 折叠宽度：`80.0`
+- 面板 inset：`EdgeInsets.fromLTRB(8, 8, 8, 8)`
+- 面板半径：`20.0`
+- 外框半径 28 与 inset 8 + 面板半径 20 对齐，目的是让左上角圆心关系更自然。
+- `_MacOSSidebarSlotPainter` 负责在侧边栏 slot 中绘制普通背景，并用 continuous path 挖掉面板区域；这样只有侧边栏内部半透明，面板外圈与右侧内容保持同一材质。
+- `_MacOSGlassPane` 使用 `AppGlassSurface(nativeBackdrop: true)`。
+
+用户对视觉结果的关键反馈：
+
+- 最初侧边栏变化不明显，只是略发白。
+- 用户希望侧边栏成为四角圆角的悬浮面板，而不是贴边整栏。
+- 用户明确不需要右侧内容延伸到侧边栏下方。
+- 用户希望“左侧只有侧边栏内部半透明，周围那一圈和右侧是同一个材质”。
+- 用户认为后续可继续处理背景，但本轮先聚焦侧边栏和窗口壳。
+
+### 147.5 红绿灯按钮处理过程与当前方案
+
+用户希望 macOS 红黄绿窗口按钮位于侧边栏框内，并且视觉上贴合窗口/侧边栏圆角。曾尝试直接移动系统 `standardWindowButton`，但 AppKit 会在窗口生命周期中反复重排，出现以下问题：
+
+- 应用刚打开时按钮在内部，随后跳到边缘，再跳到“全部文章”附近，最后又回到边缘。
+- 点击区域和视觉位置不一致，有时按钮外能点，有时按钮内没反应。
+- 即使多次重新定位，系统仍会覆盖位置。
+
+当前方案：
+
+- 在 `MainFlutterWindow.swift` 中隐藏系统标准按钮。
+- 自绘三个 `NSControl`：close / minimize / zoom。
+- 按钮颜色、hover 符号、pressed 状态均由 `TrafficLightButton` 绘制。
+- 点击行为仍调用原生窗口方法：
+  - close: `performClose(nil)`
+  - minimize: `miniaturize(nil)`
+  - zoom: `zoom(nil)`
+- 当前 metric：
+  - `windowRadius = 28`
+  - `trafficLightCenterX = 28`
+  - `trafficLightCenterYFromTop = 28`
+  - `trafficLightDiameter = 14`
+  - `trafficLightCenterSpacing = 23`
+
+用户验证：
+
+- 自绘后红绿灯点击范围和显示位置已经一致。
+- 后续只做 metric 调整，不再回到直接移动系统按钮的方案，除非重新设计原生窗口标题栏。
+
+### 147.6 高光、边框与 continuous corner 的讨论结果
+
+高光尝试过程：
+
+1. 先做了白色高光。
+2. 用户希望边框不要直接定义为白色，而是跟随背景变化。
+3. 尝试从背景派生提亮色。
+4. 又尝试混入主题 `primary/tertiary`，但用户指出这不符合预期：他要的是背景颜色基础上的提亮毛玻璃，不应包含主题色。
+5. 改成背景同色系局部提亮后，用户仍觉得效果不理想。
+6. 最终用户决定：先回到最早的白色高光。
+
+当前结论：
+
+- 保留白色薄高光。
+- 不混入主题色。
+- 不继续在颜色算法上试探。
+- 如果后续继续调，优先调 stroke / alpha / radius，而不是改成彩色边框。
+
+continuous corner：
+
+- 用户指出“全应用 + 侧边”两个边框的曲线不理想，圆角到直边处有曲率突变。
+- 已确认用户说的两个边框是：
+  1. 全应用外框。
+  2. 左侧侧边栏边框。
+- 当前已将两者的 Flutter 可见路径改为 continuous/superellipse：
+  - 全应用外框：`ContinuousRectangleClip`
+  - 侧边栏背景挖空：`continuousRectanglePath`
+  - 侧边栏玻璃裁剪：`ContinuousRectangleClip`
+  - 侧边栏高光：`continuousRectanglePath`
+  - 侧边栏阴影：`continuousRectanglePath`
+- 用户验证后反馈“似乎得到了改善，先就这样”。
+
+注意：
+
+- macOS 原生 `NSVisualEffectView.layer.cornerRadius` 仍是系统 layer 圆角，不是 Flutter continuous path。
+- 当前用户主要验证的是 Flutter 内部可见外框和侧边栏轮廓。
+- 如果未来要连原生窗口最外层也完全 continuous，需要单独研究自定义 window mask，不应混在普通 Flutter UI 调整中。
+
+### 147.7 参考工程与许可/自包含要求
+
+迁入参考工程子集时必须保持：
+
+- `lib/common/liquid_glass/ATTRIBUTION.md`
+- `lib/common/liquid_glass/src/renderer/RENDERER_ATTRIBUTION.md`
+- shader 文件在 `shaders/liquid_glass/`
+- `pubspec.yaml` 中注册所有使用的 shader：
+  - `shaders/liquid_glass/lightweight_glass.frag`
+  - `shaders/liquid_glass/interactive_indicator.frag`
+  - `shaders/liquid_glass/liquid_glass_geometry_blended.frag`
+  - `shaders/liquid_glass/liquid_glass_final_render.frag`
+
+新增依赖：
+
+- `equatable`
+- `flutter_shaders`
+- `logging`
+- `meta`
+
+如果后续裁剪、重命名或移动这些文件，需要同步检查 imports、shader asset path、license attribution 和 `pubspec.lock`。
+
+### 147.8 已验证事项
+
+本轮已运行并通过：
+
+- `flutter pub get`
+- `dart analyze lib/common/liquid_glass lib/common/widgets/app_glass.dart lib/pages/main/widgets/macos_sidebar.dart`
+- `flutter analyze --no-pub --no-fatal-infos lib test`
+- 多次 `flutter build macos --debug`
+- 最近一次 continuous corner 修改后：
+  - `dart format lib/common/widgets/continuous_rectangle.dart lib/common/widgets/app_glass.dart lib/pages/main/main_page.dart lib/pages/main/widgets/macos_sidebar.dart`
+  - `dart analyze lib/common/widgets/continuous_rectangle.dart lib/common/widgets/app_glass.dart lib/pages/main/main_page.dart lib/pages/main/widgets/macos_sidebar.dart`
+
+用户已人工验证：
+
+- 侧边栏悬浮方向正确。
+- 红绿灯自绘后点击范围和显示一致。
+- continuous/superellipse 圆角过渡相比标准圆角有所改善。
+- 当前视觉先停在白色高光 + continuous corner 版本。
+
+### 147.9 后续继续本分支时不要遗漏
+
+- 暂时不要 tag/release，除非用户明确允许。
+- 不要把 `reference/` 加入 git。
+- 不要让 Android 走 macOS shader-heavy 路径；`AppGlassSurface` 的平台 fallback 要保留。
+- 不要重新引入主题色边框；用户已经否定。
+- 不要再尝试直接移动 AppKit 标准红绿灯按钮；当前自绘方案是为了解决系统重排和 hit test 不一致。
+- 后续如果继续“macOS 全 UI 重构”，应在现有 `AppGlass*` 封装上扩展，而不是在各页面散写 Liquid Glass 细节。
+- 需要继续盘点并迁移的区域包括：
+  - 文章页右侧阅读 surface 与工具区。
+  - 时间线列表卡片和选中态。
+  - 目录按钮/面板与本轮迁入的真实 shader/morph 能力的关系。
+  - 设置页、弹窗、菜单、上下文操作。
+  - Android fallback 的视觉一致性和性能保护。

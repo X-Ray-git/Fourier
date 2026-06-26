@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/continuous_rectangle.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../utils/move_to_background.dart';
@@ -18,6 +19,8 @@ import '../recent_read/recent_read_page.dart';
 import '../widgets/article_search_delegate.dart';
 import 'main_controller.dart';
 import 'widgets/macos_sidebar.dart';
+
+const _macOSWindowContentRadius = 28.0;
 
 /// 主页面 — 移动端保留底部导航，macOS 使用桌面分栏布局。
 class MainPage extends StatefulWidget {
@@ -73,39 +76,38 @@ class _MainPageState extends State<MainPage> {
   Widget _buildMacOSLayout(ColorScheme colorScheme) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Row(
-        children: [
-          Obx(() {
-            if (controller.isMacSidebarCollapsed.value) {
-              return MacOSCollapsedSidebar(
+      body: ContinuousRectangleClip(
+        radius: _macOSWindowContentRadius,
+        child: Row(
+          children: [
+            Obx(() {
+              if (controller.isMacSidebarCollapsed.value) {
+                return MacOSCollapsedSidebar(
+                  currentIndex: controller.currentIndex.value,
+                  onIndexChanged: controller.changeIndex,
+                  onExpand: () =>
+                      controller.isMacSidebarCollapsed.value = false,
+                );
+              }
+              return MacOSSidebar(
                 currentIndex: controller.currentIndex.value,
                 onIndexChanged: controller.changeIndex,
-                onExpand: () => controller.isMacSidebarCollapsed.value = false,
+                onCollapse: () => controller.isMacSidebarCollapsed.value = true,
               );
-            }
-            return MacOSSidebar(
-              currentIndex: controller.currentIndex.value,
-              onIndexChanged: controller.changeIndex,
-              onCollapse: () => controller.isMacSidebarCollapsed.value = true,
-            );
-          }),
-          VerticalDivider(
-            thickness: 1,
-            width: 1,
-            color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-          ),
-          Expanded(
-            child: ColoredBox(
-              color: colorScheme.surface,
-              child: Obx(
-                () => IndexedStack(
-                  index: controller.currentIndex.value,
-                  children: _macPages,
+            }),
+            Expanded(
+              child: ColoredBox(
+                color: colorScheme.surface,
+                child: Obx(
+                  () => IndexedStack(
+                    index: controller.currentIndex.value,
+                    children: _macPages,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -123,7 +125,9 @@ class _MainPageState extends State<MainPage> {
         appBar: AppBar(
           leadingWidth: 130,
           leading: Obx(() {
-            if (controller.currentIndex.value != 0) return const SizedBox.shrink();
+            if (controller.currentIndex.value != 0) {
+              return const SizedBox.shrink();
+            }
             final mode = _timelineController.selectedMode.value;
             final _ = _timelineController.allArticles.length;
             return Padding(
@@ -232,7 +236,9 @@ class _MainPageState extends State<MainPage> {
     final timelineCtrl = Get.find<TimelineController>();
     final selected = await showSearch<ArticleModel?>(
       context: context,
-      delegate: ArticleSearchDelegate(source: timelineCtrl.searchSourceArticles),
+      delegate: ArticleSearchDelegate(
+        source: timelineCtrl.searchSourceArticles,
+      ),
     );
     if (selected == null) return;
 

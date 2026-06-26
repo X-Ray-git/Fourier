@@ -6293,3 +6293,127 @@ macOS：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.22 -m "- feat: add macOS article table of contents hover, active state, and anchored morph\n- fix: align table of contents jumps to heading text\n- feat: align summary and translation article actions\n- perf: defer Android article body build until after route transition" --push`*
+
+## 146. 后续 macOS 液态玻璃 UI 重构上下文（2026-06-26）
+
+### 146.1 用户意图与总体边界
+
+用户明确表达：后续有将整体 UI 重构为更接近 Apple / iOS 26 Liquid Glass 风格的想法，尤其是 macOS 端。当前只是讨论与准备上下文，尚未开始正式 UI 重构。
+
+已确认边界：
+
+- `reference/liquid_glass_widgets` 只作为参考工程。
+- 不把参考工程作为 package、submodule、git 依赖或运行时外部路径。
+- 当前仓库必须保持自包含：clone 到任何地方都应能独立构建和运行。
+- 如果未来迁移/复制参考工程中的 MIT 代码或 shader，必须把需要的源码、shader、资源、许可与 attribution 一并纳入本仓库。
+- 不允许要求运行环境额外存在 `reference/liquid_glass_widgets`。
+- 用户不希望做“先凑合、以后再改”的半成品。如果开始重构，应按目标形态认真设计与实现。
+- 新问题当然可以继续向用户确认，但不要重复询问上述已经确认的原则。
+
+### 146.2 为什么本轮没有直接引入完整 shader 液态玻璃
+
+本轮阅读参考工程后确认：`reference/liquid_glass_widgets` 不只是毛玻璃样式库，而是有完整渲染体系：
+
+- `shaders/lightweight_glass.frag`
+- `shaders/interactive_indicator.frag`
+- `shaders/liquid_glass_geometry_blended.frag`
+- `shaders/liquid_glass_final_render.frag`
+- `LiquidGlassLayer`
+- `LiquidGlassBlendGroup`
+- `AdaptiveLiquidGlassLayer`
+- `GlassMorphController`
+- `LiquidMorphPhysics`
+
+参考工程的 `GlassMenu` 是“小按钮/小组件液态展开成大组件”的标准参考实现，使用：
+
+- ghost trigger
+- menu body
+- J-curve / spring
+- anchor blob 缩小
+- body 从触发器中心移动并扩张
+- SDF/metaball 形变
+- 内容在容器接近成形后再淡入
+
+但本轮只是文章页目录与阅读体验小版本修复，直接引入 shader/renderer 体系会把风险扩大到构建、性能、平台兼容和发布链路，因此没有混入 `v1.1.22`。
+
+### 146.3 推荐路线：先 macOS，后 Android
+
+已经讨论并建议：下一阶段如果开始液态玻璃 UI 重构，应优先做 macOS，不建议 Android 同时全量重构。
+
+理由：
+
+- macOS 端的使用场景更适合液态玻璃：左侧列表、右侧阅读、悬浮目录、工具按钮、分栏布局都接近桌面 Apple 风格。
+- Android 刚处理过文章打开转场卡顿和进度条/滚动稳定性问题，大量 blur/shader/玻璃层更容易引入性能和视觉问题。
+- “逻辑统一”不等于“双端视觉同步上线”。更好的方式是抽象统一组件 API，然后按平台实现：
+  - macOS 使用液态玻璃实现。
+  - Android 先保留轻量 Material / 轻毛玻璃实现。
+- 这样调用层统一，平台差异集中在组件实现中，避免到处写零散 `Platform.isMacOS` 判断。
+
+### 146.4 建议的技术组织方式
+
+如果开始重构，建议先引入项目内自有设计系统层，而不是直接在业务页面里散写样式：
+
+- `AppGlassSurface`
+- `AppGlassPanel`
+- `AppGlassButton`
+- `AppGlassIconButton`
+- `AppGlassToolbar`
+- `AppReaderShell`
+- `AppSidebarSurface`
+
+这些名字只是建议，实际命名应服从代码库现有结构。
+
+目标：
+
+- 页面业务逻辑不直接依赖 shader 细节。
+- macOS/Android 差异集中在底层组件或少量 theme/adapter。
+- 后续如果从毛玻璃 fallback 迁移到真实 shader Liquid Glass，不需要大范围改业务页面。
+
+### 146.5 工作流建议
+
+用户询问是否可以不等 `v1.1.22` 打包完成就开始新分支。结论：
+
+- 可以不等打包完成，因为 `v1.1.22` tag 已推送，GitHub Actions 会按 tag 独立跑。
+- 不建议直接在当前 main 工作区 checkout 到大重构分支。
+- 建议使用新的 worktree，保持当前目录在 `main`，方便 release 如果失败可以随时热修。
+
+推荐命令：
+
+```bash
+git worktree add ../auto-folo-liquid-glass -b codex/macos-liquid-glass-ui main
+```
+
+原因：
+
+- macOS UI 全面重构跨度大，容易产生多轮半成品。
+- 新 worktree 可以让 main 始终保持可热修状态。
+- 不需要频繁 stash/WIP commit 才能切回 main。
+- 重构满意后再从分支 merge 回 main。
+
+如果用户明确要求简单处理，也可以在当前位置 `git checkout -b codex/macos-liquid-glass-ui`，但这不是推荐方案。
+
+### 146.6 下一位 agent 进入重构线前应先做的事
+
+进入新 worktree 后，建议先完成以下工作，而不是马上重写页面：
+
+1. 阅读本节和第 145 节，理解用户边界和本轮文章页目录已做的轻量 morph。
+2. 检查 `reference/liquid_glass_widgets` 的 license、shader 注册、renderer/fallback 结构。
+3. 盘点当前 macOS UI 结构：
+   - timeline / feed list / article split view
+   - article detail / toolbar / TOC overlay
+   - settings
+   - dialogs / menus / context actions
+4. 提出 macOS-first 的重构计划，明确哪些组件先抽象，哪些页面先改。
+5. 单独评估是否要迁移 shader 级实现，还是先构建自有组件 API + 毛玻璃 fallback。
+6. 如果迁移 MIT 代码，必须确认许可、归属说明、shader 路径、pubspec 注册和打包影响。
+
+### 146.7 不要遗漏的风险点
+
+- Android 性能不要被 macOS 液态玻璃牵连。
+- 不要重新引入文章滚动条/顶部进度条抖动。
+- 不要破坏 macOS 文章页键盘焦点：左右键、上下键、M 键、Esc 之前多次修复过。
+- 不要让图片 hover 再次造成正文布局移动；之前已通过 `AnimatedScale` + 覆盖层边框修复。
+- 不要让目录展开/收起重新出现按钮闪位移。
+- 不要让目录点击跳转重新绑定到 heading card 外壳；应保持绑定标题内容本身。
+- 不要把参考工程目录作为隐式依赖。
+- 大范围 UI 重构前后都应跑 `flutter analyze --no-pub --no-fatal-infos lib test`。

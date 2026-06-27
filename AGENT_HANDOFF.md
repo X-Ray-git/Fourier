@@ -6865,3 +6865,7 @@ continuous corner：
 
 - `dart analyze lib/pages/article/article_page.dart` 通过。
 - `flutter build macos --debug` 通过；仍有 CoreSimulator 版本警告，不影响 macOS debug build。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.23 -m "- feat: merge macOS Liquid Glass shell and sidebar foundation\n- feat: polish macOS article table of contents glass morph and spring animation\n- docs: record Liquid Glass implementation boundaries and follow-up context" --push`*

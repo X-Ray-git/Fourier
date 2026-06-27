@@ -6625,3 +6625,243 @@ continuous corner：
   - 目录按钮/面板与本轮迁入的真实 shader/morph 能力的关系。
   - 设置页、弹窗、菜单、上下文操作。
   - Android fallback 的视觉一致性和性能保护。
+
+### 147.10 Liquid Glass 使用边界校准（2026-06-27）
+
+用户追问：如果把文章页、工具区、目录、卡片、设置页、弹窗、菜单等都纳入 Liquid Glass 迁移，会不会变得冗杂；并提到记得 Apple 官方建议克制使用。
+
+本轮重新核对 Apple 官方公开表述与 `reference/liquid_glass_widgets` 后，结论是：**“纳入统一设计语言检查”不等于“全部玻璃化”。**
+
+参考依据：
+
+- Apple 官方强调新设计应让注意力回到内容本身，Liquid Glass 更多承担 controls/navigation 的功能层与层级表达。
+- 参考工程 `reference/liquid_glass_widgets/README.md` 明确写到：glass reserved for navigation/control layer；content areas、lists、cards、article tiles stay opaque。
+- 参考工程的 sheet 默认值也很克制：large overlay 的 rim 是 barely-perceptible 级别，而不是重白框。
+
+当前项目内规则应调整为：
+
+- 适合用 glass：
+  - macOS 左侧侧边栏外壳。
+  - 顶部/悬浮工具区。
+  - 目录按钮与目录浮层。
+  - 弹出菜单、右键菜单、popover、toast。
+  - 小型控制件：按钮、segmented control、开关、搜索框外壳。
+  - hover / press / selection 的轻量光效反馈。
+- 不适合整块 glass：
+  - 文章正文阅读区域。
+  - 时间线每一张文章卡片主体。
+  - 设置页每一行。
+  - 长列表行、订阅源条目、垃圾拦截文章卡片主体。
+  - 图片、视频、正文内容容器。
+
+后续推进方向：
+
+- 不追求“所有 macOS UI 都变玻璃”。
+- 追求“壳层、控制层、浮层、焦点反馈统一”。
+- 内容主体保持清晰、安静、opaque，避免阅读负担。
+- Android 继续使用轻量 fallback，不跟随 macOS shader-heavy 视觉。
+
+本节追加后，本分支开始按此规则收敛：
+
+- 侧边栏作为 shell / navigation chrome 保留 glass。
+- macOS 文章目录按钮/目录浮层作为 control / overlay 样例，改为使用项目统一 `liquid_glass` 基础能力。
+- 暂不把文章正文、时间线卡片主体、设置列表行整体 glass 化。
+
+### 147.11 侧边栏真实背景取色边框实验结论（2026-06-27）
+
+用户希望侧边栏边缘高光尽量来自窗口背后的真实内容：背景是黑色时仍然要有明显光照，背景有颜色时边缘应明亮、鲜艳但不过曝。讨论中曾推导出一个目标映射：**背景只提供 hue / saturation，输出亮度固定接近 0.9**。
+
+已尝试的原生实现路线：
+
+- 在 `MainFlutterWindow.swift` 中给侧边栏边缘单独叠加 `NSVisualEffectView` ring。
+- 该 ring 使用 `blendingMode = .behindWindow` 和系统 material，以便让边框本身也是原生背后窗口材质。
+- 进一步尝试在 ring 的 layer 上挂 `CIColorCube` / `backgroundFilters`，把采样到的背景色重映射为固定高亮度的边缘颜色。
+
+用户验证结果：该 `backgroundFilters` 映射**完全没有可见效果**。这说明当前 AppKit 路线下，`NSVisualEffectView` 的系统毛玻璃确实由 macOS compositor 处理窗口背后的内容，但我们挂在 view layer 上的 Core Image filter 不会作用到那批真实背后像素。换句话说，中间的毛玻璃可见，并不等于 Flutter 或普通 `CALayer` 能读取、重映射、再绘制窗口背后的真实内容。
+
+因此本轮已移除无效的 `CIColorCube` 代码，避免仓库保留“看起来能取色、实际不起作用”的实现。
+
+随后用户确认：真实背景驱动边缘高光这条路线先放弃，恢复成稳定的白色版实现。当前代码状态：
+
+- `MainFlutterWindow.swift` 不再保留侧边栏专用 `NSVisualEffectView` ring。
+- `main_controller.dart` 不再通过 `MethodChannel` 同步侧边栏折叠状态给原生层。
+- `app_glass.dart` 的 `nativeBackdrop` surface 回到 Flutter 侧白色 overlay 高光；主体毛玻璃仍来自 macOS 窗口底层 `NSVisualEffectView`。
+
+后续不要重复尝试：
+
+- 不要继续调 `CIColorControls`、`CIVibrance`、`CIToneCurve`、`CIColorCube` 等挂在 `NSVisualEffectView.layer.backgroundFilters` 上的参数；这条路已经被实测排除。
+- 不要把这类 filter 当作真实桌面背景取色方案。
+
+可继续讨论的真实取色方案只有更重的原生路线：
+
+- ScreenCaptureKit / 原生截图采样窗口背后像素，再绘制自定义边框；缺点是权限、性能、隐私提示和窗口遮挡处理都更复杂。
+- 自定义 Metal / Core Image compositor；工程量明显大于当前侧边栏视觉调参。
+- 当前采用的折中方案：保留系统 `NSVisualEffectView` 负责真实毛玻璃，边缘高光用项目内可控白色 specular painter 作为最低可见度保障。这不是严格真实背景取色，但稳定、轻量、不会引入权限问题。
+
+### 147.12 macOS 文章目录对标参考工程 popover morph（2026-06-27）
+
+用户追问当前目录是否已经完全对标参考工程。检查后确认：此前版本只是把目录面板套进 `AppGlassSurface`，并保留手写宽高展开动画；材质方向对齐，但没有参考工程 `GlassPopover` 的 liquid morph 行为。
+
+本轮已把 `lib/pages/article/article_page.dart` 中的目录展开动画改为目录专用 morph overlay：
+
+- 复用本仓库已迁入的参考工程基础能力：
+  - `GlassMorphController`
+  - `LiquidGlassLayer`
+  - `GlassContainer`
+  - `LiquidRoundedSuperellipse`
+- 动画上参考 `reference/liquid_glass_widgets/lib/widgets/overlays/glass_popover.dart` 的 spring morph 思路，但没有照搬两 Blob 旅行路径：
+  - 用户明确不希望目录圆点先向左下移动，所以最终采用右上角锚定展开。
+  - 展开/收起由 `GlassMorphController` 的 spring value 驱动，而不是普通固定时长 `AnimationController`。
+  - 目录自身用 `GlassContainer` 做单体玻璃形变，宽高向左下扩展，圆角同步从圆形过渡到面板圆角。
+- 保留项目已有业务行为：
+  - 目录数据来源、标题层级缩进、active heading 高亮不变。
+  - 点击目录项跳转逻辑不变。
+  - macOS-only 逻辑不扩散到 Android。
+
+注意：这里没有把参考工程完整 `GlassPopover` 组件迁入仓库，也没有依赖 `reference/` 目录。原因是目录已有自己的定位、高亮和滚动跳转逻辑；当前做法只迁入必要的 morph 思路，避免为一个专用目录按钮引入整套通用 popover API。后续如果多个地方都需要同类 popover，再考虑抽成项目级 `AppGlassPopover`。
+
+用户随后验证并指出四个体验问题：
+
+1. 首次点击目录展开会卡顿，后续正常。
+2. 未点击时目录按钮没有外围玻璃圆圈，hover 是普通按钮效果；玻璃效果从点击后才出现。
+3. 展开时圆点先向左下移动再展开，体感不好；用户希望右上角始终固定，圆形直接向左下扩展成圆角矩形。
+4. 点击目录项后的文章滚动停止略突兀。
+
+已按该反馈继续调整：
+
+- 目录 glass layer 改为常驻绘制。未点击时也显示玻璃圆形按钮，避免 idle 状态和展开状态材质割裂，并尽量提前初始化 glass/shader 路径，缓解首次点击卡顿。
+- idle 按钮 hover/press 改成玻璃容器上的轻微 glow/scale，不再使用普通灰底 hover 作为主要反馈。
+- 展开几何改为右上角锚定：`Positioned(top: 0, right: 0)` 固定，宽度向左增长，高度向下增长，圆角从圆形过渡到面板圆角；不再使用 `GlassMorphController.computeState()` 的中心位移路径，因此不会先把圆点推向左下。
+- 仍保留 `GlassMorphController` 的 spring value 驱动打开/关闭，但这次只用于锚定展开的进度，不再模拟参考 `GlassPopover` 的 Blob B 旅行路径。
+- 目录跳转滚动从固定 `280ms + Curves.easeOutCubic` 改为距离自适应 `180ms..420ms + Curves.easeInOutCubic`，降低末段急刹感；fallback `Scrollable.ensureVisible` 也改为 `300ms + easeInOutCubic`。
+
+后续用户需要重点验证：
+
+- 首次展开是否仍有明显卡顿。
+- 右上角锚定展开是否符合“圆形直接向左下扩展”的预期。
+- idle 玻璃按钮是否过于显眼或 hover 反馈是否不足。
+- 目录跳转滚动是否仍有突兀停顿。
+
+随后用户提供截图并指出两个 bug：
+
+1. 长目录标题的选中项看起来超出目录面板边框。
+2. 目录展开后点击任何地方都无法收回。
+
+已修复：
+
+- 面板高度估算不再使用简单 `58 + entries.length * 36`。现在根据标题长度估算行高：短标题 38px，长标题 54px，并给整体 header/list 留出更多空间。这样两行长标题不会挤到圆角边界外。
+- 目录列表底部 padding 从对称 `6` 改为 `fromLTRB(0, 6, 0, 12)`，给最后一项和圆角底边留出呼吸空间。
+- 展开后无法点击的直接原因是 `_ArticleTocMorphLayer` 外层 `IgnorePointer` 在 `clampedValue >= 0.86` 时把整个面板子树禁用了，包括收起按钮和目录项。已移除这层外部 `IgnorePointer`，只保留内容淡入阶段的局部 pointer guard。
+- 在文章页 Stack 中增加仅 macOS 且 `_isTocOpen` 时存在的透明 `Positioned.fill` barrier，位于正文上方、目录下方；点击目录外区域会 `setState(() => _isTocOpen = false)` 收起目录，目录内部点击仍由目录 overlay 处理。
+
+用户进一步澄清：此前询问“参考工程中的弹性+非线性动画效果”不是指 hover/press，而是指圆形展开成圆角矩形的 morph 本身。本轮重新检查参考工程后确认：
+
+- `GlassMorphController` 使用 `SpringSimulation` 驱动 raw value，打开和关闭都有 spring 响应。
+- `LiquidMorphPhysics` 的尺寸增长使用 `Curves.linearToEaseOut`，位置路径使用 `BackOutCurve` 产生 teardrop 拉伸。
+- 参考工程的明显弹性主要来自 Blob B 旅行路径、Blob A/Blob B 分离、metaball blend 和关闭回弹；不是 hover scale。
+
+由于用户明确不希望目录圆点先向左下移动，不能直接恢复参考 `GlassPopover` 的 Blob B 旅行路径。本轮改为“右上角锚定版 spring morph”：
+
+- hover 不再改变整个目录按钮尺寸，避免图标也随之变大；hover 只提升 `glowIntensity`。
+- idle press 只保留极轻微 `0.985` scale。
+- 展开仍然固定 `top: 0, right: 0`，右上角不动，宽度向左、高度向下增长。
+- 展开尺寸不再只用 clamped progress，而是读取 `GlassMorphController.value` 的 raw spring value：
+  - `Curves.linearToEaseOut(clampedValue)` 作为基础尺寸进度。
+  - open overshoot 参与尺寸，但限制到很小范围，最终 `morphT` clamp 到 `1.018`，避免文字和面板过度晃动。
+  - close undershoot 也只允许极小回弹，避免回收时形状跳动。
+
+用户随后指出：边框和四个圆角的展开速度看起来不一致，边框更快到位、圆角慢一些，导致不像一个整体展开。重新对照参考工程后发现：
+
+- 参考 `GlassPopover` 的尺寸使用 `state.sizeT`，而圆角使用 `Curves.easeInExpo.transform(state.sizeT)`。
+- 这在参考工程的“popover 气泡旅行路径 + metaball neck”里可接受，因为视觉重点是两团玻璃连接/脱离，不是固定角点的矩形展开。
+- 当前项目目录是右上角锚定展开，圆角若继续 `easeInExpo` 会明显慢于边框，产生“边框先开、圆角后追”的错觉。
+
+因此已将目录 morph 的圆角插值从 `Curves.easeInExpo` 改为 `Curves.easeOutCubic`，让圆角更早接近目标半径，和宽高展开更同步。这个调整是对参考工程的适配，而不是照搬参考工程。
+
+用户继续反馈：展开/缩小动画结束后到弹性动画开始前存在约零点几秒的间隔，看起来像“先到位、卡一下、再弹”。原因是上一版把尺寸弹性挂在 `rawValue > 1.0` 后才发生：主体尺寸先用 clamped progress 到 1.0，等 spring raw value 越过 1.0 才开始额外过冲，因此形成两段式。
+
+已调整：
+
+- 移除 `rawValue > 1.0` 后置过冲作为主要弹性来源。
+- 在展开进度约 58% 后引入 `_anchoredElasticTail(t)`，使用很小的正弦尾波参与尺寸展开。
+- 尾波在进度到 100% 时归零，因此弹性融合在展开过程中，不会在完全到位后再单独弹一下。
+- `morphT` 最大 clamp 从 `1.018` 收紧到 `1.012`，保持锚定展开有轻微生命感，但避免文字和面板边界明显跳动。
+
+验证：
+
+- `dart analyze lib/pages/article/article_page.dart` 通过。
+- `flutter build macos --debug` 通过；仍有 CoreSimulator 版本警告，不影响 macOS debug build。
+
+用户进一步把放大和缩小分开反馈：
+
+- 放大：肉眼几乎看不到弹性效果。
+- 缩小：依然像先恢复到原按钮大小，间隔零点几秒后才触发弹性；且弹性表现为先放大、停约 0.1 秒、再缩小回按钮。
+
+最终调整：
+
+- 尺寸动画不再直接依赖 `rawValue > 1.0` 或 `rawValue < 0.0` 的 spring 越界值，避免任何“已经到位后再弹”的后置动画。
+- 放大使用 `_anchoredOpenTail(t)`，从展开进度约 42% 开始融入正弦尾波，幅度提高到 `0.028`，最终 `morphT` 允许到 `1.024`。这样弹性更容易被看见，但仍然克制。
+- 缩小使用 `_anchoredCloseTail(t)`，只基于 clamped progress 的正弦尾波，进度到 0 或 1 时都严格归零。这样缩小过程可以有一点阻尼感，但回到按钮大小后不会继续弹。
+- 这次修复后再次通过：
+  - `dart analyze lib/pages/article/article_page.dart`
+  - `flutter build macos --debug`
+
+用户随后确认“先放大、停一下、再缩小回原大小”的问题依然存在。结论是：即使 `_anchoredCloseTail(t)` 不依赖 raw spring 越界，它的正向尾波在收起过程中仍会被感知为“不该有的先放大”。因此最终调整为：
+
+- 收起方向彻底不叠加尺寸弹性：`widget.morphController.isClosing ? 0.0 : _anchoredOpenTail(clampedValue)`。
+- 删除 `_anchoredCloseTail`。
+- 放大方向保留 `_anchoredOpenTail`。
+
+这次调整后再次通过：
+
+- `dart analyze lib/pages/article/article_page.dart`
+- `flutter build macos --debug`
+
+用户继续反馈同一个“收起后又放大”的现象仍存在。最终定位：问题不只是额外 tail 曲线，而是 `GlassMorphController.close()` 底层 spring 本身会在关闭时越过 0 后再反弹到正值。即使删除 `_anchoredCloseTail`，`baseMorphT = Curves.linearToEaseOut.transform(clampedValue)` 仍会吃到这次正向回弹，于是视觉上仍像“回到按钮大小后又放大一下”。
+
+最终修复：
+
+- 在 `_ArticleTocMorphLayerState.build` 中新增 `effectiveValue`：
+  - 如果 `widget.morphController.isClosing && widget.morphController.hasHandedOff`，强制 `effectiveValue = 0.0`。
+  - 否则使用 `rawValue`。
+- 后续 `clampedValue`、尺寸、内容透明度、图标透明度都基于 `effectiveValue`。
+- 这样关闭动画第一次越过 0 并 handoff 后，即使 spring 内部继续反弹，目录尺寸也保持按钮大小，不再二次放大。
+
+再次验证：
+
+- `dart analyze lib/pages/article/article_page.dart` 通过。
+- `flutter build macos --debug` 通过。
+
+用户验证后确认：错误的“收回到按钮大小后，又先放大、停顿、再缩回”的后置弹簧效果已经消失。但用户同时指出：完全移除收起弹性后，收起过程末段速度/加速度像是骤然归零，运动曲线偏生硬，希望加入一个正确的弹簧感。
+
+已按这个边界继续调整：
+
+- 不恢复 `GlassMorphController.close()` 过零后的正向回弹；那正是错误后置弹簧的根源。
+- 不给收起方向重新叠加 `_anchoredCloseTail` 这类正向尾波；用户已经验证这会被感知为“不该有的先放大”。
+- 只在 `_ArticleTocMorphLayerState` 内给收起方向换成 `_anchoredCloseSettleT(t)`：
+  - 它是一个 critically damped / 阻尼弹簧式收束函数。
+  - 输入仍来自 controller 的 spring value，但输出在 0..1 内无过冲。
+  - 收起弹性发生在到达按钮大小之前，目标点之后没有任何二次动作。
+  - `hasHandedOff` 后仍强制 `effectiveValue = 0.0`，保证 controller 内部后续反弹不会影响尺寸。
+- 打开方向保留 `_anchoredOpenTail(t)`，因为用户此前只否定了收起时的错误后置弹簧，没有否定打开时的轻微生命感。
+
+最新验证：
+
+- `dart analyze lib/pages/article/article_page.dart` 通过。
+- `flutter build macos --debug` 通过；仍有 CoreSimulator 版本警告，不影响 macOS debug build。
+
+用户随后进一步澄清：希望收起动画也像展开末尾一样有可见弹簧感，而不仅仅是“顺滑无过冲”。展开末尾当前自然，是因为 `morphT` 可以略微超过 1；收起方向的对应形态不是回到按钮后再放大，而应是在接近按钮前短暂略小于按钮尺寸，再连续回到正常按钮大小。
+
+已继续调整：
+
+- 收起方向重新加入 `_anchoredCloseTail(t)`，但它是负向 undershoot：
+  - 仅在 `clampedValue < 0.24` 的末段生效。
+  - `t == 0` 和 `t == 0.24` 都严格归零。
+  - 形态是 `-sin(u * pi) * 0.032`，不会产生目标点后的二次动画。
+- `morphT` 在收起方向允许最低到 `-0.014`，对应一个很小的“略小于按钮尺寸”视觉回摆。
+- 仍保留 `hasHandedOff` 后强制 `effectiveValue = 0.0` 的保护，因此 `GlassMorphController.close()` 内部过零后的正向回弹仍不会影响目录尺寸。
+
+再次验证：
+
+- `dart analyze lib/pages/article/article_page.dart` 通过。
+- `flutter build macos --debug` 通过；仍有 CoreSimulator 版本警告，不影响 macOS debug build。

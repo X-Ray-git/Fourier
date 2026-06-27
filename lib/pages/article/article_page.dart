@@ -15,6 +15,7 @@ import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
@@ -815,16 +816,20 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         0.0,
         maxExtent,
       );
+      final distance = (target - currentOffset).abs();
+      final durationMs = (180 + distance / 2400 * 240)
+          .clamp(180.0, 420.0)
+          .round();
       await _scrollController.animateTo(
         target,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOutCubic,
+        duration: Duration(milliseconds: durationMs),
+        curve: Curves.easeInOutCubic,
       );
     } else {
       await Scrollable.ensureVisible(
         targetContext,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOutCubic,
         alignment: 0.08,
       );
     }
@@ -1264,6 +1269,13 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             },
           ),
         ),
+        if (Platform.isMacOS && _isTocOpen)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => setState(() => _isTocOpen = false),
+            ),
+          ),
         if (Platform.isMacOS)
           Obx(() {
             final showTrans =
@@ -1396,17 +1408,38 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
   static const double _buttonSize = 34;
   static const double _panelWidth = 304;
   static const double _panelMaxHeight = 430;
+  static const glass.LiquidGlassSettings _tocGlassSettings =
+      glass.LiquidGlassSettings(
+        blur: 12,
+        thickness: 12,
+        glassColor: Color.fromRGBO(255, 255, 255, 0.14),
+        lightIntensity: 0.68,
+        ambientStrength: 0.38,
+        saturation: 1.18,
+        refractiveIndex: 0.62,
+        chromaticAberration: 0.0,
+      );
 
-  late final AnimationController _controller;
+  late final glass.GlassMorphController _morphController;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 260),
-      reverseDuration: const Duration(milliseconds: 210),
-      value: widget.isOpen ? 1.0 : 0.0,
+    _morphController =
+        glass.GlassMorphController(vsync: this, speed: glass.MorphSpeed.normal)
+          ..addListener(() {
+            if (mounted) setState(() {});
+          });
+    if (widget.isOpen) {
+      _morphController.open();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _morphController.setDisableAnimations(
+      MediaQuery.disableAnimationsOf(context),
     );
   }
 
@@ -1415,110 +1448,234 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
     super.didUpdateWidget(oldWidget);
     if (widget.isOpen != oldWidget.isOpen) {
       if (widget.isOpen) {
-        _controller.forward();
+        _morphController.open();
       } else {
-        _controller.reverse();
+        _morphController.close();
       }
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _morphController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final estimatedRowsHeight = widget.entries.fold<double>(
+      0,
+      (sum, entry) => sum + _estimatedTocRowHeight(entry),
+    );
     final panelHeight = math
-        .min(_panelMaxHeight, 58 + widget.entries.length * 36.0)
-        .clamp(96.0, _panelMaxHeight);
+        .min(_panelMaxHeight, 66 + estimatedRowsHeight)
+        .clamp(112.0, _panelMaxHeight);
+
     return SizedBox(
       width: _panelWidth,
       height: panelHeight,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final rawT = _controller.value;
-          final sizeT = Curves.easeOutCubic.transform(rawT);
-          final scaleT =
-              1.0 +
-              (rawT > 0 && rawT < 1 ? math.sin(rawT * math.pi) * 0.012 : 0.0);
-          final width = lerpDouble(_buttonSize, _panelWidth, sizeT)!;
-          final height = lerpDouble(_buttonSize, panelHeight, sizeT)!;
-          final radius = lerpDouble(999, 18, sizeT)!;
-          final blurSigma = rawT >= 0.98 ? 22.0 : lerpDouble(8, 16, sizeT)!;
-          final buttonOpacity = (1.0 - (rawT / 0.45)).clamp(0.0, 1.0);
-          final contentOpacity = rawT <= 0.72
-              ? 0.0
-              : ((rawT - 0.72) / 0.28).clamp(0.0, 1.0);
-          final buildContent = rawT > 0.58;
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _ArticleTocMorphLayer(
+            panelWidth: _panelWidth,
+            panelHeight: panelHeight,
+            buttonSize: _buttonSize,
+            morphController: _morphController,
+            entries: widget.entries,
+            activeTocId: widget.activeTocId,
+            onToggle: widget.onToggle,
+            onEntryTap: widget.onEntryTap,
+            glassSettings: _tocGlassSettings,
+          ),
+        ],
+      ),
+    );
+  }
 
-          return Stack(
-            alignment: Alignment.topRight,
-            clipBehavior: Clip.none,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: Transform.scale(
-                  scale: scaleT,
-                  alignment: Alignment.topRight,
-                  child: SizedBox(
-                    width: width,
-                    height: height,
-                    child: _GlassSurface(
-                      borderRadius: radius,
-                      blurSigma: blurSigma,
-                      child: Stack(
-                        alignment: Alignment.topRight,
-                        children: [
-                          if (buttonOpacity > 0)
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: IgnorePointer(
-                                ignoring: rawT > 0.2,
-                                child: Opacity(
-                                  opacity: buttonOpacity,
-                                  child: _TocIconButton(
-                                    icon: Icons.format_list_bulleted_rounded,
-                                    tooltip: '展开目录',
-                                    onTap: widget.onToggle,
-                                  ),
+  double _estimatedTocRowHeight(_ArticleTocEntry entry) {
+    final levelIndentChars = (entry.level - 1).clamp(0, 3) * 3;
+    final effectiveChars = entry.title.length + levelIndentChars;
+    return effectiveChars > 24 ? 54.0 : 38.0;
+  }
+}
+
+class _ArticleTocMorphLayer extends StatefulWidget {
+  final double panelWidth;
+  final double panelHeight;
+  final double buttonSize;
+  final glass.GlassMorphController morphController;
+  final List<_ArticleTocEntry> entries;
+  final String? activeTocId;
+  final VoidCallback onToggle;
+  final ValueChanged<_ArticleTocEntry> onEntryTap;
+  final glass.LiquidGlassSettings glassSettings;
+
+  const _ArticleTocMorphLayer({
+    required this.panelWidth,
+    required this.panelHeight,
+    required this.buttonSize,
+    required this.morphController,
+    required this.entries,
+    required this.activeTocId,
+    required this.onToggle,
+    required this.onEntryTap,
+    required this.glassSettings,
+  });
+
+  @override
+  State<_ArticleTocMorphLayer> createState() => _ArticleTocMorphLayerState();
+}
+
+class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final rawValue = widget.morphController.value;
+    final effectiveValue =
+        widget.morphController.isClosing && widget.morphController.hasHandedOff
+        ? 0.0
+        : rawValue;
+    final clampedValue = effectiveValue.clamp(0.0, 1.0);
+    final baseMorphT = widget.morphController.isClosing
+        ? _anchoredCloseSettleT(clampedValue)
+        : Curves.linearToEaseOut.transform(clampedValue);
+    final elasticTail = widget.morphController.isClosing
+        ? _anchoredCloseTail(clampedValue)
+        : _anchoredOpenTail(clampedValue);
+    final morphMin = widget.morphController.isClosing ? -0.014 : 0.0;
+    final morphT = (baseMorphT + elasticTail).clamp(morphMin, 1.024);
+    final currentWidth = lerpDouble(
+      widget.buttonSize,
+      widget.panelWidth,
+      morphT,
+    )!;
+    final currentHeight = lerpDouble(
+      widget.buttonSize,
+      widget.panelHeight,
+      morphT,
+    )!;
+    final maxRadius = math.min(currentWidth, currentHeight) / 2;
+    final radiusT = Curves.easeOutCubic.transform(morphT.clamp(0.0, 1.0));
+    final currentRadius = lerpDouble(maxRadius, 18, radiusT)!;
+    final contentOpacity = ((clampedValue - 0.82) / 0.18).clamp(0.0, 1.0);
+    final showContent =
+        clampedValue > 0.82 && !widget.morphController.isClosing;
+    final showTriggerIcon = clampedValue < 0.34;
+    final triggerIconOpacity = (1 - clampedValue / 0.34).clamp(0.0, 1.0);
+    final isIdle = clampedValue < 0.02 && !widget.morphController.isShowing;
+    final idleScale = _isPressed ? 0.985 : 1.0;
+
+    return glass.LiquidGlassLayer(
+      settings: widget.glassSettings,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: 0,
+            right: 0,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _isHovered = true),
+              onExit: (_) => setState(() {
+                _isHovered = false;
+                _isPressed = false;
+              }),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: clampedValue < 0.86
+                    ? (_) => setState(() => _isPressed = true)
+                    : null,
+                onTapUp: clampedValue < 0.86
+                    ? (_) => setState(() => _isPressed = false)
+                    : null,
+                onTapCancel: clampedValue < 0.86
+                    ? () => setState(() => _isPressed = false)
+                    : null,
+                onTap: clampedValue < 0.86 ? widget.onToggle : null,
+                child: AnimatedScale(
+                  scale: isIdle ? idleScale : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOutCubic,
+                  child: glass.GlassContainer(
+                    width: currentWidth,
+                    height: currentHeight,
+                    useOwnLayer: false,
+                    settings: widget.glassSettings,
+                    quality: glass.GlassQuality.standard,
+                    allowElevation: false,
+                    glowIntensity: isIdle && _isHovered ? 0.14 : 0.0,
+                    clipBehavior: Clip.antiAlias,
+                    shape: glass.LiquidRoundedSuperellipse(
+                      borderRadius: currentRadius,
+                    ),
+                    child: Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        if (showTriggerIcon)
+                          Opacity(
+                            opacity: triggerIconOpacity,
+                            child: SizedBox(
+                              width: widget.buttonSize,
+                              height: widget.buttonSize,
+                              child: _TocIconButtonChrome(
+                                icon: Icons.format_list_bulleted_rounded,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        if (showContent)
+                          Opacity(
+                            opacity: contentOpacity,
+                            child: IgnorePointer(
+                              ignoring: contentOpacity < 0.95,
+                              child: SizedBox(
+                                width: widget.panelWidth,
+                                height: widget.panelHeight,
+                                child: _ArticleTocPanelContent(
+                                  entries: widget.entries,
+                                  activeTocId: widget.activeTocId,
+                                  onToggle: widget.onToggle,
+                                  onEntryTap: widget.onEntryTap,
                                 ),
                               ),
                             ),
-                          if (buildContent)
-                            Align(
-                              alignment: Alignment.topRight,
-                              child: Opacity(
-                                opacity: contentOpacity,
-                                child: IgnorePointer(
-                                  ignoring: contentOpacity < 0.95,
-                                  child: SizedBox(
-                                    width: _panelWidth,
-                                    height: panelHeight,
-                                    child: _ArticleTocPanelContent(
-                                      entries: widget.entries,
-                                      activeTocId: widget.activeTocId,
-                                      onToggle: widget.onToggle,
-                                      onEntryTap: widget.onEntryTap,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  double _anchoredOpenTail(double t) {
+    const start = 0.42;
+    if (t <= start || t >= 1.0) return 0.0;
+    final u = ((t - start) / (1.0 - start)).clamp(0.0, 1.0);
+    return math.sin(u * math.pi) * 0.028;
+  }
+
+  double _anchoredCloseSettleT(double t) {
+    final progress = (1.0 - t).clamp(0.0, 1.0);
+    const omega = 5.0;
+    final settled =
+        1.0 - (1.0 + omega * progress) * math.exp(-omega * progress);
+    final normalizer = 1.0 - (1.0 + omega) * math.exp(-omega);
+    return (1.0 - settled / normalizer).clamp(0.0, 1.0);
+  }
+
+  double _anchoredCloseTail(double t) {
+    const end = 0.24;
+    if (t <= 0.0 || t >= end) return 0.0;
+    final u = (t / end).clamp(0.0, 1.0);
+    return -math.sin(u * math.pi) * 0.032;
   }
 }
 
@@ -1572,7 +1729,7 @@ class _ArticleTocPanelContent extends StatelessWidget {
         Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.28)),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
             itemCount: entries.length,
             itemBuilder: (context, index) {
               final entry = entries[index];
@@ -1764,57 +1921,15 @@ class _TocIconButtonState extends State<_TocIconButton> {
   }
 }
 
-class _GlassSurface extends StatelessWidget {
-  final Widget child;
-  final double borderRadius;
-  final double blurSigma;
+class _TocIconButtonChrome extends StatelessWidget {
+  final IconData icon;
+  final Color color;
 
-  const _GlassSurface({
-    required this.child,
-    required this.borderRadius,
-    this.blurSigma = 22,
-  });
+  const _TocIconButtonChrome({required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(borderRadius);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: cs.surface.withValues(alpha: 0.58),
-              borderRadius: radius,
-              border: Border.all(
-                color: cs.outlineVariant.withValues(alpha: 0.36),
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withValues(alpha: 0.18),
-                  cs.surface.withValues(alpha: 0.34),
-                ],
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
-    );
+    return Center(child: Icon(icon, size: 18, color: color));
   }
 }
 

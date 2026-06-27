@@ -1,9 +1,9 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../../common/widgets/app_glass.dart';
+import '../../../common/widgets/continuous_rectangle.dart';
 import '../../../http/init.dart';
 import '../../../models/feed.dart';
 import '../../../services/feed_readability_settings_service.dart';
@@ -11,6 +11,11 @@ import '../../../services/feed_silent_settings_service.dart';
 import '../../../services/feed_translation_settings_service.dart';
 import '../../subscriptions/subscriptions_controller.dart';
 import '../../timeline/timeline_controller.dart';
+
+const _macOSSidebarPanelRadius = 20.0;
+const EdgeInsets _macOSSidebarPanelMargin = EdgeInsets.fromLTRB(8, 8, 8, 8);
+const _macOSSidebarExpandedWidth = 290.0;
+const _macOSSidebarCollapsedWidth = 80.0;
 
 class MacOSSidebar extends StatelessWidget {
   final int currentIndex;
@@ -30,8 +35,8 @@ class MacOSSidebar extends StatelessWidget {
     final timelineController = Get.find<TimelineController>();
     final subController = Get.find<SubscriptionsController>();
 
-    return SizedBox(
-      width: 268,
+    return _MacOSSidebarSlot(
+      width: _macOSSidebarExpandedWidth,
       child: _MacOSGlassPane(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -88,7 +93,9 @@ class MacOSSidebar extends StatelessWidget {
                   _SidebarItem(
                     icon: Icons.notifications_off_outlined,
                     label: '静默订阅源',
-                    isSelected: isSelected && timelineController.selectedFeedId.value == null,
+                    isSelected:
+                        isSelected &&
+                        timelineController.selectedFeedId.value == null,
                     badgeCount: timelineController.silentUnreadCount,
                     onTap: () {
                       timelineController.isSilentSelected.value = true;
@@ -109,29 +116,46 @@ class MacOSSidebar extends StatelessWidget {
                                 return Obx(() {
                                   final feedSelected =
                                       currentIndex == 0 &&
-                                      timelineController.selectedFeedId.value == feed.feedId &&
-                                      timelineController.isSilentSelected.value == true;
+                                      timelineController.selectedFeedId.value ==
+                                          feed.feedId &&
+                                      timelineController
+                                              .isSilentSelected
+                                              .value ==
+                                          true;
                                   return _SidebarItem(
                                     icon: Icons.rss_feed,
                                     imageUrl: feed.image,
                                     label: feed.title,
                                     isSelected: feedSelected,
-                                    badgeCount: subController.rawUnreadFor(feed.feedId),
+                                    badgeCount: subController.rawUnreadFor(
+                                      feed.feedId,
+                                    ),
                                     indentLevel: 2,
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        _FeedAutoReadabilityIcon(feedId: feed.feedId),
+                                        _FeedAutoReadabilityIcon(
+                                          feedId: feed.feedId,
+                                        ),
                                         const SizedBox(width: 2),
-                                        _FeedAutoTranslateIcon(feedId: feed.feedId),
+                                        _FeedAutoTranslateIcon(
+                                          feedId: feed.feedId,
+                                        ),
                                         const SizedBox(width: 2),
                                         _FeedSilentIcon(feedId: feed.feedId),
                                       ],
                                     ),
                                     onTap: () {
-                                      timelineController.isSilentSelected.value = true;
-                                      timelineController.selectedCategory.value = null;
-                                      timelineController.selectedFeedId.value = feed.feedId;
+                                      timelineController
+                                              .isSilentSelected
+                                              .value =
+                                          true;
+                                      timelineController
+                                              .selectedCategory
+                                              .value =
+                                          null;
+                                      timelineController.selectedFeedId.value =
+                                          feed.feedId;
                                       onIndexChanged(0);
                                     },
                                   );
@@ -218,7 +242,8 @@ class MacOSSidebar extends StatelessWidget {
                                 );
                               },
                               onTap: () {
-                                timelineController.isSilentSelected.value = false;
+                                timelineController.isSilentSelected.value =
+                                    false;
                                 timelineController.selectedFeedId.value = null;
                                 timelineController.selectedCategory.value =
                                     category.name;
@@ -250,13 +275,14 @@ class MacOSSidebar extends StatelessWidget {
                                           feedId: feed.feedId,
                                         ),
                                         const SizedBox(width: 2),
-                                        _FeedSilentIcon(
-                                          feedId: feed.feedId,
-                                        ),
+                                        _FeedSilentIcon(feedId: feed.feedId),
                                       ],
                                     ),
                                     onTap: () {
-                                      timelineController.isSilentSelected.value = false;
+                                      timelineController
+                                              .isSilentSelected
+                                              .value =
+                                          false;
                                       timelineController
                                               .selectedCategory
                                               .value =
@@ -311,8 +337,8 @@ class MacOSCollapsedSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 58,
+    return _MacOSSidebarSlot(
+      width: _macOSSidebarCollapsedWidth,
       child: _MacOSGlassPane(
         child: Column(
           children: [
@@ -325,7 +351,8 @@ class MacOSCollapsedSidebar extends StatelessWidget {
             const SizedBox(height: 10),
             Obx(() {
               final timelineController = Get.find<TimelineController>();
-              final isAllSelected = currentIndex == 0 &&
+              final isAllSelected =
+                  currentIndex == 0 &&
                   timelineController.isSilentSelected.value == false &&
                   timelineController.selectedFeedId.value == null &&
                   timelineController.selectedCategory.value == null;
@@ -355,7 +382,8 @@ class MacOSCollapsedSidebar extends StatelessWidget {
             ),
             Obx(() {
               final timelineController = Get.find<TimelineController>();
-              final isSilentSelected = currentIndex == 0 &&
+              final isSilentSelected =
+                  currentIndex == 0 &&
                   timelineController.isSilentSelected.value == true;
               return _RailButton(
                 icon: Icons.notifications_off_outlined,
@@ -384,6 +412,62 @@ class MacOSCollapsedSidebar extends StatelessWidget {
   }
 }
 
+class _MacOSSidebarSlot extends StatelessWidget {
+  final double width;
+  final Widget child;
+
+  const _MacOSSidebarSlot({required this.width, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: width,
+      child: CustomPaint(
+        painter: _MacOSSidebarSlotPainter(
+          backgroundColor: cs.surface,
+          panelMargin: _macOSSidebarPanelMargin,
+          panelRadius: _macOSSidebarPanelRadius,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _MacOSSidebarSlotPainter extends CustomPainter {
+  final Color backgroundColor;
+  final EdgeInsets panelMargin;
+  final double panelRadius;
+
+  const _MacOSSidebarSlotPainter({
+    required this.backgroundColor,
+    required this.panelMargin,
+    required this.panelRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outer = Path()..addRect(Offset.zero & size);
+    final panelRect = Rect.fromLTWH(
+      panelMargin.left,
+      panelMargin.top,
+      size.width - panelMargin.horizontal,
+      size.height - panelMargin.vertical,
+    );
+    final panel = continuousRectanglePath(panelRect, panelRadius);
+    final backgroundPath = Path.combine(PathOperation.difference, outer, panel);
+    canvas.drawPath(backgroundPath, Paint()..color = backgroundColor);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MacOSSidebarSlotPainter oldDelegate) {
+    return backgroundColor != oldDelegate.backgroundColor ||
+        panelMargin != oldDelegate.panelMargin ||
+        panelRadius != oldDelegate.panelRadius;
+  }
+}
+
 class _MacOSGlassPane extends StatelessWidget {
   final Widget child;
 
@@ -391,34 +475,12 @@ class _MacOSGlassPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseTint = isDark ? const Color(0xFF1E2024) : Colors.white;
-
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: baseTint.withValues(alpha: isDark ? 0.26 : 0.18),
-            border: Border(
-              right: BorderSide(
-                color: cs.outlineVariant.withValues(alpha: 0.24),
-                width: 0.5,
-              ),
-            ),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: isDark ? 0.08 : 0.24),
-                baseTint.withValues(alpha: isDark ? 0.16 : 0.10),
-              ],
-            ),
-          ),
-          child: child,
-        ),
-      ),
+    return AppGlassSurface(
+      borderRadius: _macOSSidebarPanelRadius,
+      margin: _macOSSidebarPanelMargin,
+      tone: AppGlassTone.panel,
+      nativeBackdrop: true,
+      child: child,
     );
   }
 }
@@ -869,7 +931,9 @@ class _FeedSilentIconState extends State<_FeedSilentIcon> {
         child: Padding(
           padding: const EdgeInsets.all(2),
           child: Icon(
-            _enabled ? Icons.notifications_off : Icons.notifications_off_outlined,
+            _enabled
+                ? Icons.notifications_off
+                : Icons.notifications_off_outlined,
             size: 14,
             color: _enabled
                 ? cs.error

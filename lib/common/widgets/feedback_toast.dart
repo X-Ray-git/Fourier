@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+
+import 'app_glass.dart';
 
 enum FeedbackTone { info, success, warning, error }
 
@@ -36,25 +39,22 @@ abstract final class AppFeedback {
       // 增加顺畅的位移与淡入淡出（Slide & Fade）组合动画
       animationBuilder: (controller, child, animationParam) {
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, -0.6), // 从上方滑入
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: controller,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          )),
-          child: FadeTransition(
-            opacity: controller,
-            child: child,
-          ),
+          position:
+              Tween<Offset>(
+                begin: const Offset(0, -0.6), // 从上方滑入
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(
+                  parent: controller,
+                  curve: Curves.easeOutCubic,
+                  reverseCurve: Curves.easeInCubic,
+                ),
+              ),
+          child: FadeTransition(opacity: controller, child: child),
         );
       },
-      builder: (context) => _FeedbackToast(
-        title: title,
-        message: message,
-        tone: tone,
-      ),
+      builder: (context) =>
+          _FeedbackToast(title: title, message: message, tone: tone),
     );
   }
 }
@@ -78,17 +78,45 @@ class _FeedbackToast extends StatelessWidget {
     // 分配各状态的专属色彩与圆润图标
     final (Color accent, IconData icon) = switch (tone) {
       FeedbackTone.info => (cs.primary, Icons.info_rounded),
-      FeedbackTone.success => (const Color(0xFF10B981), Icons.check_circle_rounded),
+      FeedbackTone.success => (
+        const Color(0xFF10B981),
+        Icons.check_circle_rounded,
+      ),
       FeedbackTone.warning => (const Color(0xFFF59E0B), Icons.warning_rounded),
       FeedbackTone.error => (cs.error, Icons.error_rounded),
     };
+
+    final content = _FeedbackToastContent(
+      title: title,
+      message: message,
+      accent: accent,
+      icon: icon,
+      foreground: cs.onSurface,
+    );
+
+    if (Platform.isMacOS) {
+      return SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12, left: 24, right: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: AppGlassSurface(
+              borderRadius: 999,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              tone: AppGlassTone.panel,
+              useOwnLayer: false,
+              child: content,
+            ),
+          ),
+        ),
+      );
+    }
 
     // 背景色：采用与当前亮度适配的半透明基色，以衬托毛玻璃效果
     final bgColor = isDark
         ? const Color(0xFF1C1C1E).withValues(alpha: 0.85)
         : const Color(0xFFF9F9F9).withValues(alpha: 0.85);
-
-    final foreground = cs.onSurface;
 
     return SafeArea(
       bottom: false,
@@ -116,60 +144,83 @@ class _FeedbackToast extends StatelessWidget {
                     ),
                   ],
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // 图标底座：带微弱透明度的强调色圆圈
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(icon, size: 20, color: accent),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: foreground,
-                            ),
-                          ),
-                          if (message.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              message,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: foreground.withValues(alpha: 0.75),
-                                height: 1.2,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8), // 右侧流出呼吸空间
-                  ],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
                 ),
+                child: content,
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FeedbackToastContent extends StatelessWidget {
+  final String title;
+  final String message;
+  final Color accent;
+  final IconData icon;
+  final Color foreground;
+
+  const _FeedbackToastContent({
+    required this.title,
+    required this.message,
+    required this.accent,
+    required this.icon,
+    required this.foreground,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 20, color: accent),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: foreground,
+                ),
+              ),
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: foreground.withValues(alpha: 0.75),
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 }

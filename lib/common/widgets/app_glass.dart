@@ -8,6 +8,21 @@ import 'continuous_rectangle.dart';
 
 enum AppGlassTone { surface, panel, control }
 
+Color appGlassActiveControlFill(
+  BuildContext context, {
+  double accentAlpha = 0.05,
+}) {
+  final cs = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final neutralBase = (isDark ? Colors.black : cs.scrim).withValues(
+    alpha: isDark ? 0.22 : 0.13,
+  );
+  return Color.alphaBlend(
+    cs.primary.withValues(alpha: accentAlpha),
+    neutralBase,
+  );
+}
+
 class AppGlassSurface extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -68,6 +83,7 @@ class AppGlassSurface extends StatelessWidget {
         allowElevation: interactive,
         glowIntensity: interactive ? 0.18 : 0.0,
         child: DecoratedBox(
+          position: DecorationPosition.foreground,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(borderRadius),
             border: Border.all(
@@ -345,6 +361,7 @@ class AppGlassIconButton extends StatefulWidget {
   final String tooltip;
   final VoidCallback? onPressed;
   final bool selected;
+  final double selectedFillOpacity;
 
   const AppGlassIconButton({
     super.key,
@@ -352,6 +369,7 @@ class AppGlassIconButton extends StatefulWidget {
     required this.tooltip,
     this.onPressed,
     this.selected = false,
+    this.selectedFillOpacity = 0.16,
   });
 
   @override
@@ -366,6 +384,10 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final enabled = widget.onPressed != null;
+    final selectedFill = appGlassActiveControlFill(
+      context,
+      accentAlpha: widget.selectedFillOpacity,
+    );
     return Tooltip(
       message: widget.tooltip,
       child: MouseRegion(
@@ -400,7 +422,7 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
                   color: widget.selected
-                      ? cs.primary.withValues(alpha: 0.16)
+                      ? selectedFill
                       : _hovered
                       ? cs.onSurface.withValues(alpha: 0.06)
                       : Colors.transparent,
@@ -411,6 +433,68 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
                   color: widget.selected ? cs.primary : cs.onSurface,
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AppGlassBadge extends StatelessWidget {
+  final int count;
+  final bool selected;
+  final int maxCount;
+  final EdgeInsetsGeometry? margin;
+
+  const AppGlassBadge({
+    super.key,
+    required this.count,
+    this.selected = false,
+    this.maxCount = 99,
+    this.margin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) return const SizedBox.shrink();
+
+    final cs = Theme.of(context).colorScheme;
+    final displayText = count > maxCount ? '$maxCount+' : count.toString();
+    final isWide = displayText.length > 1;
+    final foreground = selected ? cs.primary : cs.onSurfaceVariant;
+    final fill = selected
+        ? appGlassActiveControlFill(context, accentAlpha: 0.05)
+        : cs.onSurface.withValues(alpha: 0.05);
+
+    return SelectionContainer.disabled(
+      child: AppGlassSurface(
+        margin: margin,
+        borderRadius: 999,
+        padding: EdgeInsets.zero,
+        tone: AppGlassTone.control,
+        useOwnLayer: false,
+        child: Container(
+          constraints: BoxConstraints(
+            minWidth: isWide ? 22 : 18,
+            minHeight: 18,
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: isWide ? 6 : 0,
+            vertical: 2,
+          ),
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            displayText,
+            style: TextStyle(
+              fontSize: 10,
+              height: 1,
+              fontWeight: FontWeight.w800,
+              color: foreground,
             ),
           ),
         ),

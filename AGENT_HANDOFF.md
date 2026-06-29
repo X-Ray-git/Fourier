@@ -6869,3 +6869,73 @@ continuous corner：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.23 -m "- feat: merge macOS Liquid Glass shell and sidebar foundation\n- feat: polish macOS article table of contents glass morph and spring animation\n- docs: record Liquid Glass implementation boundaries and follow-up context" --push`*
+
+## 148. macOS Liquid Glass 控制层统一推进（2026-06-28）
+
+用户下载并验证 `v1.1.23` 后反馈：macOS 使用下来没有明显问题，因此可以开始下一阶段 Liquid Glass 迁移。
+
+本轮从已发布稳定点 `v1.1.23` / `fef4add` 新建分支：
+
+- `codex/liquid-glass-controls`
+
+本阶段边界：
+
+- 继续遵守第 147.10 节的使用边界：Liquid Glass 主要用于壳层、控制层、浮层、反馈层；不要把文章正文、卡片主体、长列表行整体玻璃化。
+- 暂不 tag/release，除非用户后续明确要求。
+- 先做小范围、可验证的控制层统一，避免一次性迁移所有页面导致难以定位视觉和性能问题。
+- Android 继续保持轻量 fallback，不跟随 macOS shader-heavy 效果。
+
+本轮已先处理两处控制/反馈层：
+
+1. `lib/pages/article/article_page.dart`
+   - macOS 顶部“标为已读 / 恢复未读”按钮从普通 `IconButton` 改为 `AppGlassIconButton`。
+   - 文章正文上方的翻译、摘要、长文加载工具条在 macOS 下改为玻璃胶囊按钮组。
+   - Android 仍保留原 `_Chip` 样式，避免移动端视觉和性能被这轮影响。
+   - 初版把翻译/摘要放在同一个玻璃外壳里，用户反馈容易被理解成二选一 segmented control。已改为两个独立玻璃动作胶囊，中间留出明显间距。
+   - 翻译/摘要文案改为明确动作态：`翻译`、`显示译文`、`隐藏译文`、`翻译中...`；摘要同理，避免“已译/已摘要”像开关状态但交互不清晰。
+   - `showTranslation/showSummary` 必须在 `Obx` builder 内读取后传给 macOS 工具条，否则点击隐藏后功能已生效但文案会延迟到下一次响应式刷新才变化。
+   - macOS 工具条位于文章 `SelectionArea` 内，按钮内部必须用 `SelectionContainer.disabled` 禁用文本选择，否则鼠标悬浮在文字上会变成文本选择光标。
+   - active/selected overlay 不应再用单纯的浅橙色铺底。用户反馈亮橙色内容在浅底上不够清晰，因此新增 `appGlassActiveControlFill(...)`：先给按钮内部一个更深的中性玻璃底，再叠很轻的主题色 tint。当前已读按钮、翻译/摘要 active 胶囊、侧边栏选中未读气泡都使用这条规则。
+   - 已读按钮保留 `right: 10`，不移动，原因是它的圆心需要继续贴合窗口右上角圆角圆心。目录按钮从 `right: 18` 调为 `right: 10`，让右侧悬浮控制轨道圆心对齐已读按钮。
+
+2. `lib/common/widgets/feedback_toast.dart`
+   - macOS toast 改为复用 `AppGlassSurface`，纳入统一玻璃材质。
+   - 非 macOS 仍保留原来的 `BackdropFilter` 胶囊实现。
+   - Toast 内容拆成 `_FeedbackToastContent`，避免 macOS/non-mac 两条渲染路径重复布局逻辑。
+
+待用户验证重点：
+
+- 文章页顶部已读按钮的尺寸、点击范围、hover/press 是否自然。
+- 翻译/摘要工具条是否显得过重；长文加载状态出现时是否会挤压或溢出。
+- Toast 是否仍清晰、不会遮挡正文或和侧边栏/目录玻璃风格冲突。
+- macOS 长时间使用下是否出现额外掉帧；尤其是连续触发 toast、切换摘要/翻译、滚动文章时。
+
+用户随后要求“各个气泡也应用液态玻璃效果”，并询问参考工程是否有可用参考。检查结果：
+
+- `reference/liquid_glass_widgets/lib/widgets/interactive/glass_badge.dart`：有完整 `GlassBadge`，用于未读数、小红点等数字/状态 badge。
+- `reference/liquid_glass_widgets/lib/widgets/interactive/glass_chip.dart`：有完整 `GlassChip`，适合标签、筛选项、状态胶囊。
+
+本轮决策：
+
+- 先参考 `GlassBadge` 的 sizing/`99+`/自动隐藏逻辑，抽项目级 `AppGlassBadge`。
+- 不直接在业务层依赖 `reference/`，也不一次性搬完整 reference 组件；本项目应继续只依赖 `lib/common/liquid_glass/` 和 `AppGlassSurface`。
+- 第一阶段只替换 macOS 侧边栏未读数气泡，暂不改文章卡片标签、订阅页列表标签、feed detail 正文区域等更靠近内容主体的位置，避免页面变花。
+
+已改：
+
+- `lib/common/widgets/app_glass.dart`
+  - 新增 `AppGlassBadge`。
+  - `count <= 0` 自动隐藏。
+  - `count > 99` 显示 `99+`。
+  - 多位数字自动增加最小宽度和横向 padding。
+  - 使用 `AppGlassSurface(tone: AppGlassTone.control, useOwnLayer: false)`。
+  - 内部用 `SelectionContainer.disabled`，避免在侧边栏文字选择环境里出现文本选择光标。
+- `lib/pages/main/widgets/macos_sidebar.dart`
+  - `_UnreadBadge` 改为直接返回 `AppGlassBadge(count: ..., selected: ..., margin: EdgeInsets.only(left: 8))`。
+
+待用户验证：
+
+- 侧边栏未读气泡是否太亮、太厚或太抢眼。
+- 选中行中的气泡是否和选中背景、橙色主题协调。
+- 大数量 `99+` 是否不挤压订阅源名称。
+- 滚动大量订阅源时是否有额外性能问题。

@@ -7,6 +7,7 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/pill_tag.dart';
 import '../../common/widgets/card_press_effect.dart';
 import '../../models/article.dart';
@@ -325,7 +326,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                               ),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Tooltip(
+                            child: AppGlassTooltip(
                               message: '已翻译',
                               child: Icon(
                                 Icons.translate,

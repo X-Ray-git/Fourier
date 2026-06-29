@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
+import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -16,9 +17,12 @@ import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/translation_service.dart';
+import '../main/main_controller.dart';
 
 class TaskCenterPage extends StatefulWidget {
-  const TaskCenterPage({super.key});
+  final bool embedded;
+
+  const TaskCenterPage({super.key, this.embedded = false});
 
   @override
   State<TaskCenterPage> createState() => _TaskCenterPageState();
@@ -29,6 +33,7 @@ enum _AiTaskType { translation, summary }
 class _TaskCenterPageState extends State<TaskCenterPage> {
   Timer? _refreshTimer;
   bool _syncingReads = false;
+  final _macScrollController = ScrollController();
 
   @override
   void initState() {
@@ -41,6 +46,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _macScrollController.dispose();
     super.dispose();
   }
 
@@ -60,6 +66,20 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     }
   }
 
+  void _openFilterReview() {
+    if (Platform.isMacOS && Get.isRegistered<MainController>()) {
+      if (widget.embedded) Get.back();
+      Future<void>.delayed(
+        Duration(milliseconds: widget.embedded ? 120 : 0),
+        () {
+          Get.find<MainController>().changeIndex(1);
+        },
+      );
+      return;
+    }
+    Get.toNamed(Routes.filterReview);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -68,6 +88,26 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     final rejected = articles
         .where((a) => a.isRejectedByAi && !a.isRead)
         .length;
+
+    if (Platform.isMacOS) {
+      final content = _buildMacOSContent(
+        context,
+        articles: articles,
+        rejected: rejected,
+        pendingReads: pendingReads,
+      );
+      if (widget.embedded) return content;
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: content,
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -130,10 +170,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
               queued: filterQueued,
               processing: filterProcessing,
               failed: 0,
-              actionLabel: rejected > 0 ? '去审核' : null,
-              onAction: rejected > 0
-                  ? () => Get.toNamed(Routes.filterReview)
-                  : null,
+              actionLabel: rejected > 0 ? '去审核' : '暂无待审核',
+              onAction: rejected > 0 ? _openFilterReview : null,
             );
           }),
           const SizedBox(height: 8),
@@ -179,6 +217,151 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
       ),
     );
   }
+
+  Widget _buildMacOSContent(
+    BuildContext context, {
+    required List<ArticleModel> articles,
+    required int rejected,
+    required int pendingReads,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            if (!widget.embedded) ...[
+              AppGlassIconButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                tooltip: '返回',
+                onPressed: Get.back,
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '后台任务与同步',
+                    style: TextStyle(
+                      fontSize: widget.embedded ? 22 : 28,
+                      height: 1.1,
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '查看已读同步、AI 过滤、翻译和摘要任务状态。',
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.embedded) const SizedBox(width: 46),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: MacGlassScrollArea(
+            controller: _macScrollController,
+            child: ListView(
+              controller: _macScrollController,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.paddingOf(context).bottom + 24,
+              ),
+              children: [
+                _OverviewCard(articles: articles, rejectedCount: rejected),
+                const SizedBox(height: 14),
+                _MacTaskSectionHeader(title: '同步', subtitle: '已读同步队列和本地文章库'),
+                const SizedBox(height: 8),
+                _SyncCard(
+                  pendingReads: pendingReads,
+                  lastSyncAt: ReadSyncService.lastReadSyncAt,
+                  syncing: _syncingReads,
+                  onSync: _syncPendingReads,
+                ),
+                const SizedBox(height: 14),
+                _MacTaskSectionHeader(
+                  title: 'AI 任务',
+                  subtitle: '后台翻译、摘要和过滤的当前状态',
+                ),
+                const SizedBox(height: 8),
+                Obx(() {
+                  final filterQueued = AutoFilterWorker.queuedCount.value;
+                  final filterProcessing =
+                      AutoFilterWorker.processingCount.value;
+                  return _TaskStatusCard(
+                    icon: Icons.auto_awesome,
+                    title: 'AI 过滤',
+                    subtitle: rejected > 0 ? '$rejected 篇待人工审核' : '暂无待审核文章',
+                    queued: filterQueued,
+                    processing: filterProcessing,
+                    failed: 0,
+                    actionLabel: rejected > 0 ? '去审核' : '暂无待审核',
+                    onAction: rejected > 0 ? _openFilterReview : null,
+                  );
+                }),
+                const SizedBox(height: 8),
+                _TaskStatusCard(
+                  icon: Icons.translate,
+                  title: '自动翻译',
+                  subtitle: '按订阅源开关自动处理',
+                  queued: AutoTranslationWorker.queueSize,
+                  processing: AutoTranslationWorker.processingCount.value,
+                  failed: TranslationService.countByStatus(
+                    TranslationStatus.error,
+                  ),
+                  failureHint: '失败文章不会显示半截译文。点“查看失败”可按文章排查并单篇重试。',
+                  actionLabel:
+                      TranslationService.countByStatus(
+                            TranslationStatus.error,
+                          ) >
+                          0
+                      ? '查看失败'
+                      : null,
+                  onAction:
+                      TranslationService.countByStatus(
+                            TranslationStatus.error,
+                          ) >
+                          0
+                      ? () => Get.to(
+                          () => const _AiFailureListPage(
+                            type: _AiTaskType.translation,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                _TaskStatusCard(
+                  icon: Icons.summarize,
+                  title: '自动摘要',
+                  subtitle: '所有有正文的文章都会自动摘要',
+                  queued: AutoSummaryWorker.queueSize,
+                  processing: AutoSummaryWorker.processingCount.value,
+                  failed: SummaryService.countByStatus(SummaryStatus.error),
+                  failureHint: '失败文章不会影响阅读。点“查看失败”可按文章排查并单篇重试。',
+                  actionLabel:
+                      SummaryService.countByStatus(SummaryStatus.error) > 0
+                      ? '查看失败'
+                      : null,
+                  onAction:
+                      SummaryService.countByStatus(SummaryStatus.error) > 0
+                      ? () => Get.to(
+                          () => const _AiFailureListPage(
+                            type: _AiTaskType.summary,
+                          ),
+                        )
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _AiFailureListPage extends StatefulWidget {
@@ -192,13 +375,106 @@ class _AiFailureListPage extends StatefulWidget {
 
 class _AiFailureListPageState extends State<_AiFailureListPage> {
   final Set<String> _retrying = {};
+  final _macScrollController = ScrollController();
 
   bool get _isTranslation => widget.type == _AiTaskType.translation;
+
+  @override
+  void dispose() {
+    _macScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final failures = _failureItems();
+
+    if (Platform.isMacOS) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    AppGlassIconButton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      tooltip: '返回',
+                      onPressed: Get.back,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isTranslation ? '翻译失败文章' : '摘要失败文章',
+                            style: TextStyle(
+                              fontSize: 28,
+                              height: 1.1,
+                              fontWeight: FontWeight.w800,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '按文章排查失败原因，并支持单篇重试。',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: failures.isEmpty
+                      ? _MacEmptyTaskState(colorScheme: cs)
+                      : MacGlassScrollArea(
+                          controller: _macScrollController,
+                          child: ListView.separated(
+                            controller: _macScrollController,
+                            padding: EdgeInsets.only(
+                              bottom: MediaQuery.paddingOf(context).bottom + 24,
+                            ),
+                            itemBuilder: (context, index) {
+                              final item = failures[index];
+                              final article = item.article;
+                              final retrying =
+                                  article != null &&
+                                  _retrying.contains(article.entryId);
+                              return _FailureArticleCard(
+                                item: item,
+                                type: widget.type,
+                                retrying: retrying,
+                                onRetry: retrying || article == null
+                                    ? null
+                                    : () => _retry(article),
+                                onOpen: article == null
+                                    ? null
+                                    : () => _openArticle(article),
+                              );
+                            },
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 8),
+                            itemCount: failures.length,
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -391,12 +667,7 @@ class _FailureArticleCard extends StatelessWidget {
     final canRetry = onRetry != null && retryBlockedReason == null;
     final error = item.record.errorMessage?.trim();
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-      ),
+    return _TaskPanel(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -447,27 +718,43 @@ class _FailureArticleCard extends StatelessWidget {
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
                 const Spacer(),
-                TextButton(
-                  onPressed: canOpen ? onOpen : null,
-                  child: const Text('打开'),
-                ),
+                if (Platform.isMacOS)
+                  AppGlassButton(
+                    label: '打开',
+                    onPressed: canOpen ? onOpen : null,
+                  )
+                else
+                  TextButton(
+                    onPressed: canOpen ? onOpen : null,
+                    child: const Text('打开'),
+                  ),
                 const SizedBox(width: 6),
-                FilledButton.icon(
-                  onPressed: canRetry ? onRetry : null,
-                  icon: retrying
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          type == _AiTaskType.translation
-                              ? Icons.translate
-                              : Icons.summarize,
-                          size: 16,
-                        ),
-                  label: Text(retrying ? '重试中' : retryBlockedReason ?? '重试'),
-                ),
+                if (Platform.isMacOS)
+                  AppGlassButton(
+                    label: retrying ? '重试中' : retryBlockedReason ?? '重试',
+                    icon: type == _AiTaskType.translation
+                        ? Icons.translate
+                        : Icons.summarize,
+                    onPressed: canRetry ? onRetry : null,
+                    role: AppGlassButtonRole.primary,
+                  )
+                else
+                  FilledButton.icon(
+                    onPressed: canRetry ? onRetry : null,
+                    icon: retrying
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            type == _AiTaskType.translation
+                                ? Icons.translate
+                                : Icons.summarize,
+                            size: 16,
+                          ),
+                    label: Text(retrying ? '重试中' : retryBlockedReason ?? '重试'),
+                  ),
               ],
             ),
           ],
@@ -501,12 +788,7 @@ class _OverviewCard extends StatelessWidget {
         AutoSummaryWorker.processingCount.value;
     final cs = Theme.of(context).colorScheme;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-      ),
+    return _TaskPanel(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -566,12 +848,7 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-      ),
+    return _TaskPanel(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -600,17 +877,25 @@ class _SyncCard extends StatelessWidget {
             const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: syncing ? null : onSync,
-                icon: syncing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sync, size: 18),
-                label: Text(syncing ? '同步中' : '同步已读'),
-              ),
+              child: Platform.isMacOS
+                  ? AppGlassButton(
+                      label: syncing ? '同步中' : '同步已读',
+                      tooltip: syncing ? '同步中' : '同步已读',
+                      icon: Icons.sync,
+                      onPressed: syncing ? null : onSync,
+                      role: AppGlassButtonRole.primary,
+                    )
+                  : FilledButton.icon(
+                      onPressed: syncing ? null : onSync,
+                      icon: syncing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.sync, size: 18),
+                      label: Text(syncing ? '同步中' : '同步已读'),
+                    ),
             ),
           ],
         ),
@@ -647,12 +932,7 @@ class _TaskStatusCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final active = queued > 0 || processing > 0;
     final hasFailure = failed > 0 && failureHint != null;
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-      ),
+    return _TaskPanel(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -684,8 +964,13 @@ class _TaskStatusCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (actionLabel != null && onAction != null)
-                  TextButton(onPressed: onAction, child: Text(actionLabel!)),
+                if (actionLabel != null)
+                  Platform.isMacOS
+                      ? AppGlassButton(label: actionLabel!, onPressed: onAction)
+                      : TextButton(
+                          onPressed: onAction,
+                          child: Text(actionLabel!),
+                        ),
               ],
             ),
             const SizedBox(height: 14),
@@ -780,6 +1065,108 @@ class _MetricTile extends StatelessWidget {
 }
 
 enum _MetricTone { normal, warning }
+
+class _TaskPanel extends StatelessWidget {
+  final Widget child;
+
+  const _TaskPanel({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    if (Platform.isMacOS) {
+      return AppGlassSurface(
+        borderRadius: 20,
+        padding: EdgeInsets.zero,
+        tone: AppGlassTone.surface,
+        nativeBackdrop: true,
+        child: child,
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _MacEmptyTaskState extends StatelessWidget {
+  final ColorScheme colorScheme;
+
+  const _MacEmptyTaskState({required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: AppGlassSurface(
+        borderRadius: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+        tone: AppGlassTone.panel,
+        nativeBackdrop: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 40,
+              color: colorScheme.primary,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '没有失败文章',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MacTaskSectionHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _MacTaskSectionHeader({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SectionTitle extends StatelessWidget {
   final String title;

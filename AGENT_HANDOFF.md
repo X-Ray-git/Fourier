@@ -6939,3 +6939,74 @@ continuous corner：
 - 选中行中的气泡是否和选中背景、橙色主题协调。
 - 大数量 `99+` 是否不挤压订阅源名称。
 - 滚动大量订阅源时是否有额外性能问题。
+
+## 149. macOS Liquid Glass 设置页与后台任务浮层整改（2026-06-29）
+
+继续在 `codex/liquid-glass-controls` 分支推进。用户确认 `v1.1.23`
+后的 macOS Liquid Glass 基础壳层可继续作为下一阶段基础，但设置页仍明显像移动端页面迁移版，
+后台任务页也和当前 macOS 设计语言不一致。因此本轮目标是继续迁移“控制层、设置层、浮层”，
+不是把文章正文或长列表主体整体玻璃化。
+
+本轮用户重点反馈与对应决策：
+
+- 设置页不应保留移动端风格的卡片、`ExpansionTile`、传统输入框和传统 dropdown。
+- 设置页顶部不需要“设置”大标题、说明、版本号等 header；右侧内容应直接进入配置模块。
+- 设置页 scrollbar 视觉效果不稳定，且滚动时会跳变；最终决定 macOS 设置页直接隐藏 scrollbar，
+  右侧内容延伸到边界，并让上/右/下边距形成和左侧侧边栏一致的视觉间距。
+- LLM 参数里的 `max_tokens` 改成四个离散值：`2k`、`8k`、`32k`、`128k`。
+  旧配置如果不是这四个值，读取时归一到最近的选项。
+- 多选/下拉类设置先不要继续使用原生 dropdown。参考工程中更接近的是“轴上移动的节点 / segmented pill”
+  模式，因此模型、思考模式、思考强度、最大输出等优先迁移为玻璃 segmented 控件。
+- 用户指出 pill 掉帧不应通过降低效果解决。定位结论是：问题不是机器性能不足，而是此前把
+  `nativeBackdrop` / `BackdropFilter` 当作移动中的选中 pill 使用，导致每帧重采样背景。
+  当前修正为：外层轨道可以是 `nativeBackdrop`，移动 pill 本身使用 `AppGlassSurface`
+  的 adaptive/shader 玻璃路径，不再拖着系统 blur 层移动。
+- 后台任务不再作为普通页面跳转，而是在 macOS 设置页中作为浮层弹出。
+- 用户发现后台任务浮层打开后，左侧侧边栏同时出现模糊和变淡叠加，且仍能看到清晰文字。
+  最终判断这不是单纯 alpha 数值问题，而是遮罩覆盖了整个窗口，导致侧边栏这种独立长期主结构
+  被重复参与 blur/tint。当前修正为：后台任务浮层只模糊和染色侧边栏右侧区域，侧边栏本身不参与遮罩。
+- “去审核”在 macOS 浮层内不应继续打开独立页面。当前行为改为关闭后台任务浮层并切换到过滤审核主页面。
+- macOS tooltip 需要纳入 Liquid Glass 风格。已新增 `AppGlassTooltip` 并逐步替换已有 macOS tooltip；
+  移动端仍走原生/轻量 fallback。
+- 同步按钮、时间线筛选按钮、清空筛选按钮、文章卡片翻译状态提示等已逐步换到玻璃按钮或玻璃 tooltip。
+
+主要代码变化：
+
+- `lib/common/widgets/app_glass.dart`
+  - 扩展 `AppGlassSurface`、`AppGlassIconButton`、`AppGlassButton`、`AppGlassTooltip`、
+    `AppGlassBadge`、`MacGlassScrollArea` 等项目级玻璃组件。
+  - `nativeBackdrop` 路径增加真实 `BackdropFilter`，用于 macOS 浮层/面板这类固定位置玻璃。
+  - 注意：移动的 pill/indicator 不要使用 `nativeBackdrop`，应使用 adaptive/shader 路径。
+- `lib/pages/settings/settings_page.dart`
+  - macOS 设置页重构为左侧设置导航 + 右侧模块化配置区。
+  - 右侧滚动区隐藏 scrollbar，移除顶部 header。
+  - 账号、阅读偏好、AI 参数、Prompt、快捷键、关于等模块迁移到 macOS 玻璃面板。
+  - LLM 参数卡片改为 macOS inline expansion，移动端保留原 `ExpansionTile`。
+  - `_MacGlassSegmentedField` 使用玻璃轨道 + adaptive/shader moving pill。
+  - 配置导入/导出确认弹窗在 macOS 下改为玻璃 dialog。
+  - 后台任务入口改为右侧区域浮层，遮罩不覆盖侧边栏。
+- `lib/pages/settings/task_center_page.dart`
+  - 支持 `embedded` 模式，用于设置页浮层。
+  - macOS 下“去审核”关闭浮层并切换主控制器 tab，而不是继续 push 独立页面。
+  - 背景、列表、按钮和 close 逻辑纳入当前玻璃语言。
+- `lib/pages/timeline/timeline_page.dart`
+  - 同步按钮、feed toggle、清空筛选等 macOS 控件迁移到玻璃按钮/tooltip。
+- `lib/pages/main/widgets/macos_sidebar.dart`
+  - 侧边栏未读气泡迁移到 `AppGlassBadge`。
+- `lib/pages/article/article_page.dart`、`lib/pages/widgets/article_card.dart`
+  - 继续补齐 tooltip / 文本选择光标等 macOS 控制层细节。
+
+最新验证：
+
+- `dart analyze lib` 通过。
+- `flutter build macos --debug` 通过。
+- 构建仍会出现 CoreSimulator 版本过旧警告，这是本机 Xcode/Simulator 环境提示，
+  不影响 macOS debug app 产物生成。
+
+后续建议：
+
+- 用户已经验证后台任务侧边栏遮罩问题和 segmented pill 性能问题“似乎解决了”。
+- 本分支可先 commit/push 保存当前阶段。
+- 是否切回 `main`：如果后续要继续大范围 macOS Liquid Glass UI 重构，建议仍在功能分支上迭代，
+  等用户确认一组页面稳定后再合回 `main`；如果下一步只是修发布线 bug 或准备 release，
+  再切回 `main` 更合适。

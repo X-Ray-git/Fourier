@@ -11,6 +11,7 @@ import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
+import '../../common/widgets/app_glass.dart';
 
 import '../../http/init.dart';
 import '../../models/article.dart';
@@ -949,10 +950,9 @@ class _MacTimelineAppBar extends StatelessWidget
         actions: [
           ?trailing,
           if (feedId != null)
-            IconButton(
-              icon: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+            AppGlassIconButton(
+              icon: Icons.close_rounded,
               tooltip: '清除筛选',
-              visualDensity: VisualDensity.compact,
               onPressed: () {
                 controller.selectedFeedId.value = null;
                 controller.selectedCategory.value = null;
@@ -1009,20 +1009,38 @@ class _MacSyncButtonState extends State<_MacSyncButton>
     final cs = widget.colorScheme;
     return Obx(() {
       final syncing = widget.controller.isSyncing.value;
-      return IconButton(
-        icon: RotationTransition(
-          turns: ReverseAnimation(_spinController),
-          child: Icon(
-            Icons.sync,
-            size: 20,
-            color: syncing ? cs.primary : cs.onSurfaceVariant,
+      return AppGlassTooltip(
+        message: syncing ? '同步中' : '同步',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: syncing
+              ? null
+              : () => widget.controller.loadFeedsThenArticles(),
+          child: MouseRegion(
+            cursor: syncing ? MouseCursor.defer : SystemMouseCursors.click,
+            child: AppGlassSurface(
+              borderRadius: 999,
+              padding: EdgeInsets.zero,
+              tone: AppGlassTone.control,
+              nativeBackdrop: true,
+              interactive: !syncing,
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: Center(
+                  child: RotationTransition(
+                    turns: ReverseAnimation(_spinController),
+                    child: Icon(
+                      Icons.sync,
+                      size: 18,
+                      color: syncing ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
-        tooltip: syncing ? '同步中' : '同步',
-        visualDensity: VisualDensity.compact,
-        onPressed: syncing
-            ? null
-            : () => widget.controller.loadFeedsThenArticles(),
       );
     });
   }
@@ -1069,16 +1087,10 @@ class _FeedToggleIconState extends State<_FeedToggleIcon> {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(
-        _enabled ? widget.activeIcon : widget.icon,
-        size: 20,
-        color: _enabled
-            ? widget.colorScheme.primary
-            : widget.colorScheme.onSurfaceVariant,
-      ),
+    return AppGlassIconButton(
+      icon: _enabled ? widget.activeIcon : widget.icon,
       tooltip: widget.tooltip,
-      visualDensity: VisualDensity.compact,
+      selected: _enabled,
       onPressed: () {
         widget.onToggle();
         setState(() => _enabled = !_enabled);

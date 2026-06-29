@@ -814,7 +814,7 @@ class _FeedAutoReadabilityIconState extends State<_FeedAutoReadabilityIcon> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Tooltip(
+    return AppGlassTooltip(
       message: _enabled ? '已开启自动拉取全文' : '自动拉取全文',
       child: InkWell(
         onTap: _toggle,
@@ -862,7 +862,7 @@ class _FeedAutoTranslateIconState extends State<_FeedAutoTranslateIcon> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Tooltip(
+    return AppGlassTooltip(
       message: _enabled ? '已开启自动翻译' : '自动翻译',
       child: InkWell(
         onTap: _toggle,
@@ -908,7 +908,7 @@ class _FeedSilentIconState extends State<_FeedSilentIcon> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Tooltip(
+    return AppGlassTooltip(
       message: _enabled ? '已开启静默' : '设为静默',
       child: InkWell(
         onTap: _toggle,
@@ -948,7 +948,7 @@ class _RailButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Tooltip(
+      child: AppGlassTooltip(
         message: tooltip,
         child: Material(
           color: selected

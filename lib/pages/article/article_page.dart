@@ -1882,7 +1882,7 @@ class _TocIconButtonState extends State<_TocIconButton> {
         ? overlay.withValues(alpha: isDark ? 0.09 : 0.055)
         : Colors.transparent;
 
-    return Tooltip(
+    return AppGlassTooltip(
       message: widget.tooltip,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

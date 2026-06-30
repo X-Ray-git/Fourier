@@ -7054,3 +7054,38 @@ continuous corner：
 - `dart analyze lib` 通过。
 - `flutter build macos --debug` 通过。
 - 用户运行后确认横向并列的两个独立按钮“看起来不错”。
+
+## 151. macOS 时间线同步按钮对齐（2026-06-30）
+
+继续在 `codex/liquid-glass-controls` 分支。
+
+用户反馈：
+
+- 时间线 macOS 顶部同步按钮右侧看起来对齐的是左侧列表 pane / AppBar 模块外缘，
+  但用户希望它对齐文章卡片的右边界。
+
+定位结果：
+
+- macOS 时间线左侧列表 pane 固定宽度为 `380`。
+- 同步按钮位于 `_MacTimelineAppBar` 的 `actions`，因此默认贴近 AppBar / pane 的右边缘。
+- `ArticleCard` 在 macOS 下外层还有 `horizontal: 8` 的 padding，
+  所以卡片右边界比 pane 右边缘向内缩 `8px`。
+
+已改：
+
+- `lib/pages/timeline/timeline_page.dart`
+  - 在 `_MacTimelineAppBar.actions` 最右侧增加 `const SizedBox(width: 8)`。
+  - 这样同步按钮右边缘对齐文章卡片右边界，不改列表宽度、不改卡片布局。
+
+验证：
+
+- `dart analyze lib` 通过。
+- 用户运行后确认“现在符合预期”。
+
+发布计划：
+
+- 用户询问当前是否适合发布。判断：适合发一个内部测试 / 小版本验证版，
+  用于固化 macOS Liquid Glass 控制层、设置页、后台任务、文章页工具按钮和时间线对齐这组阶段性成果。
+- 建议版本：`v1.1.24`。
+- 发布前流程：提交当前分支收尾改动，合并 `codex/liquid-glass-controls` 到 `main`，
+  在 `main` 上验证后运行 `scripts/release.sh 1.1.24 ... --push`。

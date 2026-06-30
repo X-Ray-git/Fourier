@@ -959,6 +959,7 @@ class _MacTimelineAppBar extends StatelessWidget
               },
             ),
           _MacSyncButton(controller: controller, colorScheme: cs),
+          const SizedBox(width: 8),
         ],
       );
     });

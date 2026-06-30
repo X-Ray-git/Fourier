@@ -1636,7 +1636,7 @@ class _MacSettingsMetadataRow extends StatelessWidget {
   }
 }
 
-class _MacInlineExpansion extends StatelessWidget {
+class _MacInlineExpansion extends StatefulWidget {
   final String title;
   final String subtitle;
   final Widget child;
@@ -1648,31 +1648,189 @@ class _MacInlineExpansion extends StatelessWidget {
   });
 
   @override
+  State<_MacInlineExpansion> createState() => _MacInlineExpansionState();
+}
+
+class _MacInlineExpansionState extends State<_MacInlineExpansion>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _heightFactor;
+  late final Animation<double> _contentOpacity;
+  late final Animation<Offset> _contentOffset;
+  bool _expanded = false;
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+      reverseDuration: const Duration(milliseconds: 240),
+    );
+    _heightFactor = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    _contentOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.18, 1.0, curve: Curves.easeOutCubic),
+      reverseCurve: const Interval(0.0, 0.74, curve: Curves.easeInCubic),
+    );
+    _contentOffset =
+        Tween<Offset>(begin: const Offset(0, -0.025), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() {
+      _expanded = !_expanded;
+      _pressed = false;
+    });
+    if (_expanded) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-    );
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(16),
+    final overlayAlpha = _pressed
+        ? 0.095
+        : _hovered
+        ? 0.055
+        : 0.0;
+    final borderAlpha = _pressed
+        ? 0.50
+        : _hovered
+        ? 0.42
+        : 0.35;
+    final panelFill = cs.surfaceContainerHighest.withValues(alpha: 0.12);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: panelFill,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: borderAlpha),
+          width: 0.7,
         ),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          shape: shape,
-          collapsedShape: shape,
-          title: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+      child: Stack(
+        children: [
+          if (overlayAlpha > 0)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: cs.onSurface.withValues(alpha: overlayAlpha),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                onEnter: (_) => setState(() => _hovered = true),
+                onExit: (_) => setState(() {
+                  _hovered = false;
+                  _pressed = false;
+                }),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggle,
+                  onTapDown: (_) => setState(() => _pressed = true),
+                  onTapCancel: () => setState(() => _pressed = false),
+                  onTapUp: (_) => setState(() => _pressed = false),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: cs.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        AnimatedRotation(
+                          turns: _expanded ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 22,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedBuilder(
+                animation: _heightFactor,
+                child: FadeTransition(
+                  opacity: _contentOpacity,
+                  child: SlideTransition(
+                    position: _contentOffset,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                      child: widget.child,
+                    ),
+                  ),
+                ),
+                builder: (context, child) {
+                  return ClipRect(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      heightFactor: _heightFactor.value,
+                      child: child,
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-          subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-          children: [child],
-        ),
+        ],
       ),
     );
   }
@@ -1826,22 +1984,25 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
                         children: [
                           for (var i = 0; i < options.length; i++)
                             Expanded(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => onChanged(options[i]),
-                                child: Center(
-                                  child: Text(
-                                    labelFor(options[i]),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: selectedIndex == i
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
-                                      color: selectedIndex == i
-                                          ? cs.primary
-                                          : cs.onSurfaceVariant,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => onChanged(options[i]),
+                                  child: Center(
+                                    child: Text(
+                                      labelFor(options[i]),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: selectedIndex == i
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                        color: selectedIndex == i
+                                            ? cs.primary
+                                            : cs.onSurfaceVariant,
+                                      ),
                                     ),
                                   ),
                                 ),

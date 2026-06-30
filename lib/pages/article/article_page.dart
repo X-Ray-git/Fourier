@@ -573,6 +573,10 @@ class ArticlePageView extends StatefulWidget {
 }
 
 class _ArticlePageViewState extends State<ArticlePageView> {
+  static const double _macToolbarButtonSize = 34;
+  static const double _macToolbarButtonGap = 8;
+  static const double _macToolbarButtonRightInset = 10;
+
   late final String _tag;
   late final ArticleController controller;
   late final ScrollController _scrollController;
@@ -801,6 +805,17 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     return MediaQuery.paddingOf(context).top + kToolbarHeight + 24;
   }
 
+  double _macToolbarButtonTop(BuildContext context) {
+    return MediaQuery.paddingOf(context).top +
+        (kToolbarHeight - _macToolbarButtonSize) / 2;
+  }
+
+  double get _macTocButtonRight {
+    return _macToolbarButtonRightInset +
+        _macToolbarButtonSize +
+        _macToolbarButtonGap;
+  }
+
   Future<void> _scrollToTocEntry(_ArticleTocEntry entry) async {
     final targetContext = entry.key.currentContext;
     if (targetContext == null) return;
@@ -930,7 +945,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   final isRead = controller.isRead.value;
                   final isUpdating = controller.isUpdatingReadState.value;
                   return Padding(
-                    padding: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.only(
+                      right: _macToolbarButtonRightInset,
+                    ),
                     child: AppGlassIconButton(
                       icon: isRead ? Icons.undo : Icons.check_circle_outline,
                       tooltip: isRead ? '恢复未读' : '标为已读 (M)',
@@ -1292,8 +1309,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               }
             });
             return Positioned(
-              top: MediaQuery.paddingOf(context).top + kToolbarHeight + 14,
-              right: 10,
+              top: _macToolbarButtonTop(context),
+              right: _macTocButtonRight,
               child: ValueListenableBuilder<String?>(
                 valueListenable: _activeTocId,
                 builder: (context, activeTocId, child) {

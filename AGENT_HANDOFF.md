@@ -7010,3 +7010,47 @@ continuous corner：
 - 是否切回 `main`：如果后续要继续大范围 macOS Liquid Glass UI 重构，建议仍在功能分支上迭代，
   等用户确认一组页面稳定后再合回 `main`；如果下一步只是修发布线 bug 或准备 release，
   再切回 `main` 更合适。
+
+## 150. macOS 设置展开组件与文章页右上浮动控制（2026-06-30）
+
+继续在 `codex/liquid-glass-controls` 分支。
+
+用户反馈：
+
+- 设置页中点击“翻译 LLM 参数”等折叠项时，展开体感不像当前 Liquid Glass 风格，
+  并怀疑 `InkWell` 反馈只局限在标题区域。
+- 定位结果：macOS `_MacInlineExpansion` 仍直接使用 Flutter 原生 `ExpansionTile`。
+  默认高度动画是 Material `Curves.easeIn` / 200ms，且点击/ink 反馈只包住 header。
+- 用户要求开始整改，并进一步指出 hover 效果应是灰色中性反馈，不应混入橙色主题色。
+- 用户还指出 segmented 选项虽然可点击，但 hover 时鼠标没有变成可点击指针。
+- 文章页目录按钮位置重新讨论：用户希望目录按钮和已读按钮可以横向并列，
+  但不希望包成一个工具组。最终决策是保留已读按钮原右上角几何位置不动，
+  把目录按钮作为独立圆形玻璃按钮移动到已读按钮左侧。
+
+已改：
+
+- `lib/pages/settings/settings_page.dart`
+  - `_MacInlineExpansion` 从 `StatelessWidget + ExpansionTile` 改为自定义 `StatefulWidget`。
+  - 使用 `AnimationController` 驱动展开/收起：
+    - 展开：320ms，`Curves.easeOutCubic`。
+    - 收起：240ms，`Curves.easeInCubic`。
+  - 展开内容同时使用高度、透明度、轻微位移动画。
+  - hover/press 视觉反馈作用到整个小面板背景和描边，但交互触发仍只在标题区，
+    避免展开后的输入框、segmented、保存按钮误触发收起。
+  - hover/press 改为中性灰色 overlay 和描边透明度变化，不混入 `colorScheme.primary` 橙色。
+  - `_MacGlassSegmentedField` 的每个 segment 增加 `MouseRegion(cursor: SystemMouseCursors.click)`。
+- `lib/pages/article/article_page.dart`
+  - 新增 macOS 文章页工具按钮常量：
+    - `_macToolbarButtonSize = 34`
+    - `_macToolbarButtonGap = 8`
+    - `_macToolbarButtonRightInset = 10`
+  - 已读按钮继续使用原右侧 inset，不改变右上角几何关系。
+  - 目录按钮移动到已读按钮左侧：`right = 10 + 34 + 8`。
+  - 目录按钮 `top` 改为和 AppBar 工具栏垂直居中对齐。
+  - 目录展开算法本身未改，只让展开锚点跟随新按钮位置。
+
+验证：
+
+- `dart analyze lib` 通过。
+- `flutter build macos --debug` 通过。
+- 用户运行后确认横向并列的两个独立按钮“看起来不错”。

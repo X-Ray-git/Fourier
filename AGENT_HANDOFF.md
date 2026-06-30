@@ -7093,3 +7093,57 @@ continuous corner：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.24 -m "- feat: refresh macOS Liquid Glass settings and task center UI\n- feat: polish macOS article controls, table of contents placement, and tooltips\n- fix: align macOS timeline sync button with article cards" --push`*
+
+## 152. macOS 列表/阅读 header 统一与底部滚动视口内缩（2026-06-30）
+
+发布 `v1.1.24` 后继续在 `main` 上小步修 UI。
+
+用户反馈与讨论：
+
+- macOS 时间线、垃圾拦截、右侧文章详情的顶部 header 看起来不一致：
+  - 垃圾拦截原来是自绘 header，高度 `62px`，有 shield 图标、两行状态和较明显 divider。
+  - 时间线是 `_MacTimelineAppBar`，高度 `kToolbarHeight`，半透明背景但没有 blur。
+  - 文章详情是 `AppBar`，高度 `kToolbarHeight`，有半透明背景和 `BackdropFilter`。
+- 用户指出三者信息结构天然不同，不应强行做成完全同一个外观。
+- 最终决策：统一“底层规则”，保留信息结构差异：
+  - 使用 56px header 高度。
+  - 使用相同 `BackdropFilter` blur 参数和 `surface alpha 0.5` 材质。
+  - 使用很浅的底部 hairline，而不是垃圾拦截独有的强 divider。
+  - 垃圾拦截保留轻量 shield 图标，标题/副标题排版参考时间线指定订阅源时的两行 header。
+- 用户还指出中间文章卡片栏和右侧正文滚动时，内容像是从应用最下边缘/圆角处直接冒出来。
+  澄清后确认：这不是“文章末尾 bottom padding”问题，而是滚动 viewport 的可见裁切边界贴到窗口外框。
+
+已改：
+
+- `lib/pages/timeline/timeline_page.dart`
+  - `_MacTimelineAppBar` 增加 `dart:ui` 的 `BackdropFilter(ImageFilter.blur(sigmaX: 20, sigmaY: 20))`。
+  - 保持 `backgroundColor: surface alpha 0.5`。
+  - 在 header 底部增加 `outlineVariant alpha 0.22` 的 1px hairline。
+  - macOS 时间线列表 viewport 外层增加 `Padding(bottom: 8)`，
+    让卡片滚动时从内缩边界出现，而不是从应用外框底边出现。
+- `lib/pages/timeline/filter_review_page.dart`
+  - `_MacReviewHeader` 从 `62px` 改成 `kToolbarHeight`。
+  - 增加同样的 `BackdropFilter` 和 `surface alpha 0.5`。
+  - 去掉原先独立的下方 `Divider`。
+  - header 内部增加 `outlineVariant alpha 0.22` 的 1px hairline。
+  - shield 图标保留但改为 `onSurfaceVariant`、`17px`，降低抢眼程度。
+  - 两行文字规格向时间线 header 靠拢：标题 `14px / w700`，副标题 `11px`。
+- `lib/pages/recent_read/recent_read_page.dart`
+  - 最近阅读页也是 macOS 左侧 `380px` split list，补上同款 blur + 半透明材质 + 底部 hairline。
+- `lib/pages/article/article_page.dart`
+  - 文章详情 header 在阅读进度为 0 时显示同款浅 hairline。
+  - 阅读进度大于 0 时仍用橙色 `LinearProgressIndicator` 覆盖/替代 hairline。
+  - 文章正文 `CustomScrollView` 外层增加 macOS-only `Padding(bottom: 8)`，
+    改的是滚动 viewport 可见边界，不是文章末尾内容 padding。
+
+未改/后续：
+
+- 没有调整文章详情 scrollbar；用户明确认为当前 scrollbar 状态可以。
+- 没有改 `feed_detail_page.dart` 的 `_MacFeedHeader`。它是 68px、高信息密度、带返回按钮和头像的订阅源详情 header，
+  需要后续单独设计，不适合在本轮顺手硬改成普通列表 header。
+- 目前还没有抽公共 `MacHeaderSurface`。本轮先对齐参数，后续如果继续扩展应抽组件以避免 drift。
+
+验证：
+
+- `dart analyze lib` 通过。
+- 用户运行后确认底部滚动进入效果符合预期。

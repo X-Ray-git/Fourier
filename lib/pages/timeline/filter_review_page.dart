@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -580,11 +581,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _MacReviewHeader(articles: _articles, colorScheme: cs),
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: cs.outlineVariant.withValues(alpha: 0.35),
-                ),
                 Expanded(
                   child: Obx(() {
                     final q = AutoFilterWorker.queuedCount.value;
@@ -754,66 +750,88 @@ class _MacReviewHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 62,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 7, 14, 7),
-        child: Obx(() {
-          final humanCount = articles.length;
-          final q = AutoFilterWorker.queuedCount.value;
-          final p = AutoFilterWorker.processingCount.value;
-          final llmActive = q > 0 || p > 0;
-          final llmCount = q + p;
+      height: kToolbarHeight,
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: ColoredBox(
+            color: colorScheme.surface.withValues(alpha: 0.5),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
+                  child: Obx(() {
+                    final humanCount = articles.length;
+                    final q = AutoFilterWorker.queuedCount.value;
+                    final p = AutoFilterWorker.processingCount.value;
+                    final llmActive = q > 0 || p > 0;
+                    final llmCount = q + p;
 
-          return Row(
-            children: [
-              Icon(Icons.shield_outlined, size: 18, color: colorScheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '垃圾拦截',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.15,
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      llmActive
-                          ? '$humanCount 篇待处理 · $llmCount 篇判定中'
-                          : humanCount == 0
-                          ? '全部处理完毕'
-                          : '$humanCount 篇待处理',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.15,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                    return Row(
+                      children: [
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 17,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '垃圾拦截',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                llmActive
+                                    ? '$humanCount 篇待处理 · $llmCount 篇判定中'
+                                    : humanCount == 0
+                                    ? '全部处理完毕'
+                                    : '$humanCount 篇待处理',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (llmActive)
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    );
+                  }),
                 ),
-              ),
-              if (llmActive)
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colorScheme.onSurfaceVariant,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: ColoredBox(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.22),
+                    child: const SizedBox(height: 1),
                   ),
                 ),
-            ],
-          );
-        }),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

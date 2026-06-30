@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -478,38 +479,41 @@ class _TimelinePageState extends State<TimelinePage> {
       final filterBarCount = Platform.isMacOS ? 0 : 1;
       Widget content;
       if (Platform.isMacOS) {
-        content = Stack(
-          children: [
-            Positioned.fill(
-              child: ImplicitlyAnimatedList<ArticleModel>(
-                physics: _refreshPhysics,
-                controller: _scrollController,
-                padding: EdgeInsets.only(
-                  bottom: 8 + MediaQuery.of(context).padding.bottom,
-                ),
-                items: controller.articles.toList(),
-                itemKey: (article) => article.entryId,
-                itemBuilder: _buildAnimatedTimelineItem,
-                removedItemBuilder: _buildRemovedTimelineItem,
-                onRemoveStart: _handleTimelineRemoveStart,
-                onRemoveEnd: _handleTimelineRemoveEnd,
-              ),
-            ),
-            if (controller.articles.isEmpty)
+        content = Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Stack(
+            children: [
               Positioned.fill(
-                child: DelayedVisibility(
-                  visible: controller.articles.isEmpty,
-                  delay: const Duration(milliseconds: 220),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 64),
-                    child: _EmptyView(
-                      message: controller.emptyMessage,
-                      onRetry: controller.loadFeedsThenArticles,
+                child: ImplicitlyAnimatedList<ArticleModel>(
+                  physics: _refreshPhysics,
+                  controller: _scrollController,
+                  padding: EdgeInsets.only(
+                    bottom: 8 + MediaQuery.of(context).padding.bottom,
+                  ),
+                  items: controller.articles.toList(),
+                  itemKey: (article) => article.entryId,
+                  itemBuilder: _buildAnimatedTimelineItem,
+                  removedItemBuilder: _buildRemovedTimelineItem,
+                  onRemoveStart: _handleTimelineRemoveStart,
+                  onRemoveEnd: _handleTimelineRemoveEnd,
+                ),
+              ),
+              if (controller.articles.isEmpty)
+                Positioned.fill(
+                  child: DelayedVisibility(
+                    visible: controller.articles.isEmpty,
+                    delay: const Duration(milliseconds: 220),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 64),
+                      child: _EmptyView(
+                        message: controller.emptyMessage,
+                        onRetry: controller.loadFeedsThenArticles,
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         );
       } else if (controller.articles.isEmpty) {
         content = ListView(
@@ -947,6 +951,29 @@ class _MacTimelineAppBar extends StatelessWidget
         ),
         backgroundColor: cs.surface.withValues(alpha: 0.5),
         centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Stack(
+              children: [
+                const Positioned.fill(
+                  child: ColoredBox(color: Colors.transparent),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: ColoredBox(
+                    color: cs.outlineVariant.withValues(alpha: 0.22),
+                    child: const SizedBox(height: 1),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         actions: [
           ?trailing,
           if (feedId != null)

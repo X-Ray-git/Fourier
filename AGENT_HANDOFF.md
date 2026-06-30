@@ -7089,3 +7089,7 @@ continuous corner：
 - 建议版本：`v1.1.24`。
 - 发布前流程：提交当前分支收尾改动，合并 `codex/liquid-glass-controls` 到 `main`，
   在 `main` 上验证后运行 `scripts/release.sh 1.1.24 ... --push`。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.24 -m "- feat: refresh macOS Liquid Glass settings and task center UI\n- feat: polish macOS article controls, table of contents placement, and tooltips\n- fix: align macOS timeline sync button with article cards" --push`*

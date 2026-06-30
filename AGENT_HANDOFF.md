@@ -7147,3 +7147,56 @@ continuous corner：
 
 - `dart analyze lib` 通过。
 - 用户运行后确认底部滚动进入效果符合预期。
+
+## 153. 文章正文表格与空代码块保守修复（2026-06-30）
+
+背景：
+
+- 用户报告少量文章存在明显排版问题，并提供了三篇具体样例：
+  - PaperWeekly 的 VLX-Seek 文章：局部段落之间出现很大的空白/换行距离。
+  - ModelScope 的 DSpark 文章：表格内容没有按表格显示，而是退化成一列正文；文末还有空代码块。
+  - MarkTechPost 的 OpenClaw 文章：原文中的交互式组件 DOM 被展开成大量正文。
+- 排查时用临时脚本从 Folo API 拉取过真实文章 HTML 做定位；相关脚本未进入仓库，敏感会话信息不得写入仓库、文档或提交信息。
+
+定位结论：
+
+- PaperWeekly 大行距能和源 HTML 对上：
+  - 源内容是公众号常见富文本，很多连续 `<p>` 原本依靠自身样式控制紧凑排版。
+  - 当前解析器会合并相邻 paragraph 并插入 `<br><br>`，这会放大段落间距。
+  - 但这是低频问题，若贸然改段落合并策略，可能影响大量正常文章的性能与阅读节奏，因此本轮暂不修。
+- ModelScope 表格问题能和源 HTML 对上：
+  - 源内容是标准 `<table><tr><td>`，不是源数据缺失。
+  - 当前依赖 `flutter_html_table` 渲染，实际可能退化成普通文本流。
+  - 这是确定性 bug，适合用自有、简单、可控的表格渲染替代。
+- ModelScope 空代码块能和源 HTML 对上：
+  - 源里确实有空 `<pre><code></code></pre>`。
+  - 当前解析器见到 block code 就生成 `codeBlock`，没有跳过空内容。
+  - 这是安全修复。
+- MarkTechPost 交互组件问题也能和源 HTML 对上：
+  - 原文嵌入了完整 interactive explainer 组件，包含大量 UI 文案和模拟流程。
+  - 当前阅读器不支持网页交互组件，所以会把 DOM 文本展开为正文。
+  - 若做通用“交互组件识别/删除”容易误伤普通内容，本轮暂不修，后续只有在出现足够明确规则时再处理。
+
+已改：
+
+- `lib/utils/html_chunk_parser.dart`
+  - `_isBlockCode(element)` 命中后先 `trim()` 文本。
+  - 空内容直接 `return`，不再产生空代码块。
+- `lib/pages/article/widgets/html_chunk_card.dart`
+  - `_buildTable` 不再依赖 `flutter_html_table` 渲染表格块。
+  - 使用 `package:html/parser.dart` 解析 chunk 中的 `table`。
+  - 提取 `tr` 下的 `td/th` 文本，压缩单元格内部空白。
+  - 用 Flutter 原生 `Table` + 横向 `SingleChildScrollView` 渲染。
+  - 表头行和 `th` 单元格加粗，表格宽度按列数给稳定宽度，避免标准表格退化为正文。
+
+刻意未改：
+
+- 未修改 paragraph 合并策略，避免为少数公众号个例影响多数文章性能和节奏。
+- 未做 MarkTechPost 交互组件过滤，避免复杂 HTML 清洗引入误删风险。
+- 未引入新的大型 HTML 清洗/布局系统。
+
+验证：
+
+- `dart format lib/pages/article/widgets/html_chunk_card.dart lib/utils/html_chunk_parser.dart` 通过。
+- `dart analyze lib/utils/html_chunk_parser.dart lib/pages/article/widgets/html_chunk_card.dart` 通过。
+- 全量 `dart analyze` 仍会被 `reference/` 外部参考工程污染，报大量无关缺依赖错误；本轮只以变更文件分析为准。

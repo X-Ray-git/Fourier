@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html_table/flutter_html_table.dart';
 import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html_parser;
 
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../utils/article_content_utils.dart';
@@ -391,31 +392,113 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   // ── 表格 ──
 
   Widget _buildTable(BuildContext context, ColorScheme cs) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Html(
-        data: Theme.of(context).brightness == Brightness.dark
-            ? HtmlContrastUtils.adjustHtmlContrast(
-                widget.chunk.content,
-                cs.surface,
-              )
-            : widget.chunk.content,
-        onLinkTap: _handleLinkTap,
-        style: {
-          'table': Style(
-            border: Border.all(color: cs.outlineVariant),
-            fontSize: FontSize(14),
+    final tableRows = _parseTableRows(widget.chunk.content);
+    if (tableRows.isEmpty) return const SizedBox.shrink();
+
+    final columnCount = tableRows.fold<int>(
+      0,
+      (maxCount, row) => math.max(maxCount, row.length),
+    );
+    if (columnCount == 0) return const SizedBox.shrink();
+
+    final columnWidth = math.max(
+      112.0,
+      math.min(180.0, widget.maxWidth / math.min(columnCount, 4)),
+    );
+    final tableWidth = columnWidth * columnCount;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: widget.maxWidth,
+            maxWidth: math.max(widget.maxWidth, tableWidth),
           ),
-          'th': Style(
-            backgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-            fontWeight: FontWeight.w700,
-            padding: HtmlPaddings.symmetric(horizontal: 10, vertical: 8),
+          child: Table(
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            border: TableBorder.all(color: cs.outlineVariant, width: 0.8),
+            columnWidths: {
+              for (var i = 0; i < columnCount; i++)
+                i: FixedColumnWidth(columnWidth),
+            },
+            children: [
+              for (var rowIndex = 0; rowIndex < tableRows.length; rowIndex++)
+                TableRow(
+                  decoration: BoxDecoration(
+                    color: rowIndex == 0
+                        ? cs.surfaceContainerHighest.withValues(alpha: 0.55)
+                        : Colors.transparent,
+                  ),
+                  children: [
+                    for (
+                      var cellIndex = 0;
+                      cellIndex < columnCount;
+                      cellIndex++
+                    )
+                      _buildTableCell(
+                        context,
+                        cs,
+                        cellIndex < tableRows[rowIndex].length
+                            ? tableRows[rowIndex][cellIndex]
+                            : const _ArticleTableCell(''),
+                        isHeader: rowIndex == 0,
+                      ),
+                  ],
+                ),
+            ],
           ),
-          'td': Style(
-            padding: HtmlPaddings.symmetric(horizontal: 10, vertical: 8),
-          ),
-        },
-        extensions: _buildCommonExtensions(context, cs),
+        ),
+      ),
+    );
+  }
+
+  List<List<_ArticleTableCell>> _parseTableRows(String html) {
+    final fragment = html_parser.parseFragment(html);
+    final table = fragment.querySelector('table');
+    if (table == null) return const [];
+
+    final rows = <List<_ArticleTableCell>>[];
+    for (final tr in table.querySelectorAll('tr')) {
+      final cells = <_ArticleTableCell>[];
+      for (final child in tr.children) {
+        final tag = child.localName?.toLowerCase();
+        if (tag != 'td' && tag != 'th') continue;
+
+        final text = child.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+        final colSpan = int.tryParse(child.attributes['colspan'] ?? '') ?? 1;
+        final normalizedSpan = colSpan.clamp(1, 12);
+        cells.add(_ArticleTableCell(text, isHeader: tag == 'th'));
+        for (var i = 1; i < normalizedSpan; i++) {
+          cells.add(const _ArticleTableCell(''));
+        }
+      }
+      if (cells.any((cell) => cell.text.isNotEmpty)) {
+        rows.add(cells);
+      }
+    }
+    return rows;
+  }
+
+  Widget _buildTableCell(
+    BuildContext context,
+    ColorScheme cs,
+    _ArticleTableCell cell, {
+    required bool isHeader,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Text(
+        cell.text,
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.45,
+          color: cs.onSurface,
+          fontWeight: (isHeader || cell.isHeader)
+              ? FontWeight.w700
+              : FontWeight.w400,
+        ),
       ),
     );
   }
@@ -1103,6 +1186,13 @@ class _InlineCodeWrapperElement extends StyledElement {
         children: [child],
         name: "[inline-code-wrapper]",
       );
+}
+
+class _ArticleTableCell {
+  final String text;
+  final bool isHeader;
+
+  const _ArticleTableCell(this.text, {this.isHeader = false});
 }
 
 /// 自定义 flutter_html 扩展：替换 `<a>` 标签的默认渲染，

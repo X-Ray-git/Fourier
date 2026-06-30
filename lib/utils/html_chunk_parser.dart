@@ -364,9 +364,9 @@ abstract final class HtmlChunkParser {
 
     // 代码块 - 回退为提取纯文本，降低渲染负担
     if (_isBlockCode(element)) {
-      chunks.add(
-        HtmlChunk(type: HtmlChunkType.codeBlock, content: element.text.trim()),
-      );
+      final content = element.text.trim();
+      if (content.isEmpty) return;
+      chunks.add(HtmlChunk(type: HtmlChunkType.codeBlock, content: content));
       return;
     }
 

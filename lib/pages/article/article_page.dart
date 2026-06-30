@@ -15,6 +15,7 @@ import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/app_glass.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -572,6 +573,10 @@ class ArticlePageView extends StatefulWidget {
 }
 
 class _ArticlePageViewState extends State<ArticlePageView> {
+  static const double _macToolbarButtonSize = 34;
+  static const double _macToolbarButtonGap = 8;
+  static const double _macToolbarButtonRightInset = 10;
+
   late final String _tag;
   late final ArticleController controller;
   late final ScrollController _scrollController;
@@ -800,6 +805,17 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     return MediaQuery.paddingOf(context).top + kToolbarHeight + 24;
   }
 
+  double _macToolbarButtonTop(BuildContext context) {
+    return MediaQuery.paddingOf(context).top +
+        (kToolbarHeight - _macToolbarButtonSize) / 2;
+  }
+
+  double get _macTocButtonRight {
+    return _macToolbarButtonRightInset +
+        _macToolbarButtonSize +
+        _macToolbarButtonGap;
+  }
+
   Future<void> _scrollToTocEntry(_ArticleTocEntry entry) async {
     final targetContext = entry.key.currentContext;
     if (targetContext == null) return;
@@ -928,33 +944,34 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 Obx(() {
                   final isRead = controller.isRead.value;
                   final isUpdating = controller.isUpdatingReadState.value;
-                  return IconButton(
-                    icon: Icon(
-                      isRead ? Icons.undo : Icons.check_circle_outline,
+                  return Padding(
+                    padding: const EdgeInsets.only(
+                      right: _macToolbarButtonRightInset,
                     ),
-                    tooltip: isRead ? '恢复未读' : '标为已读 (M)',
-                    color: isRead
-                        ? colorScheme.onSurfaceVariant
-                        : colorScheme.primary,
-                    onPressed: isUpdating
-                        ? null
-                        : () {
-                            if (isRead) {
-                              controller.markAsUnread();
-                            } else {
-                              if (widget.onMKeyPressed != null) {
-                                widget.onMKeyPressed!();
+                    child: AppGlassIconButton(
+                      icon: isRead ? Icons.undo : Icons.check_circle_outline,
+                      tooltip: isRead ? '恢复未读' : '标为已读 (M)',
+                      selected: !isRead,
+                      selectedFillOpacity: 0.07,
+                      onPressed: isUpdating
+                          ? null
+                          : () {
+                              if (isRead) {
+                                controller.markAsUnread();
                               } else {
-                                controller.markAsRead();
-                                if (widget.onNext != null) {
-                                  widget.onNext!();
+                                if (widget.onMKeyPressed != null) {
+                                  widget.onMKeyPressed!();
+                                } else {
+                                  controller.markAsRead();
+                                  if (widget.onNext != null) {
+                                    widget.onNext!();
+                                  }
                                 }
                               }
-                            }
-                          },
+                            },
+                    ),
                   );
                 }),
-                const SizedBox(width: 8),
               ]
             : const [],
         bottom: PreferredSize(
@@ -1292,8 +1309,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               }
             });
             return Positioned(
-              top: MediaQuery.paddingOf(context).top + kToolbarHeight + 14,
-              right: 18,
+              top: _macToolbarButtonTop(context),
+              right: _macTocButtonRight,
               child: ValueListenableBuilder<String?>(
                 valueListenable: _activeTocId,
                 builder: (context, activeTocId, child) {
@@ -1882,7 +1899,7 @@ class _TocIconButtonState extends State<_TocIconButton> {
         ? overlay.withValues(alpha: isDark ? 0.09 : 0.055)
         : Colors.transparent;
 
-    return Tooltip(
+    return AppGlassTooltip(
       message: widget.tooltip,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -2013,6 +2030,21 @@ class _ToolbarRow extends StatelessWidget {
       final hasSummary =
           summaryRecord?.isSummarized == true && summary.isNotEmpty;
       final isFetchingReadability = controller.isFetchingReadability.value;
+      final showTranslation = controller.showTranslation.value;
+      final showSummary = controller.showSummary.value;
+      if (Platform.isMacOS) {
+        return _MacGlassToolbarRow(
+          controller: controller,
+          cs: cs,
+          isPending: isPending,
+          hasTranslation: hasTranslation,
+          showTranslation: showTranslation,
+          isSummarizing: isSummarizing,
+          hasSummary: hasSummary,
+          showSummary: showSummary,
+          isFetchingReadability: isFetchingReadability,
+        );
+      }
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: SingleChildScrollView(
@@ -2071,6 +2103,188 @@ class _ToolbarRow extends StatelessWidget {
         ),
       );
     });
+  }
+}
+
+class _MacGlassToolbarRow extends StatelessWidget {
+  final ArticleController controller;
+  final ColorScheme cs;
+  final bool isPending;
+  final bool hasTranslation;
+  final bool showTranslation;
+  final bool isSummarizing;
+  final bool hasSummary;
+  final bool showSummary;
+  final bool isFetchingReadability;
+
+  const _MacGlassToolbarRow({
+    required this.controller,
+    required this.cs,
+    required this.isPending,
+    required this.hasTranslation,
+    required this.showTranslation,
+    required this.isSummarizing,
+    required this.hasSummary,
+    required this.showSummary,
+    required this.isFetchingReadability,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <Widget>[
+      _MacGlassActionChip(
+        icon: showTranslation ? Icons.translate : Icons.translate_outlined,
+        label: isPending
+            ? '翻译中...'
+            : hasTranslation
+            ? showTranslation
+                  ? '隐藏译文'
+                  : '显示译文'
+            : '翻译',
+        active: showTranslation || isPending,
+        onTap: isPending
+            ? null
+            : hasTranslation
+            ? () => controller.showTranslation.toggle()
+            : () => controller.translateArticle(),
+      ),
+      _MacGlassActionChip(
+        icon: hasSummary && showSummary
+            ? Icons.summarize
+            : Icons.summarize_outlined,
+        label: isSummarizing
+            ? '摘要中...'
+            : hasSummary
+            ? showSummary
+                  ? '隐藏摘要'
+                  : '显示摘要'
+            : '摘要',
+        active: isSummarizing || (hasSummary && showSummary),
+        onTap: isSummarizing
+            ? null
+            : hasSummary
+            ? () => controller.showSummary.toggle()
+            : () => controller.summarizeArticle(),
+      ),
+      if (isFetchingReadability)
+        const _MacGlassActionChip(
+          icon: Icons.sync,
+          label: '加载长文中...',
+          active: true,
+        ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < actions.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              actions[i],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MacGlassActionChip extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+
+  const _MacGlassActionChip({
+    required this.icon,
+    required this.label,
+    required this.active,
+    this.onTap,
+  });
+
+  @override
+  State<_MacGlassActionChip> createState() => _MacGlassActionChipState();
+}
+
+class _MacGlassActionChipState extends State<_MacGlassActionChip> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final enabled = widget.onTap != null;
+    final foreground = widget.active ? cs.primary : cs.onSurfaceVariant;
+    final overlay = widget.active
+        ? appGlassActiveControlFill(context, accentAlpha: 0.04)
+        : _hovered
+        ? cs.onSurface.withValues(alpha: 0.07)
+        : Colors.transparent;
+
+    return SelectionContainer.disabled(
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: enabled
+            ? (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              })
+            : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: _pressed ? 0.975 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: AppGlassSurface(
+              borderRadius: 999,
+              padding: EdgeInsets.zero,
+              tone: AppGlassTone.control,
+              interactive: enabled,
+              useOwnLayer: false,
+              child: AnimatedContainer(
+                duration: _pressed
+                    ? Duration.zero
+                    : const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                constraints: const BoxConstraints(minHeight: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: overlay,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(widget.icon, size: 16, color: foreground),
+                    const SizedBox(width: 5),
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: foreground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

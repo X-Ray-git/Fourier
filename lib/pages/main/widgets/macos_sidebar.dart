@@ -775,25 +775,10 @@ class _UnreadBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (count <= 0) return const SizedBox.shrink();
-    final cs = Theme.of(context).colorScheme;
-    return Container(
+    return AppGlassBadge(
+      count: count,
+      selected: selected,
       margin: const EdgeInsets.only(left: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: selected
-            ? cs.primary
-            : cs.onSurfaceVariant.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        count > 99 ? '99+' : count.toString(),
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: selected ? cs.onPrimary : cs.onSurfaceVariant,
-        ),
-      ),
     );
   }
 }
@@ -829,7 +814,7 @@ class _FeedAutoReadabilityIconState extends State<_FeedAutoReadabilityIcon> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Tooltip(
+    return AppGlassTooltip(
       message: _enabled ? '已开启自动拉取全文' : '自动拉取全文',
       child: InkWell(
         onTap: _toggle,
@@ -877,7 +862,7 @@ class _FeedAutoTranslateIconState extends State<_FeedAutoTranslateIcon> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Tooltip(
+    return AppGlassTooltip(
       message: _enabled ? '已开启自动翻译' : '自动翻译',
       child: InkWell(
         onTap: _toggle,
@@ -923,7 +908,7 @@ class _FeedSilentIconState extends State<_FeedSilentIcon> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Tooltip(
+    return AppGlassTooltip(
       message: _enabled ? '已开启静默' : '设为静默',
       child: InkWell(
         onTap: _toggle,
@@ -963,7 +948,7 @@ class _RailButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Tooltip(
+      child: AppGlassTooltip(
         message: tooltip,
         child: Material(
           color: selected

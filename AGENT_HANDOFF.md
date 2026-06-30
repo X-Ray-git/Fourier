@@ -6869,3 +6869,223 @@ continuous corner：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.23 -m "- feat: merge macOS Liquid Glass shell and sidebar foundation\n- feat: polish macOS article table of contents glass morph and spring animation\n- docs: record Liquid Glass implementation boundaries and follow-up context" --push`*
+
+## 148. macOS Liquid Glass 控制层统一推进（2026-06-28）
+
+用户下载并验证 `v1.1.23` 后反馈：macOS 使用下来没有明显问题，因此可以开始下一阶段 Liquid Glass 迁移。
+
+本轮从已发布稳定点 `v1.1.23` / `fef4add` 新建分支：
+
+- `codex/liquid-glass-controls`
+
+本阶段边界：
+
+- 继续遵守第 147.10 节的使用边界：Liquid Glass 主要用于壳层、控制层、浮层、反馈层；不要把文章正文、卡片主体、长列表行整体玻璃化。
+- 暂不 tag/release，除非用户后续明确要求。
+- 先做小范围、可验证的控制层统一，避免一次性迁移所有页面导致难以定位视觉和性能问题。
+- Android 继续保持轻量 fallback，不跟随 macOS shader-heavy 效果。
+
+本轮已先处理两处控制/反馈层：
+
+1. `lib/pages/article/article_page.dart`
+   - macOS 顶部“标为已读 / 恢复未读”按钮从普通 `IconButton` 改为 `AppGlassIconButton`。
+   - 文章正文上方的翻译、摘要、长文加载工具条在 macOS 下改为玻璃胶囊按钮组。
+   - Android 仍保留原 `_Chip` 样式，避免移动端视觉和性能被这轮影响。
+   - 初版把翻译/摘要放在同一个玻璃外壳里，用户反馈容易被理解成二选一 segmented control。已改为两个独立玻璃动作胶囊，中间留出明显间距。
+   - 翻译/摘要文案改为明确动作态：`翻译`、`显示译文`、`隐藏译文`、`翻译中...`；摘要同理，避免“已译/已摘要”像开关状态但交互不清晰。
+   - `showTranslation/showSummary` 必须在 `Obx` builder 内读取后传给 macOS 工具条，否则点击隐藏后功能已生效但文案会延迟到下一次响应式刷新才变化。
+   - macOS 工具条位于文章 `SelectionArea` 内，按钮内部必须用 `SelectionContainer.disabled` 禁用文本选择，否则鼠标悬浮在文字上会变成文本选择光标。
+   - active/selected overlay 不应再用单纯的浅橙色铺底。用户反馈亮橙色内容在浅底上不够清晰，因此新增 `appGlassActiveControlFill(...)`：先给按钮内部一个更深的中性玻璃底，再叠很轻的主题色 tint。当前已读按钮、翻译/摘要 active 胶囊、侧边栏选中未读气泡都使用这条规则。
+   - 已读按钮保留 `right: 10`，不移动，原因是它的圆心需要继续贴合窗口右上角圆角圆心。目录按钮从 `right: 18` 调为 `right: 10`，让右侧悬浮控制轨道圆心对齐已读按钮。
+
+2. `lib/common/widgets/feedback_toast.dart`
+   - macOS toast 改为复用 `AppGlassSurface`，纳入统一玻璃材质。
+   - 非 macOS 仍保留原来的 `BackdropFilter` 胶囊实现。
+   - Toast 内容拆成 `_FeedbackToastContent`，避免 macOS/non-mac 两条渲染路径重复布局逻辑。
+
+待用户验证重点：
+
+- 文章页顶部已读按钮的尺寸、点击范围、hover/press 是否自然。
+- 翻译/摘要工具条是否显得过重；长文加载状态出现时是否会挤压或溢出。
+- Toast 是否仍清晰、不会遮挡正文或和侧边栏/目录玻璃风格冲突。
+- macOS 长时间使用下是否出现额外掉帧；尤其是连续触发 toast、切换摘要/翻译、滚动文章时。
+
+用户随后要求“各个气泡也应用液态玻璃效果”，并询问参考工程是否有可用参考。检查结果：
+
+- `reference/liquid_glass_widgets/lib/widgets/interactive/glass_badge.dart`：有完整 `GlassBadge`，用于未读数、小红点等数字/状态 badge。
+- `reference/liquid_glass_widgets/lib/widgets/interactive/glass_chip.dart`：有完整 `GlassChip`，适合标签、筛选项、状态胶囊。
+
+本轮决策：
+
+- 先参考 `GlassBadge` 的 sizing/`99+`/自动隐藏逻辑，抽项目级 `AppGlassBadge`。
+- 不直接在业务层依赖 `reference/`，也不一次性搬完整 reference 组件；本项目应继续只依赖 `lib/common/liquid_glass/` 和 `AppGlassSurface`。
+- 第一阶段只替换 macOS 侧边栏未读数气泡，暂不改文章卡片标签、订阅页列表标签、feed detail 正文区域等更靠近内容主体的位置，避免页面变花。
+
+已改：
+
+- `lib/common/widgets/app_glass.dart`
+  - 新增 `AppGlassBadge`。
+  - `count <= 0` 自动隐藏。
+  - `count > 99` 显示 `99+`。
+  - 多位数字自动增加最小宽度和横向 padding。
+  - 使用 `AppGlassSurface(tone: AppGlassTone.control, useOwnLayer: false)`。
+  - 内部用 `SelectionContainer.disabled`，避免在侧边栏文字选择环境里出现文本选择光标。
+- `lib/pages/main/widgets/macos_sidebar.dart`
+  - `_UnreadBadge` 改为直接返回 `AppGlassBadge(count: ..., selected: ..., margin: EdgeInsets.only(left: 8))`。
+
+待用户验证：
+
+- 侧边栏未读气泡是否太亮、太厚或太抢眼。
+- 选中行中的气泡是否和选中背景、橙色主题协调。
+- 大数量 `99+` 是否不挤压订阅源名称。
+- 滚动大量订阅源时是否有额外性能问题。
+
+## 149. macOS Liquid Glass 设置页与后台任务浮层整改（2026-06-29）
+
+继续在 `codex/liquid-glass-controls` 分支推进。用户确认 `v1.1.23`
+后的 macOS Liquid Glass 基础壳层可继续作为下一阶段基础，但设置页仍明显像移动端页面迁移版，
+后台任务页也和当前 macOS 设计语言不一致。因此本轮目标是继续迁移“控制层、设置层、浮层”，
+不是把文章正文或长列表主体整体玻璃化。
+
+本轮用户重点反馈与对应决策：
+
+- 设置页不应保留移动端风格的卡片、`ExpansionTile`、传统输入框和传统 dropdown。
+- 设置页顶部不需要“设置”大标题、说明、版本号等 header；右侧内容应直接进入配置模块。
+- 设置页 scrollbar 视觉效果不稳定，且滚动时会跳变；最终决定 macOS 设置页直接隐藏 scrollbar，
+  右侧内容延伸到边界，并让上/右/下边距形成和左侧侧边栏一致的视觉间距。
+- LLM 参数里的 `max_tokens` 改成四个离散值：`2k`、`8k`、`32k`、`128k`。
+  旧配置如果不是这四个值，读取时归一到最近的选项。
+- 多选/下拉类设置先不要继续使用原生 dropdown。参考工程中更接近的是“轴上移动的节点 / segmented pill”
+  模式，因此模型、思考模式、思考强度、最大输出等优先迁移为玻璃 segmented 控件。
+- 用户指出 pill 掉帧不应通过降低效果解决。定位结论是：问题不是机器性能不足，而是此前把
+  `nativeBackdrop` / `BackdropFilter` 当作移动中的选中 pill 使用，导致每帧重采样背景。
+  当前修正为：外层轨道可以是 `nativeBackdrop`，移动 pill 本身使用 `AppGlassSurface`
+  的 adaptive/shader 玻璃路径，不再拖着系统 blur 层移动。
+- 后台任务不再作为普通页面跳转，而是在 macOS 设置页中作为浮层弹出。
+- 用户发现后台任务浮层打开后，左侧侧边栏同时出现模糊和变淡叠加，且仍能看到清晰文字。
+  最终判断这不是单纯 alpha 数值问题，而是遮罩覆盖了整个窗口，导致侧边栏这种独立长期主结构
+  被重复参与 blur/tint。当前修正为：后台任务浮层只模糊和染色侧边栏右侧区域，侧边栏本身不参与遮罩。
+- “去审核”在 macOS 浮层内不应继续打开独立页面。当前行为改为关闭后台任务浮层并切换到过滤审核主页面。
+- macOS tooltip 需要纳入 Liquid Glass 风格。已新增 `AppGlassTooltip` 并逐步替换已有 macOS tooltip；
+  移动端仍走原生/轻量 fallback。
+- 同步按钮、时间线筛选按钮、清空筛选按钮、文章卡片翻译状态提示等已逐步换到玻璃按钮或玻璃 tooltip。
+
+主要代码变化：
+
+- `lib/common/widgets/app_glass.dart`
+  - 扩展 `AppGlassSurface`、`AppGlassIconButton`、`AppGlassButton`、`AppGlassTooltip`、
+    `AppGlassBadge`、`MacGlassScrollArea` 等项目级玻璃组件。
+  - `nativeBackdrop` 路径增加真实 `BackdropFilter`，用于 macOS 浮层/面板这类固定位置玻璃。
+  - 注意：移动的 pill/indicator 不要使用 `nativeBackdrop`，应使用 adaptive/shader 路径。
+- `lib/pages/settings/settings_page.dart`
+  - macOS 设置页重构为左侧设置导航 + 右侧模块化配置区。
+  - 右侧滚动区隐藏 scrollbar，移除顶部 header。
+  - 账号、阅读偏好、AI 参数、Prompt、快捷键、关于等模块迁移到 macOS 玻璃面板。
+  - LLM 参数卡片改为 macOS inline expansion，移动端保留原 `ExpansionTile`。
+  - `_MacGlassSegmentedField` 使用玻璃轨道 + adaptive/shader moving pill。
+  - 配置导入/导出确认弹窗在 macOS 下改为玻璃 dialog。
+  - 后台任务入口改为右侧区域浮层，遮罩不覆盖侧边栏。
+- `lib/pages/settings/task_center_page.dart`
+  - 支持 `embedded` 模式，用于设置页浮层。
+  - macOS 下“去审核”关闭浮层并切换主控制器 tab，而不是继续 push 独立页面。
+  - 背景、列表、按钮和 close 逻辑纳入当前玻璃语言。
+- `lib/pages/timeline/timeline_page.dart`
+  - 同步按钮、feed toggle、清空筛选等 macOS 控件迁移到玻璃按钮/tooltip。
+- `lib/pages/main/widgets/macos_sidebar.dart`
+  - 侧边栏未读气泡迁移到 `AppGlassBadge`。
+- `lib/pages/article/article_page.dart`、`lib/pages/widgets/article_card.dart`
+  - 继续补齐 tooltip / 文本选择光标等 macOS 控制层细节。
+
+最新验证：
+
+- `dart analyze lib` 通过。
+- `flutter build macos --debug` 通过。
+- 构建仍会出现 CoreSimulator 版本过旧警告，这是本机 Xcode/Simulator 环境提示，
+  不影响 macOS debug app 产物生成。
+
+后续建议：
+
+- 用户已经验证后台任务侧边栏遮罩问题和 segmented pill 性能问题“似乎解决了”。
+- 本分支可先 commit/push 保存当前阶段。
+- 是否切回 `main`：如果后续要继续大范围 macOS Liquid Glass UI 重构，建议仍在功能分支上迭代，
+  等用户确认一组页面稳定后再合回 `main`；如果下一步只是修发布线 bug 或准备 release，
+  再切回 `main` 更合适。
+
+## 150. macOS 设置展开组件与文章页右上浮动控制（2026-06-30）
+
+继续在 `codex/liquid-glass-controls` 分支。
+
+用户反馈：
+
+- 设置页中点击“翻译 LLM 参数”等折叠项时，展开体感不像当前 Liquid Glass 风格，
+  并怀疑 `InkWell` 反馈只局限在标题区域。
+- 定位结果：macOS `_MacInlineExpansion` 仍直接使用 Flutter 原生 `ExpansionTile`。
+  默认高度动画是 Material `Curves.easeIn` / 200ms，且点击/ink 反馈只包住 header。
+- 用户要求开始整改，并进一步指出 hover 效果应是灰色中性反馈，不应混入橙色主题色。
+- 用户还指出 segmented 选项虽然可点击，但 hover 时鼠标没有变成可点击指针。
+- 文章页目录按钮位置重新讨论：用户希望目录按钮和已读按钮可以横向并列，
+  但不希望包成一个工具组。最终决策是保留已读按钮原右上角几何位置不动，
+  把目录按钮作为独立圆形玻璃按钮移动到已读按钮左侧。
+
+已改：
+
+- `lib/pages/settings/settings_page.dart`
+  - `_MacInlineExpansion` 从 `StatelessWidget + ExpansionTile` 改为自定义 `StatefulWidget`。
+  - 使用 `AnimationController` 驱动展开/收起：
+    - 展开：320ms，`Curves.easeOutCubic`。
+    - 收起：240ms，`Curves.easeInCubic`。
+  - 展开内容同时使用高度、透明度、轻微位移动画。
+  - hover/press 视觉反馈作用到整个小面板背景和描边，但交互触发仍只在标题区，
+    避免展开后的输入框、segmented、保存按钮误触发收起。
+  - hover/press 改为中性灰色 overlay 和描边透明度变化，不混入 `colorScheme.primary` 橙色。
+  - `_MacGlassSegmentedField` 的每个 segment 增加 `MouseRegion(cursor: SystemMouseCursors.click)`。
+- `lib/pages/article/article_page.dart`
+  - 新增 macOS 文章页工具按钮常量：
+    - `_macToolbarButtonSize = 34`
+    - `_macToolbarButtonGap = 8`
+    - `_macToolbarButtonRightInset = 10`
+  - 已读按钮继续使用原右侧 inset，不改变右上角几何关系。
+  - 目录按钮移动到已读按钮左侧：`right = 10 + 34 + 8`。
+  - 目录按钮 `top` 改为和 AppBar 工具栏垂直居中对齐。
+  - 目录展开算法本身未改，只让展开锚点跟随新按钮位置。
+
+验证：
+
+- `dart analyze lib` 通过。
+- `flutter build macos --debug` 通过。
+- 用户运行后确认横向并列的两个独立按钮“看起来不错”。
+
+## 151. macOS 时间线同步按钮对齐（2026-06-30）
+
+继续在 `codex/liquid-glass-controls` 分支。
+
+用户反馈：
+
+- 时间线 macOS 顶部同步按钮右侧看起来对齐的是左侧列表 pane / AppBar 模块外缘，
+  但用户希望它对齐文章卡片的右边界。
+
+定位结果：
+
+- macOS 时间线左侧列表 pane 固定宽度为 `380`。
+- 同步按钮位于 `_MacTimelineAppBar` 的 `actions`，因此默认贴近 AppBar / pane 的右边缘。
+- `ArticleCard` 在 macOS 下外层还有 `horizontal: 8` 的 padding，
+  所以卡片右边界比 pane 右边缘向内缩 `8px`。
+
+已改：
+
+- `lib/pages/timeline/timeline_page.dart`
+  - 在 `_MacTimelineAppBar.actions` 最右侧增加 `const SizedBox(width: 8)`。
+  - 这样同步按钮右边缘对齐文章卡片右边界，不改列表宽度、不改卡片布局。
+
+验证：
+
+- `dart analyze lib` 通过。
+- 用户运行后确认“现在符合预期”。
+
+发布计划：
+
+- 用户询问当前是否适合发布。判断：适合发一个内部测试 / 小版本验证版，
+  用于固化 macOS Liquid Glass 控制层、设置页、后台任务、文章页工具按钮和时间线对齐这组阶段性成果。
+- 建议版本：`v1.1.24`。
+- 发布前流程：提交当前分支收尾改动，合并 `codex/liquid-glass-controls` 到 `main`，
+  在 `main` 上验证后运行 `scripts/release.sh 1.1.24 ... --push`。

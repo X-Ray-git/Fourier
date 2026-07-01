@@ -7200,3 +7200,35 @@ continuous corner：
 - `dart format lib/pages/article/widgets/html_chunk_card.dart lib/utils/html_chunk_parser.dart` 通过。
 - `dart analyze lib/utils/html_chunk_parser.dart lib/pages/article/widgets/html_chunk_card.dart` 通过。
 - 全量 `dart analyze` 仍会被 `reference/` 外部参考工程污染，报大量无关缺依赖错误；本轮只以变更文件分析为准。
+
+## 154. macOS 中间栏 header 取消玻璃背景（2026-07-01）
+
+背景：
+
+- 用户反馈中间文章列表栏 header 不再需要玻璃效果，只保留底部分隔线即可。
+- 明确要求：右侧文章详情 header 暂时保持现状，不要一起改。
+
+排查范围：
+
+- 中间栏涉及的 macOS header：
+  - 时间线：`lib/pages/timeline/timeline_page.dart` 的 `_MacTimelineAppBar`。
+  - 最近阅读：`lib/pages/recent_read/recent_read_page.dart` 的 macOS 左栏 `AppBar`。
+  - 垃圾拦截：`lib/pages/timeline/filter_review_page.dart` 的 `_MacReviewHeader`。
+  - 订阅源详情：`lib/pages/feed_detail/feed_detail_page.dart` 的 `_MacFeedHeader`。
+- 右侧文章详情：`lib/pages/article/article_page.dart` 的 `AppBar`，明确不改。
+
+已改：
+
+- 时间线、最近阅读、垃圾拦截三处中间栏 header：
+  - 移除 `BackdropFilter` / `ImageFilter.blur`。
+  - 移除 `surface alpha 0.5` 半透明背景。
+  - `backgroundColor` 改为 `Colors.transparent` 或纯 `Stack` 内容。
+  - 保留底部 `outlineVariant alpha 0.22` 的 1px hairline 分隔线。
+- 订阅源详情 `_MacFeedHeader` 本身没有玻璃/模糊背景，且 header 下方已有独立分隔线，因此未改。
+- 右侧文章详情 header 仍保留玻璃效果和阅读进度条逻辑。
+
+验证：
+
+- `dart format lib/pages/timeline/timeline_page.dart lib/pages/recent_read/recent_read_page.dart lib/pages/timeline/filter_review_page.dart` 通过。
+- `dart analyze lib/pages/timeline/timeline_page.dart lib/pages/recent_read/recent_read_page.dart lib/pages/timeline/filter_review_page.dart` 通过。
+- `git diff --check` 通过。

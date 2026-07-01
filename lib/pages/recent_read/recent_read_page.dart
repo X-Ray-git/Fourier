@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -141,32 +140,22 @@ class _RecentReadPageState extends State<RecentReadPage> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    backgroundColor: cs.surface.withValues(alpha: 0.5),
+                    backgroundColor: Colors.transparent,
                     centerTitle: false,
                     elevation: 0,
                     scrolledUnderElevation: 0,
-                    flexibleSpace: ClipRect(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                        child: Stack(
-                          children: [
-                            const Positioned.fill(
-                              child: ColoredBox(color: Colors.transparent),
-                            ),
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: ColoredBox(
-                                color: cs.outlineVariant.withValues(
-                                  alpha: 0.22,
-                                ),
-                                child: const SizedBox(height: 1),
-                              ),
-                            ),
-                          ],
+                    flexibleSpace: Stack(
+                      children: [
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: ColoredBox(
+                            color: cs.outlineVariant.withValues(alpha: 0.22),
+                            child: const SizedBox(height: 1),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                   body: content,

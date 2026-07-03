@@ -7296,3 +7296,40 @@ continuous corner：
 - `dart format lib/main.dart lib/common/constants/constants.dart lib/common/widgets/no_overscroll_indicator_behavior.dart lib/common/widgets/refresh_aware_scroll_physics.dart lib/pages/settings/settings_page.dart lib/services/settings_backup_service.dart lib/pages/feed_detail/feed_detail_page.dart lib/pages/widgets/article_search_delegate.dart` 通过。
 - `dart analyze lib/main.dart lib/common/constants/constants.dart lib/common/widgets/no_overscroll_indicator_behavior.dart lib/common/widgets/refresh_aware_scroll_physics.dart lib/pages/settings/settings_page.dart lib/services/settings_backup_service.dart lib/pages/feed_detail/feed_detail_page.dart lib/pages/widgets/article_search_delegate.dart` 通过。
 - `git diff --check` 通过。
+
+## 156. macOS 文章页滚动期无体验变化的小性能优化（2026-07-03）
+
+背景：
+
+- 用户反馈 macOS 文章滑动时仍有卡顿，怀疑是性能优化不足或历史遗留瓶颈。
+- 复盘历史后确认：
+  - 文章正文曾多次在 `SliverList.builder` 与 `SliverToBoxAdapter + Column` 之间切换。
+  - `SliverList.builder` 对长文性能和内存更好，但变量高度 chunk 会让 `maxScrollExtent` 随滚动不断修正，导致 macOS 滚动条跳动和顶部阅读进度条抖动。
+  - 当前 `Column` 架构是为了稳定总高度、滚动条、阅读进度条和目录定位，用户明确要求本轮先不要改回虚拟列表。
+- 用户要求只做“完全不影响任何当前体验”的优化。
+
+本轮只做低风险缓存/去重：
+
+- `lib/pages/article/article_page.dart`
+  - 新增 `_headingTextCache`：缓存 heading HTML 到纯文本标题的解析结果，避免反复 `html_parser.parseFragment(...)`。
+  - 新增 `_tocEntriesCache`：同一篇文章、同一原文/译文状态下，目录 entries 复用缓存，不再在 build/滚动高亮刷新路径反复扫描 chunks 和生成目录项。
+  - 目录缓存 key 使用 heading 的位置、层级、内容长度和内容本身组成明确签名，不依赖 hash 碰撞概率。
+  - `_updateScrollProgress(...)` 只在 progress 值实际变化时更新 `_scrollProgress.value`，跳过重复通知，不做节流，不改变视觉连续性。
+  - `_scheduleActiveTocUpdate()` 增加 `ScrollController.hasClients` 判断，并继续依赖既有 `_activeTocUpdateScheduled` 做同帧去重。
+
+刻意未改：
+
+- 未改正文 `SliverToBoxAdapter + Column` 架构。
+- 未降低目录高亮刷新频率。
+- 未移除 `SelectionArea`。
+- 未改变目录按钮、目录浮层、进度条、图片、表格、正文选择、滚动速度等体验。
+
+用户验证：
+
+- 用户按建议检查了目录内容、目录高亮、目录点击跳转、顶部阅读进度条、原文/译文/摘要切换、无目录文章等一致性，反馈“都是一致的”。
+
+验证：
+
+- `dart format lib/pages/article/article_page.dart` 通过。
+- `dart analyze lib/pages/article/article_page.dart` 通过。
+- `git diff --check` 通过。

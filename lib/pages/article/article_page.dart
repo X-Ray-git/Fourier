@@ -590,6 +590,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   bool _isTocOpen = false;
   bool _activeTocUpdateScheduled = false;
   final Map<String, GlobalKey> _headingKeys = {};
+  final Map<String, String> _headingTextCache = {};
+  final Map<String, List<_ArticleTocEntry>> _tocEntriesCache = {};
 
   @override
   void initState() {
@@ -746,10 +748,16 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
     final maxScroll = metrics.maxScrollExtent;
     final currentScroll = metrics.pixels;
+    double nextProgress;
     if (maxScroll > 0) {
-      _scrollProgress.value = (currentScroll / maxScroll).clamp(0.0, 1.0);
+      nextProgress = (currentScroll / maxScroll).clamp(0.0, 1.0);
     } else if (metrics.hasContentDimensions) {
-      _scrollProgress.value = 1.0;
+      nextProgress = 1.0;
+    } else {
+      return;
+    }
+    if (_scrollProgress.value != nextProgress) {
+      _scrollProgress.value = nextProgress;
     }
   }
 
@@ -778,6 +786,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     List<HtmlChunk> chunks,
     bool showTranslation,
   ) {
+    final cacheKey = _tocEntriesCacheKey(chunks, showTranslation);
+    final cached = _tocEntriesCache[cacheKey];
+    if (cached != null) return cached;
+
     final entries = <_ArticleTocEntry>[];
     for (var i = 0; i < chunks.length; i++) {
       final chunk = chunks[i];
@@ -793,12 +805,39 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ),
       );
     }
+    _tocEntriesCache
+      ..clear()
+      ..[cacheKey] = entries;
     return entries;
   }
 
+  String _tocEntriesCacheKey(List<HtmlChunk> chunks, bool showTranslation) {
+    final buffer = StringBuffer(showTranslation ? 'trans' : 'orig')
+      ..write('|')
+      ..write(chunks.length);
+    for (var i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      if (chunk.type != HtmlChunkType.heading) continue;
+      buffer
+        ..write('|')
+        ..write(i)
+        ..write(':')
+        ..write(chunk.headingLevel ?? 2)
+        ..write(':')
+        ..write(chunk.content.length)
+        ..write(':')
+        ..write(chunk.content);
+    }
+    return buffer.toString();
+  }
+
   String _plainHeadingText(String html) {
+    final cached = _headingTextCache[html];
+    if (cached != null) return cached;
     final text = html_parser.parseFragment(html).text ?? '';
-    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final normalized = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    _headingTextCache[html] = normalized;
+    return normalized;
   }
 
   double _tocAnchorY() {
@@ -866,7 +905,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   }
 
   void _scheduleActiveTocUpdate() {
-    if (!Platform.isMacOS || !mounted || _activeTocUpdateScheduled) return;
+    if (!Platform.isMacOS ||
+        !mounted ||
+        _activeTocUpdateScheduled ||
+        !_scrollController.hasClients) {
+      return;
+    }
     _activeTocUpdateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _activeTocUpdateScheduled = false;

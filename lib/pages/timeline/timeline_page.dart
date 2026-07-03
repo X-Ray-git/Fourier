@@ -1048,11 +1048,15 @@ class _MacSyncButtonState extends State<_MacSyncButton>
                 height: 34,
                 child: Center(
                   child: RotationTransition(
-                    turns: ReverseAnimation(_spinController),
-                    child: Icon(
-                      Icons.sync,
-                      size: 18,
-                      color: syncing ? cs.primary : cs.onSurfaceVariant,
+                    turns: _spinController,
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.diagonal3Values(-1, 1, 1),
+                      child: Icon(
+                        Icons.sync,
+                        size: 18,
+                        color: syncing ? cs.primary : cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),

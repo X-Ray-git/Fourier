@@ -7333,3 +7333,42 @@ continuous corner：
 - `dart format lib/pages/article/article_page.dart` 通过。
 - `dart analyze lib/pages/article/article_page.dart` 通过。
 - `git diff --check` 通过。
+
+## 157. macOS 同步按钮旋转与图标方向统一为顺时针（2026-07-03）
+
+背景：
+
+- 新 worktree `codex/macos-sync-clockwise` 中有一项真实需求：macOS 时间线右上角同步按钮同步中应改为顺时针旋转。
+- 该 worktree 已提交的代码只把动画方向从 `ReverseAnimation(_spinController)` 改成 `_spinController`。
+- 用户指出这还不完整：`Icons.sync` 图标本身的箭头方向也需要同步调整，否则会出现动画顺时针但图标箭头语义仍偏逆时针的问题。
+- 同一 worktree 里还有一个未提交的 `lib/pages/article/article_page.dart` 改动，经检查与 main 上已提交的第 156 节文章目录缓存优化完全一致，是重复残留，不应再次合并。
+
+排查结论：
+
+- 项目里主要有两类图标语义：
+  - `Icons.refresh`：用于“重新加载 / 加载失败后重试”。
+  - `Icons.sync`：用于“同步 / 后台同步 / 加载长文中 / 摘要生成中”。
+- Android 下拉刷新使用 `RefreshIndicator` 默认动画，不是项目手写的 `Icons.sync` 旋转。
+- 真正需要改的是 `lib/pages/timeline/timeline_page.dart` 的 `_MacSyncButtonState`：
+  - 原动画 `ReverseAnimation(_spinController)` 使同步按钮逆时针旋转。
+  - `Icons.sync` 默认图形上方箭头向左、下方箭头向右，静态语义也偏逆时针。
+
+已改：
+
+- `lib/pages/timeline/timeline_page.dart`
+  - `RotationTransition.turns` 从 `ReverseAnimation(_spinController)` 改为 `_spinController`。
+  - `Icons.sync` 外层增加水平镜像：
+    - `Transform(alignment: Alignment.center, transform: Matrix4.diagonal3Values(-1, 1, 1), child: Icon(Icons.sync, ...))`
+  - 这样静态箭头方向与同步中旋转方向都统一为顺时针语义。
+
+刻意未改：
+
+- 未直接 merge `codex/macos-sync-clockwise`，因为其 `AGENT_HANDOFF.md` 也追加了 `## 156`，会和 main 当前第 156 节冲突，且文档中关于 `article_page.dart` 未提交改动的上下文已经过期。
+- 未修改 Android 下拉刷新。
+- 未修改静态 `Icons.refresh` / `Icons.sync` 的语义分工。
+
+验证：
+
+- `dart format lib/pages/timeline/timeline_page.dart` 通过。
+- `dart analyze lib/pages/timeline/timeline_page.dart` 通过。
+- `git diff --check` 通过。

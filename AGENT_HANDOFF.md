@@ -7372,3 +7372,7 @@ continuous corner：
 - `dart format lib/pages/timeline/timeline_page.dart` 通过。
 - `dart analyze lib/pages/timeline/timeline_page.dart` 通过。
 - `git diff --check` 通过。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.25 -m "- feat: make macOS fling velocity configurable\n- perf: cache article table of contents metadata\n- fix: align macOS sync button rotation and icon direction\n- style: simplify macOS list headers" --push`*

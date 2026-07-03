@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import 'no_overscroll_indicator_behavior.dart';
 import 'refresh_indicator.dart' as custom_refresh;
 
 /// 一个感知下拉刷新状态的 [ScrollPhysics]。
@@ -16,10 +19,7 @@ import 'refresh_indicator.dart' as custom_refresh;
 class RefreshAwareScrollPhysics extends AlwaysScrollableScrollPhysics {
   final GlobalKey<custom_refresh.RefreshIndicatorState> refreshKey;
 
-  const RefreshAwareScrollPhysics({
-    required this.refreshKey,
-    super.parent,
-  });
+  const RefreshAwareScrollPhysics({required this.refreshKey, super.parent});
 
   @override
   RefreshAwareScrollPhysics applyTo(ScrollPhysics? ancestor) {
@@ -29,11 +29,39 @@ class RefreshAwareScrollPhysics extends AlwaysScrollableScrollPhysics {
     );
   }
 
+  double _capMacosFling(double velocity) {
+    if (!Platform.isMacOS) {
+      return velocity;
+    }
+    final maxVelocity =
+        NoOverscrollIndicatorBehavior.currentMacosMaxFlingVelocity;
+    return velocity.clamp(-maxVelocity, maxVelocity).toDouble();
+  }
+
+  @override
+  double get maxFlingVelocity => Platform.isMacOS
+      ? NoOverscrollIndicatorBehavior.currentMacosMaxFlingVelocity
+      : super.maxFlingVelocity;
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    return super.createBallisticSimulation(position, _capMacosFling(velocity));
+  }
+
+  @override
+  double carriedMomentum(double existingVelocity) {
+    return _capMacosFling(
+      super.carriedMomentum(_capMacosFling(existingVelocity)),
+    );
+  }
+
   @override
   double applyBoundaryConditions(ScrollMetrics position, double value) {
     // 先让父级物理做正常判断
-    final double parentResult =
-        super.applyBoundaryConditions(position, value);
+    final double parentResult = super.applyBoundaryConditions(position, value);
 
     // 只有当 RefreshIndicator 处于活跃状态时才干预
     final state = refreshKey.currentState;
@@ -44,7 +72,8 @@ class RefreshAwareScrollPhysics extends AlwaysScrollableScrollPhysics {
     final status = state.status;
     final dragOffset = state.dragOffset;
 
-    final bool isRefreshing = status == custom_refresh.RefreshIndicatorStatus.drag ||
+    final bool isRefreshing =
+        status == custom_refresh.RefreshIndicatorStatus.drag ||
         status == custom_refresh.RefreshIndicatorStatus.armed;
 
     // 关键判断：刷新活跃 + 还有累积的下拉量 + 用户正向滚动 + 在顶部边界

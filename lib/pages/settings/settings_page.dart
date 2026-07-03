@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../services/account_service.dart';
 import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
@@ -39,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _deepseekApiKeyController = TextEditingController();
   final _readSyncWindowDaysController = TextEditingController();
   final _articleContentMaxWidthController = TextEditingController();
+  final _macosMaxFlingVelocityController = TextEditingController();
   final _macSettingsScrollController = ScrollController();
   final _macAuthKey = GlobalKey();
   final _macPreferencesKey = GlobalKey();
@@ -76,6 +78,11 @@ class _SettingsPageState extends State<SettingsPage> {
       defaultValue: AppConstants.defaultArticleContentMaxWidth,
     );
     _articleContentMaxWidthController.text = articleContentMaxWidth.toString();
+    final macosMaxFlingVelocity = GStorage.setting.get(
+      StorageKeys.macosMaxFlingVelocity,
+      defaultValue: AppConstants.defaultMacosMaxFlingVelocity,
+    );
+    _macosMaxFlingVelocityController.text = macosMaxFlingVelocity.toString();
     _badgeStrategy = GStorage.setting.get(
       StorageKeys.badgeStrategy,
       defaultValue: 'unread_count',
@@ -94,6 +101,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _deepseekApiKeyController.dispose();
     _readSyncWindowDaysController.dispose();
     _articleContentMaxWidthController.dispose();
+    _macosMaxFlingVelocityController.dispose();
     _macSettingsScrollController.dispose();
     super.dispose();
   }
@@ -148,10 +156,25 @@ class _SettingsPageState extends State<SettingsPage> {
       AppFeedback.warning('配置未保存', '正文最大宽度请填写 480～1200 之间的整数');
       return;
     }
+    final macosMaxFlingVelocity = int.tryParse(
+      _macosMaxFlingVelocityController.text.trim(),
+    );
+    if (macosMaxFlingVelocity == null ||
+        macosMaxFlingVelocity <
+            NoOverscrollIndicatorBehavior.macosMinFlingVelocity ||
+        macosMaxFlingVelocity >
+            NoOverscrollIndicatorBehavior.macosMaxAllowedFlingVelocity) {
+      AppFeedback.warning('配置未保存', 'macOS 滚动惯性上限请填写 1000～8000 之间的整数');
+      return;
+    }
     GStorage.setting.put(StorageKeys.readSyncWindowDays, readWindowDays);
     GStorage.setting.put(
       StorageKeys.articleContentMaxWidth,
       articleContentMaxWidth,
+    );
+    GStorage.setting.put(
+      StorageKeys.macosMaxFlingVelocity,
+      macosMaxFlingVelocity,
     );
     GStorage.setting.put(StorageKeys.badgeStrategy, _badgeStrategy);
     GStorage.setting.put('auto_retry_max_count', _autoRetryMaxCount);
@@ -539,6 +562,16 @@ class _SettingsPageState extends State<SettingsPage> {
                               label: '正文最大宽度（px）',
                               hint: '720',
                               helper: 'macOS 文章页生效；建议 640～800 之间调试',
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                            ),
+                            AppGlassTextField(
+                              controller: _macosMaxFlingVelocityController,
+                              label: 'macOS 滚动惯性上限',
+                              hint: '4500',
+                              helper: '限制松手后的惯性滚动速度；范围 1000～8000，默认 4500',
                               keyboardType: TextInputType.number,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
@@ -1130,6 +1163,20 @@ class _SettingsPageState extends State<SettingsPage> {
               hintText: '720',
               border: OutlineInputBorder(),
               helperText: 'macOS 文章页生效；默认 720，建议 640～800 之间调试',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+
+          const SizedBox(height: 12),
+
+          TextField(
+            controller: _macosMaxFlingVelocityController,
+            decoration: const InputDecoration(
+              labelText: 'macOS 滚动惯性上限',
+              hintText: '4500',
+              border: OutlineInputBorder(),
+              helperText: '限制松手后的惯性滚动速度；范围 1000～8000，默认 4500',
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],

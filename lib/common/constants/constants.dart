@@ -14,6 +14,7 @@ abstract final class AppConstants {
   static const int defaultTimeout = 30000;
   static const int defaultReadSyncWindowDays = 2;
   static const int defaultArticleContentMaxWidth = 720;
+  static const int defaultMacosMaxFlingVelocity = 4500;
 }
 
 abstract final class StorageKeys {
@@ -29,4 +30,5 @@ abstract final class StorageKeys {
   static const String articleInitialChunkBuildCount =
       'article_initial_chunk_build_count';
   static const String articleContentMaxWidth = 'article_content_max_width';
+  static const String macosMaxFlingVelocity = 'macos_max_fling_velocity';
 }

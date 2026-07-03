@@ -7232,3 +7232,67 @@ continuous corner：
 - `dart format lib/pages/timeline/timeline_page.dart lib/pages/recent_read/recent_read_page.dart lib/pages/timeline/filter_review_page.dart` 通过。
 - `dart analyze lib/pages/timeline/timeline_page.dart lib/pages/recent_read/recent_read_page.dart lib/pages/timeline/filter_review_page.dart` 通过。
 - `git diff --check` 通过。
+
+## 155. macOS 全局滚动惯性上限与设置项（2026-07-03）
+
+背景：
+
+- 用户反馈 macOS 端触控板滚动文章正文时，偶尔很短距离一滑就会高速上/下滑，像缺少误操作围栏。
+- 前期讨论过多种方案：
+  - `PointerScrollEvent.scrollDelta` 底层拦截可以限制手指仍在触控板上的即时 delta，但侵入性高，容易影响嵌套滚动、滚动条、选择文本、可访问性和平台手感。
+  - `ScrollPhysics.maxFlingVelocity` 是 Flutter 提供的较干净入口，只限制松手后的 fling / ballistic 惯性速度，不拦截手仍在触控板上的直接滚动 delta。
+- 用户后来查到 `maxFlingVelocity` / `kMaxFlingVelocity`，确认希望先用官方入口做轻量尝试。
+- 实验过程：
+  - 先只在文章详情正文局部将上限压到 `1200`，用户反馈“速度没有明显变慢，但总位移变少”，这符合 `maxFlingVelocity` 只限制松手后惯性的预期，也证明该入口对目标问题有部分效果。
+  - 后续依次试过 `2800`、`3400`、`4500`，用户确认 `4500` 基本符合预期。
+  - 用户进一步要求 macOS 内所有地方都应用该改动，并希望做成设置项，避免硬编码且适应不同用户习惯。
+
+实现：
+
+- `lib/common/widgets/no_overscroll_indicator_behavior.dart`
+  - 在既有 `NoOverscrollIndicatorBehavior` 上扩展，而不是另起全局滚动系统。
+  - 新增 `CappedMacosFlingPhysics`，覆盖：
+    - `maxFlingVelocity`
+    - `createBallisticSimulation`
+    - `carriedMomentum`
+  - 只在 `Platform.isMacOS` 时叠加 fling 上限；Android 和其他平台保持原状。
+  - 当前只限制松手后的 fling / ballistic 速度，不拦截 `PointerScrollEvent.scrollDelta`。
+  - 新增 `currentMacosMaxFlingVelocity` 从 `GStorage.setting` 读取设置值，并将范围防御性夹在 `1000～8000`。
+- `lib/main.dart`
+  - `GetMaterialApp.scrollBehavior` 接入 `NoOverscrollIndicatorBehavior`，覆盖大多数没有显式 `physics` 的滚动区域。
+  - 在 app builder 内监听 `StorageKeys.macosMaxFlingVelocity`，并用新的 `ScrollConfiguration` 包裹子树，使保存设置后不必重启应用；新发生的滚动/惯性会使用新值。
+- `lib/common/widgets/refresh_aware_scroll_physics.dart`
+  - 时间线、订阅源等下拉刷新页面使用显式 `_refreshPhysics`，会绕开全局 `ScrollBehavior`。
+  - 因此在 `RefreshAwareScrollPhysics` 内同样读取 `NoOverscrollIndicatorBehavior.currentMacosMaxFlingVelocity`，保证 macOS 下拉刷新列表也应用同一 fling 上限。
+  - Android 原有用于修复下拉刷新反悔手势的边界逻辑保持不变。
+- `lib/pages/feed_detail/feed_detail_page.dart`
+  - 显式 `AlwaysScrollableScrollPhysics` 改为通过 `NoOverscrollIndicatorBehavior.applyMacosFlingCap(...)` 包装。
+- `lib/pages/widgets/article_search_delegate.dart`
+  - 搜索结果列表的显式 `AlwaysScrollableScrollPhysics` 同样通过 helper 包装。
+- `lib/common/constants/constants.dart`
+  - 新增 `AppConstants.defaultMacosMaxFlingVelocity = 4500`。
+  - 新增 `StorageKeys.macosMaxFlingVelocity = 'macos_max_fling_velocity'`。
+- `lib/pages/settings/settings_page.dart`
+  - macOS 设置页“阅读与后台偏好”增加 `macOS 滚动惯性上限` 输入项。
+  - 移动端设置页也显示该项，但 helper 明确该配置用于 macOS。
+  - 保存时校验范围 `1000～8000`；默认 `4500`。
+- `lib/services/settings_backup_service.dart`
+  - 将 `macos_max_fling_velocity` 纳入固定管理 key 和 int key。
+  - 设置导出/导入会保留该配置，避免后续迁移时遗漏。
+
+用户确认：
+
+- 用户确认 `4500` 的手感目前符合预期。
+
+注意事项：
+
+- 这个设置对应 Flutter 的 `maxFlingVelocity`，不是修改 Flutter SDK 内部常量 `kMaxFlingVelocity`。
+- 它只能限制松手后的惯性滚动速度/距离；手指仍在触控板上时，系统连续发送的 `PointerScrollEvent.scrollDelta` 不受该参数控制。
+- 若未来继续追求“手还在触控板上也限速”，需要另做更底层的 pointer signal/scroll position 方案；这类方案复杂度和副作用明显更高，本轮刻意不做。
+- 保存设置后不需要重启应用；当前已在根部监听该 Hive key。极少数正在进行中的惯性过程可能要等下一次滚动才完全体现新值。
+
+验证：
+
+- `dart format lib/main.dart lib/common/constants/constants.dart lib/common/widgets/no_overscroll_indicator_behavior.dart lib/common/widgets/refresh_aware_scroll_physics.dart lib/pages/settings/settings_page.dart lib/services/settings_backup_service.dart lib/pages/feed_detail/feed_detail_page.dart lib/pages/widgets/article_search_delegate.dart` 通过。
+- `dart analyze lib/main.dart lib/common/constants/constants.dart lib/common/widgets/no_overscroll_indicator_behavior.dart lib/common/widgets/refresh_aware_scroll_physics.dart lib/pages/settings/settings_page.dart lib/services/settings_backup_service.dart lib/pages/feed_detail/feed_detail_page.dart lib/pages/widgets/article_search_delegate.dart` 通过。
+- `git diff --check` 通过。

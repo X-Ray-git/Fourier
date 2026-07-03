@@ -8,10 +8,12 @@ import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common/constants/constants.dart';
 import 'common/widgets/loading_widget.dart';
+import 'common/widgets/no_overscroll_indicator_behavior.dart';
 import 'http/init.dart';
 import 'router/app_pages.dart';
 import 'pages/main/main_controller.dart';
@@ -101,6 +103,7 @@ class AutoFoloApp extends StatelessWidget {
     return GetMaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const NoOverscrollIndicatorBehavior(),
 
       // 多语言
       localizationsDelegates: const [
@@ -176,7 +179,7 @@ class AutoFoloApp extends StatelessWidget {
           toastBuilder: (String msg) => _CustomToast(msg: msg),
           loadingBuilder: (msg) => LoadingWidget(msg: msg),
         );
-        return Shortcuts(
+        final appChild = Shortcuts(
           shortcuts: <ShortcutActivator, Intent>{
             SingleActivator(
               LogicalKeyboardKey.keyZ,
@@ -236,6 +239,21 @@ class AutoFoloApp extends StatelessWidget {
             },
             child: smartDialogBuilder(context, child),
           ),
+        );
+        return ValueListenableBuilder(
+          valueListenable: GStorage.setting.listenable(
+            keys: const [StorageKeys.macosMaxFlingVelocity],
+          ),
+          child: appChild,
+          builder: (context, _, child) {
+            return ScrollConfiguration(
+              behavior: NoOverscrollIndicatorBehavior(
+                macosMaxFlingVelocity:
+                    NoOverscrollIndicatorBehavior.currentMacosMaxFlingVelocity,
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
         );
       },
       navigatorObservers: [FlutterSmartDialog.observer],

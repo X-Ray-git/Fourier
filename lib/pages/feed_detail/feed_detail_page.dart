@@ -17,6 +17,7 @@ import '../../router/app_pages.dart';
 import '../../utils/security_utils.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
@@ -548,7 +549,9 @@ class FeedDetailPage extends StatelessWidget {
         color: cs.primary,
         backgroundColor: cs.surfaceContainerHighest,
         child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics: NoOverscrollIndicatorBehavior.applyMacosFlingCap(
+            const AlwaysScrollableScrollPhysics(),
+          ),
           slivers: [
             // ─── 杂志级沉浸式头部 ───
             SliverAppBar(
@@ -771,7 +774,9 @@ class FeedDetailPage extends StatelessWidget {
                     final isEnabled = controller.isSilentEnabled.value;
                     return IconButton(
                       icon: Icon(
-                        isEnabled ? Icons.notifications_off : Icons.notifications_off_outlined,
+                        isEnabled
+                            ? Icons.notifications_off
+                            : Icons.notifications_off_outlined,
                         color: isEnabled ? cs.error : cs.onSurfaceVariant,
                       ),
                       tooltip: isEnabled ? '已开启静默' : '设为静默',
@@ -1061,7 +1066,9 @@ class _MacFeedHeader extends StatelessWidget {
                 final isEnabled = controller.isSilentEnabled.value;
                 return IconButton(
                   icon: Icon(
-                    isEnabled ? Icons.notifications_off : Icons.notifications_off_outlined,
+                    isEnabled
+                        ? Icons.notifications_off
+                        : Icons.notifications_off_outlined,
                     size: 20,
                     color: isEnabled
                         ? colorScheme.error

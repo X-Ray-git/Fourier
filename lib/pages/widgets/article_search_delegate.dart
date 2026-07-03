@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../models/article.dart';
 import 'article_card.dart';
 
@@ -8,14 +9,14 @@ class ArticleSearchDelegate extends SearchDelegate<ArticleModel?> {
   final List<ArticleModel> source;
 
   ArticleSearchDelegate({required this.source})
-      : super(searchFieldLabel: '搜索文章标题、内容或来源...');
+    : super(searchFieldLabel: '搜索文章标题、内容或来源...');
 
   /// 覆写系统主题，移除原生 SearchDelegate 生硬的阴影和下划线，赋予现代化质感
   @override
   ThemeData appBarTheme(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    
+
     return theme.copyWith(
       appBarTheme: AppBarTheme(
         backgroundColor: cs.surface,
@@ -101,7 +102,9 @@ class ArticleSearchDelegate extends SearchDelegate<ArticleModel?> {
 
     // 3. 渲染结果卡片
     return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: NoOverscrollIndicatorBehavior.applyMacosFlingCap(
+        const AlwaysScrollableScrollPhysics(),
+      ),
       padding: EdgeInsets.only(
         top: 8,
         bottom: 16 + MediaQuery.of(context).padding.bottom,

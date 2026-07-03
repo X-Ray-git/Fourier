@@ -48,6 +48,7 @@ abstract final class SettingsBackupService {
     StorageKeys.readSyncWindowDays,
     StorageKeys.badgeStrategy,
     StorageKeys.articleContentMaxWidth,
+    StorageKeys.macosMaxFlingVelocity,
     _deepseekApiKey,
     _autoRetryMaxCount,
     _translationPrompt,
@@ -69,6 +70,7 @@ abstract final class SettingsBackupService {
   static const _intKeys = {
     StorageKeys.readSyncWindowDays,
     StorageKeys.articleContentMaxWidth,
+    StorageKeys.macosMaxFlingVelocity,
     _autoRetryMaxCount,
   };
 

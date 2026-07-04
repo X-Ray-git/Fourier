@@ -49,6 +49,8 @@ if [[ -z "$message" ]]; then
   exit 1
 fi
 
+message="${message//\\n/$'\n'}"
+
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Version must look like 1.2.3, got: $version" >&2
   exit 1

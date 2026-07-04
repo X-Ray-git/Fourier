@@ -7490,3 +7490,41 @@ continuous corner：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.26 -m "- perf: reduce macOS glass rendering cost\n- perf: restore lightweight sidebar unread badges\n- style: align settings and task center with lightweight macOS panels" --push`*
+
+## 159. v1.1.26 Release Notes 换行格式修复（2026-07-04）
+
+背景：
+
+- `v1.1.26` 发布后，用户发现 GitHub Release 描述显示成一行，包含字面量 `\n`：
+  - `- perf: reduce macOS glass rendering cost\n- perf: restore lightweight sidebar unread badges\n- style: ...`
+- 打包本身成功，`Internal Release Builds` workflow 状态为 success；问题只在 release notes 的文本格式。
+
+根因：
+
+- 本轮调用 release 脚本时使用了类似：
+  - `./scripts/release.sh 1.1.26 -m "- perf: ...\n- perf: ..." --push`
+- 在普通 zsh/bash 双引号中，`\n` 不会自动变成真实换行，而是作为两个字符反斜杠和 n 传给脚本。
+- `scripts/release.sh` 之前只会把“真实换行”转义成 `\n` 写入 `AGENT_HANDOFF.md` 的 footprint，但不会反向把用户传入的字面量 `\n` 归一化为真实换行。
+- 因此 `v1.1.26` 的本地 annotated tag annotation 和 GitHub Release body 最初都包含字面量 `\n`。
+
+已处理：
+
+- 使用 GitHub CLI 修正已发布的 GitHub Release body：
+  - `/opt/homebrew/bin/gh release edit v1.1.26 --notes $'- perf: ...\n- perf: ...\n- style: ...'`
+- 已确认：
+  - `/opt/homebrew/bin/gh release view v1.1.26 --json body`
+  - 返回 body 为真实多行文本，不再包含字面量 `\\n`。
+- 未移动、未 force-update、未重打 `v1.1.26` tag。tag annotation 里仍可能保留字面量 `\n`，但 release 页面已修正；不要为了文本格式去重写已发布 tag。
+
+脚本修复：
+
+- `scripts/release.sh`
+  - 在 `message` 非空校验后新增：
+    - `message="${message//\\n/$'\n'}"`
+  - 后续即使用 `-m "- a\n- b"` 这种双引号字面量写法，脚本也会先归一化成真实换行，再创建 annotated tag。
+  - `footprint_message="${message//$'\n'/\\n}"` 保持不变，因此写入 `AGENT_HANDOFF.md` 的执行脚印仍是单行、可读、不会打散 Markdown。
+
+注意：
+
+- 如果手动运行 release 脚本，也可以使用 shell 的 ANSI-C quoting：`-m $'- a\n- b'`。
+- 但脚本现在已经兼容普通双引号里的 `\n`，后续不应再出现同类 release notes 格式错误。

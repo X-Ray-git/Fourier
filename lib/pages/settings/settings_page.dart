@@ -768,6 +768,7 @@ class _SettingsPageState extends State<SettingsPage> {
           padding: const EdgeInsets.all(16),
           tone: AppGlassTone.panel,
           nativeBackdrop: true,
+          staticMaterial: true,
           child: Obx(() {
             final loggedIn = _accountService.isLoggedIn.value;
             return Row(
@@ -812,6 +813,7 @@ class _SettingsPageState extends State<SettingsPage> {
           padding: const EdgeInsets.all(12),
           tone: AppGlassTone.surface,
           nativeBackdrop: true,
+          staticMaterial: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -846,6 +848,7 @@ class _SettingsPageState extends State<SettingsPage> {
           padding: const EdgeInsets.all(12),
           tone: AppGlassTone.surface,
           nativeBackdrop: true,
+          staticMaterial: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -881,6 +884,7 @@ class _SettingsPageState extends State<SettingsPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             tone: AppGlassTone.surface,
             nativeBackdrop: true,
+            staticMaterial: true,
             child: ListView.builder(
               padding: EdgeInsets.zero,
               itemCount: navItems.length,
@@ -1511,6 +1515,7 @@ class _MacSettingsSection extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       tone: AppGlassTone.panel,
       nativeBackdrop: true,
+      staticMaterial: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1758,16 +1763,16 @@ class _MacInlineExpansionState extends State<_MacInlineExpansion>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final overlayAlpha = _pressed
-        ? 0.095
+        ? 0.04
         : _hovered
-        ? 0.055
+        ? 0.022
         : 0.0;
     final borderAlpha = _pressed
-        ? 0.50
+        ? 0.36
         : _hovered
-        ? 0.42
-        : 0.35;
-    final panelFill = cs.surfaceContainerHighest.withValues(alpha: 0.12);
+        ? 0.32
+        : 0.28;
+    const panelFill = Colors.transparent;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
@@ -1776,8 +1781,8 @@ class _MacInlineExpansionState extends State<_MacInlineExpansion>
         color: panelFill,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: borderAlpha),
-          width: 0.7,
+          color: cs.onSurfaceVariant.withValues(alpha: borderAlpha),
+          width: 0.8,
         ),
       ),
       child: Stack(
@@ -1996,6 +2001,7 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
             padding: const EdgeInsets.all(4),
             tone: AppGlassTone.control,
             nativeBackdrop: true,
+            staticMaterial: true,
             child: SizedBox(
               height: 34,
               child: LayoutBuilder(
@@ -2014,7 +2020,8 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
                           borderRadius: 11,
                           padding: EdgeInsets.zero,
                           tone: AppGlassTone.control,
-                          useOwnLayer: true,
+                          useOwnLayer: false,
+                          staticMaterial: true,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(11),
@@ -2171,6 +2178,7 @@ class _MacGlassSelectFieldState<T> extends State<_MacGlassSelectField<T>> {
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       tone: AppGlassTone.panel,
                       nativeBackdrop: true,
+                      staticMaterial: true,
                       child: SingleChildScrollView(
                         padding: EdgeInsets.zero,
                         child: Column(
@@ -2228,6 +2236,7 @@ class _MacGlassSelectFieldState<T> extends State<_MacGlassSelectField<T>> {
                 padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
                 tone: AppGlassTone.control,
                 nativeBackdrop: true,
+                staticMaterial: true,
                 child: Row(
                   children: [
                     Expanded(
@@ -2322,7 +2331,7 @@ class _MacGlassSelectOptionState<T> extends State<_MacGlassSelectOption<T>> {
     final fill = widget.selected
         ? appGlassActiveControlFill(context, accentAlpha: 0.05)
         : _hovered
-        ? cs.onSurface.withValues(alpha: 0.07)
+        ? cs.onSurface.withValues(alpha: 0.035)
         : Colors.transparent;
     return MouseRegion(
       cursor: SystemMouseCursors.click,

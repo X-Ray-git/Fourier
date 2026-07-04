@@ -775,10 +775,25 @@ class _UnreadBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppGlassBadge(
-      count: count,
-      selected: selected,
+    if (count <= 0) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    return Container(
       margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: selected
+            ? cs.primary
+            : cs.onSurfaceVariant.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        count > 99 ? '99+' : count.toString(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+        ),
+      ),
     );
   }
 }

@@ -38,6 +38,7 @@ class AppGlassSurface extends StatelessWidget {
   final bool useOwnLayer;
   final Clip clipBehavior;
   final bool nativeBackdrop;
+  final bool staticMaterial;
 
   const AppGlassSurface({
     super.key,
@@ -50,6 +51,7 @@ class AppGlassSurface extends StatelessWidget {
     this.useOwnLayer = true,
     this.clipBehavior = Clip.antiAlias,
     this.nativeBackdrop = false,
+    this.staticMaterial = false,
   });
 
   @override
@@ -62,6 +64,16 @@ class AppGlassSurface extends StatelessWidget {
         borderRadius: borderRadius,
         padding: padding,
         margin: margin,
+        child: child,
+      );
+    }
+
+    if (staticMaterial) {
+      return _StaticGlassSurface(
+        borderRadius: borderRadius,
+        padding: padding,
+        margin: margin,
+        tone: tone,
         child: child,
       );
     }
@@ -516,6 +528,7 @@ class AppGlassIconButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool selected;
   final double selectedFillOpacity;
+  final bool useOwnLayer;
 
   const AppGlassIconButton({
     super.key,
@@ -524,6 +537,7 @@ class AppGlassIconButton extends StatefulWidget {
     this.onPressed,
     this.selected = false,
     this.selectedFillOpacity = 0.16,
+    this.useOwnLayer = true,
   });
 
   @override
@@ -568,6 +582,7 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
               padding: EdgeInsets.zero,
               tone: AppGlassTone.control,
               interactive: enabled,
+              useOwnLayer: widget.useOwnLayer,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
@@ -708,10 +723,10 @@ class _AppGlassButtonState extends State<AppGlassButton> {
     final hoverFill = switch (widget.role) {
       AppGlassButtonRole.primary => appGlassActiveControlFill(
         context,
-        accentAlpha: 0.08,
+        accentAlpha: 0.065,
       ),
-      AppGlassButtonRole.destructive => cs.error.withValues(alpha: 0.08),
-      AppGlassButtonRole.secondary => cs.onSurface.withValues(alpha: 0.07),
+      AppGlassButtonRole.destructive => cs.error.withValues(alpha: 0.045),
+      AppGlassButtonRole.secondary => cs.onSurface.withValues(alpha: 0.035),
     };
     final fill = !enabled
         ? cs.onSurface.withValues(alpha: 0.03)
@@ -726,6 +741,7 @@ class _AppGlassButtonState extends State<AppGlassButton> {
       tone: AppGlassTone.control,
       interactive: enabled,
       nativeBackdrop: true,
+      staticMaterial: Platform.isMacOS,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOutCubic,
@@ -904,6 +920,7 @@ class AppGlassTextField extends StatelessWidget {
           tone: AppGlassTone.control,
           interactive: true,
           nativeBackdrop: true,
+          staticMaterial: Platform.isMacOS,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -998,6 +1015,45 @@ class _FallbackGlassSurface extends StatelessWidget {
         color: cs.surfaceContainerHighest.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.28)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _StaticGlassSurface extends StatelessWidget {
+  final Widget child;
+  final double borderRadius;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final AppGlassTone tone;
+
+  const _StaticGlassSurface({
+    required this.child,
+    required this.borderRadius,
+    required this.tone,
+    this.padding,
+    this.margin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderAlpha = switch (tone) {
+      AppGlassTone.panel => isDark ? 0.34 : 0.42,
+      AppGlassTone.surface => isDark ? 0.28 : 0.36,
+      AppGlassTone.control => isDark ? 0.24 : 0.32,
+    };
+    return Container(
+      margin: margin,
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: cs.onSurfaceVariant.withValues(alpha: borderAlpha),
+          width: 0.75,
+        ),
       ),
       child: child,
     );

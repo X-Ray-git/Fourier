@@ -1080,6 +1080,7 @@ class _TaskPanel extends StatelessWidget {
         padding: EdgeInsets.zero,
         tone: AppGlassTone.surface,
         nativeBackdrop: true,
+        staticMaterial: true,
         child: child,
       );
     }
@@ -1108,6 +1109,7 @@ class _MacEmptyTaskState extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
         tone: AppGlassTone.panel,
         nativeBackdrop: true,
+        staticMaterial: true,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

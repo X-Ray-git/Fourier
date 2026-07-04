@@ -997,6 +997,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                       tooltip: isRead ? '恢复未读' : '标为已读 (M)',
                       selected: !isRead,
                       selectedFillOpacity: 0.07,
+                      useOwnLayer: false,
                       onPressed: isUpdating
                           ? null
                           : () {

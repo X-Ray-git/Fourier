@@ -7376,3 +7376,113 @@ continuous corner：
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.25 -m "- feat: make macOS fling velocity configurable\n- perf: cache article table of contents metadata\n- fix: align macOS sync button rotation and icon direction\n- style: simplify macOS list headers" --push`*
+
+## 158. macOS 文章正文与设置页滚动卡顿回归排查（2026-07-04）
+
+背景：
+
+- 用户在 `v1.1.25` 后反馈 macOS 文章正文滚动明显不如 `v1.1.20` / `v1.1.23` 流畅。
+- 用户陆续实测：
+  - `v1.1.20` 流畅。
+  - `v1.1.22` 流畅。
+  - `v1.1.23` 与 `v1.1.22` 没有断崖式差距，至少没有 `v1.1.25` 那种一眼可见的性能退化。
+  - `v1.1.24` 开始能感觉到卡顿。
+  - `v1.1.25` 卡顿非常明显。
+- 本轮目标不是继续扩大 Liquid Glass 迁移，而是在不破坏当前布局和已认可交互的前提下，降低 macOS 玻璃层渲染成本。
+- 用户明确验证过本轮最终构建：正文滚动相比 `v1.1.25` 明显改善；设置页/后台任务页目前未发现更多本轮 debug 引入的问题。
+
+定位过程：
+
+- 重点对比 `v1.1.23` 之后的第一个相关提交 `336c78c feat: polish macOS liquid glass controls`。
+- 曾在 `/private/tmp/auto-folo-perf-336` 建临时 worktree 做二分式实验：
+  - 在 `336c78c` 上构建，用户确认明显不如 `v1.1.23`。
+  - 只把 `lib/pages/article/article_page.dart` 回退到 `v1.1.23`，仍明显不如 `v1.1.23`，因此文章页文件不是唯一原因。
+  - 再把 `lib/common/widgets/app_glass.dart`、`lib/common/widgets/feedback_toast.dart`、`lib/pages/main/widgets/macos_sidebar.dart` 回退到 `v1.1.23`，用户反馈相比 `v1.1.25` 明显改善。
+  - 逐步加回后确认：`macos_sidebar.dart` 中把侧边栏未读数字从轻量 `Container` 改成 `AppGlassBadge` / `AppGlassSurface` 是主要性能贡献点之一。
+- 结论：问题不只是文章正文内部，而是 macOS 左侧常驻区域与页面内大量小玻璃控件叠加，导致滚动时 compositor / layer 成本过高。
+
+关于侧边栏未读标签的取舍：
+
+- 初始修复方向是把未读数字改成“预绘制静态玻璃样式”，避免真实 `BackdropFilter` / `AdaptiveGlass`，同时保留 Liquid Glass 观感。
+- 试过多轮静态模拟：
+  - 左上角光照、右下暗边、渐变轮廓。
+  - 更接近刷新按钮的浅色静态 control 材质。
+  - 外层渐变 rim + 内层静态玻璃填充。
+- 用户多次验证后认为这些静态玻璃模拟观感仍不如 `v1.1.23`，尤其小尺寸 badge 很容易显得“画出来”和刷新按钮不一致。
+- 最终决定：侧边栏未读数字直接回退到 `v1.1.23` 的朴素轻量样式：
+  - 选中：`cs.primary` 实心小标签，文字 `cs.onPrimary`。
+  - 未选中：`cs.onSurfaceVariant alpha 0.2` 半透明灰底，文字 `cs.onSurfaceVariant`。
+  - 不再使用 `AppGlassBadge`，避免大量常驻小 glass layer。
+
+关于文章右上已读按钮：
+
+- `AppGlassIconButton` 新增 `useOwnLayer` 参数，默认仍为 `true`，避免影响全局按钮行为。
+- 文章详情右上“标为已读/恢复未读”按钮传入 `useOwnLayer: false`，降低正文滚动期间额外 glass layer 压力。
+- 这属于局部性能优化，不改变按钮尺寸、位置、tooltip、选中态和交互语义。
+
+关于设置页与后台任务页：
+
+- 用户进一步指出：虽然设置页不影响正文阅读，但进入设置页后设置页自身滚动也会卡顿。
+- 重新审视第 149 节的 Liquid Glass 设置页迁移后，确认设置页存在大量滚动内容内的真实玻璃层：
+  - 每个 `_MacSettingsSection` 是 `nativeBackdrop: true`。
+  - section 内部的 `AppGlassTextField`、`_MacGlassSelectField`、`_MacGlassSegmentedField`、`AppGlassButton` 又继续套真实玻璃。
+  - 后台任务页 `_TaskPanel` 也使用 `nativeBackdrop: true`。
+- 用户要求：
+  - 设置页和后台任务页应共用同一设计语言。
+  - 当前布局基本认可，不应回退到移动端页面或大改布局。
+  - 设置页左侧栏也不需要玻璃效果。
+  - 静态化后不要大面积灰色填充，只需要细线描边。
+  - 线条需要稍微更明显。
+  - hover 时颜色变化只需要很轻微；后来澄清左侧导航 hover 本来很好，需要减弱的是设置页主体控件/卡片的 hover。
+
+实现：
+
+- `lib/common/widgets/app_glass.dart`
+  - `AppGlassSurface` 新增 `staticMaterial` 参数。
+  - macOS 且 `staticMaterial: true` 时走 `_StaticGlassSurface`：
+    - 不使用 `BackdropFilter` / `AdaptiveGlass`。
+    - 不铺大面积灰色底。
+    - 使用透明主体 + `onSurfaceVariant` 低透明度细线描边。
+    - 当前线宽 `0.75`，按 `panel/surface/control` 分别设定 alpha。
+  - `AppGlassIconButton` 新增 `useOwnLayer` 参数并透传给内部 `AppGlassSurface`。
+  - `AppGlassTextField` 在 macOS 下使用 `staticMaterial: true`。
+  - `AppGlassButton` 在 macOS 下使用 `staticMaterial: true`，并减轻 hover 填充：
+    - primary hover `accentAlpha` 从 `0.08` 降到 `0.065`。
+    - destructive hover alpha 从 `0.08` 降到 `0.045`。
+    - secondary hover alpha 从 `0.07` 降到 `0.035`。
+- `lib/pages/main/widgets/macos_sidebar.dart`
+  - `_UnreadBadge` 从 `AppGlassBadge` 回退为 `v1.1.23` 轻量 `Container`。
+- `lib/pages/article/article_page.dart`
+  - 文章详情右上 `AppGlassIconButton` 增加 `useOwnLayer: false`。
+- `lib/pages/settings/settings_page.dart`
+  - macOS 设置页左侧栏的 Token 状态卡、操作卡、配置迁移卡、导航列表容器全部 `staticMaterial: true`。
+  - 右侧主滚动区 `_MacSettingsSection` 全部 `staticMaterial: true`。
+  - `_MacGlassSegmentedField` 轨道与 selected pill 改为静态材质，selected pill 关闭独立 layer。
+  - `_MacGlassSelectField` 输入框和下拉浮层改为静态材质。
+  - `_MacInlineExpansion` 去掉 `surfaceContainerHighest alpha 0.12` 灰色底，改为透明底 + 更明确的 `onSurfaceVariant` 细线；hover/press 仅做轻微 overlay。
+  - 左侧导航 hover 恢复到用户认可的原强度；主体 hover 才减弱。
+- `lib/pages/settings/task_center_page.dart`
+  - `_TaskPanel` 改为 `staticMaterial: true`，覆盖概览卡、同步卡、AI 任务卡、失败列表卡。
+  - `_MacEmptyTaskState` 也改为 `staticMaterial: true`，与设置页统一。
+
+刻意未改：
+
+- 没有修改正文 `Column` 架构，也没有重新启用 `SliverList.builder`。第 156 节关于滚动条/阅读进度条/目录定位稳定性的取舍仍有效。
+- 没有移除 macOS 主窗口左侧 shell / sidebar 的整体 Liquid Glass 设计。
+- 没有把刷新/同步按钮等少量固定控制按钮全部去玻璃化；本轮重点是大量常驻或滚动内容里的小玻璃层。
+- 没有改变设置页、后台任务页的布局、入口、业务逻辑或保存/导入导出行为。
+- 没有 tag 或 release。当前只是本地性能修复提交，后续发布需用户明确允许。
+
+验证：
+
+- `dart format` 已覆盖本轮修改文件。
+- `dart analyze lib/common/widgets/app_glass.dart lib/pages/settings/settings_page.dart lib/pages/settings/task_center_page.dart lib/pages/main/widgets/macos_sidebar.dart lib/pages/article/article_page.dart` 通过。
+- `git diff --check` 通过。
+- `flutter build macos --release` 多轮通过。
+- 用户验证最终构建后表示目前没有发现本次 debug 修改中的更多问题，可以提交。
+
+当前 Git 状态：
+
+- 本轮提交标题为 `perf: reduce macOS glass rendering cost`。
+- 本节文档应随同该代码提交存在，保持代码与上下文一致；如果后续 amend，提交哈希会变化，不要依赖旧 hash。
+- 当前不要自动 tag/release；如果用户下一步要求发布，再走 `scripts/release.sh`。

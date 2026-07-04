@@ -4,10 +4,14 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/release.sh <version> -m "<message>" [--push]
+  scripts/release.sh <version> -m "<message>" [--push] [--allow-literal-backslash-n]
 
 Example:
-  scripts/release.sh 1.1.7 -m "- fix: list scrolling\n- feat: media controls" --push
+  scripts/release.sh 1.1.7 -m $'- fix: list scrolling\n- feat: media controls' --push
+
+If the release notes intentionally need to contain the literal characters \n,
+pass --allow-literal-backslash-n. Otherwise literal \n is treated as a likely
+quoting mistake and the script exits before creating commits or tags.
 
 The script reads the current pubspec build number, increments it by one,
 commits the pubspec bump and documentation footprint, creates an annotated tag
@@ -25,12 +29,17 @@ shift
 
 message=""
 push_remote=false
+allow_literal_backslash_n=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -m|--message)
       message="$2"
       shift 2
+      ;;
+    --allow-literal-backslash-n)
+      allow_literal_backslash_n=true
+      shift
       ;;
     --push)
       push_remote=true
@@ -49,7 +58,19 @@ if [[ -z "$message" ]]; then
   exit 1
 fi
 
-message="${message//\\n/$'\n'}"
+literal_backslash_n='\n'
+if [[ "$allow_literal_backslash_n" != true && "$message" == *"$literal_backslash_n"* ]]; then
+  cat >&2 <<'EOF'
+Error: release notes contain the literal characters \n.
+
+Use a real newline instead, for example:
+  scripts/release.sh 1.2.3 -m $'- fix: first item\n- feat: second item' --push
+
+If you intentionally want the release notes to display the literal characters \n,
+rerun with --allow-literal-backslash-n.
+EOF
+  exit 1
+fi
 
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Version must look like 1.2.3, got: $version" >&2

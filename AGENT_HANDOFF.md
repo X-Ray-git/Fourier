@@ -7519,12 +7519,45 @@ continuous corner：
 脚本修复：
 
 - `scripts/release.sh`
-  - 在 `message` 非空校验后新增：
+  - 本节初版曾在 `message` 非空校验后新增自动转换：
     - `message="${message//\\n/$'\n'}"`
-  - 后续即使用 `-m "- a\n- b"` 这种双引号字面量写法，脚本也会先归一化成真实换行，再创建 annotated tag。
+  - 该方案随后被第 160 节取代：自动转换会静默猜测用户意图，因此最终改为默认报错、显式允许字面量 `\n`。
   - `footprint_message="${message//$'\n'/\\n}"` 保持不变，因此写入 `AGENT_HANDOFF.md` 的执行脚印仍是单行、可读、不会打散 Markdown。
 
 注意：
 
 - 如果手动运行 release 脚本，也可以使用 shell 的 ANSI-C quoting：`-m $'- a\n- b'`。
-- 但脚本现在已经兼容普通双引号里的 `\n`，后续不应再出现同类 release notes 格式错误。
+- 当前最终策略见第 160 节：普通双引号里的字面量 `\n` 默认会被拒绝，而不是自动转换。
+
+## 160. release.sh 对字面量 \n 的策略改为 fail-fast（2026-07-04）
+
+背景：
+
+- 第 159 节最初把 `scripts/release.sh` 改为自动将 `-m` 参数里的字面量 `\n` 转换成真实换行。
+- 用户指出这仍然有隐患：
+  - 如果未来真的希望 release notes 显示字面量 `\n`，自动转换会静默篡改用户意图。
+  - 发布脚本不应该猜测外部可见文本的语义。
+- 经过讨论，决定改为“默认拒绝字面量 `\n`，显式参数允许”的 fail-fast 策略。
+
+已改：
+
+- `scripts/release.sh`
+  - 移除自动转换：`message="${message//\\n/$'\n'}"`。
+  - 新增参数：`--allow-literal-backslash-n`。
+  - 默认情况下，如果 `-m` 里包含字面量 `\n`，脚本会在修改 `pubspec.yaml`、提交或打 tag 前直接退出。
+  - 报错信息会提示正确写法：
+    - `scripts/release.sh 1.2.3 -m $'- fix: first item\n- feat: second item' --push`
+  - 如果确实需要 release notes 显示字面量 `\n`，必须显式传：
+    - `--allow-literal-backslash-n`
+- `usage()` 示例同步改为 ANSI-C quoting，避免继续误导用户使用普通双引号里的 `\n`。
+
+当前推荐发布写法：
+
+```bash
+./scripts/release.sh 1.2.3 -m $'- fix: first item\n- feat: second item' --push
+```
+
+注意：
+
+- `AGENT_HANDOFF.md` 的 Automated Release Footprint 仍会把真实换行转义成 `\n` 记录在单行命令里，这是文档展示需要，和 release notes/tag annotation 的真实换行不是一回事。
+- 后续不要再改回自动转换，除非有更明确的 escaping 规则和测试覆盖。

@@ -7486,3 +7486,7 @@ continuous corner：
 - 本轮提交标题为 `perf: reduce macOS glass rendering cost`。
 - 本节文档应随同该代码提交存在，保持代码与上下文一致；如果后续 amend，提交哈希会变化，不要依赖旧 hash。
 - 当前不要自动 tag/release；如果用户下一步要求发布，再走 `scripts/release.sh`。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.26 -m "- perf: reduce macOS glass rendering cost\n- perf: restore lightweight sidebar unread badges\n- style: align settings and task center with lightweight macOS panels" --push`*

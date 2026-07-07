@@ -7561,3 +7561,85 @@ continuous corner：
 
 - `AGENT_HANDOFF.md` 的 Automated Release Footprint 仍会把真实换行转义成 `\n` 记录在单行命令里，这是文档展示需要，和 release notes/tag annotation 的真实换行不是一回事。
 - 后续不要再改回自动转换，除非有更明确的 escaping 规则和测试覆盖。
+
+## 161. macOS 时间线未读/全部切换与系统红绿灯修复（2026-07-07）
+
+背景：
+
+- 用户指出 macOS 时间线缺少直观的“区分已读/未读”入口。底层 `TimelineController` 早已有 `TimelineViewMode { unread, all, read }` 与 `setViewMode()` / `_applyFilter()`，但 macOS 时间线 header 没暴露对应控件。
+- 经过讨论，macOS 当前只需要 `未读 / 全部` 两态切换；`已读` 暂时不放进 macOS header，避免控件变重。
+- 用户希望该控件符合当前 Liquid Glass 控制按钮语言，选中态参考文章页“显示译文 / 隐藏摘要”一类橙色/主色活跃气泡。
+- 用户随后反馈初版 `未读 / 全部` 切换会造成整个应用短暂停顿，连文章页翻译 loading 转圈也会卡住。结论是切换阅读模式时不应让中间列表做大量逐项插入/删除动画。
+- 用户还指出 macOS 红黄绿窗口按钮不标准：
+  - hover 时应三颗一起点亮；
+  - 非当前聚焦窗口时应变灰；
+  - 内部符号应使用系统样式；
+  - 绿色按钮语义应交给系统标准行为。
+
+实现：
+
+- `lib/pages/timeline/timeline_page.dart`
+  - 在 macOS `_MacTimelineAppBar.actions` 中新增 `_MacTimelineModeToggle`，位置在同步按钮左侧。
+  - 控件为两段式 `未读 / 全部`：
+    - `未读` 调用 `TimelineViewMode.unread`；
+    - `全部` 调用 `TimelineViewMode.all`；
+    - 不新增业务状态，不改变 controller 的筛选语义。
+  - 选中气泡使用 `appGlassActiveControlFill(context, accentAlpha: 0.085)` 和轻量 primary 边框，提高可见度，视觉上对齐文章页 Mac glass action chip 的活跃态。
+  - 增加 hover 与 press 反馈，鼠标悬浮为轻微灰色，按下有轻微缩放。
+  - `_MacTimelineModeToggleState` 使用 `_visualMode` 做局部即时视觉状态：
+    - 点击时先让气泡在当前帧响应；
+    - 下一帧再调用 `controller.setViewMode(mode)` 执行业务过滤；
+    - 避免按钮动画完全被列表更新抢帧。
+  - macOS 中间列表的 `ImplicitlyAnimatedList` 增加 `key: ValueKey(controller.selectedMode.value)`：
+    - 阅读模式切换时列表整体重建，不走逐项 `removeItem` / `insertItem` diff。
+    - 这是本轮解决全局短暂停顿的关键。此前卡顿来自切换 `未读/全部` 时大量已读文章触发 AnimatedList 逐项移除/插入，UI isolate 同步创建大量动画和 widget。
+    - 日常单篇文章标为已读时仍保留原有逐项移除动画，因为 selectedMode 不变，列表 key 不变。
+
+- `macos/Runner/MainFlutterWindow.swift`
+  - 移除自绘 `TrafficLightButton` / `TrafficLightKind`。
+  - 不再隐藏系统 `standardWindowButton(.closeButton/.miniaturizeButton/.zoomButton)`。
+  - 保留原有坐标设计，只重新定位 AppKit 标准窗口按钮：
+    - 获取 `standardWindowButton` 的真实 `NSButton`；
+    - 按现有 `trafficLightCenterX/YFromTop/CenterSpacing` 计算位置；
+    - 将坐标从 `contentView` 转换到按钮自身 superview。
+  - 这样 hover 联动、非激活灰态、符号绘制、绿色按钮语义都回到 AppKit 负责，避免继续维护近似但不标准的自绘控件。
+
+验证与注意：
+
+- 已验证：
+  - `dart format lib/pages/timeline/timeline_page.dart`
+  - `flutter analyze lib/pages/timeline/timeline_page.dart`
+  - `flutter build macos --debug`
+- 本地不要用 `flutter run --release -d macos` 或本地 `flutter build macos --release` 的产物验证 macOS UI：
+  - 当前 macOS 环境会把本地 release 构建视为 ad-hoc signed / unknown certificate chain；
+  - 系统策略可能拒绝加载内嵌 framework，表现为 Dock 图标弹跳、进程卡在 dyld 阶段、没有窗口；
+  - 这不是本轮窗口按钮或时间线控件代码导致的。
+- 本地 UI 验证建议使用：
+
+```bash
+flutter run -d macos
+```
+
+或：
+
+```bash
+flutter build macos --debug
+open "build/macos/Build/Products/Debug/Auto Folo.app"
+```
+
+后续验证重点：
+
+- `未读 / 全部` 控件位置是否和同步按钮、订阅源自动翻译/全文按钮、清除筛选按钮不挤压。
+- 在“全部文章 / 单个订阅源 / 分类 / 静默订阅源”下切换 `未读 / 全部`，列表内容是否符合筛选预期。
+- 切换时整个应用不应再出现约 0.3 秒的全局掉帧；文章页 loading 动画不应明显停住。
+- 普通按 `M` 标为已读时，中间列表单篇移除动画仍应正常。
+- 红黄绿按钮：
+  - hover 任意一颗时，三颗应显示系统标准符号；
+  - 切到别的应用后应变灰；
+  - 红色仍走现有 `windowShouldClose` 逻辑，关闭窗口但不退出应用；
+  - 黄色最小化，绿色走系统标准 zoom/fullscreen 行为。
+
+当前状态：
+
+- 当前只是代码与文档维护，尚未 tag/release。
+- 若用户后续要求发布，仍按第 80 节/第 159-160 节的 release 流程执行，注意 release notes 使用真实换行或 ANSI-C quoting。

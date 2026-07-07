@@ -484,6 +484,7 @@ class _TimelinePageState extends State<TimelinePage> {
             children: [
               Positioned.fill(
                 child: ImplicitlyAnimatedList<ArticleModel>(
+                  key: ValueKey(controller.selectedMode.value),
                   physics: _refreshPhysics,
                   controller: _scrollController,
                   padding: EdgeInsets.only(
@@ -966,6 +967,8 @@ class _MacTimelineAppBar extends StatelessWidget
           ],
         ),
         actions: [
+          _MacTimelineModeToggle(controller: controller),
+          const SizedBox(width: 6),
           ?trailing,
           if (feedId != null)
             AppGlassIconButton(
@@ -981,6 +984,172 @@ class _MacTimelineAppBar extends StatelessWidget
         ],
       );
     });
+  }
+}
+
+class _MacTimelineModeToggle extends StatefulWidget {
+  final TimelineController controller;
+
+  const _MacTimelineModeToggle({required this.controller});
+
+  @override
+  State<_MacTimelineModeToggle> createState() => _MacTimelineModeToggleState();
+}
+
+class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
+  TimelineViewMode? _visualMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Obx(() {
+      final mode = _visualMode ?? widget.controller.selectedMode.value;
+      final selectedIndex = mode == TimelineViewMode.unread ? 0 : 1;
+
+      return SelectionContainer.disabled(
+        child: AppGlassSurface(
+          borderRadius: 999,
+          padding: const EdgeInsets.all(3),
+          tone: AppGlassTone.control,
+          nativeBackdrop: true,
+          staticMaterial: true,
+          child: SizedBox(
+            width: 104,
+            height: 30,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final segmentWidth = constraints.maxWidth / 2;
+                return Stack(
+                  children: [
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 240),
+                      curve: Curves.easeOutBack,
+                      left: segmentWidth * selectedIndex,
+                      top: 0,
+                      bottom: 0,
+                      width: segmentWidth,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: appGlassActiveControlFill(
+                            context,
+                            accentAlpha: 0.085,
+                          ),
+                          border: Border.all(
+                            color: cs.primary.withValues(alpha: 0.22),
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        _MacTimelineModeSegment(
+                          label: '未读',
+                          selected: selectedIndex == 0,
+                          onTap: () => _setMode(TimelineViewMode.unread),
+                        ),
+                        _MacTimelineModeSegment(
+                          label: '全部',
+                          selected: selectedIndex == 1,
+                          onTap: () => _setMode(TimelineViewMode.all),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  void _setMode(TimelineViewMode mode) {
+    if (widget.controller.selectedMode.value == mode) return;
+
+    setState(() => _visualMode = mode);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.controller.setViewMode(mode);
+      setState(() => _visualMode = null);
+    });
+  }
+}
+
+class _MacTimelineModeSegment extends StatefulWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MacTimelineModeSegment({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  State<_MacTimelineModeSegment> createState() =>
+      _MacTimelineModeSegmentState();
+}
+
+class _MacTimelineModeSegmentState extends State<_MacTimelineModeSegment> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final foreground = widget.selected ? cs.primary : cs.onSurfaceVariant;
+
+    return Expanded(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: _pressed ? 0.975 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                color: !widget.selected && _hovered
+                    ? cs.onSurface.withValues(alpha: 0.055)
+                    : Colors.transparent,
+              ),
+              child: Center(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: widget.selected
+                        ? FontWeight.w800
+                        : FontWeight.w600,
+                    color: foreground,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -15,6 +15,7 @@ import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/app_glass.dart';
+import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 
 import '../../http/init.dart';
@@ -1796,83 +1797,35 @@ class _MacSyncButton extends StatefulWidget {
   State<_MacSyncButton> createState() => _MacSyncButtonState();
 }
 
-class _MacSyncButtonState extends State<_MacSyncButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _spinController;
+class _MacSyncButtonState extends State<_MacSyncButton> {
   StreamSubscription? _syncSub;
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
-    _spinController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
     _syncSub = widget.controller.isSyncing.listen(_syncSpinAnimation);
     _syncSpinAnimation(widget.controller.isSyncing.value);
   }
 
   void _syncSpinAnimation(bool syncing) {
-    if (syncing) {
-      if (!_spinController.isAnimating) {
-        _spinController.repeat();
-      }
-      return;
-    }
-
-    _spinController.stop();
-    _spinController.reset();
+    if (!mounted) return;
+    setState(() => _syncing = syncing);
   }
 
   @override
   void dispose() {
     _syncSub?.cancel();
-    _spinController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = widget.colorScheme;
-    return Obx(() {
-      final syncing = widget.controller.isSyncing.value;
-      return AppGlassTooltip(
-        message: syncing ? '同步中' : '同步',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: syncing
-              ? null
-              : () => widget.controller.loadFeedsThenArticles(),
-          child: MouseRegion(
-            cursor: syncing ? MouseCursor.defer : SystemMouseCursors.click,
-            child: AppGlassSurface(
-              borderRadius: 999,
-              padding: EdgeInsets.zero,
-              tone: AppGlassTone.control,
-              nativeBackdrop: true,
-              interactive: !syncing,
-              child: SizedBox(
-                width: 34,
-                height: 34,
-                child: Center(
-                  child: RotationTransition(
-                    turns: _spinController,
-                    child: Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.diagonal3Values(-1, 1, 1),
-                      child: Icon(
-                        Icons.sync,
-                        size: 18,
-                        color: syncing ? cs.primary : cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    });
+    return AppGlassSyncButton(
+      syncing: _syncing,
+      onPressed: widget.controller.loadFeedsThenArticles,
+      idleColor: widget.colorScheme.onSurfaceVariant,
+      syncingColor: widget.colorScheme.primary,
+    );
   }
 }

@@ -125,6 +125,34 @@
 - 不要在中间 header 添加清除筛选按钮，除非用户重新明确要求。
 - 如果以后需要更多订阅源级操作，优先扩展左侧侧边栏或订阅源上下文菜单。
 
+## 垃圾拦截页复用时间线级组件
+
+背景：垃圾拦截页长期和普通时间线分叉，导致刷新按钮、文章右键菜单等功能需要单独维护。用户注意到刷新按钮位置不一致，右键菜单也缺少重新生成摘要等文章级动作。
+
+决策：把可共享的时间线级 UI 和文章级 AI 动作抽成共用组件。同步按钮由 `AppGlassSyncButton` 维护；文章翻译/摘要菜单由 `ArticleActionsMenu` 维护。垃圾拦截页复用这些组件，但保留自己的审核业务布局和已拒绝文章处理逻辑。
+
+后果：后续改同步按钮样式或文章 AI 菜单时，普通时间线和垃圾拦截页可以一起受益；审核页的保留/移除、拒绝理由、下一篇选择等特殊逻辑仍然独立。
+
+不要回退：
+
+- 不要重新在 `ArticleCard` 和垃圾拦截审核行复制翻译/摘要菜单代码。
+- 不要为了“统一”把垃圾拦截页的审核操作塞进普通 `ArticleCard`，除非重新设计整个审核流。
+- 已读/未读快速切换属于普通时间线，不需要同步到垃圾拦截页。
+
+## macOS Debug 禁用 Xcode Debug Dylib
+
+背景：在 macOS 26 / Xcode 17 环境中，`flutter run -d macos --no-pub` 可能出现 Xcode 构建成功但 Flutter 等不到 debug connection。系统日志显示主程序加载 `Auto Folo.debug.dylib` 被拒绝：`library load denied by system policy`。
+
+决策：Debug 配置设置 `ENABLE_DEBUG_DYLIB = NO`，避免 Xcode 生成并加载 `Auto Folo.debug.dylib`。
+
+后果：`flutter run` 可以正常启动 Dart VM Service。修改后如果仍使用旧构建产物，需要先执行 `flutter clean && flutter pub get`。
+
+不要回退：
+
+- 不要只看 Flutter 的 `log reader stopped` 表象就判断为 Dart 代码崩溃。
+- 不要优先尝试普通 build phase 清理 xattr；实测时机不稳定，最终产物仍可能带 provenance。
+- 如果本机有真实开发者证书，未来可以重新评估签名方案，但当前用户机器没有有效 codesigning identity。
+
 ## 使用 AppKit 系统红黄绿按钮
 
 背景：自定义红黄绿按钮只能近似外观，无法正确匹配系统 hover、非激活、zoom 语义。

@@ -38,3 +38,13 @@ open "build/macos/Build/Products/Debug/Auto Folo.app"
 ```
 
 不要把本地 macOS release 构建作为主要 UI 验证目标。本地环境可能把 release 产物视为 ad-hoc 签名或未知证书链，从而造成启动/framework 加载问题；这不一定和当前代码有关。
+
+如果 macOS Debug 出现“构建成功但等不到 debug connection”：
+
+```bash
+flutter clean
+flutter pub get
+flutter run -d macos --no-pub
+```
+
+当前 Debug 配置依赖 `ENABLE_DEBUG_DYLIB = NO` 避免 `Auto Folo.debug.dylib` 被 macOS 系统策略拒载。验证时应看到 `A Dart VM Service on macOS is available at:`。

@@ -5,6 +5,8 @@
 - `lib/pages/timeline/timeline_controller.dart`
 - `lib/pages/timeline/timeline_page.dart`
 - `lib/pages/widgets/article_card.dart`
+- `lib/common/widgets/app_glass_sync_button.dart`
+- `lib/pages/widgets/article_actions_menu.dart`
 
 当前行为：
 
@@ -42,6 +44,8 @@
 - 不要在该 header 重复放置订阅源级设置按钮，例如自动拉取全文、自动翻译、静默等；这些入口属于左侧侧边栏订阅源项。
 - 该 header 也不显示“清除筛选”。用户通过左侧侧边栏切换范围或回到全部文章。
 - 这个取舍来自一次拥挤问题：进入某个分类下的具体订阅源后，刷新、清除筛选、拉取全文、自动翻译等按钮挤在同一行，视觉负担过重且功能重复。
+- 同步按钮样式和旋转逻辑集中在 `AppGlassSyncButton`。普通时间线通过 `_MacSyncButton` 订阅 `TimelineController.isSyncing`，垃圾拦截页也复用同一个按钮。
+- 文章卡片的长按/右键 AI 操作集中在 `ArticleActionsMenu`。不要再把翻译/摘要菜单逻辑塞回 `article_card.dart`。
 
 当前文章保持可见：
 

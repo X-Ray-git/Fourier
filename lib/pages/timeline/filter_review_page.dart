@@ -21,7 +21,9 @@ import '../widgets/article_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/card_press_effect.dart';
+import '../../common/widgets/app_glass_sync_button.dart';
 import '../../utils/scroll_utils.dart';
+import '../widgets/article_actions_menu.dart';
 
 class FilterReviewPage extends StatefulWidget {
   const FilterReviewPage({super.key});
@@ -125,6 +127,13 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
     _articles.value = all;
     _pruneInvalidSelection();
+  }
+
+  Future<void> _syncReviewArticles() async {
+    if (Get.isRegistered<TimelineController>()) {
+      await Get.find<TimelineController>().loadFeedsThenArticles();
+    }
+    _loadArticles();
   }
 
   void _syncArticleFromDb(String entryId) {
@@ -579,7 +588,11 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _MacReviewHeader(articles: _articles, colorScheme: cs),
+                _MacReviewHeader(
+                  articles: _articles,
+                  colorScheme: cs,
+                  onSync: _syncReviewArticles,
+                ),
                 Expanded(
                   child: Obx(() {
                     final q = AutoFilterWorker.queuedCount.value;
@@ -743,8 +756,13 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 class _MacReviewHeader extends StatelessWidget {
   final RxList<ArticleModel> articles;
   final ColorScheme colorScheme;
+  final VoidCallback onSync;
 
-  const _MacReviewHeader({required this.articles, required this.colorScheme});
+  const _MacReviewHeader({
+    required this.articles,
+    required this.colorScheme,
+    required this.onSync,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -753,13 +771,17 @@ class _MacReviewHeader extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
+            padding: const EdgeInsets.fromLTRB(16, 0, 0, 0),
             child: Obx(() {
               final humanCount = articles.length;
               final q = AutoFilterWorker.queuedCount.value;
               final p = AutoFilterWorker.processingCount.value;
               final llmActive = q > 0 || p > 0;
               final llmCount = q + p;
+              final timelineController = Get.isRegistered<TimelineController>()
+                  ? Get.find<TimelineController>()
+                  : null;
+              final syncing = timelineController?.isSyncing.value ?? false;
 
               return Row(
                 children: [
@@ -809,6 +831,14 @@ class _MacReviewHeader extends StatelessWidget {
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
+                  const SizedBox(width: 10),
+                  AppGlassSyncButton(
+                    syncing: syncing,
+                    onPressed: onSync,
+                    idleColor: colorScheme.onSurfaceVariant,
+                    syncingColor: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
                 ],
               );
             }),
@@ -852,6 +882,15 @@ class _MacReviewRow extends StatelessWidget {
 
     return CardPressEffect(
       onTap: onTap,
+      onSecondaryTapDown: Platform.isMacOS
+          ? (details) {
+              ArticleActionsMenu.showMacOSContextMenu(
+                context,
+                position: details.globalPosition,
+                article: article,
+              );
+            }
+          : null,
       enableHover: true,
       enablePress: true,
       borderRadius: BorderRadius.circular(8),

@@ -6,7 +6,6 @@ import 'package:get/get.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/pill_tag.dart';
 import '../../common/widgets/card_press_effect.dart';
@@ -15,6 +14,7 @@ import '../../services/article_image_service.dart';
 import '../../services/translation_service.dart';
 import '../../services/summary_service.dart';
 import '../../utils/source_taxonomy.dart';
+import 'article_actions_menu.dart';
 
 /// 文章卡片组件
 class ArticleCard extends StatefulWidget {
@@ -117,11 +117,6 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
       final isTranslated =
           (record?.translatedTitle?.isNotEmpty ?? false) ||
           (record?.translatedContent?.isNotEmpty ?? false);
-      final summaryRecord = SummaryService.recordOf(article.entryId);
-      final isSummaryPending = summaryRecord?.isPending ?? false;
-      final hasSummary =
-          (summaryRecord?.isSummarized ?? false) &&
-          (summaryRecord?.summaryText?.trim().isNotEmpty ?? false);
       final displayTitle = TranslationService.displayTitleFor(article);
 
       return RepaintBoundary(
@@ -134,22 +129,18 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
             onTap: onTap,
             onLongPress: Platform.isMacOS
                 ? null
-                : () => _showAiActionsMenu(
+                : () => ArticleActionsMenu.showBottomSheet(
                     context,
-                    isTranslated: isTranslated,
-                    isTranslationPending: isPending,
-                    hasSummary: hasSummary,
-                    isSummaryPending: isSummaryPending,
+                    article: article,
+                    onTranslateSuccess: onTranslateSuccess,
                   ),
             onSecondaryTapDown: Platform.isMacOS
                 ? (details) {
-                    _showMacOSContextMenu(
+                    ArticleActionsMenu.showMacOSContextMenu(
                       context,
-                      details.globalPosition,
-                      isTranslated: isTranslated,
-                      isTranslationPending: isPending,
-                      hasSummary: hasSummary,
-                      isSummaryPending: isSummaryPending,
+                      position: details.globalPosition,
+                      article: article,
+                      onTranslateSuccess: onTranslateSuccess,
                     );
                   }
                 : null,
@@ -530,243 +521,6 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
         ),
       ],
     );
-  }
-
-  Future<void> _translateArticle() async {
-    try {
-      final record = await TranslationService.translateArticle(article);
-      if (record.translatedContent != null &&
-          record.translatedContent!.isNotEmpty) {
-        onTranslateSuccess?.call();
-        AppFeedback.success('翻译完成', '已生成文章译文');
-      } else {
-        AppFeedback.error('翻译失败', record.errorMessage ?? '请检查网络连接和 API 配置');
-      }
-    } catch (e) {
-      AppFeedback.error('翻译失败', e.toString());
-    }
-  }
-
-  Future<void> _summarizeArticle() async {
-    try {
-      final record = await SummaryService.summarizeArticle(article);
-      if (record.summaryText != null && record.summaryText!.isNotEmpty) {
-        AppFeedback.success('摘要完成', '已生成文章摘要');
-      } else {
-        AppFeedback.error('摘要失败', record.errorMessage ?? '请检查网络连接和 API 配置');
-      }
-    } catch (e) {
-      AppFeedback.error('摘要失败', e.toString());
-    }
-  }
-
-  void _showAiActionsMenu(
-    BuildContext context, {
-    required bool isTranslated,
-    required bool isTranslationPending,
-    required bool hasSummary,
-    required bool isSummaryPending,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: isTranslationPending
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.primary,
-                        ),
-                      )
-                    : Icon(Icons.translate, color: colorScheme.primary),
-                title: Text(
-                  isTranslationPending
-                      ? '翻译中...'
-                      : (isTranslated ? '重新翻译' : '翻译文章'),
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                enabled: !isTranslationPending,
-                onTap: isTranslationPending
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _translateArticle();
-                      },
-              ),
-              if (isTranslated) ...[
-                ListTile(
-                  leading: Icon(Icons.delete_outline, color: colorScheme.error),
-                  title: Text(
-                    '删除翻译',
-                    style: TextStyle(color: colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    TranslationService.deleteTranslation(article.entryId);
-                  },
-                ),
-              ],
-              const Divider(height: 1),
-              ListTile(
-                leading: isSummaryPending
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.secondary,
-                        ),
-                      )
-                    : Icon(Icons.summarize, color: colorScheme.secondary),
-                title: Text(
-                  isSummaryPending ? '摘要中...' : (hasSummary ? '重新摘要' : '生成摘要'),
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                enabled: !isSummaryPending,
-                onTap: isSummaryPending
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _summarizeArticle();
-                      },
-              ),
-              if (hasSummary) ...[
-                ListTile(
-                  leading: Icon(Icons.delete_outline, color: colorScheme.error),
-                  title: Text(
-                    '删除摘要',
-                    style: TextStyle(color: colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    SummaryService.deleteSummary(article.entryId);
-                  },
-                ),
-              ],
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showMacOSContextMenu(
-    BuildContext context,
-    Offset position, {
-    required bool isTranslated,
-    required bool isTranslationPending,
-    required bool hasSummary,
-    required bool isSummaryPending,
-  }) async {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    final result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
-      items: [
-        PopupMenuItem(
-          value: 'translate',
-          enabled: !isTranslationPending,
-          child: Row(
-            children: [
-              isTranslationPending
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.primary,
-                      ),
-                    )
-                  : Icon(Icons.translate, size: 18, color: colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                isTranslationPending
-                    ? '翻译中...'
-                    : (isTranslated ? '重新翻译' : '翻译文章'),
-              ),
-            ],
-          ),
-        ),
-        if (isTranslated)
-          PopupMenuItem(
-            value: 'delete_translation',
-            child: Row(
-              children: [
-                Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                const SizedBox(width: 8),
-                Text('删除翻译', style: TextStyle(color: colorScheme.error)),
-              ],
-            ),
-          ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'summarize',
-          enabled: !isSummaryPending,
-          child: Row(
-            children: [
-              isSummaryPending
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.secondary,
-                      ),
-                    )
-                  : Icon(
-                      Icons.summarize,
-                      size: 18,
-                      color: colorScheme.secondary,
-                    ),
-              const SizedBox(width: 8),
-              Text(
-                isSummaryPending ? '摘要中...' : (hasSummary ? '重新摘要' : '生成摘要'),
-              ),
-            ],
-          ),
-        ),
-        if (hasSummary)
-          PopupMenuItem(
-            value: 'delete_summary',
-            child: Row(
-              children: [
-                Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                const SizedBox(width: 8),
-                Text('删除摘要', style: TextStyle(color: colorScheme.error)),
-              ],
-            ),
-          ),
-      ],
-    );
-
-    if (result == 'translate') {
-      _translateArticle();
-    } else if (result == 'delete_translation') {
-      TranslationService.deleteTranslation(article.entryId);
-    } else if (result == 'summarize') {
-      _summarizeArticle();
-    } else if (result == 'delete_summary') {
-      SummaryService.deleteSummary(article.entryId);
-    }
   }
 
   String _formatTime(String isoTime) {

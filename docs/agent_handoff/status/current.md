@@ -25,6 +25,8 @@
 - 从卡片右键菜单删除摘要后，文章详情能立即更新。
 - macOS debug 构建/运行在关闭 CocoaPods 并行签名并放开 debug library validation 后恢复正常。
 - macOS 中间时间线在具体订阅源筛选状态下，header 不再显示重复的订阅源级按钮，也不再显示清除筛选按钮；用户验证该视觉调整符合预期。
+- 垃圾拦截页开始复用普通时间线的同步按钮和文章 AI 右键菜单：刷新按钮位置已按时间线 header 对齐，文章审核行右键也有翻译/摘要相关动作。
+- `flutter run -d macos --no-pub` 的“构建成功但等不到 debug connection”问题已定位为 Xcode Debug Dylib 被 macOS 系统策略拒载，并通过 Debug 配置 `ENABLE_DEBUG_DYLIB = NO` 修复。
 
 工具最近已验证：
 
@@ -33,6 +35,7 @@
 - `flutter test`
 - `flutter build macos --debug`
 - `flutter run -d macos --no-pub`
+- `dart analyze lib/common/widgets lib/pages/widgets lib/pages/timeline`
 
 已知 analyzer 注意点：
 

@@ -21,6 +21,7 @@ macOS 是近期 UI 工作的主要验证目标。
 - 中间时间线/列表 header 不再使用玻璃背景；保留分隔线。
 - 文章详情 header 暂时保留当前处理，除非用户要求再次调整。
 - macOS max fling velocity 是用户可配置项，并应全局应用于 macOS。
+- 普通时间线和垃圾拦截页的同步按钮复用 `AppGlassSyncButton`；如果调整 macOS 同步按钮样式、旋转或 tooltip，应改共用组件。
 
 验证清单：
 
@@ -38,3 +39,7 @@ macOS 是近期 UI 工作的主要验证目标。
 - macOS/Xcode 26 环境下，`flutter run -d macos --no-pub` 曾在 `[CP] Embed Pods Frameworks` 阶段出现 `Killed: 9 "${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh"`。
 - 当前处理是：Debug 配置覆盖 `COCOAPODS_PARALLEL_CODE_SIGN=false`，并在 `DebugProfile.entitlements` 添加 `com.apple.security.cs.disable-library-validation`。前者避免 CocoaPods 并行 ad-hoc signing 被系统无诊断杀掉，后者允许 debug app 加载本地 ad-hoc framework。
 - 如果用户机器再次遇到类似问题，先用 `flutter build macos --debug --no-pub -v` 看 Xcode 实际环境中 `COCOAPODS_PARALLEL_CODE_SIGN` 是否为 `false`，再考虑 `rm -rf build/macos` 重建。
+- 2026-07-08 又出现一种不同的 `flutter run -d macos --no-pub` 失败：Xcode 构建成功，Flutter 随后报 `Error waiting for a debug connection: The log reader stopped unexpectedly, or never started.`。系统日志显示 `Auto Folo -> Auto Folo.debug.dylib` 被拒载：`library load denied by system policy`。
+- 这个问题不是 Dart 业务崩溃，也不是 `[CP] Embed Pods Frameworks` 被 kill。直接 `open build/macos/Build/Products/Debug/Auto Folo.app` 可以启动应用，但 Flutter 等不到 VM Service，因为 debug dylib 没加载成功。
+- 已验证修复：Debug 配置设置 `ENABLE_DEBUG_DYLIB = NO`，避免 Xcode 把 Debug 代码拆到 `Auto Folo.debug.dylib`。修改后需要 `flutter clean && flutter pub get` 让 Xcode 重新生成产物，再运行 `flutter run -d macos --no-pub`。
+- 不要优先尝试普通 Runner build phase 清理 `com.apple.provenance` xattr。实测这种脚本时机不够晚，最终 CodeSign/构建步骤仍会让产物带上 provenance，并不能稳定解决 debug dylib 被系统拒载。

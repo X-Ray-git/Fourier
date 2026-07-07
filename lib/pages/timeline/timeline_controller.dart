@@ -20,9 +20,12 @@ import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
+import '../../utils/article_length_estimator.dart';
 import '../subscriptions/subscriptions_controller.dart';
 
 enum TimelineViewMode { unread, all, read }
+
+enum TimelineSortMode { newest, longest, shortest }
 
 /// 时间线控制器 — 本地文章库（未读/全部/已读）
 class TimelineController extends GetxController {
@@ -30,6 +33,7 @@ class TimelineController extends GetxController {
   final articles = <ArticleModel>[].obs;
   final allArticles = <ArticleModel>[].obs;
   final selectedMode = TimelineViewMode.unread.obs;
+  final selectedSortMode = TimelineSortMode.newest.obs;
   final selectedArticle = Rxn<ArticleModel>();
   final selectedFeedId = RxnString();
   final selectedCategory = RxnString();
@@ -376,6 +380,13 @@ class TimelineController extends GetxController {
     loadingState.value = Success(articles.toList());
   }
 
+  void setSortMode(TimelineSortMode mode) {
+    if (selectedSortMode.value == mode) return;
+    selectedSortMode.value = mode;
+    _applyFilter();
+    loadingState.value = Success(articles.toList());
+  }
+
   /// 标记文章为已读（仅本地）
   void markAsReadLocal(String entryId, {bool recordHistory = true}) {
     if (entryId.trim().isEmpty) return;
@@ -399,13 +410,25 @@ class TimelineController extends GetxController {
 
   bool get hasMore => selectedMode.value != TimelineViewMode.read && _hasMore;
   bool get isLoadingMore => _isLoadingMore;
-  int get unreadCount => allArticles.where((a) => !a.isRead && !FeedSilentSettingsService.isSilent(a.feedId)).length;
-  int get readCount => allArticles.where((a) => a.isRead && !FeedSilentSettingsService.isSilent(a.feedId)).length;
-  int get allCount => allArticles.where((a) => !FeedSilentSettingsService.isSilent(a.feedId)).length;
+  int get unreadCount => allArticles
+      .where((a) => !a.isRead && !FeedSilentSettingsService.isSilent(a.feedId))
+      .length;
+  int get readCount => allArticles
+      .where((a) => a.isRead && !FeedSilentSettingsService.isSilent(a.feedId))
+      .length;
+  int get allCount => allArticles
+      .where((a) => !FeedSilentSettingsService.isSilent(a.feedId))
+      .length;
 
-  int get silentUnreadCount => allArticles.where((a) => !a.isRead && FeedSilentSettingsService.isSilent(a.feedId)).length;
-  int get silentReadCount => allArticles.where((a) => a.isRead && FeedSilentSettingsService.isSilent(a.feedId)).length;
-  int get silentAllCount => allArticles.where((a) => FeedSilentSettingsService.isSilent(a.feedId)).length;
+  int get silentUnreadCount => allArticles
+      .where((a) => !a.isRead && FeedSilentSettingsService.isSilent(a.feedId))
+      .length;
+  int get silentReadCount => allArticles
+      .where((a) => a.isRead && FeedSilentSettingsService.isSilent(a.feedId))
+      .length;
+  int get silentAllCount => allArticles
+      .where((a) => FeedSilentSettingsService.isSilent(a.feedId))
+      .length;
 
   void _updateAppBadge() {
     if (Platform.isMacOS) {
@@ -490,7 +513,29 @@ class TimelineController extends GetxController {
       TimelineViewMode.read => source.where((a) => a.isRead).toList(),
       TimelineViewMode.all => source.toList(),
     };
+    filtered.sort(_compareArticlesForCurrentSort);
     articles.value = filtered;
+  }
+
+  int _compareArticlesForCurrentSort(ArticleModel a, ArticleModel b) {
+    final mode = selectedSortMode.value;
+    if (mode == TimelineSortMode.newest) {
+      return _compareArticleByTimeDesc(a, b);
+    }
+
+    final lengthA = ArticleLengthEstimator.estimateReadingHeight(a);
+    final lengthB = ArticleLengthEstimator.estimateReadingHeight(b);
+    final lengthCompare = mode == TimelineSortMode.longest
+        ? lengthB.compareTo(lengthA)
+        : lengthA.compareTo(lengthB);
+    if (lengthCompare != 0) return lengthCompare;
+    return _compareArticleByTimeDesc(a, b);
+  }
+
+  int _compareArticleByTimeDesc(ArticleModel a, ArticleModel b) {
+    final ta = _timeScore(a) ?? 0;
+    final tb = _timeScore(b) ?? 0;
+    return tb.compareTo(ta);
   }
 
   void _updateFilterCount() {

@@ -7561,3 +7561,163 @@ continuous corner：
 
 - `AGENT_HANDOFF.md` 的 Automated Release Footprint 仍会把真实换行转义成 `\n` 记录在单行命令里，这是文档展示需要，和 release notes/tag annotation 的真实换行不是一回事。
 - 后续不要再改回自动转换，除非有更明确的 escaping 规则和测试覆盖。
+
+## 161. macOS 时间线排序、同步动画与调试日志收口（2026-07-07）
+
+背景：
+
+- 本轮工作发生在独立 worktree：`/Users/x.rw/.codex/worktrees/42b8/auto-folo`，分支名为 `codex/auto-folo-1`。
+- 用户最初反馈：macOS 打开应用后自动首次同步时，右上角同步按钮显示“同步中”，但图标没有旋转。
+- 随后用户要求：
+  - 文章详情页 macOS 翻译 / 摘要按钮取消液态玻璃，回到普通胶囊按钮。
+  - 时间线新增不同排序方式：保留当前按时间排序，并支持按“实际阅读长度”排序。
+  - 排序按钮不要紧贴刷新按钮；排序按钮与刷新按钮风格要统一。
+  - 排序菜单的样式和动画应参考正文“目录”按钮，包括展开和收起的液态玻璃形变与尾段弹性。
+- 验证期间用户遇到 `flutter run -d macos` 的启动失败：
+  - `Error waiting for a debug connection: The log reader stopped unexpectedly, or never started.`
+  - 后续通过直接运行 Debug app 发现应用本身能启动，问题主要来自 debug 模式 HTTP 日志量过大。
+- 用户还贴出一段运行日志，明确显示排序菜单收起时仍有 `RenderFlex overflowed ... bottom/right`，且错误源指向 `lib/pages/timeline/timeline_page.dart` 的排序菜单内容 Column。
+
+已实现：
+
+1. **macOS 首次自动同步旋转修复**
+   - 文件：`lib/pages/timeline/timeline_page.dart`
+   - 修复点在 `_MacSyncButtonState`：
+     - 原先只监听 `widget.controller.isSyncing.listen(...)` 后续变化。
+     - `TimelineController.onInit()` 会立即触发 `loadFeedsThenArticles(showToast: false)`，可能在 `_MacSyncButton` 挂载前就把 `isSyncing` 置为 `true`。
+     - 因此 Obx 能显示“同步中”，但 animation controller 错过 `false -> true` 事件，没有开始旋转。
+   - 现在改为：
+     - `_syncSub = widget.controller.isSyncing.listen(_syncSpinAnimation);`
+     - 初始化后立即调用 `_syncSpinAnimation(widget.controller.isSyncing.value);`
+     - `_syncSpinAnimation` 内部对 `true` 调 `repeat()`，对 `false` `stop()+reset()`。
+
+2. **文章详情页翻译 / 摘要按钮回退普通胶囊**
+   - 文件：`lib/pages/article/article_page.dart`
+   - `_MacGlassActionChip` 改名为 `_MacPillActionChip`。
+   - 移除内部 `AppGlassSurface`，改为普通 `AnimatedContainer + BoxDecoration`：
+     - 普通胶囊圆角 `999`。
+     - active 状态使用低透明 `cs.primary` 背景和描边。
+     - 非 active 使用 `surfaceContainerHighest` 半透明背景。
+     - 保留 hover、press scale、鼠标 cursor、SelectionContainer.disabled 与原点击逻辑。
+   - 同一行的“加载长文中...”也使用同一个普通胶囊组件，避免一排控件中玻璃和非玻璃混杂。
+
+3. **时间线排序功能**
+   - 文件：
+     - `lib/pages/timeline/timeline_controller.dart`
+     - `lib/pages/timeline/timeline_page.dart`
+     - `lib/utils/article_length_estimator.dart`（新增）
+   - 新增 `TimelineSortMode`：
+     - `newest`：最新优先，等价于旧行为，按 `publishedAt` 倒序。
+     - `longest`：长文优先。
+     - `shortest`：短文优先。
+   - `TimelineController` 新增 `selectedSortMode` 和 `setSortMode()`；`_applyFilter()` 在筛选后统一 `filtered.sort(_compareArticlesForCurrentSort)`。
+   - 长度排序没有使用标题长度或纯文本长度，也没有真实离屏布局所有文章：
+     - 严格等于右侧 scrollbar 长度需要把每篇文章实际布局一次，成本高且容易引入滚动/布局副作用。
+     - 当前采用“阅读高度估算”：`ArticleLengthEstimator.estimateReadingHeight(article)`。
+     - 估算流程：
+       - `ArticleContentUtils.normalizeHtml(rawContent)`；
+       - `HtmlChunkParser.parseSync(normalized)`；
+       - 对每个 `HtmlChunk.estimatedHeight` 求和；
+       - 加入标题区和元数据区的固定估算高度。
+     - 这样会把图片、代码块、表格、列表、标题等渲染块计入权重，比字符数更接近实际阅读长度。
+   - 估算结果按 entryId + title/content signature 做内存缓存，避免每次切换排序都重复解析同一篇文章。
+
+4. **排序按钮与刷新按钮风格统一**
+   - 文件：`lib/pages/timeline/timeline_page.dart`
+   - `_MacTimelineAppBar.actions` 中排序按钮位于同步按钮左侧，并与同步按钮间隔 `SizedBox(width: 10)`。
+   - 排序按钮闭合状态改为和 `_MacSyncButton` 同样的 `AppGlassSurface` 配置：
+     - `borderRadius: 999`
+     - `tone: AppGlassTone.control`
+     - `nativeBackdrop: true`
+     - `width/height: 34`
+   - 用户指出点击/打开时按钮本体不应有颜色变化，否则颜色会从玻璃中透出来；因此排序按钮内部填充保持 `Colors.transparent`。
+   - 当前只通过图标颜色表达排序状态：
+     - 默认最新排序：`onSurfaceVariant`
+     - 非默认或菜单打开：`primary`
+
+5. **排序菜单对齐正文目录按钮动画与样式**
+   - 文件：`lib/pages/timeline/timeline_page.dart`
+   - 初版排序菜单使用 Flutter 原生 `showMenu`，用户认为样式和动画不符合当前 Liquid Glass 体系。
+   - 后续改为自定义 overlay 面板，并最终对齐目录按钮实现：
+     - 使用 `glass.GlassMorphController(vsync: this, speed: glass.MorphSpeed.normal)`，不再使用普通 `AnimationController.reverse()`。
+     - `didChangeDependencies()` 中同步 `MediaQuery.disableAnimationsOf(context)`，与目录按钮一致。
+     - 打开使用 `_morphController.open()`。
+     - 关闭使用 `_morphController.close()`，获得和目录按钮同源的 spring close / handoff 行为。
+     - overlay 在 `_handleMorphTick()` 中监听 controller，当 `isClosing && !isShowing` 后才移除，避免过早消失。
+   - `_MacTimelineSortOverlayPanel` 复制目录按钮关键形变逻辑：
+     - `effectiveValue = isClosing && hasHandedOff ? 0.0 : rawValue`
+     - `baseMorphT = isClosing ? _anchoredCloseSettleT(clampedValue) : Curves.linearToEaseOut.transform(clampedValue)`
+     - `elasticTail = isClosing ? _anchoredCloseTail(clampedValue) : _anchoredOpenTail(clampedValue)`
+     - `morphMin = isClosing ? -0.014 : 0.0`
+     - `morphT = (baseMorphT + elasticTail).clamp(morphMin, 1.024)`
+     - `_anchoredOpenTail` / `_anchoredCloseSettleT` / `_anchoredCloseTail` 的参数与目录按钮保持一致。
+   - 排序面板也是右上锚定，向左下扩展；面板大小目前为 `188 x 166`。
+   - 收起时必须注意：
+     - 目录按钮在 closing 阶段不布局面板内容：`showContent = clampedValue > 0.82 && !isClosing`。
+     - 排序面板已按这个逻辑修正。
+     - 不要再把完整菜单内容放在 closing 阶段参与布局，否则容器缩小时会复现 `bottom/right overflowed` 黄色提示条。
+
+6. **Debug HTTP 日志降噪与隐私保护**
+   - 文件：`lib/http/init.dart`
+   - 原 debug 模式 `Dio LogInterceptor` 打印：
+     - request headers
+     - request body
+     - response body
+   - 启动自动同步时会产生大量响应全文，macOS `flutter run` 的 log reader 容易被打断，用户看到 debug connection 等待失败。
+   - 同时 headers/body 可能包含会话信息或用户内容，不应该进入日志。
+   - 现在 debug 下只保留轻量 request / error 信息：
+     - `request: true`
+     - `requestHeader: false`
+     - `requestBody: false`
+     - `responseHeader: false`
+     - `responseBody: false`
+     - `error: true`
+   - 本轮验证中没有把用户贴出的真实 API 响应和任何 token 写入本文档。
+
+7. **设置页下拉框 dispose 生命周期修复**
+   - 文件：`lib/pages/settings/settings_page.dart`
+   - `flutter run` 验证退出时暴露断言：
+     - `_MacGlassSelectFieldState.dispose()` 调 `_hideOptions()`；
+     - `_hideOptions()` 移除 overlay 后调用 `setState()`；
+     - dispose/unmount 阶段触发 `markNeedsBuild` 断言。
+   - 修复：
+     - `_hideOptions({bool rebuild = true})`
+     - dispose 中调用 `_hideOptions(rebuild: false)`
+     - 正常点击关闭仍保留 rebuild。
+
+验证记录：
+
+- `dart format` 已覆盖本轮修改文件。
+- `dart analyze lib/http/init.dart lib/pages/settings/settings_page.dart lib/pages/timeline/timeline_page.dart lib/pages/timeline/timeline_controller.dart lib/utils/article_length_estimator.dart lib/pages/article/article_page.dart` 通过。
+- 曾直接运行 Debug 产物确认 app 本身可启动，VM service 可用。
+- 修改 debug HTTP 日志后，`flutter run -d macos` 已成功连接 Dart VM Service 和 DevTools。
+- `flutter run` 输出中仍可能出现 `Failed to foreground app; open returned 1`，但当 VM Service / DevTools URL 已出现时，这不是启动失败。
+- 用户仍需在真实 UI 中验证：
+  - 首次自动同步时同步按钮是否旋转。
+  - 翻译/摘要按钮是否已回到普通胶囊，且显示/隐藏逻辑正常。
+  - 排序按钮与同步按钮间距和风格是否满意。
+  - 排序菜单展开/收起是否与正文目录按钮体感一致。
+  - 排序菜单收起时是否不再闪过 yellow/black overflow 提示。
+  - 长文/短文排序是否大体符合阅读长度直觉。
+
+刻意未做：
+
+- 未 tag / release。当前只是 worktree 内本地改动，后续若用户确认可发布，再按 `scripts/release.sh` 流程推进。
+- 未提交本轮改动；若用户要求提交，应把本节文档与代码一起提交。
+- 未把“真实 scrollbar 高度排序”做成离屏布局测量。当前采用渲染块高度估算，是为了避免为排序引入大规模布局、滚动状态和性能风险。
+- 未把排序模式持久化到设置项；目前是进程内状态，重启恢复 `最新优先`。
+- 未把排序菜单抽成公共组件。当前为了快速对齐目录按钮，逻辑局部放在 `timeline_page.dart`；如后续还要多个地方复用，应再抽出一个明确的 Liquid Glass morph menu 组件。
+- 未清理 `AutoTranslation` 等其他 debugPrint，只有 Dio 的超大请求/响应日志被降噪。
+
+当前 Git 状态提示：
+
+- 本节记录的是 `codex/auto-folo-1` worktree 中尚未提交的一组改动。
+- 相关文件包括：
+  - `lib/http/init.dart`
+  - `lib/pages/article/article_page.dart`
+  - `lib/pages/settings/settings_page.dart`
+  - `lib/pages/timeline/timeline_controller.dart`
+  - `lib/pages/timeline/timeline_page.dart`
+  - `lib/utils/article_length_estimator.dart`
+  - `AGENT_HANDOFF.md`
+- 若之后合并回 main，应优先保留第 161 节与代码变更的对应关系，避免只合代码不合上下文。

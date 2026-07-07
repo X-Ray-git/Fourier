@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
+import '../utils/html_entity_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
 
@@ -284,7 +285,8 @@ abstract final class TranslationService {
         'JSON 结构必须是：{"translated_title":"...","translated_html":"..."}\n\n'
         '标题：\n${article.title}\n\nHTML：\n<html>$htmlContent</html>';
 
-    final maxRetries = GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final maxRetries =
+        GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
     for (int attempt = 1; attempt <= totalAttempts; attempt++) {
@@ -303,7 +305,10 @@ abstract final class TranslationService {
           ...llmConfig.toRequestBody(),
         };
 
-        final response = await _dio.post('/chat/completions', data: requestBody);
+        final response = await _dio.post(
+          '/chat/completions',
+          data: requestBody,
+        );
 
         final content = _extractMessageContent(response.data);
         if (content == null || content.trim().isEmpty) {
@@ -313,7 +318,8 @@ abstract final class TranslationService {
         Map<String, dynamic> parsed;
         try {
           parsed =
-              jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
+              jsonDecode(_normalizeJsonPayload(content))
+                  as Map<String, dynamic>;
         } on FormatException {
           final recovered = _extractJsonObject(content);
           if (recovered != null) {
@@ -322,17 +328,20 @@ abstract final class TranslationService {
             rethrow;
           }
         }
-        final translatedTitle =
-            (parsed['translated_title'] ?? parsed['title'] ?? '')
-                .toString()
-                .trim();
+        final translatedTitle = HtmlEntityUtils.decodeText(
+          (parsed['translated_title'] ?? parsed['title'] ?? '')
+              .toString()
+              .trim(),
+        );
         final translatedHtml =
             (parsed['translated_html'] ?? parsed['content'] ?? '')
                 .toString()
                 .trim();
 
         if (translatedHtml.isEmpty) {
-          throw StateError('DeepSeek translation result missing translated_html');
+          throw StateError(
+            'DeepSeek translation result missing translated_html',
+          );
         }
 
         final record = TranslationRecord(
@@ -346,7 +355,8 @@ abstract final class TranslationService {
       } catch (e) {
         if (attempt < totalAttempts) {
           debugPrint(
-              '[Translation] Attempt $attempt failed for ${article.entryId}, retrying in 1s...');
+            '[Translation] Attempt $attempt failed for ${article.entryId}, retrying in 1s...',
+          );
           await Future.delayed(const Duration(seconds: 1));
           continue;
         }
@@ -391,7 +401,8 @@ abstract final class TranslationService {
   ) async {
     final apiKey = getApiKey()!;
     final chunks = _splitHtmlIntoChunks(htmlContent);
-    final maxRetries = GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final maxRetries =
+        GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
     debugPrint('[Translation] 🧩 ${article.entryId}: 切分为 ${chunks.length} 块');
 
@@ -543,7 +554,9 @@ abstract final class TranslationService {
       }
 
       final title = isFirst
-          ? (parsed['translated_title'] ?? '').toString().trim()
+          ? HtmlEntityUtils.decodeText(
+              (parsed['translated_title'] ?? '').toString().trim(),
+            )
           : null;
       final html = (parsed['translated_html'] ?? '').toString().trim();
       if (html.isEmpty) {

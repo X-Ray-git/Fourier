@@ -25,4 +25,27 @@ void main() {
     expect(article.subscriptionCategory, 'Tech');
     expect(article.imageUrl, 'https://example.com/a.png');
   });
+
+  test(
+    'fromEntryJson should decode text entities without touching html content',
+    () {
+      final article = ArticleModel.fromEntryJson({
+        'entries': {
+          'id': 'e-2',
+          'title': 'OpenClaw &amp; DeepSeek',
+          'url': 'https://example.com?a=1&amp;b=2',
+          'content': '<p>OpenClaw &amp; DeepSeek</p>',
+          'author': 'A &amp; B',
+        },
+        'feeds': {'id': 'f-2', 'title': 'AI &amp; Tools'},
+      }, subscriptionCategory: 'News &amp; Analysis');
+
+      expect(article.title, 'OpenClaw & DeepSeek');
+      expect(article.feedTitle, 'AI & Tools');
+      expect(article.author, 'A & B');
+      expect(article.subscriptionCategory, 'News & Analysis');
+      expect(article.url, 'https://example.com?a=1&amp;b=2');
+      expect(article.content, '<p>OpenClaw &amp; DeepSeek</p>');
+    },
+  );
 }

@@ -2083,8 +2083,7 @@ class _ToolbarRow extends StatelessWidget {
       final summaryRecord = SummaryService.recordOf(controller.article.entryId);
       final isSummaryPending =
           (summaryRecord?.isPending ?? false) || controller.isSummarizing.value;
-      final summary =
-          (summaryRecord?.summaryText ?? controller.summaryText.value).trim();
+      final summary = (summaryRecord?.summaryText ?? '').trim();
       final hasSummary =
           summary.isNotEmpty &&
           ((summaryRecord?.isSummarized ?? false) ||
@@ -2280,12 +2279,10 @@ class _MacPillActionChipState extends State<_MacPillActionChip> {
     final foreground = widget.active ? cs.primary : cs.onSurfaceVariant;
     final background = widget.active
         ? cs.primary.withValues(alpha: 0.10)
-        : _hovered
-        ? cs.onSurface.withValues(alpha: 0.06)
         : cs.surfaceContainerHighest.withValues(alpha: 0.58);
     final borderColor = widget.active
         ? cs.primary.withValues(alpha: 0.22)
-        : cs.outlineVariant.withValues(alpha: _hovered ? 0.78 : 0.52);
+        : cs.outlineVariant.withValues(alpha: _hovered ? 0.62 : 0.52);
 
     return SelectionContainer.disabled(
       child: MouseRegion(
@@ -2401,8 +2398,7 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final record = SummaryService.recordOf(controller.article.entryId);
-      final summary = (record?.summaryText ?? controller.summaryText.value)
-          .trim();
+      final summary = (record?.summaryText ?? '').trim();
       if (!controller.showSummary.value) return const SizedBox.shrink();
       if (summary.isEmpty) return const SizedBox.shrink();
       return Padding(

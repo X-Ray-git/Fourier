@@ -5307,7 +5307,6 @@ flutter test --no-pub
    - 扩展接收 `currentHoveredUrl`，在 `prepare` 阶段通过精准的 CSS Style 覆盖，按状态动态赋予 `TextDecoration.underline`。
 
 
-=======
 ## 131. 卡片交互特效统一 (2026-06-10)
 
 ### 131.1 需求背景
@@ -7689,3 +7688,119 @@ Git 记录提示：
   - `test/feed_model_test.dart`
   - `test/html_entity_utils_test.dart`
   - `AGENT_HANDOFF.md`
+## 162. 软件内外观模式设置与圆角收敛调研（2026-07-07）
+
+背景：
+
+- 用户希望深色/浅色模式可以在软件内调整，同时保留“和系统对齐”的选项。
+- 初始要求是先阅读仓库、确认理解、定位问题并讨论，不要马上修改。
+- 仓库检查结论：
+  - `lib/main.dart` 已经定义了 light/dark 两套 `ThemeData`。
+  - 但 `GetMaterialApp.themeMode` 写死为 `ThemeMode.system`，因此此前只能跟随系统，不能由应用内部覆盖。
+  - 设置页有 macOS 与移动端两套 UI；偏好配置使用 Hive `GStorage.setting`。
+  - 配置导入/导出走 `SettingsBackupService` 白名单，如果新增设置 key 不进白名单，迁移配置时会丢失。
+- 用户随后确认：如果能做到“一选择就立刻生效”，就按立即生效实现。
+
+已实现：
+
+- `lib/common/constants/constants.dart`
+  - 新增 `AppConstants.defaultAppearanceMode = 'system'`。
+  - 新增 `StorageKeys.appearanceMode = 'appearance_mode'`。
+  - 合法存储值为：
+    - `system`：跟随系统。
+    - `light`：强制浅色。
+    - `dark`：强制深色。
+- `lib/main.dart`
+  - 用 `ValueListenableBuilder` 监听 `GStorage.setting.listenable(keys: [StorageKeys.appearanceMode])`。
+  - `GetMaterialApp.themeMode` 改为读取 `_currentThemeMode`，不再固定 `ThemeMode.system`。
+  - 这样设置页写入 `appearance_mode` 后会立即重建 `GetMaterialApp` 并切换主题，不需要重启，也不需要点保存。
+  - 原有 macOS 滚动惯性上限监听仍保留在 `builder` 内，未改变滚动行为。
+- `lib/pages/settings/settings_page.dart`
+  - 新增 `_appearanceMode` 状态。
+  - `_loadPersistedSettings()` 读取并规范化外观模式，非法值回退到 `system`。
+  - 新增 `_setAppearanceMode()`：
+    - `setState` 更新设置页当前选项；
+    - 立即 `GStorage.setting.put(StorageKeys.appearanceMode, normalized)`。
+  - `_save()` 也会再次保存当前 `_appearanceMode`，作为与其他偏好统一的兜底。
+  - macOS 设置页在“阅读与后台偏好”中新增 `_MacGlassSegmentedField<String>`：
+    - `跟随系统 / 浅色 / 深色`
+    - 文案提示“选择后立即生效；跟随系统会响应 macOS 外观变化”。
+  - 移动端设置页新增普通 `DropdownButtonFormField<String>`，保持原移动端 Material 表单风格。
+- `lib/services/settings_backup_service.dart`
+  - `appearance_mode` 加入 `_fixedKeys` 与 `_stringKeys`。
+  - 导入时只允许 `system/light/dark`，否则抛 `FormatException`，避免错误配置落入未知状态。
+
+设计决策：
+
+- 选择“写入 Hive 后由根部监听重建”的方案，而不是引入新的 GetX controller 或手动调用 `Get.changeThemeMode`。
+  - 原因：项目设置项已经主要依赖 Hive；根部监听设置 key 更直接，也能保证重启后持久化一致。
+- 外观模式采用字符串 `system/light/dark`，而不是数字枚举。
+  - 原因：配置导出为 JSON 时更可读，也更利于后续兼容。
+- macOS 端使用现有 `_MacGlassSegmentedField`。
+  - 原因：三档选项紧凑、符合当前 macOS 设置页设计语言，不需要新造控件。
+- 移动端暂时使用现有 Material 下拉表单。
+  - 原因：移动端设置页尚未做 macOS 那种全量玻璃化重构，应保持现有风格。
+
+需要后续验证的重点：
+
+- 设置页切换 `跟随系统 / 浅色 / 深色` 是否立即生效，不需要保存、不需要重启。
+- 切换时设置页不应退出、跳页、丢失明显状态或闪退。
+- macOS 主界面重点检查：
+  - 左侧侧边栏玻璃效果；
+  - 中间文章列表；
+  - 右侧文章详情；
+  - 右上角已读/目录/刷新等按钮；
+  - tooltip、弹窗、后台任务页。
+- 特别验证“系统浅色但应用强制深色”和“系统深色但应用强制浅色”：
+  - 大多数项目代码使用 `Theme.of(context)`，应跟随应用内设置。
+  - 但 `lib/common/liquid_glass` 中仍有少量底层代码直接读 `MediaQuery.platformBrightnessOf(context)` 或 `CupertinoTheme.brightnessOf(context)`；如果发现玻璃高光/材质仍跟随系统而不是跟随应用主题，后续应专门修这些底层读取点。
+- Android 也要验证设置项存在、切换立即生效、返回时间线和文章详情后颜色一致。
+- 配置导出 JSON 应包含类似：
+
+```json
+"appearance_mode": "system"
+```
+
+或 `light/dark`；导入后外观模式应恢复。
+
+验证：
+
+- `dart format lib/main.dart lib/pages/settings/settings_page.dart lib/services/settings_backup_service.dart lib/common/constants/constants.dart` 已执行。
+- 裸 `dart analyze` 不适合本 Flutter 项目，会因为找不到 Flutter SDK 包 URI 产生大量无效错误；不要据此判断健康度。
+- `flutter analyze` 已执行并通过；运行时需要允许 Flutter SDK 写本机 cache。
+
+尚未实施但已讨论的圆角收敛：
+
+- 用户进一步提出“整个软件稍稍将圆角半径变小一点”，要求先扫描工程并查 macOS 官方是否有圆角参数推荐。
+- 已扫描工程中显式圆角：
+  - 大面板/窗口层级集中在 `28 / 20 / 18 / 16`。
+  - 小控件/内容裁剪集中在 `12 / 10 / 8 / 6 / 4`。
+  - 胶囊类控件大量使用 `999`，不应参与普通圆角收敛。
+- 查阅 Apple HIG / Liquid Glass / Materials / Windows 等官方资料后，没有找到 Apple 对 macOS 普通应用窗口、面板、卡片公开给出“推荐圆角半径 = N pt”的数值规范。官方更倾向让系统控件自己决定形状，自定义控件按层级和尺寸选择。
+- 建议后续如果要做圆角收敛，优先改 macOS 主视觉层级，不要盲目全局等比例缩放：
+  - 强烈建议联动：
+    - `macos/Runner/MainFlutterWindow.swift` 的 `Metrics.windowRadius = 28`。
+    - `lib/pages/main/main_page.dart` 的 `_macOSWindowContentRadius = 28.0`。
+    - `MainFlutterWindow.swift` 里的 `trafficLightCenterX/Y = 28`，因为它此前和外框圆角圆心绑定。
+    - `lib/pages/main/widgets/macos_sidebar.dart` 的 `_macOSSidebarPanelRadius = 20.0`。
+    - `AppGlassSurface` 默认 `18` 与 `AppGlassPanel` 默认 `20`。
+    - 设置页和后台任务页里大量 `AppGlassSurface(borderRadius: 20)`。
+  - 可以考虑的方向：
+    - 外框 `28 -> 24`。
+    - 交通灯圆心 `28 -> 24`。
+    - 侧边栏/大面板 `20 -> 18`。
+    - `AppGlassSurface` 默认 `18 -> 16`。
+    - 常规按钮/输入框 `12 -> 10`。
+  - 不建议动：
+    - `999` 胶囊按钮、badge、pill tag。
+    - macOS 文章卡片当前已经是 `8`，不必再缩。
+    - 图片、代码块、媒体裁剪的 `8/10/12`。
+    - 小遮罩 `3/4/6`。
+    - Android 端 Material 卡片圆角，除非用户明确要求 Android 同步收敛。
+- 本节提交不包含任何圆角代码修改。后续 agent 不要误认为圆角已经完成；目前只是调研和方案分层。
+
+当前 Git 注意事项：
+
+- 本节对应代码修改和文档修改应作为一个提交，建议提交标题：
+  - `feat: add in-app appearance mode`
+- 当前不要 tag/release，除非用户明确要求发布。

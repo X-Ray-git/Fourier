@@ -100,164 +100,186 @@ class AutoFoloApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: AppConstants.appName,
-      debugShowCheckedModeBanner: false,
-      scrollBehavior: const NoOverscrollIndicatorBehavior(),
-
-      // 多语言
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
-      locale: const Locale('zh', 'CN'),
-      fallbackLocale: const Locale('en', 'US'),
-
-      // 路由
-      getPages: appPages,
-      initialRoute: Routes.main,
-      defaultTransition: Transition.native,
-
-      // 主题 (注入全局组件规范)
-      theme: ThemeData(
-        colorScheme: _defaultLightScheme,
-        useMaterial3: true,
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: _defaultLightScheme.surface,
-        appBarTheme: AppBarTheme(
-          backgroundColor: _defaultLightScheme.surface,
-          scrolledUnderElevation: 0, // 全局移除 AppBar 滚动时的生硬投影色
-          elevation: 0,
-          centerTitle: true,
-          iconTheme: IconThemeData(color: _defaultLightScheme.onSurface),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16), // 全局统一 16px 卡片圆角
-          ),
-          clipBehavior: Clip.antiAlias,
-        ),
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
-          },
-        ),
+    return ValueListenableBuilder(
+      valueListenable: GStorage.setting.listenable(
+        keys: const [StorageKeys.appearanceMode],
       ),
-      darkTheme: ThemeData(
-        colorScheme: _defaultDarkScheme,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: _defaultDarkScheme.surface,
-        appBarTheme: AppBarTheme(
-          backgroundColor: _defaultDarkScheme.surface,
-          scrolledUnderElevation: 0,
-          elevation: 0,
-          centerTitle: true,
-          iconTheme: IconThemeData(color: _defaultDarkScheme.onSurface),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          clipBehavior: Clip.antiAlias,
-        ),
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
-          },
-        ),
-      ),
-      themeMode: ThemeMode.system,
+      builder: (context, settingsBox, child) {
+        return GetMaterialApp(
+          title: AppConstants.appName,
+          debugShowCheckedModeBanner: false,
+          scrollBehavior: const NoOverscrollIndicatorBehavior(),
 
-      // SmartDialog 注入毛玻璃版全局基础 Toast
-      builder: (context, child) {
-        final smartDialogBuilder = FlutterSmartDialog.init(
-          toastBuilder: (String msg) => _CustomToast(msg: msg),
-          loadingBuilder: (msg) => LoadingWidget(msg: msg),
-        );
-        final appChild = Shortcuts(
-          shortcuts: <ShortcutActivator, Intent>{
-            SingleActivator(
-              LogicalKeyboardKey.keyZ,
-              meta: Platform.isMacOS,
-              control: !Platform.isMacOS,
-            ): const UndoReadIntent(),
-            if (Platform.isMacOS)
-              SingleActivator(LogicalKeyboardKey.comma, meta: true):
-                  const OpenSettingsIntent(),
-            if (Platform.isMacOS)
-              SingleActivator(LogicalKeyboardKey.keyR, meta: true):
-                  const RefreshTimelineIntent(),
-          },
-          child: Actions(
-            actions: <Type, Action<Intent>>{
-              UndoReadIntent: CallbackAction<UndoReadIntent>(
-                onInvoke: (intent) {
-                  final focusContext =
-                      FocusManager.instance.primaryFocus?.context;
-                  if (focusContext
-                          ?.findAncestorWidgetOfExactType<EditableText>() !=
-                      null) {
-                    return null;
-                  }
-                  unawaited(UndoService.undoLastAction());
-                  return null;
-                },
+          // 多语言
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+          locale: const Locale('zh', 'CN'),
+          fallbackLocale: const Locale('en', 'US'),
+
+          // 路由
+          getPages: appPages,
+          initialRoute: Routes.main,
+          defaultTransition: Transition.native,
+
+          // 主题 (注入全局组件规范)
+          theme: ThemeData(
+            colorScheme: _defaultLightScheme,
+            useMaterial3: true,
+            brightness: Brightness.light,
+            scaffoldBackgroundColor: _defaultLightScheme.surface,
+            appBarTheme: AppBarTheme(
+              backgroundColor: _defaultLightScheme.surface,
+              scrolledUnderElevation: 0, // 全局移除 AppBar 滚动时的生硬投影色
+              elevation: 0,
+              centerTitle: true,
+              iconTheme: IconThemeData(color: _defaultLightScheme.onSurface),
+            ),
+            cardTheme: CardThemeData(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16), // 全局统一 16px 卡片圆角
               ),
-              OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
-                onInvoke: (intent) {
-                  if (Get.currentRoute != Routes.main) {
-                    Get.until((route) => route.settings.name == Routes.main);
-                  }
-                  if (Get.isRegistered<MainController>()) {
-                    Get.find<MainController>().changeIndex(3);
-                  }
-                  return null;
-                },
-              ),
-              RefreshTimelineIntent: CallbackAction<RefreshTimelineIntent>(
-                onInvoke: (intent) {
-                  final focusContext =
-                      FocusManager.instance.primaryFocus?.context;
-                  if (focusContext
-                          ?.findAncestorWidgetOfExactType<EditableText>() !=
-                      null) {
-                    return null;
-                  }
-                  if (Get.isRegistered<TimelineController>()) {
-                    unawaited(
-                      Get.find<TimelineController>().loadFeedsThenArticles(),
-                    );
-                  }
-                  return null;
-                },
-              ),
-            },
-            child: smartDialogBuilder(context, child),
+              clipBehavior: Clip.antiAlias,
+            ),
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+              },
+            ),
           ),
-        );
-        return ValueListenableBuilder(
-          valueListenable: GStorage.setting.listenable(
-            keys: const [StorageKeys.macosMaxFlingVelocity],
-          ),
-          child: appChild,
-          builder: (context, _, child) {
-            return ScrollConfiguration(
-              behavior: NoOverscrollIndicatorBehavior(
-                macosMaxFlingVelocity:
-                    NoOverscrollIndicatorBehavior.currentMacosMaxFlingVelocity,
+          darkTheme: ThemeData(
+            colorScheme: _defaultDarkScheme,
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: _defaultDarkScheme.surface,
+            appBarTheme: AppBarTheme(
+              backgroundColor: _defaultDarkScheme.surface,
+              scrolledUnderElevation: 0,
+              elevation: 0,
+              centerTitle: true,
+              iconTheme: IconThemeData(color: _defaultDarkScheme.onSurface),
+            ),
+            cardTheme: CardThemeData(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: child ?? const SizedBox.shrink(),
+              clipBehavior: Clip.antiAlias,
+            ),
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+              },
+            ),
+          ),
+          themeMode: _currentThemeMode,
+
+          // SmartDialog 注入毛玻璃版全局基础 Toast
+          builder: (context, child) {
+            final smartDialogBuilder = FlutterSmartDialog.init(
+              toastBuilder: (String msg) => _CustomToast(msg: msg),
+              loadingBuilder: (msg) => LoadingWidget(msg: msg),
+            );
+            final appChild = Shortcuts(
+              shortcuts: <ShortcutActivator, Intent>{
+                SingleActivator(
+                  LogicalKeyboardKey.keyZ,
+                  meta: Platform.isMacOS,
+                  control: !Platform.isMacOS,
+                ): const UndoReadIntent(),
+                if (Platform.isMacOS)
+                  SingleActivator(LogicalKeyboardKey.comma, meta: true):
+                      const OpenSettingsIntent(),
+                if (Platform.isMacOS)
+                  SingleActivator(LogicalKeyboardKey.keyR, meta: true):
+                      const RefreshTimelineIntent(),
+              },
+              child: Actions(
+                actions: <Type, Action<Intent>>{
+                  UndoReadIntent: CallbackAction<UndoReadIntent>(
+                    onInvoke: (intent) {
+                      final focusContext =
+                          FocusManager.instance.primaryFocus?.context;
+                      if (focusContext
+                              ?.findAncestorWidgetOfExactType<EditableText>() !=
+                          null) {
+                        return null;
+                      }
+                      unawaited(UndoService.undoLastAction());
+                      return null;
+                    },
+                  ),
+                  OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
+                    onInvoke: (intent) {
+                      if (Get.currentRoute != Routes.main) {
+                        Get.until(
+                          (route) => route.settings.name == Routes.main,
+                        );
+                      }
+                      if (Get.isRegistered<MainController>()) {
+                        Get.find<MainController>().changeIndex(3);
+                      }
+                      return null;
+                    },
+                  ),
+                  RefreshTimelineIntent: CallbackAction<RefreshTimelineIntent>(
+                    onInvoke: (intent) {
+                      final focusContext =
+                          FocusManager.instance.primaryFocus?.context;
+                      if (focusContext
+                              ?.findAncestorWidgetOfExactType<EditableText>() !=
+                          null) {
+                        return null;
+                      }
+                      if (Get.isRegistered<TimelineController>()) {
+                        unawaited(
+                          Get.find<TimelineController>()
+                              .loadFeedsThenArticles(),
+                        );
+                      }
+                      return null;
+                    },
+                  ),
+                },
+                child: smartDialogBuilder(context, child),
+              ),
+            );
+            return ValueListenableBuilder(
+              valueListenable: GStorage.setting.listenable(
+                keys: const [StorageKeys.macosMaxFlingVelocity],
+              ),
+              child: appChild,
+              builder: (context, _, child) {
+                return ScrollConfiguration(
+                  behavior: NoOverscrollIndicatorBehavior(
+                    macosMaxFlingVelocity: NoOverscrollIndicatorBehavior
+                        .currentMacosMaxFlingVelocity,
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
             );
           },
+          navigatorObservers: [FlutterSmartDialog.observer],
         );
       },
-      navigatorObservers: [FlutterSmartDialog.observer],
     );
+  }
+
+  static ThemeMode get _currentThemeMode {
+    final raw = GStorage.setting.get(
+      StorageKeys.appearanceMode,
+      defaultValue: AppConstants.defaultAppearanceMode,
+    );
+    return switch (raw) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
   }
 
   // ── Folo UIKit 配色 ──────────────────────────

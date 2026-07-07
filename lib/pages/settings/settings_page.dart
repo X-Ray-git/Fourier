@@ -52,6 +52,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _obscureClientId = true;
   bool _obscureSessionId = true;
   bool _obscureDeepseekKey = true;
+  late String _appearanceMode;
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
 
@@ -83,6 +84,12 @@ class _SettingsPageState extends State<SettingsPage> {
       defaultValue: AppConstants.defaultMacosMaxFlingVelocity,
     );
     _macosMaxFlingVelocityController.text = macosMaxFlingVelocity.toString();
+    _appearanceMode = _normalizeAppearanceMode(
+      GStorage.setting.get(
+        StorageKeys.appearanceMode,
+        defaultValue: AppConstants.defaultAppearanceMode,
+      ),
+    );
     _badgeStrategy = GStorage.setting.get(
       StorageKeys.badgeStrategy,
       defaultValue: 'unread_count',
@@ -176,10 +183,32 @@ class _SettingsPageState extends State<SettingsPage> {
       StorageKeys.macosMaxFlingVelocity,
       macosMaxFlingVelocity,
     );
+    GStorage.setting.put(StorageKeys.appearanceMode, _appearanceMode);
     GStorage.setting.put(StorageKeys.badgeStrategy, _badgeStrategy);
     GStorage.setting.put('auto_retry_max_count', _autoRetryMaxCount);
 
     AppFeedback.success('配置已保存', '设置已更新');
+  }
+
+  void _setAppearanceMode(String value) {
+    final normalized = _normalizeAppearanceMode(value);
+    setState(() => _appearanceMode = normalized);
+    GStorage.setting.put(StorageKeys.appearanceMode, normalized);
+  }
+
+  static String _normalizeAppearanceMode(Object? value) {
+    return switch (value) {
+      'light' || 'dark' || 'system' => value as String,
+      _ => AppConstants.defaultAppearanceMode,
+    };
+  }
+
+  static String _appearanceModeLabel(String value) {
+    return switch (value) {
+      'light' => '浅色',
+      'dark' => '深色',
+      _ => '跟随系统',
+    };
   }
 
   void _clear() {
@@ -538,6 +567,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: '控制桌面角标、文章宽度、已读同步和后台任务容错。',
                         child: _MacSettingsGrid(
                           children: [
+                            _MacGlassSegmentedField<String>(
+                              value: _appearanceMode,
+                              labelFor: _appearanceModeLabel,
+                              options: const ['system', 'light', 'dark'],
+                              label: '外观模式',
+                              helper: '选择后立即生效；跟随系统会响应 macOS 外观变化',
+                              onChanged: _setAppearanceMode,
+                            ),
                             _MacGlassSelectField<String>(
                               value: _badgeStrategy,
                               labelFor: (value) => switch (value) {
@@ -1105,6 +1142,41 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             obscureText: _obscureSessionId,
             textInputAction: TextInputAction.next,
+          ),
+
+          const SizedBox(height: 32),
+
+          // 外观模式
+          Text(
+            '外观模式',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '控制应用使用浅色、深色，或跟随系统外观',
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+
+          DropdownButtonFormField<String>(
+            initialValue: _appearanceMode,
+            decoration: const InputDecoration(
+              labelText: '外观模式',
+              border: OutlineInputBorder(),
+              helperText: '选择后立即生效',
+            ),
+            items: const [
+              DropdownMenuItem(value: 'system', child: Text('跟随系统')),
+              DropdownMenuItem(value: 'light', child: Text('浅色')),
+              DropdownMenuItem(value: 'dark', child: Text('深色')),
+            ],
+            onChanged: (val) {
+              if (val != null) _setAppearanceMode(val);
+            },
           ),
 
           const SizedBox(height: 32),

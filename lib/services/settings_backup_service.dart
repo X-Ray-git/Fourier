@@ -46,6 +46,7 @@ abstract final class SettingsBackupService {
     StorageKeys.clientId,
     StorageKeys.sessionId,
     StorageKeys.readSyncWindowDays,
+    StorageKeys.appearanceMode,
     StorageKeys.badgeStrategy,
     StorageKeys.articleContentMaxWidth,
     StorageKeys.macosMaxFlingVelocity,
@@ -60,6 +61,7 @@ abstract final class SettingsBackupService {
     StorageKeys.sessionToken,
     StorageKeys.clientId,
     StorageKeys.sessionId,
+    StorageKeys.appearanceMode,
     StorageKeys.badgeStrategy,
     _deepseekApiKey,
     _translationPrompt,
@@ -201,6 +203,13 @@ abstract final class SettingsBackupService {
   }
 
   static dynamic _normalizeValue(String key, Object? value) {
+    if (key == StorageKeys.appearanceMode) {
+      if (value == 'system' || value == 'light' || value == 'dark') {
+        return value;
+      }
+      throw FormatException('$key 必须是 system、light 或 dark');
+    }
+
     if (_stringKeys.contains(key) ||
         key.endsWith('model') ||
         key.endsWith('reasoning_effort')) {

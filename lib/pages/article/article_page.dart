@@ -1291,8 +1291,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   }),
                 ),
 
-                // 底部间距
-                const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+                // 底部间距：移动端需要避让右下角 FAB，macOS 仅保留小的视觉间距。
+                SliverPadding(
+                  padding: EdgeInsets.only(bottom: Platform.isMacOS ? 16 : 80),
+                ),
               ],
             ),
           ),

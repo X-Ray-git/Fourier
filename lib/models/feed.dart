@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../utils/html_entity_utils.dart';
 import '../utils/source_taxonomy.dart';
 
 class FeedModel {
@@ -23,8 +24,8 @@ class FeedModel {
     final feeds = json['feeds'] as Map<String, dynamic>? ?? {};
     return FeedModel(
       feedId: json['feedId'] as String? ?? '',
-      title: feeds['title'] as String? ?? '?',
-      category: json['category'] as String?,
+      title: HtmlEntityUtils.decodeText(feeds['title'] as String? ?? '?'),
+      category: HtmlEntityUtils.decodeNullableText(json['category'] as String?),
       view: json['view'] as int?,
       url: feeds['url'] as String?,
       image: feeds['image'] as String?,
@@ -34,8 +35,10 @@ class FeedModel {
   factory FeedModel.fromInboxJson(Map<String, dynamic> json) {
     return FeedModel(
       feedId: (json['id'] as String?) ?? (json['inboxId'] as String? ?? ''),
-      title: SourceTaxonomy.inboxDisplayTitle(json),
-      category: SourceTaxonomy.inboxShortLabel(json),
+      title: HtmlEntityUtils.decodeText(SourceTaxonomy.inboxDisplayTitle(json)),
+      category: HtmlEntityUtils.decodeText(
+        SourceTaxonomy.inboxShortLabel(json),
+      ),
       view: 2,
       url: json['url'] as String?,
       image: json['image'] as String?,

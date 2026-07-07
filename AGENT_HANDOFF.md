@@ -7561,3 +7561,131 @@ continuous corner：
 
 - `AGENT_HANDOFF.md` 的 Automated Release Footprint 仍会把真实换行转义成 `\n` 记录在单行命令里，这是文档展示需要，和 release notes/tag annotation 的真实换行不是一回事。
 - 后续不要再改回自动转换，除非有更明确的 escaping 规则和测试覆盖。
+
+## 161. macOS 正文底部留白与纯文本 HTML entity 解码（2026-07-07）
+
+本节记录两组小修，二者都来自用户运行验证时发现的具体体验问题。当前尚未发布 tag/release。
+
+### 161.1 macOS 文章详情底部留白
+
+背景：
+
+- 用户指出：手机端文章详情底部空出空间主要是为了避让右下角 FAB；macOS 文章详情没有这个 FAB，因此不应沿用同样大的底部空白。
+- 讨论确认后，本轮只调整文章详情正文尾部的 trailing spacer，不改变正文布局结构、滚动控制、目录定位或移动端避让逻辑。
+
+实现：
+
+- `lib/pages/article/article_page.dart`
+  - 原来正文 `CustomScrollView` 尾部固定：
+    - `SliverPadding(padding: EdgeInsets.only(bottom: 80))`
+  - 现在改为平台分支：
+    - macOS：`16`
+    - 非 macOS：`80`
+  - 注释明确：移动端需要避让右下角 FAB，macOS 仅保留小的视觉间距。
+
+取舍：
+
+- 不把 macOS 底部留白降为 0，因为文章滚动到底部时完全贴边会显得拥挤，也不利于与当前 macOS 外框/内边距语言保持一致。
+- 不改 Android/iOS。移动端仍保留 `80`，避免正文末尾被右下角按钮遮住。
+- 不改文章详情的 `Column` 正文架构；第 156 节关于目录定位、选择、图片生命周期和滚动稳定性的取舍仍有效。
+
+运行验证重点：
+
+- macOS：打开任意长文并滚到底部，确认末尾不再出现移动端那样的大空白，但仍有轻微呼吸感。
+- Android：如果同步验证，确认末尾仍能避开右下角 FAB，不被按钮遮挡。
+
+### 161.2 普通文本字段显示 `&amp;` 等 HTML entity
+
+背景：
+
+- 用户反馈 macOS 仍有位置显示 `&amp;` 这类符号。
+- 定位后确认：问题不是 macOS 渲染器导致，而是 API/LLM 返回的某些“纯文本字段”本身包含 HTML entity。
+- 正文 HTML、目录标题等路径多数已经通过 HTML parser 或 HTML renderer，会自然还原 entity；问题集中在普通 `Text(...)` 路径：
+  - 文章卡片标题；
+  - 文章详情标题；
+  - macOS 侧边栏订阅源标题；
+  - 时间线 header 的订阅源标题；
+  - 后台任务等使用 `article.title` / `feed.title` 的位置。
+- 用户明确：不需要处理过往缓存文章。因此本轮不做缓存迁移，也不在 `fromCache` 中解码。
+
+实现：
+
+- 新增 `lib/utils/html_entity_utils.dart`
+  - `HtmlEntityUtils.decodeText(String value)`
+  - `HtmlEntityUtils.decodeNullableText(String? value)`
+  - 只在字符串包含 `&` 时才进入替换逻辑，普通文本直接原样返回。
+  - 支持常见命名实体：
+    - `amp`, `lt`, `gt`, `quot`, `apos`, `nbsp`, `ndash`, `mdash`, `hellip`, `lsquo`, `rsquo`, `ldquo`, `rdquo`, `copy`, `reg`, `trade`
+  - 支持十进制/十六进制数字实体，如 `&#8211;`、`&#x26;`。
+  - 未知或非法实体保持原样，避免误改内容。
+  - 没有使用 `html_parser.parseFragment` 做纯文本解码，原因是纯文本里可能真实包含 `<...>`；用 HTML parser 可能把这类文本误当标签吞掉。
+- `lib/models/article.dart`
+  - `ArticleModel.fromEntryJson`
+    - 解码新拉取文章的 `title`、`feedTitle`、`author`、`subscriptionCategory`。
+    - 不解码 `url`、`content`、`imageUrl`。
+  - `ArticleModel.fromInboxJson`
+    - 解码 `title`、`feedTitle`、`subscriptionCategory`。
+  - `ArticleModel.fromCache`
+    - 刻意不改，避免处理旧缓存文章。
+- `lib/models/feed.dart`
+  - `FeedModel.fromJson`
+    - 解码新拉取订阅源的 `title`、`category`。
+    - 不解码 `url`、`image`。
+  - `FeedModel.fromInboxJson`
+    - 解码 inbox title/category。
+  - `FeedModel.fromCache`
+    - 刻意不改。
+- `lib/services/translation_service.dart`
+  - 单块翻译和分块翻译的 `translated_title` 写入前都会经过 `HtmlEntityUtils.decodeText`。
+  - `translated_html` 不解码，继续交给 HTML 清洗/渲染链路处理。
+
+取舍与边界：
+
+- 不做全局 `replaceAll('&amp;', '&')`，因为那会漏掉数字实体，也容易在错误位置误改。
+- 不处理正文 HTML、URL、图片地址：
+  - 正文 HTML 需要保留标签结构和属性，不应作为纯文本整体解码。
+  - URL 查询参数里的 `&amp;` 如果来自 HTML attribute，属于正文 HTML 解析/链接规范化链路的问题，不应在模型层处理。
+- 不处理旧缓存：
+  - 用户明确旧文章暂时不用管。
+  - 如果后续确实需要修旧缓存，应单独设计一次性迁移或显示层兼容，不能混进本轮小修。
+- 新工具没有依赖 `package:html/src/*` 内部 API，避免依赖私有实现。
+
+测试：
+
+- 新增 `test/html_entity_utils_test.dart`
+  - 覆盖常见命名实体、数字实体；
+  - 覆盖纯文本里的 `<` / `>` 不被吞掉。
+- 新增 `test/feed_model_test.dart`
+  - 覆盖订阅源标题和分类解码，同时确认 URL 不被解码。
+- 扩展 `test/article_model_test.dart`
+  - 覆盖文章标题、订阅源标题、作者、分类解码；
+  - 确认 `url` 和 `content` 保持原样。
+
+验证状态：
+
+- `dart format` 已覆盖本轮相关文件。
+- `flutter test test/html_entity_utils_test.dart test/article_model_test.dart test/feed_model_test.dart` 曾通过。
+- `flutter analyze lib/utils/html_entity_utils.dart lib/models/article.dart lib/models/feed.dart lib/services/translation_service.dart test/html_entity_utils_test.dart test/article_model_test.dart test/feed_model_test.dart` 曾通过。
+- 随后仅做了一处一致性微调：命名实体 `ndash`/`mdash` 等改为标准 Unicode escape，而不是 ASCII 近似值。
+- 微调后因 Codex 提升权限用量限制，未能再次执行 `flutter test` / `flutter analyze`；已执行 `dart format` 与 `git diff --check`，均通过。
+
+运行验证重点：
+
+- 新拉取标题中含 `&amp;`、`&quot;`、`&#...;` 的文章时，时间线卡片、文章详情标题、后台任务等普通文本位置应显示正常字符。
+- macOS 侧边栏和时间线 header 中含 `&amp;` 的订阅源名应显示正常字符。
+- 触发翻译后，如果 `translated_title` 含 entity，应显示解码后的标题。
+- 正文 HTML 排版、链接点击、图片显示、URL 文本不应因本轮修改发生变化。
+
+Git 记录提示：
+
+- 本节应随同对应代码提交保存，确保后续 agent 能从文档还原本次讨论和取舍。
+- 本轮涉及文件包括：
+  - `lib/pages/article/article_page.dart`
+  - `lib/models/article.dart`
+  - `lib/models/feed.dart`
+  - `lib/services/translation_service.dart`
+  - `lib/utils/html_entity_utils.dart`
+  - `test/article_model_test.dart`
+  - `test/feed_model_test.dart`
+  - `test/html_entity_utils_test.dart`
+  - `AGENT_HANDOFF.md`

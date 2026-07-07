@@ -1,4 +1,5 @@
 import '../utils/source_taxonomy.dart';
+import '../utils/html_entity_utils.dart';
 
 class ArticleModel {
   final String entryId;
@@ -61,16 +62,20 @@ class ArticleModel {
     return ArticleModel(
       entryId: entry['id'] as String? ?? '',
       feedId: feed['id'] as String? ?? '',
-      feedTitle: feedTitle ?? feed['title'] as String? ?? '?',
+      feedTitle: HtmlEntityUtils.decodeText(
+        feedTitle ?? feed['title'] as String? ?? '?',
+      ),
       feedImage: feedImage ?? feed['image'] as String?,
-      title: entry['title'] as String? ?? '?',
+      title: HtmlEntityUtils.decodeText(entry['title'] as String? ?? '?'),
       url: entry['url'] as String? ?? '',
       content: entry['content'] as String?,
       publishedAt: entry['publishedAt'] as String? ?? '',
       isRead: entry['read'] as bool? ?? false,
       category: category,
-      subscriptionCategory: subscriptionCategory ?? '',
-      author: entry['author'] as String?,
+      subscriptionCategory: HtmlEntityUtils.decodeText(
+        subscriptionCategory ?? '',
+      ),
+      author: HtmlEntityUtils.decodeNullableText(entry['author'] as String?),
       imageUrl: imageUrl,
       isRejectedByAi: false,
       filterReviewed: false,
@@ -85,7 +90,9 @@ class ArticleModel {
     String? subscriptionCategory,
   }) {
     final entry = item['entries'] as Map<String, dynamic>? ?? {};
-    final sourceTitle = feedTitle ?? SourceTaxonomy.inboxDisplayTitle(item);
+    final sourceTitle = HtmlEntityUtils.decodeText(
+      feedTitle ?? SourceTaxonomy.inboxDisplayTitle(item),
+    );
     return ArticleModel(
       entryId: entry['id'] as String? ?? '',
       feedId:
@@ -94,14 +101,15 @@ class ArticleModel {
           '',
       feedTitle: sourceTitle,
       feedImage: feedImage ?? item['image'] as String?,
-      title: entry['title'] as String? ?? '?',
+      title: HtmlEntityUtils.decodeText(entry['title'] as String? ?? '?'),
       url: entry['url'] as String? ?? '',
       content: entry['content'] as String?,
       publishedAt: entry['publishedAt'] as String? ?? '',
       isRead: entry['read'] as bool? ?? false,
       category: 'inbox',
-      subscriptionCategory:
-          subscriptionCategory ?? SourceTaxonomy.inboxShortLabel(item),
+      subscriptionCategory: HtmlEntityUtils.decodeText(
+        subscriptionCategory ?? SourceTaxonomy.inboxShortLabel(item),
+      ),
       isRejectedByAi: false,
       filterReviewed: false,
       filteredAt: null,

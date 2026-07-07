@@ -54,10 +54,10 @@ class Request {
       dio.interceptors.add(
         LogInterceptor(
           request: true,
-          requestHeader: true,
-          requestBody: true,
+          requestHeader: false,
+          requestBody: false,
           responseHeader: false,
-          responseBody: true,
+          responseBody: false,
           error: true,
         ),
       );

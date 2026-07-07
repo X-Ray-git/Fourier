@@ -2189,7 +2189,7 @@ class _MacGlassSelectFieldState<T> extends State<_MacGlassSelectField<T>> {
 
   @override
   void dispose() {
-    _hideOptions();
+    _hideOptions(rebuild: false);
     super.dispose();
   }
 
@@ -2283,10 +2283,10 @@ class _MacGlassSelectFieldState<T> extends State<_MacGlassSelectField<T>> {
     if (mounted) setState(() {});
   }
 
-  void _hideOptions() {
+  void _hideOptions({bool rebuild = true}) {
     _overlayEntry?.remove();
     _overlayEntry = null;
-    if (mounted) setState(() {});
+    if (rebuild && mounted) setState(() {});
   }
 
   @override

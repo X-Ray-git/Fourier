@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -12,6 +14,7 @@ import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/app_glass.dart';
+import '../../common/liquid_glass/liquid_glass.dart' as glass;
 
 import '../../http/init.dart';
 import '../../models/article.dart';
@@ -981,6 +984,8 @@ class _MacTimelineAppBar extends StatelessWidget
                 controller.selectedCategory.value = null;
               },
             ),
+          _MacTimelineSortButton(controller: controller, colorScheme: cs),
+          const SizedBox(width: 10),
           _MacSyncButton(controller: controller, colorScheme: cs),
           const SizedBox(width: 8),
         ],
@@ -1155,6 +1160,582 @@ class _MacTimelineModeSegmentState extends State<_MacTimelineModeSegment> {
   }
 }
 
+class _MacTimelineSortButton extends StatefulWidget {
+  final TimelineController controller;
+  final ColorScheme colorScheme;
+
+  const _MacTimelineSortButton({
+    required this.controller,
+    required this.colorScheme,
+  });
+
+  @override
+  State<_MacTimelineSortButton> createState() => _MacTimelineSortButtonState();
+}
+
+class _MacTimelineSortButtonState extends State<_MacTimelineSortButton>
+    with SingleTickerProviderStateMixin {
+  static const double _buttonSize = 34;
+  static const double _panelWidth = 188;
+  static const double _panelHeight = 166;
+  static const glass.LiquidGlassSettings _sortGlassSettings =
+      glass.LiquidGlassSettings(
+        blur: 12,
+        thickness: 12,
+        glassColor: Color.fromRGBO(255, 255, 255, 0.14),
+        lightIntensity: 0.68,
+        ambientStrength: 0.38,
+        saturation: 1.18,
+        refractiveIndex: 0.62,
+        chromaticAberration: 0.0,
+      );
+
+  final _buttonKey = GlobalKey();
+  late final glass.GlassMorphController _morphController;
+  OverlayEntry? _overlayEntry;
+  bool _pressed = false;
+  bool _isMenuOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _morphController = glass.GlassMorphController(
+      vsync: this,
+      speed: glass.MorphSpeed.normal,
+    )..addListener(_handleMorphTick);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _morphController.setDisableAnimations(
+      MediaQuery.disableAnimationsOf(context),
+    );
+  }
+
+  @override
+  void dispose() {
+    _removeOverlay(immediate: true);
+    _morphController.dispose();
+    super.dispose();
+  }
+
+  void _handleMorphTick() {
+    _overlayEntry?.markNeedsBuild();
+    if (_overlayEntry == null ||
+        !_morphController.isClosing ||
+        _morphController.isShowing) {
+      return;
+    }
+
+    final entry = _overlayEntry;
+    _overlayEntry = null;
+    entry?.remove();
+    if (mounted) {
+      setState(() => _isMenuOpen = false);
+    } else {
+      _isMenuOpen = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final mode = widget.controller.selectedSortMode.value;
+      final selected = mode != TimelineSortMode.newest || _isMenuOpen;
+
+      return AppGlassTooltip(
+        message: '排序：${mode.label}',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onExit: (_) => setState(() => _pressed = false),
+          child: GestureDetector(
+            key: _buttonKey,
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapUp: (_) => setState(() => _pressed = false),
+            onTapCancel: () => setState(() => _pressed = false),
+            onTap: _toggleOverlay,
+            child: AnimatedScale(
+              scale: _pressed ? 0.96 : 1.0,
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
+              child: AppGlassSurface(
+                borderRadius: 999,
+                padding: EdgeInsets.zero,
+                tone: AppGlassTone.control,
+                nativeBackdrop: true,
+                interactive: true,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOutCubic,
+                  width: _buttonSize,
+                  height: _buttonSize,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: Colors.transparent,
+                  ),
+                  child: Icon(
+                    mode.icon,
+                    size: 18,
+                    color: selected
+                        ? widget.colorScheme.primary
+                        : widget.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  void _toggleOverlay() {
+    if (_overlayEntry != null) {
+      _removeOverlay();
+      return;
+    }
+    _showOverlay();
+  }
+
+  void _showOverlay() {
+    final renderObject = _buttonKey.currentContext?.findRenderObject();
+    final overlayState = Overlay.of(context);
+    final overlayBox = overlayState.context.findRenderObject() as RenderBox?;
+    if (renderObject is! RenderBox || overlayBox == null) return;
+
+    final buttonTopLeft = renderObject.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final buttonRight = buttonTopLeft.dx + renderObject.size.width;
+    final left = (buttonRight - _panelWidth)
+        .clamp(8.0, math.max(8.0, overlayBox.size.width - _panelWidth - 8))
+        .toDouble();
+    final top = buttonTopLeft.dy
+        .clamp(8.0, math.max(8.0, overlayBox.size.height - _panelHeight - 8))
+        .toDouble();
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _removeOverlay,
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              child: _MacTimelineSortOverlayPanel(
+                morphController: _morphController,
+                selected: widget.controller.selectedSortMode.value,
+                onClose: _removeOverlay,
+                onSelected: (mode) {
+                  widget.controller.setSortMode(mode);
+                  _removeOverlay();
+                },
+                colorScheme: widget.colorScheme,
+                glassSettings: _sortGlassSettings,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlayState.insert(_overlayEntry!);
+    setState(() => _isMenuOpen = true);
+    _morphController.open();
+  }
+
+  void _removeOverlay({bool immediate = false}) {
+    final entry = _overlayEntry;
+    if (entry == null) return;
+    if (immediate) {
+      entry.remove();
+      _overlayEntry = null;
+      _isMenuOpen = false;
+      return;
+    }
+
+    if (_morphController.isClosing) return;
+    _morphController.close();
+  }
+}
+
+class _MacTimelineSortOverlayPanel extends StatelessWidget {
+  final glass.GlassMorphController morphController;
+  final TimelineSortMode selected;
+  final ValueChanged<TimelineSortMode> onSelected;
+  final VoidCallback onClose;
+  final ColorScheme colorScheme;
+  final glass.LiquidGlassSettings glassSettings;
+
+  const _MacTimelineSortOverlayPanel({
+    required this.morphController,
+    required this.selected,
+    required this.onSelected,
+    required this.onClose,
+    required this.colorScheme,
+    required this.glassSettings,
+  });
+
+  static const double _buttonSize = 34;
+  static const double _panelWidth = 188;
+  static const double _panelHeight = 166;
+
+  @override
+  Widget build(BuildContext context) {
+    final rawValue = morphController.value;
+    final effectiveValue =
+        morphController.isClosing && morphController.hasHandedOff
+        ? 0.0
+        : rawValue;
+    final clampedValue = effectiveValue.clamp(0.0, 1.0);
+    final baseMorphT = morphController.isClosing
+        ? _anchoredCloseSettleT(clampedValue)
+        : Curves.linearToEaseOut.transform(clampedValue);
+    final elasticTail = morphController.isClosing
+        ? _anchoredCloseTail(clampedValue)
+        : _anchoredOpenTail(clampedValue);
+    final morphMin = morphController.isClosing ? -0.014 : 0.0;
+    final morphT = (baseMorphT + elasticTail).clamp(morphMin, 1.024);
+    final currentWidth = lerpDouble(_buttonSize, _panelWidth, morphT)!;
+    final currentHeight = lerpDouble(_buttonSize, _panelHeight, morphT)!;
+    final maxRadius = math.min(currentWidth, currentHeight) / 2;
+    final radiusT = Curves.easeOutCubic.transform(morphT.clamp(0.0, 1.0));
+    final currentRadius = lerpDouble(maxRadius, 16, radiusT)!;
+    final contentOpacity = ((clampedValue - 0.82) / 0.18).clamp(0.0, 1.0);
+    final showContent = clampedValue > 0.82 && !morphController.isClosing;
+    final showIcon = clampedValue < 0.34;
+    final iconOpacity = (1 - clampedValue / 0.34).clamp(0.0, 1.0);
+
+    return Material(
+      color: Colors.transparent,
+      child: SizedBox(
+        width: _panelWidth,
+        height: _panelHeight,
+        child: glass.LiquidGlassLayer(
+          settings: glassSettings,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                top: 0,
+                right: 0,
+                child: glass.GlassContainer(
+                  width: currentWidth,
+                  height: currentHeight,
+                  useOwnLayer: false,
+                  settings: glassSettings,
+                  quality: glass.GlassQuality.standard,
+                  allowElevation: false,
+                  clipBehavior: Clip.antiAlias,
+                  shape: glass.LiquidRoundedSuperellipse(
+                    borderRadius: currentRadius,
+                  ),
+                  child: Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      if (showIcon)
+                        Opacity(
+                          opacity: iconOpacity,
+                          child: SizedBox(
+                            width: _buttonSize,
+                            height: _buttonSize,
+                            child: Icon(
+                              selected.icon,
+                              size: 18,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      if (showContent)
+                        Opacity(
+                          opacity: contentOpacity,
+                          child: IgnorePointer(
+                            ignoring: contentOpacity < 0.95,
+                            child: _MacTimelineSortPanelContent(
+                              selected: selected,
+                              onSelected: onSelected,
+                              onClose: onClose,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _anchoredOpenTail(double t) {
+    const start = 0.42;
+    if (t <= start || t >= 1.0) return 0.0;
+    final u = ((t - start) / (1.0 - start)).clamp(0.0, 1.0);
+    return math.sin(u * math.pi) * 0.028;
+  }
+
+  double _anchoredCloseSettleT(double t) {
+    final progress = (1.0 - t).clamp(0.0, 1.0);
+    const omega = 5.0;
+    final settled =
+        1.0 - (1.0 + omega * progress) * math.exp(-omega * progress);
+    final normalizer = 1.0 - (1.0 + omega) * math.exp(-omega);
+    return (1.0 - settled / normalizer).clamp(0.0, 1.0);
+  }
+
+  double _anchoredCloseTail(double t) {
+    const end = 0.24;
+    if (t <= 0.0 || t >= end) return 0.0;
+    final u = (t / end).clamp(0.0, 1.0);
+    return -math.sin(u * math.pi) * 0.032;
+  }
+}
+
+class _MacTimelineSortPanelContent extends StatelessWidget {
+  final TimelineSortMode selected;
+  final ValueChanged<TimelineSortMode> onSelected;
+  final VoidCallback onClose;
+
+  const _MacTimelineSortPanelContent({
+    required this.selected,
+    required this.onSelected,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: _MacTimelineSortOverlayPanel._panelWidth,
+      height: _MacTimelineSortOverlayPanel._panelHeight,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
+            child: Row(
+              children: [
+                Icon(Icons.sort_rounded, size: 17, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '排序',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+                _MacTimelineSortCloseButton(onTap: onClose),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.28)),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
+              child: Column(
+                children: [
+                  for (final mode in TimelineSortMode.values)
+                    _MacTimelineSortOption(
+                      mode: mode,
+                      selected: mode == selected,
+                      onTap: () => onSelected(mode),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MacTimelineSortOption extends StatefulWidget {
+  final TimelineSortMode mode;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MacTimelineSortOption({
+    required this.mode,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  State<_MacTimelineSortOption> createState() => _MacTimelineSortOptionState();
+}
+
+class _MacTimelineSortOptionState extends State<_MacTimelineSortOption> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final neutralOverlay = isDark ? Colors.white : Colors.black;
+    final foreground = widget.selected ? cs.primary : cs.onSurface;
+    final backgroundColor = widget.selected
+        ? cs.primary.withValues(alpha: isDark ? 0.20 : 0.12)
+        : _pressed
+        ? neutralOverlay.withValues(alpha: isDark ? 0.12 : 0.08)
+        : _hovered
+        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.055)
+        : Colors.transparent;
+    final borderColor = widget.selected
+        ? cs.primary.withValues(alpha: isDark ? 0.24 : 0.18)
+        : _hovered
+        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.06)
+        : Colors.transparent;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: AnimatedScale(
+          scale: _pressed ? 0.985 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: _pressed
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            height: 32,
+            margin: const EdgeInsets.symmetric(vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: borderColor, width: 0.5),
+            ),
+            child: Row(
+              children: [
+                Icon(widget.mode.icon, size: 17, color: foreground),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.mode.label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: widget.selected
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                      color: foreground,
+                    ),
+                  ),
+                ),
+                if (widget.selected)
+                  Icon(Icons.check_rounded, size: 17, color: cs.primary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MacTimelineSortCloseButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _MacTimelineSortCloseButton({required this.onTap});
+
+  @override
+  State<_MacTimelineSortCloseButton> createState() =>
+      _MacTimelineSortCloseButtonState();
+}
+
+class _MacTimelineSortCloseButtonState
+    extends State<_MacTimelineSortCloseButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final overlay = isDark ? Colors.white : Colors.black;
+    final backgroundColor = _pressed
+        ? overlay.withValues(alpha: isDark ? 0.14 : 0.08)
+        : _hovered
+        ? overlay.withValues(alpha: isDark ? 0.09 : 0.055)
+        : Colors.transparent;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: AnimatedScale(
+          scale: _pressed ? 0.96 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: _pressed
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Icon(
+              Icons.keyboard_arrow_up_rounded,
+              size: 18,
+              color: cs.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+extension _TimelineSortModeUi on TimelineSortMode {
+  String get label => switch (this) {
+    TimelineSortMode.newest => '最新优先',
+    TimelineSortMode.longest => '长文优先',
+    TimelineSortMode.shortest => '短文优先',
+  };
+
+  IconData get icon => switch (this) {
+    TimelineSortMode.newest => Icons.schedule_rounded,
+    TimelineSortMode.longest => Icons.vertical_align_bottom_rounded,
+    TimelineSortMode.shortest => Icons.vertical_align_top_rounded,
+  };
+}
+
 class _MacSyncButton extends StatefulWidget {
   final TimelineController controller;
   final ColorScheme colorScheme;
@@ -1177,14 +1758,20 @@ class _MacSyncButtonState extends State<_MacSyncButton>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _syncSub = widget.controller.isSyncing.listen((syncing) {
-      if (syncing) {
+    _syncSub = widget.controller.isSyncing.listen(_syncSpinAnimation);
+    _syncSpinAnimation(widget.controller.isSyncing.value);
+  }
+
+  void _syncSpinAnimation(bool syncing) {
+    if (syncing) {
+      if (!_spinController.isAnimating) {
         _spinController.repeat();
-      } else {
-        _spinController.stop();
-        _spinController.reset();
       }
-    });
+      return;
+    }
+
+    _spinController.stop();
+    _spinController.reset();
   }
 
   @override

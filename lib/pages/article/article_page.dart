@@ -2192,7 +2192,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = <Widget>[
-      _MacGlassActionChip(
+      _MacPillActionChip(
         icon: showTranslation ? Icons.translate : Icons.translate_outlined,
         label: isPending
             ? '翻译中...'
@@ -2208,7 +2208,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
             ? () => controller.showTranslation.toggle()
             : () => controller.translateArticle(),
       ),
-      _MacGlassActionChip(
+      _MacPillActionChip(
         icon: hasSummary && showSummary
             ? Icons.summarize
             : Icons.summarize_outlined,
@@ -2227,7 +2227,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
             : () => controller.summarizeArticle(),
       ),
       if (isFetchingReadability)
-        const _MacGlassActionChip(
+        const _MacPillActionChip(
           icon: Icons.sync,
           label: '加载长文中...',
           active: true,
@@ -2252,13 +2252,13 @@ class _MacGlassToolbarRow extends StatelessWidget {
   }
 }
 
-class _MacGlassActionChip extends StatefulWidget {
+class _MacPillActionChip extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback? onTap;
 
-  const _MacGlassActionChip({
+  const _MacPillActionChip({
     required this.icon,
     required this.label,
     required this.active,
@@ -2266,10 +2266,10 @@ class _MacGlassActionChip extends StatefulWidget {
   });
 
   @override
-  State<_MacGlassActionChip> createState() => _MacGlassActionChipState();
+  State<_MacPillActionChip> createState() => _MacPillActionChipState();
 }
 
-class _MacGlassActionChipState extends State<_MacGlassActionChip> {
+class _MacPillActionChipState extends State<_MacPillActionChip> {
   bool _hovered = false;
   bool _pressed = false;
 
@@ -2278,11 +2278,14 @@ class _MacGlassActionChipState extends State<_MacGlassActionChip> {
     final cs = Theme.of(context).colorScheme;
     final enabled = widget.onTap != null;
     final foreground = widget.active ? cs.primary : cs.onSurfaceVariant;
-    final overlay = widget.active
-        ? appGlassActiveControlFill(context, accentAlpha: 0.04)
+    final background = widget.active
+        ? cs.primary.withValues(alpha: 0.10)
         : _hovered
-        ? cs.onSurface.withValues(alpha: 0.07)
-        : Colors.transparent;
+        ? cs.onSurface.withValues(alpha: 0.06)
+        : cs.surfaceContainerHighest.withValues(alpha: 0.58);
+    final borderColor = widget.active
+        ? cs.primary.withValues(alpha: 0.22)
+        : cs.outlineVariant.withValues(alpha: _hovered ? 0.78 : 0.52);
 
     return SelectionContainer.disabled(
       child: MouseRegion(
@@ -2304,41 +2307,32 @@ class _MacGlassActionChipState extends State<_MacGlassActionChip> {
             scale: _pressed ? 0.975 : 1.0,
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOutCubic,
-            child: AppGlassSurface(
-              borderRadius: 999,
-              padding: EdgeInsets.zero,
-              tone: AppGlassTone.control,
-              interactive: enabled,
-              useOwnLayer: false,
-              child: AnimatedContainer(
-                duration: _pressed
-                    ? Duration.zero
-                    : const Duration(milliseconds: 150),
-                curve: Curves.easeOutCubic,
-                constraints: const BoxConstraints(minHeight: 32),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 11,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: overlay,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(widget.icon, size: 16, color: foreground),
-                    const SizedBox(width: 5),
-                    Text(
-                      widget.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: foreground,
-                      ),
+            child: AnimatedContainer(
+              duration: _pressed
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              constraints: const BoxConstraints(minHeight: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(widget.icon, size: 16, color: foreground),
+                  const SizedBox(width: 5),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

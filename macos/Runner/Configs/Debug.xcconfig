@@ -1,2 +1,7 @@
 #include "../../Flutter/Flutter-Debug.xcconfig"
 #include "Warnings.xcconfig"
+
+// Keep CocoaPods framework signing serial in local debug builds. On recent
+// macOS/Xcode combinations parallel ad-hoc signing can be killed without a
+// useful task-level error, which leaves `flutter run -d macos` unusable.
+COCOAPODS_PARALLEL_CODE_SIGN=false

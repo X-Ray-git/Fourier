@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -49,6 +50,8 @@ class TimelinePage extends StatefulWidget {
 }
 
 class _TimelinePageState extends State<TimelinePage> {
+  static const double _defaultMacTimelineItemExtent = 124;
+
   late final TimelineController controller;
   final ScrollController _scrollController = ScrollController();
   final _refreshKey = GlobalKey<custom_refresh.RefreshIndicatorState>();
@@ -60,6 +63,7 @@ class _TimelinePageState extends State<TimelinePage> {
   DateTime? _lastArticleTapAt;
   final Map<String, GlobalKey> _itemKeys = {};
   final Map<String, GlobalKey> _removingItemKeys = {};
+  double _estimatedMacTimelineItemExtent = _defaultMacTimelineItemExtent;
   bool _isHandlingMacReadShortcut = false;
   Worker? _undoRestoreWorker;
 
@@ -183,11 +187,101 @@ class _TimelinePageState extends State<TimelinePage> {
 
   void _scrollToArticle(String entryId) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _itemKeys[entryId];
-      if (key != null && key.currentContext != null) {
-        ScrollUtils.ensureVisible(key.currentContext!);
-      }
+      if (!mounted) return;
+      if (_ensureBuiltArticleVisible(entryId)) return;
+      if (!Platform.isMacOS) return;
+      unawaited(_scrollToVirtualizedArticle(entryId));
     });
+  }
+
+  bool _ensureBuiltArticleVisible(String entryId, {int durationMs = 250}) {
+    final context = _itemKeys[entryId]?.currentContext;
+    if (context == null) return false;
+
+    _updateEstimatedMacTimelineItemExtent(context);
+    ScrollUtils.ensureVisible(context, durationMs: durationMs);
+    return true;
+  }
+
+  Future<void> _scrollToVirtualizedArticle(String entryId) async {
+    if (!_scrollController.hasClients) return;
+
+    final targetIndex = controller.articles.indexWhere(
+      (article) => article.entryId == entryId,
+    );
+    if (targetIndex < 0) return;
+
+    final position = _scrollController.position;
+    final targetTop = _estimateMacTimelineArticleTop(targetIndex);
+    final targetOffset =
+        targetTop -
+        (position.viewportDimension - _estimatedMacTimelineItemExtent) / 2;
+    final clampedOffset = targetOffset.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+
+    // 粗定位可能跨越很长距离。用动画滚过去会和右侧文章切换同时竞争
+    // UI isolate，导致明显掉帧；先 jump 到附近，再做短距离精确校正。
+    _scrollController.jumpTo(clampedOffset.toDouble());
+
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!mounted) return;
+
+    if (_ensureBuiltArticleVisible(entryId, durationMs: 180)) return;
+
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return;
+    _ensureBuiltArticleVisible(entryId, durationMs: 160);
+  }
+
+  double _estimateMacTimelineArticleTop(int targetIndex) {
+    final articles = controller.articles;
+    final indexByEntryId = <String, int>{
+      for (var i = 0; i < articles.length; i++) articles[i].entryId: i,
+    };
+
+    double? closestKnownTop;
+    int? closestKnownIndex;
+    var closestDistance = articles.length + 1;
+
+    for (final entry in _itemKeys.entries) {
+      final context = entry.value.currentContext;
+      final builtIndex = indexByEntryId[entry.key];
+      if (context == null || builtIndex == null) continue;
+
+      _updateEstimatedMacTimelineItemExtent(context);
+      final renderObject = context.findRenderObject();
+      if (renderObject == null) continue;
+      final viewport = RenderAbstractViewport.maybeOf(renderObject);
+      if (viewport == null) continue;
+
+      final distance = (builtIndex - targetIndex).abs();
+      if (distance >= closestDistance) continue;
+
+      closestDistance = distance;
+      closestKnownIndex = builtIndex;
+      closestKnownTop = viewport.getOffsetToReveal(renderObject, 0.0).offset;
+    }
+
+    if (closestKnownTop != null && closestKnownIndex != null) {
+      return closestKnownTop +
+          (targetIndex - closestKnownIndex) * _estimatedMacTimelineItemExtent;
+    }
+
+    return targetIndex * _estimatedMacTimelineItemExtent;
+  }
+
+  void _updateEstimatedMacTimelineItemExtent(BuildContext context) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return;
+
+    final height = renderObject.size.height;
+    if (height < 48 || height > 260) return;
+
+    _estimatedMacTimelineItemExtent =
+        _estimatedMacTimelineItemExtent * 0.82 + height * 0.18;
   }
 
   bool get _isActiveMacTimeline {

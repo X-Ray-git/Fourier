@@ -22,8 +22,6 @@ import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/article_state_notifier.dart';
-import '../../services/feed_readability_settings_service.dart';
-import '../../services/feed_translation_settings_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
@@ -978,7 +976,6 @@ class _MacTimelineAppBar extends StatelessWidget
 
       String title = '时间线';
       String? subtitle;
-      Widget? trailing;
 
       if (feedId != null && Get.isRegistered<SubscriptionsController>()) {
         final sub = Get.find<SubscriptionsController>();
@@ -988,37 +985,6 @@ class _MacTimelineAppBar extends StatelessWidget
           final unread = controller.articles.where((a) => !a.isRead).length;
           final total = controller.articles.length;
           subtitle = unread > 0 ? '$unread 篇未读 · $total 篇当前列表' : '$total 篇当前列表';
-          trailing = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _FeedToggleIcon(
-                icon: Icons.article_outlined,
-                activeIcon: Icons.article,
-                enabled:
-                    FeedReadabilitySettingsService.isAutoReadabilityEnabled(
-                      feedId,
-                    ),
-                tooltip: '自动拉取全文',
-                onToggle: () {
-                  FeedReadabilitySettingsService.toggleAutoReadability(feedId);
-                },
-                colorScheme: cs,
-              ),
-              const SizedBox(width: 2),
-              _FeedToggleIcon(
-                icon: Icons.translate_outlined,
-                activeIcon: Icons.translate,
-                enabled: FeedTranslationSettingsService.isAutoTranslateEnabled(
-                  feedId,
-                ),
-                tooltip: '自动翻译',
-                onToggle: () {
-                  FeedTranslationSettingsService.toggleAutoTranslate(feedId);
-                },
-                colorScheme: cs,
-              ),
-            ],
-          );
         }
       } else if (category != null) {
         title = category;
@@ -1068,16 +1034,6 @@ class _MacTimelineAppBar extends StatelessWidget
             _MacTimelineModeToggle(controller: controller),
             const SizedBox(width: 6),
           ],
-          ?trailing,
-          if (feedId != null)
-            AppGlassIconButton(
-              icon: Icons.close_rounded,
-              tooltip: '清除筛选',
-              onPressed: () {
-                controller.selectedFeedId.value = null;
-                controller.selectedCategory.value = null;
-              },
-            ),
           _MacTimelineSortButton(controller: controller, colorScheme: cs),
           const SizedBox(width: 10),
           _MacSyncButton(controller: controller, colorScheme: cs),
@@ -1918,58 +1874,5 @@ class _MacSyncButtonState extends State<_MacSyncButton>
         ),
       );
     });
-  }
-}
-
-/// macOS 时间线 AppBar 内的小型开关图标（带本地状态）
-class _FeedToggleIcon extends StatefulWidget {
-  final IconData icon;
-  final IconData activeIcon;
-  final bool enabled;
-  final String tooltip;
-  final VoidCallback onToggle;
-  final ColorScheme colorScheme;
-
-  const _FeedToggleIcon({
-    required this.icon,
-    required this.activeIcon,
-    required this.enabled,
-    required this.tooltip,
-    required this.onToggle,
-    required this.colorScheme,
-  });
-
-  @override
-  State<_FeedToggleIcon> createState() => _FeedToggleIconState();
-}
-
-class _FeedToggleIconState extends State<_FeedToggleIcon> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = widget.enabled;
-  }
-
-  @override
-  void didUpdateWidget(covariant _FeedToggleIcon oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.enabled != widget.enabled) {
-      _enabled = widget.enabled;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AppGlassIconButton(
-      icon: _enabled ? widget.activeIcon : widget.icon,
-      tooltip: widget.tooltip,
-      selected: _enabled,
-      onPressed: () {
-        widget.onToggle();
-        setState(() => _enabled = !_enabled);
-      },
-    );
   }
 }

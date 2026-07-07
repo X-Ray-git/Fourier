@@ -2080,12 +2080,15 @@ class _ToolbarRow extends StatelessWidget {
       final isPending =
           (rec?.isPending ?? false) || controller.isTranslating.value;
       final hasTranslation = controller.isTranslated.value;
-      final isSummarizing = controller.isSummarizing.value;
       final summaryRecord = SummaryService.recordOf(controller.article.entryId);
+      final isSummaryPending =
+          (summaryRecord?.isPending ?? false) || controller.isSummarizing.value;
       final summary =
           (summaryRecord?.summaryText ?? controller.summaryText.value).trim();
       final hasSummary =
-          summaryRecord?.isSummarized == true && summary.isNotEmpty;
+          summary.isNotEmpty &&
+          ((summaryRecord?.isSummarized ?? false) ||
+              controller.isSummarized.value);
       final isFetchingReadability = controller.isFetchingReadability.value;
       final showTranslation = controller.showTranslation.value;
       final showSummary = controller.showSummary.value;
@@ -2096,7 +2099,7 @@ class _ToolbarRow extends StatelessWidget {
           isPending: isPending,
           hasTranslation: hasTranslation,
           showTranslation: showTranslation,
-          isSummarizing: isSummarizing,
+          isSummaryPending: isSummaryPending,
           hasSummary: hasSummary,
           showSummary: showSummary,
           isFetchingReadability: isFetchingReadability,
@@ -2131,15 +2134,15 @@ class _ToolbarRow extends StatelessWidget {
                 icon: hasSummary && controller.showSummary.value
                     ? Icons.summarize
                     : Icons.summarize_outlined,
-                label: isSummarizing
+                label: isSummaryPending
                     ? '摘要…'
                     : hasSummary
                     ? '已摘要'
                     : '摘要',
                 active:
-                    isSummarizing ||
+                    isSummaryPending ||
                     (hasSummary && controller.showSummary.value),
-                onTap: isSummarizing
+                onTap: isSummaryPending
                     ? null
                     : hasSummary
                     ? () => controller.showSummary.toggle()
@@ -2169,7 +2172,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
   final bool isPending;
   final bool hasTranslation;
   final bool showTranslation;
-  final bool isSummarizing;
+  final bool isSummaryPending;
   final bool hasSummary;
   final bool showSummary;
   final bool isFetchingReadability;
@@ -2180,7 +2183,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
     required this.isPending,
     required this.hasTranslation,
     required this.showTranslation,
-    required this.isSummarizing,
+    required this.isSummaryPending,
     required this.hasSummary,
     required this.showSummary,
     required this.isFetchingReadability,
@@ -2209,15 +2212,15 @@ class _MacGlassToolbarRow extends StatelessWidget {
         icon: hasSummary && showSummary
             ? Icons.summarize
             : Icons.summarize_outlined,
-        label: isSummarizing
+        label: isSummaryPending
             ? '摘要中...'
             : hasSummary
             ? showSummary
                   ? '隐藏摘要'
                   : '显示摘要'
             : '摘要',
-        active: isSummarizing || (hasSummary && showSummary),
-        onTap: isSummarizing
+        active: isSummaryPending || (hasSummary && showSummary),
+        onTap: isSummaryPending
             ? null
             : hasSummary
             ? () => controller.showSummary.toggle()

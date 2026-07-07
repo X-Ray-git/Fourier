@@ -74,5 +74,59 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    let cursorChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/cursor", binaryMessenger: controller.engine.binaryMessenger)
+    cursorChannel.setMethodCallHandler { (call, result) in
+      if call.method == "activateZoomInCursor" {
+        AutoFoloCursorFactory.zoomInCursor.set()
+        result(nil)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+}
+
+private enum AutoFoloCursorFactory {
+  static let zoomInCursor: NSCursor = {
+    if #available(macOS 15.0, *) {
+      return NSCursor.zoomIn
+    }
+    return makeLegacyZoomInCursor()
+  }()
+
+  private static func makeLegacyZoomInCursor() -> NSCursor {
+    let size = NSSize(width: 28, height: 28)
+    let image = NSImage(size: size)
+    image.lockFocus()
+    defer { image.unlockFocus() }
+
+    let lensRect = NSRect(x: 3.5, y: 10.5, width: 14, height: 14)
+    let lensPath = NSBezierPath(ovalIn: lensRect)
+    NSColor.white.withAlphaComponent(0.92).setFill()
+    lensPath.fill()
+    NSColor.black.withAlphaComponent(0.78).setStroke()
+    lensPath.lineWidth = 1.7
+    lensPath.stroke()
+
+    let handle = NSBezierPath()
+    handle.lineCapStyle = .round
+    handle.lineWidth = 2.4
+    handle.move(to: NSPoint(x: 15.0, y: 11.0))
+    handle.line(to: NSPoint(x: 23.0, y: 3.0))
+    NSColor.black.withAlphaComponent(0.78).setStroke()
+    handle.stroke()
+
+    let plus = NSBezierPath()
+    plus.lineCapStyle = .round
+    plus.lineWidth = 1.5
+    plus.move(to: NSPoint(x: 8.0, y: 17.5))
+    plus.line(to: NSPoint(x: 13.0, y: 17.5))
+    plus.move(to: NSPoint(x: 10.5, y: 15.0))
+    plus.line(to: NSPoint(x: 10.5, y: 20.0))
+    NSColor.black.withAlphaComponent(0.78).setStroke()
+    plus.stroke()
+
+    return NSCursor(image: image, hotSpot: NSPoint(x: 10.5, y: 10.5))
   }
 }

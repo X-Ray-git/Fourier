@@ -17,6 +17,7 @@ import '../../../utils/article_content_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
 import '../../../utils/html_contrast_utils.dart';
 import '../../../utils/image_clipboard.dart';
+import '../../../utils/macos_zoom_in_cursor.dart';
 import '../../../services/article_image_service.dart';
 import 'inline_video_player.dart';
 
@@ -407,48 +408,41 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     );
     final tableWidth = columnWidth * columnCount;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: widget.maxWidth,
-            maxWidth: math.max(widget.maxWidth, tableWidth),
-          ),
-          child: Table(
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            border: TableBorder.all(color: cs.outlineVariant, width: 0.8),
-            columnWidths: {
-              for (var i = 0; i < columnCount; i++)
-                i: FixedColumnWidth(columnWidth),
-            },
-            children: [
-              for (var rowIndex = 0; rowIndex < tableRows.length; rowIndex++)
-                TableRow(
-                  decoration: BoxDecoration(
-                    color: rowIndex == 0
-                        ? cs.surfaceContainerHighest.withValues(alpha: 0.55)
-                        : Colors.transparent,
-                  ),
-                  children: [
-                    for (
-                      var cellIndex = 0;
-                      cellIndex < columnCount;
-                      cellIndex++
-                    )
-                      _buildTableCell(
-                        context,
-                        cs,
-                        cellIndex < tableRows[rowIndex].length
-                            ? tableRows[rowIndex][cellIndex]
-                            : const _ArticleTableCell(''),
-                        isHeader: rowIndex == 0,
-                      ),
-                  ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: widget.maxWidth,
+          maxWidth: math.max(widget.maxWidth, tableWidth),
+        ),
+        child: Table(
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          border: TableBorder.all(color: cs.outlineVariant, width: 0.8),
+          columnWidths: {
+            for (var i = 0; i < columnCount; i++)
+              i: FixedColumnWidth(columnWidth),
+          },
+          children: [
+            for (var rowIndex = 0; rowIndex < tableRows.length; rowIndex++)
+              TableRow(
+                decoration: BoxDecoration(
+                  color: rowIndex == 0
+                      ? cs.surfaceContainerHighest.withValues(alpha: 0.55)
+                      : Colors.transparent,
                 ),
-            ],
-          ),
+                children: [
+                  for (var cellIndex = 0; cellIndex < columnCount; cellIndex++)
+                    _buildTableCell(
+                      context,
+                      cs,
+                      cellIndex < tableRows[rowIndex].length
+                          ? tableRows[rowIndex][cellIndex]
+                          : const _ArticleTableCell(''),
+                      isHeader: rowIndex == 0,
+                    ),
+                ],
+              ),
+          ],
         ),
       ),
     );
@@ -882,16 +876,9 @@ class _ArticleInlineImage extends StatefulWidget {
 class _ArticleInlineImageState extends State<_ArticleInlineImage>
     with AutomaticKeepAliveClientMixin {
   int _retryCount = 0;
-  final ValueNotifier<bool> _isHovered = ValueNotifier<bool>(false);
 
   @override
   bool get wantKeepAlive => true; // 告诉 ListView 不要在滑出屏幕时销毁该组件
-
-  @override
-  void dispose() {
-    _isHovered.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -973,46 +960,8 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
 
     if (Platform.isMacOS) {
       image = MouseRegion(
-        onEnter: (_) => _isHovered.value = true,
-        onExit: (_) => _isHovered.value = false,
-        child: Stack(
-          children: [
-            ValueListenableBuilder<bool>(
-              valueListenable: _isHovered,
-              child: image,
-              builder: (context, isHovered, child) {
-                return AnimatedScale(
-                  scale: isHovered ? 0.992 : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOut,
-                  child: child,
-                );
-              },
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: _isHovered,
-                  builder: (context, isHovered, _) {
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 120),
-                      curve: Curves.easeOut,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isHovered
-                              ? cs.outlineVariant.withValues(alpha: 0.55)
-                              : Colors.transparent,
-                          width: 1,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
+        cursor: canTap ? MacOSZoomInCursor.instance : MouseCursor.defer,
+        child: image,
       );
     } else {
       image = Material(type: MaterialType.transparency, child: image);

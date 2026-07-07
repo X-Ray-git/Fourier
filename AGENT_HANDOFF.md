@@ -7561,3 +7561,124 @@ continuous corner：
 
 - `AGENT_HANDOFF.md` 的 Automated Release Footprint 仍会把真实换行转义成 `\n` 记录在单行命令里，这是文档展示需要，和 release notes/tag annotation 的真实换行不是一回事。
 - 后续不要再改回自动转换，除非有更明确的 escaping 规则和测试覆盖。
+
+## 161. 文章详情状态与正文渲染细节修复（2026-07-07）
+
+背景：
+
+- 用户在 macOS 文章详情中继续做细节验证，集中反馈了三类问题：
+  1. 从文章卡片右键触发“重新摘要”后，右侧详情页原本的“隐藏摘要”按钮会变成“摘要”，而不是“摘要中...”等正确状态。
+  2. macOS 正文图片 hover 时不应再有轻微缩小效果；如果有 hover 边框也应取消；图片可点击时，鼠标指针应变成放大镜加号，而不是图片右上角显示一个额外图标。
+  3. 宽表格横向超出阅读区时，外层圆角裁剪会把直角表格四角切掉，视觉上像表格被削角。
+- 这些修改只针对文章详情/正文渲染细节，不涉及发布流程、版本号、tag 或 GitHub Release。
+
+### 161.1 摘要按钮 pending 状态修复
+
+问题复现链路：
+
+- 打开一篇已有摘要的文章，详情页工具条摘要按钮显示“隐藏摘要”。
+- 在左侧文章卡片上右键选择“重新摘要”。
+- 卡片右键菜单直接调用 `SummaryService.summarizeArticle()`，会把 `SummaryService` 里的记录状态改成 `pending`。
+- 但文章详情页 `_ToolbarRow` 原本只看 `ArticleController.isSummarizing`，而这个本地状态只会在详情页按钮自己触发摘要时被设置。
+- 因此从卡片右键触发时，详情页本地 `isSummarizing == false`；同时 `summaryRecord.isSummarized == false`（因为状态已是 pending），导致 `hasSummary` 也变成 false，文案落到 fallback “摘要”。
+
+已改：
+
+- `lib/pages/article/article_page.dart`
+  - `_ToolbarRow` 新增 `isSummaryPending`：
+    - `(summaryRecord?.isPending ?? false) || controller.isSummarizing.value`
+  - `hasSummary` 不再只依赖 `summaryRecord.isSummarized`，而是把“有摘要文本”和“完成态/本地已摘要态”分开处理：
+    - 有摘要文本，且 `summaryRecord.isSummarized` 或 `controller.isSummarized` 为真时视为已有摘要。
+  - macOS `_MacGlassToolbarRow` 和非 macOS `_Chip` 都统一使用 `isSummaryPending` 控制文案、active 状态和禁用状态。
+
+预期：
+
+- 从卡片右键重新摘要时，详情页按钮应显示“摘要中...”并禁用，不再退回“摘要”。
+- 旧摘要文本仍保留显示，直到新摘要完成后替换。
+- 这个修复同时覆盖 macOS 工具条和移动端/非 macOS chip。
+
+### 161.2 macOS 图片 hover 行为调整
+
+讨论过程：
+
+- 用户最初说“箭头改成带有放大镜的加号”，第一轮被误解为“图片右上角显示一个放大镜加号 overlay”。
+- 用户随后明确纠正：期望的是“鼠标指针本身变成放大镜加号”，不是图片右上角显示图标。
+- 实测用户没有看到 `SystemMouseCursors.zoomIn` 的变化。原因随后通过 Flutter 源码确认：
+  - `SystemMouseCursors.zoomIn` 文档只列出 Android / Web / Linux。
+  - Flutter macOS embedder 的 `FlutterMouseCursorPlugin.mm` 没有映射 `"zoomIn"`，未知 kind 会回退为 arrow cursor。
+  - 因此单纯在 Dart 侧使用 `SystemMouseCursors.zoomIn` 在 macOS 上不会生效。
+
+已改：
+
+- `lib/pages/article/widgets/html_chunk_card.dart`
+  - 删除 `_ArticleInlineImageState` 中用于 hover 的 `_isHovered`、`AnimatedScale(scale: 0.992)` 和 hover 边框 `AnimatedContainer`。
+  - macOS 图片 hover 不再改变图片尺寸，也不再显示整图边框，避免后续文字或排版被 hover 影响。
+  - 可点击图片在 macOS 下使用 `MacOSZoomInCursor.instance`。
+- `lib/utils/macos_zoom_in_cursor.dart`
+  - 新增项目内自定义 `MouseCursor`。
+  - 通过 `MethodChannel('io.github.xraygit.autofolo/cursor')` 调用原生 `activateZoomInCursor`。
+  - 如果原生 channel 调用失败，fallback 到 `click` cursor，避免完全没有可点击提示。
+- `macos/Runner/AppDelegate.swift`
+  - 新增 cursor channel。
+  - `AutoFoloCursorFactory.zoomInCursor` 优先使用 macOS 15+ 的 `NSCursor.zoomIn`。
+  - 低版本 macOS 使用项目内绘制的 `NSCursor`：28x28 放大镜加号图标。
+
+注意：
+
+- 不要再把图片右上角 overlay 图标加回来；用户明确要求的是鼠标指针变化。
+- 不要再使用 `SystemMouseCursors.zoomIn` 作为 macOS 实现，它在 Flutter macOS 当前映射中会回退成普通箭头。
+- 如果后续要改 cursor 视觉效果，优先改 `AutoFoloCursorFactory.makeLegacyZoomInCursor()`，macOS 15+ 会继续使用系统 `NSCursor.zoomIn`。
+
+### 161.3 宽表格四角被裁剪修复
+
+问题：
+
+- `lib/pages/article/widgets/html_chunk_card.dart` 的 `_buildTable()` 原本在横向 `SingleChildScrollView` 外包了一层 `ClipRRect(borderRadius: 8)`。
+- 内部表格使用 `TableBorder.all(...)`，本身是直角矩形。
+- 当表格宽度超过阅读区并横向滚动时，圆角裁剪作用在“滚动视口”的四角，而不是表格真实四角，导致直角表格边框在视口四角被切掉。
+
+已改：
+
+- 移除 `_buildTable()` 外层 `ClipRRect`。
+- 保留横向滚动、`ConstrainedBox` 宽度约束和原本的直角 `TableBorder`。
+
+预期：
+
+- 宽表格仍可横向滚动。
+- 表格不再被阅读区圆角裁剪四角。
+- 普通不超宽表格仍保持直角表格样式。
+
+### 161.4 验证结果与后续验证重点
+
+已执行验证：
+
+- `dart format` 已覆盖：
+  - `lib/pages/article/article_page.dart`
+  - `lib/pages/article/widgets/html_chunk_card.dart`
+  - `lib/utils/macos_zoom_in_cursor.dart`
+- `flutter analyze` 通过。
+- `flutter build macos --debug` 通过，确认新增 Swift cursor channel 可以编译。
+  - 构建中仅出现 `video_player_avfoundation` 依赖自身的 deprecation/optional warning，非本轮代码问题。
+
+建议用户运行验证：
+
+1. 摘要状态：
+   - 打开已有摘要的文章。
+   - 从文章卡片右键触发“重新摘要”。
+   - 右侧详情页摘要按钮应显示“摘要中...”，旧摘要内容仍应可见。
+2. macOS 图片 hover：
+   - 鼠标移到正文可点击图片上。
+   - 图片本身不应缩小，不应出现整图边框，也不应出现右上角 overlay 图标。
+   - 鼠标指针应变成放大镜加号；如果系统版本是 macOS 15+，应使用系统 `NSCursor.zoomIn`，旧系统使用项目内绘制 cursor。
+3. 宽表格：
+   - 找一篇表格宽度超过阅读区的文章。
+   - 横向滚动表格时，四角不应再被圆角裁剪。
+4. 回归：
+   - 正文图片点击仍应能打开图片预览。
+   - 图片右键菜单仍应可用。
+   - 普通文章滚动不应出现 hover 引起的排版抖动。
+
+当前 Git 状态：
+
+- 本轮代码与本节文档应一起提交，保持上下文与实现一致。
+- 当前不需要 tag/release；若用户后续要求发布，再走 `scripts/release.sh`。

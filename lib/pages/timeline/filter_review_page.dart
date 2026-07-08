@@ -19,6 +19,7 @@ import '../article/article_page.dart';
 import '../main/main_controller.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
+import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/card_press_effect.dart';
@@ -626,7 +627,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                             itemKey: (article) => article.entryId,
                             padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
                             separatorBuilder: (_, _) =>
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
                             itemBuilder: _buildAnimatedReviewRow,
                             removedItemBuilder: _buildRemovedReviewRow,
                             onRemoveStart: _handleReviewRemoveStart,
@@ -916,14 +917,10 @@ class _MacReviewRow extends StatelessWidget {
       enablePress: true,
       borderRadius: BorderRadius.circular(8),
       child: Material(
-        color: selected
-            ? cs.primaryContainer.withValues(alpha: 0.5)
-            : Colors.transparent,
+        color: ArticleCardChrome.fillColor(context, selected: selected),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: selected
-              ? BorderSide(color: cs.primary.withValues(alpha: 0.5), width: 1)
-              : BorderSide.none,
+          side: ArticleCardChrome.borderSide(context, selected: selected),
         ),
         clipBehavior: Clip.antiAlias,
         child: Padding(

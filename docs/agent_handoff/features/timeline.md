@@ -5,6 +5,7 @@
 - `lib/pages/timeline/timeline_controller.dart`
 - `lib/pages/timeline/timeline_page.dart`
 - `lib/pages/widgets/article_card.dart`
+- `lib/common/widgets/article_card_chrome.dart`
 - `lib/common/widgets/app_glass_sync_button.dart`
 - `lib/pages/widgets/article_actions_menu.dart`
 
@@ -12,6 +13,7 @@
 
 - 模式：未读、全部、已读。
 - macOS 中间 header 快速切换只暴露未读/全部，并使用紧凑二态开关，而不是完整 segment。
+- macOS 中间时间线 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。
 - macOS 订阅源详情页的 header 筛选也应跟随这个二态开关语言；不要重新引入 `仅已读` 入口。
 - 已读模式/页面仍在其他入口存在，不应删除。
 - 过滤支持选中订阅源、分类和静默订阅源。
@@ -53,6 +55,8 @@
 - 这个取舍来自一次拥挤问题：进入某个分类下的具体订阅源后，刷新、清除筛选、拉取全文、自动翻译等按钮挤在同一行，视觉负担过重且功能重复。
 - 同步按钮样式和旋转逻辑集中在 `AppGlassSyncButton`。普通时间线通过 `_MacSyncButton` 订阅 `TimelineController.isSyncing`，垃圾拦截页也复用同一个按钮。
 - 文章卡片的长按/右键 AI 操作集中在 `ArticleActionsMenu`。不要再把翻译/摘要菜单逻辑塞回 `article_card.dart`。
+- 文章列表卡片的基础“外壳”样式集中在 `ArticleCardChrome`：macOS 普通态使用极高透明度中性色填充，不使用普通边框；选中态仍使用主色背景和边框。
+- 不要在文章卡片上使用重型玻璃、BackdropFilter、渐变边框或阴影。用户尝试过细线边框后认为不好看，最终取舍是轻填充 + 较大的卡片间距。
 - macOS 空态占位符应在左右分栏中对齐。左侧列表有 AppBar/header 时，右侧详情空态使用 `MacSplitDetailEmptyPlaceholder` 预留对应顶部 inset；不要用临时 `Padding(top: 64)` 推动左侧空态。
 - 订阅源筛选或无文章状态下，macOS 空态应使用安静的图标占位，不要回退到移动端旧文案如“一切就绪”“没有阅读文章”“强制同步”。
 

@@ -7,6 +7,7 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/app_glass.dart';
+import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/pill_tag.dart';
 import '../../common/widgets/card_press_effect.dart';
 import '../../models/article.dart';
@@ -123,7 +124,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
         child: Padding(
           padding: EdgeInsets.symmetric(
             horizontal: Platform.isMacOS ? 8 : 12,
-            vertical: Platform.isMacOS ? 2 : 6,
+            vertical: Platform.isMacOS ? 4 : 6,
           ),
           child: CardPressEffect(
             onTap: onTap,
@@ -151,21 +152,13 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
               margin: EdgeInsets.zero,
               clipBehavior: Clip.antiAlias,
               elevation: 0,
-              color: isSelected
-                  ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-                  : (Platform.isMacOS ? Colors.transparent : null),
+              color: ArticleCardChrome.fillColor(context, selected: isSelected),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
-                side: Platform.isMacOS && !isSelected
-                    ? BorderSide.none
-                    : BorderSide(
-                        color: isSelected
-                            ? colorScheme.primary.withValues(alpha: 0.5)
-                            : colorScheme.outlineVariant.withValues(
-                                alpha: 0.35,
-                              ),
-                        width: 1,
-                      ),
+                side: ArticleCardChrome.borderSide(
+                  context,
+                  selected: isSelected,
+                ),
               ),
               child: Container(
                 decoration: article.isRejectedByAi

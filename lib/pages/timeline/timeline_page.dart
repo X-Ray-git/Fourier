@@ -1023,19 +1023,6 @@ class _MacTimelineAppBar extends StatelessWidget
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        flexibleSpace: Stack(
-          children: [
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: ColoredBox(
-                color: cs.outlineVariant.withValues(alpha: 0.22),
-                child: const SizedBox(height: 1),
-              ),
-            ),
-          ],
-        ),
         actions: [
           if (controller.selectedMode.value != TimelineViewMode.read) ...[
             _MacTimelineModeToggle(controller: controller),

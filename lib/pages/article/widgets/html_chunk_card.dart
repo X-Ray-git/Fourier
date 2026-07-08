@@ -13,6 +13,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../../../common/widgets/feedback_toast.dart';
+import '../../../common/widgets/app_context_menu.dart';
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
 import '../../../utils/html_contrast_utils.dart';
@@ -981,37 +982,25 @@ void showInlineImageContextMenu(
   Offset position,
   String imageUrl,
 ) {
-  showMenu<String>(
-    context: context,
-    position: RelativeRect.fromLTRB(
-      position.dx,
-      position.dy,
-      position.dx,
-      position.dy,
-    ),
-    items: [
-      const PopupMenuItem(
-        value: 'copy',
-        child: Row(
-          children: [
-            Icon(Icons.copy_rounded, size: 18),
-            SizedBox(width: 8),
-            Text('复制图片'),
-          ],
+  () async {
+    final value = await AppContextMenu.show<String>(
+      context,
+      position: position,
+      minWidth: 132,
+      entries: const [
+        AppContextMenuAction(
+          value: 'copy',
+          icon: Icons.copy_rounded,
+          label: '复制图片',
         ),
-      ),
-      const PopupMenuItem(
-        value: 'copyLink',
-        child: Row(
-          children: [
-            Icon(Icons.link_rounded, size: 18),
-            SizedBox(width: 8),
-            Text('复制链接'),
-          ],
+        AppContextMenuAction(
+          value: 'copyLink',
+          icon: Icons.link_rounded,
+          label: '复制链接',
         ),
-      ),
-    ],
-  ).then((value) async {
+      ],
+    );
+
     switch (value) {
       case 'copy':
         final bytes = await ImageClipboard.downloadBytes(imageUrl);
@@ -1036,8 +1025,10 @@ void showInlineImageContextMenu(
         if (context.mounted) {
           AppFeedback.success('已复制', '图片链接已复制到剪贴板');
         }
+      case null:
+        break;
     }
-  });
+  }();
 }
 
 class _ImageErrorWidget extends StatelessWidget {

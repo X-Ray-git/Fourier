@@ -1001,7 +1001,7 @@ class _MacReviewRow extends StatelessWidget {
                   _ReviewActionButton(
                     icon: Icons.restore_rounded,
                     tooltip: '保留',
-                    color: const Color(0xFF10B981),
+                    color: const Color(0xFF059669),
                     onPressed: onKeep,
                   ),
                   const SizedBox(height: 2),
@@ -1046,7 +1046,7 @@ class _MacReviewRow extends StatelessWidget {
 
   Color _summaryColorFor(ColorScheme cs, SummaryStatus status) {
     return switch (status) {
-      SummaryStatus.done => const Color(0xFF0F766E),
+      SummaryStatus.done => const Color(0xFF64748B),
       SummaryStatus.pending => cs.primary,
       SummaryStatus.error => cs.error,
       SummaryStatus.idle => cs.onSurfaceVariant,

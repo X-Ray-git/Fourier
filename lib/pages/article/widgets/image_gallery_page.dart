@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../common/widgets/app_context_menu.dart';
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/interactiveviewer_gallery/interactive_viewer_boundary.dart';
 import '../../../services/article_image_service.dart';
@@ -226,54 +227,29 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
   }
 
   void _showImageContextMenu(Offset position, String imageUrl) {
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
-      items: [
-        const PopupMenuItem(
+    AppContextMenu.show<String>(
+      context,
+      position: position,
+      entries: const [
+        AppContextMenuAction(
           value: 'copy',
-          child: Row(
-            children: [
-              Icon(Icons.copy_rounded, size: 18),
-              SizedBox(width: 8),
-              Text('复制图片'),
-            ],
-          ),
+          icon: Icons.copy_rounded,
+          label: '复制图片',
         ),
-        const PopupMenuItem(
+        AppContextMenuAction(
           value: 'share',
-          child: Row(
-            children: [
-              Icon(Icons.share_rounded, size: 18),
-              SizedBox(width: 8),
-              Text('分享图片'),
-            ],
-          ),
+          icon: Icons.share_rounded,
+          label: '分享图片',
         ),
-        const PopupMenuItem(
+        AppContextMenuAction(
           value: 'save',
-          child: Row(
-            children: [
-              Icon(Icons.save_alt_rounded, size: 18),
-              SizedBox(width: 8),
-              Text('保存到相册'),
-            ],
-          ),
+          icon: Icons.save_alt_rounded,
+          label: '保存到相册',
         ),
-        const PopupMenuItem(
+        AppContextMenuAction(
           value: 'copyLink',
-          child: Row(
-            children: [
-              Icon(Icons.link_rounded, size: 18),
-              SizedBox(width: 8),
-              Text('复制链接'),
-            ],
-          ),
+          icon: Icons.link_rounded,
+          label: '复制链接',
         ),
       ],
     ).then((value) {
@@ -287,6 +263,8 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
         case 'copyLink':
           Clipboard.setData(ClipboardData(text: imageUrl));
           AppFeedback.success('已复制', '图片链接已复制到剪贴板');
+        case null:
+          break;
       }
     });
   }

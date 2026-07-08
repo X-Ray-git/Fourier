@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../common/widgets/app_context_menu.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../models/article.dart';
 import '../../services/summary_service.dart';
@@ -123,89 +124,44 @@ abstract final class ArticleActionsMenu {
     final colorScheme = Theme.of(context).colorScheme;
     final state = _ArticleActionState.from(article);
 
-    final result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
-      items: [
-        PopupMenuItem(
+    final result = await AppContextMenu.show<String>(
+      context,
+      position: position,
+      entries: [
+        AppContextMenuAction(
           value: 'translate',
+          icon: Icons.translate,
+          label: state.isTranslationPending
+              ? '翻译中...'
+              : (state.isTranslated ? '重新翻译' : '翻译文章'),
+          color: colorScheme.primary,
           enabled: !state.isTranslationPending,
-          child: Row(
-            children: [
-              state.isTranslationPending
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.primary,
-                      ),
-                    )
-                  : Icon(Icons.translate, size: 18, color: colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                state.isTranslationPending
-                    ? '翻译中...'
-                    : (state.isTranslated ? '重新翻译' : '翻译文章'),
-              ),
-            ],
-          ),
+          loading: state.isTranslationPending,
         ),
         if (state.isTranslated)
-          PopupMenuItem(
+          AppContextMenuAction(
             value: 'delete_translation',
-            child: Row(
-              children: [
-                Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                const SizedBox(width: 8),
-                Text('删除翻译', style: TextStyle(color: colorScheme.error)),
-              ],
-            ),
+            icon: Icons.delete_outline,
+            label: '删除翻译',
+            destructive: true,
           ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
+        const AppContextMenuDivider(),
+        AppContextMenuAction(
           value: 'summarize',
+          icon: Icons.summarize,
+          label: state.isSummaryPending
+              ? '摘要中...'
+              : (state.hasSummary ? '重新摘要' : '生成摘要'),
+          color: colorScheme.secondary,
           enabled: !state.isSummaryPending,
-          child: Row(
-            children: [
-              state.isSummaryPending
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.secondary,
-                      ),
-                    )
-                  : Icon(
-                      Icons.summarize,
-                      size: 18,
-                      color: colorScheme.secondary,
-                    ),
-              const SizedBox(width: 8),
-              Text(
-                state.isSummaryPending
-                    ? '摘要中...'
-                    : (state.hasSummary ? '重新摘要' : '生成摘要'),
-              ),
-            ],
-          ),
+          loading: state.isSummaryPending,
         ),
         if (state.hasSummary)
-          PopupMenuItem(
+          AppContextMenuAction(
             value: 'delete_summary',
-            child: Row(
-              children: [
-                Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                const SizedBox(width: 8),
-                Text('删除摘要', style: TextStyle(color: colorScheme.error)),
-              ],
-            ),
+            icon: Icons.delete_outline,
+            label: '删除摘要',
+            destructive: true,
           ),
       ],
     );

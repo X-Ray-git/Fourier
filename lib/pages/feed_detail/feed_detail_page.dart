@@ -103,6 +103,15 @@ class FeedDetailController extends GetxController {
     }
   }
 
+  void setReadFilter(int value, {bool clearSelection = false}) {
+    if (readFilter.value == value && !clearSelection) return;
+    readFilter.value = value;
+    _applyFilter();
+    if (clearSelection) {
+      selectedArticle.value = null;
+    }
+  }
+
   void selectRelativeArticle(int delta) {
     if (articles.isEmpty) return;
 
@@ -712,10 +721,7 @@ class FeedDetailPage extends StatelessWidget {
                       size: 22,
                       color: cs.onSurfaceVariant,
                     ),
-                    onSelected: (v) {
-                      controller.readFilter.value = v;
-                      controller._applyFilter();
-                    },
+                    onSelected: controller.setReadFilter,
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 0, child: Text('仅未读')),
                       const PopupMenuItem(value: 1, child: Text('全部')),
@@ -994,31 +1000,7 @@ class _MacFeedHeader extends StatelessWidget {
             Obx(
               () => AppGlassTooltip(
                 message: '筛选文章状态',
-                child: PopupMenuButton<int>(
-                  tooltip: '',
-                  child: SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: Icon(
-                      controller.readFilter.value == 0
-                          ? Icons.mark_email_unread_outlined
-                          : controller.readFilter.value == 1
-                          ? Icons.inbox
-                          : Icons.done_all,
-                      size: 18,
-                    ),
-                  ),
-                  onSelected: (v) {
-                    controller.readFilter.value = v;
-                    controller._applyFilter();
-                    controller.selectedArticle.value = null;
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 0, child: Text('仅未读')),
-                    PopupMenuItem(value: 1, child: Text('全部')),
-                    PopupMenuItem(value: 2, child: Text('仅已读')),
-                  ],
-                ),
+                child: _MacFeedReadFilterToggle(controller: controller),
               ),
             ),
             AppGlassIconButton(
@@ -1084,6 +1066,146 @@ class _MacFeedHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _MacFeedReadFilterToggle extends StatefulWidget {
+  final FeedDetailController controller;
+
+  const _MacFeedReadFilterToggle({required this.controller});
+
+  @override
+  State<_MacFeedReadFilterToggle> createState() =>
+      _MacFeedReadFilterToggleState();
+}
+
+class _MacFeedReadFilterToggleState extends State<_MacFeedReadFilterToggle> {
+  int? _visualFilter;
+  bool _hovered = false;
+  bool _pressed = false;
+
+  static const _trackWidth = 62.0;
+  static const _trackHeight = 30.0;
+  static const _padding = 3.0;
+  static const _thumbWidth = 42.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Obx(() {
+      final filter = _visualFilter ?? widget.controller.readFilter.value;
+      final selectedIndex = filter == 0 ? 0 : 1;
+
+      return SelectionContainer.disabled(
+        child: AppGlassSurface(
+          borderRadius: 999,
+          padding: const EdgeInsets.all(_padding),
+          tone: AppGlassTone.control,
+          nativeBackdrop: true,
+          staticMaterial: true,
+          child: SizedBox(
+            width: _trackWidth,
+            height: _trackHeight,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _hovered = true),
+              onExit: (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              }),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (_) => setState(() => _pressed = true),
+                onTapUp: (_) => setState(() => _pressed = false),
+                onTapCancel: () => setState(() => _pressed = false),
+                onTap: () => _setFilter(selectedIndex == 0 ? 1 : 0),
+                child: AnimatedScale(
+                  scale: _pressed ? 0.975 : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOutCubic,
+                  child: Stack(
+                    children: [
+                      if (_hovered)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: cs.onSurface.withValues(alpha: 0.035),
+                            ),
+                          ),
+                        ),
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOutBack,
+                        left: selectedIndex == 0
+                            ? 0
+                            : _trackWidth - _thumbWidth,
+                        top: 0,
+                        bottom: 0,
+                        width: _thumbWidth,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: appGlassActiveControlFill(
+                              context,
+                              accentAlpha: 0.085,
+                            ),
+                            border: Border.all(
+                              color: cs.primary.withValues(alpha: 0.22),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 140),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeOutCubic,
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: ScaleTransition(
+                                    scale: Tween<double>(
+                                      begin: 0.94,
+                                      end: 1,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                selectedIndex == 0 ? '未读' : '全部',
+                                key: ValueKey(selectedIndex),
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: cs.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  void _setFilter(int filter) {
+    _visualFilter = filter;
+    widget.controller.setReadFilter(filter, clearSelection: true);
+    Future.delayed(const Duration(milliseconds: 260), () {
+      if (!mounted) return;
+      setState(() => _visualFilter = null);
+    });
   }
 }
 

@@ -56,9 +56,7 @@ class MacOSSidebar extends StatelessWidget {
                 isSelected: isSelected,
                 badgeCount: unreadCount,
                 onTap: () {
-                  timelineController.isSilentSelected.value = false;
-                  timelineController.selectedFeedId.value = null;
-                  timelineController.selectedCategory.value = null;
+                  timelineController.setTimelineScope();
                   onIndexChanged(0);
                 },
               );
@@ -98,9 +96,7 @@ class MacOSSidebar extends StatelessWidget {
                         timelineController.selectedFeedId.value == null,
                     badgeCount: timelineController.silentUnreadCount,
                     onTap: () {
-                      timelineController.isSilentSelected.value = true;
-                      timelineController.selectedFeedId.value = null;
-                      timelineController.selectedCategory.value = null;
+                      timelineController.setTimelineScope(silent: true);
                       onIndexChanged(0);
                     },
                   ),
@@ -146,16 +142,10 @@ class MacOSSidebar extends StatelessWidget {
                                       ],
                                     ),
                                     onTap: () {
-                                      timelineController
-                                              .isSilentSelected
-                                              .value =
-                                          true;
-                                      timelineController
-                                              .selectedCategory
-                                              .value =
-                                          null;
-                                      timelineController.selectedFeedId.value =
-                                          feed.feedId;
+                                      timelineController.setTimelineScope(
+                                        silent: true,
+                                        feedId: feed.feedId,
+                                      );
                                       onIndexChanged(0);
                                     },
                                   );
@@ -242,11 +232,9 @@ class MacOSSidebar extends StatelessWidget {
                                 );
                               },
                               onTap: () {
-                                timelineController.isSilentSelected.value =
-                                    false;
-                                timelineController.selectedFeedId.value = null;
-                                timelineController.selectedCategory.value =
-                                    category.name;
+                                timelineController.setTimelineScope(
+                                  category: category.name,
+                                );
                                 onIndexChanged(0);
                               },
                               feedBuilder: (feed) {
@@ -279,16 +267,9 @@ class MacOSSidebar extends StatelessWidget {
                                       ],
                                     ),
                                     onTap: () {
-                                      timelineController
-                                              .isSilentSelected
-                                              .value =
-                                          false;
-                                      timelineController
-                                              .selectedCategory
-                                              .value =
-                                          null;
-                                      timelineController.selectedFeedId.value =
-                                          feed.feedId;
+                                      timelineController.setTimelineScope(
+                                        feedId: feed.feedId,
+                                      );
                                       onIndexChanged(0);
                                     },
                                   );
@@ -361,9 +342,7 @@ class MacOSCollapsedSidebar extends StatelessWidget {
                 tooltip: '全部文章',
                 selected: isAllSelected,
                 onTap: () {
-                  timelineController.isSilentSelected.value = false;
-                  timelineController.selectedFeedId.value = null;
-                  timelineController.selectedCategory.value = null;
+                  timelineController.setTimelineScope();
                   onIndexChanged(0);
                 },
               );
@@ -390,9 +369,7 @@ class MacOSCollapsedSidebar extends StatelessWidget {
                 tooltip: '静默订阅源',
                 selected: isSilentSelected,
                 onTap: () {
-                  timelineController.isSilentSelected.value = true;
-                  timelineController.selectedFeedId.value = null;
-                  timelineController.selectedCategory.value = null;
+                  timelineController.setTimelineScope(silent: true);
                   onIndexChanged(0);
                 },
               );

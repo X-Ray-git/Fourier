@@ -22,3 +22,24 @@ class MacEmptyPlaceholder extends StatelessWidget {
     );
   }
 }
+
+class MacSplitDetailEmptyPlaceholder extends StatelessWidget {
+  final IconData icon;
+  final double topInset;
+
+  const MacSplitDetailEmptyPlaceholder({
+    super.key,
+    this.icon = Icons.article_outlined,
+    this.topInset = kToolbarHeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(height: topInset),
+        Expanded(child: MacEmptyPlaceholder(icon: icon)),
+      ],
+    );
+  }
+}

@@ -87,13 +87,19 @@
 
 后果：中间列表 chrome 保持安静；文章详情可以保留当前独立处理。
 
-## 批量时间线变化按模式 key 重建
+## 批量时间线变化重建，读状态变化保留动画
 
-背景：切换未读/全部会产生大量插入/删除 diff，并阻塞 UI isolate。
+背景：切换未读/全部、从具体订阅源回到全部文章、排序、同步回填等操作会产生大量插入/删除/重排序 diff，并阻塞 UI isolate。用户明确希望列表动画只在“标为已读/恢复未读”时应用，其余批量变化不要动画，以节省性能。
 
-决策：macOS 按 selected mode 给列表设置 key，让批量模式切换整体重建，而不是为几千行逐个动画。
+决策：macOS 时间线列表 key 包含 selected mode、scope key 和 `TimelineController.timelineListResetVersion`。批量变化递增 reset version，使 `ImplicitlyAnimatedList` 整体重建；`markAsReadLocal` / `markAsUnreadLocal` 不递增 reset version，保留单篇移除/恢复动画。
 
-后果：模式切换避免全局动画卡顿，同时普通单卡片标已读动画保留。
+后果：批量变化避免全局动画卡顿，同时普通单卡片标已读/恢复未读动画保留。
+
+不要回退：
+
+- 不要让排序、筛选范围切换、同步回填、加载更多重新触发大规模列表 diff 动画。
+- 不要在侧边栏直接连续设置 `isSilentSelected`、`selectedFeedId`、`selectedCategory`；应使用 `setTimelineScope()` 合并为一次过滤。
+- 不要为了禁用批量动画而移除已读/未读的局部动画，除非用户重新明确要求。
 
 ## 时间线排序保持本地化
 

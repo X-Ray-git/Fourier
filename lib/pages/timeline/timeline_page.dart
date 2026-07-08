@@ -526,7 +526,10 @@ class _TimelinePageState extends State<TimelinePage> {
                 child: Obx(() {
                   final selected = controller.selectedArticle.value;
                   if (selected == null) {
-                    return const MacEmptyPlaceholder();
+                    return MacSplitDetailEmptyPlaceholder(
+                      topInset:
+                          MediaQuery.paddingOf(context).top + kToolbarHeight,
+                    );
                   }
                   return ArticlePageView(
                     key: ValueKey(selected.entryId),
@@ -580,7 +583,9 @@ class _TimelinePageState extends State<TimelinePage> {
             children: [
               Positioned.fill(
                 child: ImplicitlyAnimatedList<ArticleModel>(
-                  key: ValueKey(controller.selectedMode.value),
+                  key: ValueKey(
+                    '${controller.selectedMode.value}:${controller.timelineScopeKey}:${controller.timelineListResetVersion}',
+                  ),
                   physics: _refreshPhysics,
                   controller: _scrollController,
                   padding: EdgeInsets.only(
@@ -599,12 +604,9 @@ class _TimelinePageState extends State<TimelinePage> {
                   child: DelayedVisibility(
                     visible: controller.articles.isEmpty,
                     delay: const Duration(milliseconds: 220),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 64),
-                      child: _EmptyView(
-                        message: controller.emptyMessage,
-                        onRetry: controller.loadFeedsThenArticles,
-                      ),
+                    child: _EmptyView(
+                      message: controller.emptyMessage,
+                      onRetry: controller.loadFeedsThenArticles,
                     ),
                   ),
                 ),
@@ -894,6 +896,10 @@ class _EmptyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (Platform.isMacOS) {
+      return const MacEmptyPlaceholder(icon: Icons.done_all_rounded);
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(

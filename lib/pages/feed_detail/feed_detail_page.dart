@@ -905,7 +905,7 @@ class FeedDetailPage extends StatelessWidget {
             child: Obx(() {
               final selected = controller.selectedArticle.value;
               if (selected == null) {
-                return const MacEmptyPlaceholder();
+                return const MacSplitDetailEmptyPlaceholder(topInset: 69);
               }
               return ArticlePageView(
                 key: ValueKey(selected.entryId),
@@ -1330,6 +1330,13 @@ class _EmptyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (Platform.isMacOS) {
+      final isUnread = readFilter == 0;
+      return MacEmptyPlaceholder(
+        icon: isUnread ? Icons.done_all_rounded : Icons.inbox_outlined,
+      );
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
     final isUnread = readFilter == 0;
 

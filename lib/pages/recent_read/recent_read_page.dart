@@ -172,7 +172,10 @@ class _RecentReadPageState extends State<RecentReadPage> {
                 child: Obx(() {
                   final selected = selectedArticle.value;
                   if (selected == null) {
-                    return const MacEmptyPlaceholder();
+                    return MacSplitDetailEmptyPlaceholder(
+                      topInset:
+                          MediaQuery.paddingOf(context).top + kToolbarHeight,
+                    );
                   }
                   return ArticlePageView(
                     key: ValueKey(selected.entryId),

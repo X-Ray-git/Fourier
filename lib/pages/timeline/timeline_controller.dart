@@ -45,6 +45,9 @@ class TimelineController extends GetxController {
   bool _isLoadingMore = false;
   bool _hasMore = true;
   bool _isRefreshingRecentRead = false;
+  bool _isBatchingScopeChange = false;
+  int _timelineListResetVersion = 0;
+  String _timelineScopeKey = 'normal::';
 
   final Map<String, FeedModel> _feedMap = {};
   bool _feedsLoaded = false;
@@ -54,21 +57,9 @@ class TimelineController extends GetxController {
   void onInit() {
     super.onInit();
     ever(allArticles, (_) => _updateAppBadge());
-    ever(selectedFeedId, (_) {
-      UndoService.clear();
-      _applyFilter();
-      selectedArticle.value = null;
-    });
-    ever(selectedCategory, (_) {
-      UndoService.clear();
-      _applyFilter();
-      selectedArticle.value = null;
-    });
-    ever(isSilentSelected, (_) {
-      UndoService.clear();
-      _applyFilter();
-      selectedArticle.value = null;
-    });
+    ever(selectedFeedId, (_) => _handleScopeFieldChanged());
+    ever(selectedCategory, (_) => _handleScopeFieldChanged());
+    ever(isSilentSelected, (_) => _handleScopeFieldChanged());
 
     // 监听全局文章状态变更，精准更新内存数据，保持 UI 同步（如 AI 过滤拦截数）
     ever(ArticleStateNotifier.version, (_) {
@@ -375,6 +366,7 @@ class TimelineController extends GetxController {
   void setViewMode(TimelineViewMode mode) {
     if (selectedMode.value == mode) return;
     UndoService.clear();
+    resetTimelineListAnimation();
     selectedMode.value = mode;
     _applyFilter();
     loadingState.value = Success(articles.toList());
@@ -382,6 +374,7 @@ class TimelineController extends GetxController {
 
   void setSortMode(TimelineSortMode mode) {
     if (selectedSortMode.value == mode) return;
+    resetTimelineListAnimation();
     selectedSortMode.value = mode;
     _applyFilter();
     loadingState.value = Success(articles.toList());
@@ -410,6 +403,55 @@ class TimelineController extends GetxController {
 
   bool get hasMore => selectedMode.value != TimelineViewMode.read && _hasMore;
   bool get isLoadingMore => _isLoadingMore;
+  int get timelineListResetVersion => _timelineListResetVersion;
+  String get timelineScopeKey => _timelineScopeKey;
+
+  void setTimelineScope({
+    bool silent = false,
+    String? feedId,
+    String? category,
+  }) {
+    assert(feedId == null || category == null);
+    if (isSilentSelected.value == silent &&
+        selectedFeedId.value == feedId &&
+        selectedCategory.value == category) {
+      return;
+    }
+
+    resetTimelineListAnimation();
+    _isBatchingScopeChange = true;
+    try {
+      isSilentSelected.value = silent;
+      selectedFeedId.value = feedId;
+      selectedCategory.value = category;
+    } finally {
+      _isBatchingScopeChange = false;
+    }
+    _handleScopeChanged();
+  }
+
+  void resetTimelineListAnimation() {
+    _timelineListResetVersion++;
+  }
+
+  void _handleScopeFieldChanged() {
+    if (_isBatchingScopeChange) return;
+    _handleScopeChanged();
+  }
+
+  void _handleScopeChanged() {
+    _updateTimelineScopeKey();
+    UndoService.clear();
+    _applyFilter();
+    selectedArticle.value = null;
+  }
+
+  void _updateTimelineScopeKey() {
+    final silent = isSilentSelected.value ? 'silent' : 'normal';
+    _timelineScopeKey =
+        '$silent:${selectedCategory.value ?? ''}:${selectedFeedId.value ?? ''}';
+  }
+
   int get unreadCount => allArticles
       .where((a) => !a.isRead && !FeedSilentSettingsService.isSilent(a.feedId))
       .length;
@@ -480,6 +522,7 @@ class TimelineController extends GetxController {
   void _loadFromLocalDatabase() {
     final local = LocalArticleDbService.readAllArticles();
     allArticles.value = _mergeLocalReadState(local);
+    resetTimelineListAnimation();
     _applyFilter();
     _updateFilterCount();
     if (allArticles.isNotEmpty ||
@@ -581,10 +624,34 @@ class TimelineController extends GetxController {
       filteredAt: updatedFromDb.filteredAt,
     );
 
+    final shouldResetList = _hasNonReadTimelineChange(
+      allArticles[idx],
+      finalUpdated,
+    );
     allArticles[idx] = finalUpdated;
     allArticles.refresh();
+    if (shouldResetList) resetTimelineListAnimation();
     _applyFilter();
     _updateFilterCount();
+  }
+
+  bool _hasNonReadTimelineChange(ArticleModel a, ArticleModel b) {
+    return a.entryId != b.entryId ||
+        a.feedId != b.feedId ||
+        a.feedTitle != b.feedTitle ||
+        a.feedImage != b.feedImage ||
+        a.title != b.title ||
+        a.url != b.url ||
+        a.content != b.content ||
+        a.publishedAt != b.publishedAt ||
+        a.category != b.category ||
+        a.subscriptionCategory != b.subscriptionCategory ||
+        a.author != b.author ||
+        a.imageUrl != b.imageUrl ||
+        a.isRejectedByAi != b.isRejectedByAi ||
+        a.filterReason != b.filterReason ||
+        a.filterReviewed != b.filterReviewed ||
+        a.filteredAt != b.filteredAt;
   }
 
   void _updateReadStateInMemory(String entryId, bool isRead) {

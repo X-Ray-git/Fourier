@@ -415,9 +415,7 @@ class ArticleController extends GetxController {
     if (article.feedId.isEmpty) return;
     if (Platform.isMacOS) {
       final tc = Get.find<TimelineController>();
-      tc.selectedArticle.value = null;
-      tc.selectedCategory.value = null;
-      tc.selectedFeedId.value = article.feedId;
+      tc.setTimelineScope(feedId: article.feedId);
       return;
     }
     Get.toNamed(

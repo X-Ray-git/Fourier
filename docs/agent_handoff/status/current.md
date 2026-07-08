@@ -28,6 +28,13 @@
 - 垃圾拦截页开始复用普通时间线的同步按钮和文章 AI 右键菜单：刷新按钮位置已按时间线 header 对齐，文章审核行右键也有翻译/摘要相关动作。
 - `flutter run -d macos --no-pub` 的“构建成功但等不到 debug connection”问题已定位为 Xcode Debug Dylib 被 macOS 系统策略拒载，并通过 Debug 配置 `ENABLE_DEBUG_DYLIB = NO` 修复。
 
+本次待用户继续验证：
+
+- macOS 无文章订阅源/筛选状态下，左侧列表空态勾图标和右侧文章空态图标的 y 轴对齐。
+- 从具体订阅源回到“全部文章”时，中间时间线不再出现明显掉帧。
+- 标为已读/恢复未读仍保留局部列表动画。
+- 排序、切换筛选范围、同步回填、加载更多不再播放大规模新增/重排序动画。
+
 工具最近已验证：
 
 - `dart analyze lib test`
@@ -36,6 +43,7 @@
 - `flutter build macos --debug`
 - `flutter run -d macos --no-pub`
 - `dart analyze lib/common/widgets lib/pages/widgets lib/pages/timeline`
+- `dart analyze lib/pages/timeline/timeline_controller.dart lib/pages/timeline/timeline_page.dart lib/pages/main/widgets/macos_sidebar.dart lib/pages/article/article_page.dart lib/common/widgets/mac_empty_placeholder.dart lib/pages/feed_detail/feed_detail_page.dart lib/pages/timeline/filter_review_page.dart lib/pages/recent_read/recent_read_page.dart`
 
 已知 analyzer 注意点：
 

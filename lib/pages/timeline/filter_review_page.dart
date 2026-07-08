@@ -642,7 +642,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             child: Obx(() {
               final selected = _selectedArticle.value;
               if (selected == null) {
-                return const MacEmptyPlaceholder();
+                return MacSplitDetailEmptyPlaceholder(
+                  topInset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                );
               }
               return ArticlePageView(
                 key: ValueKey(selected.entryId),

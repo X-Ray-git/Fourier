@@ -894,11 +894,6 @@ class FeedDetailPage extends StatelessWidget {
                   colorScheme: cs,
                   imageUrl: safeImageUrl,
                 ),
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: cs.outlineVariant.withValues(alpha: 0.35),
-                ),
                 Expanded(child: _MacFeedArticleList(controller: controller)),
               ],
             ),

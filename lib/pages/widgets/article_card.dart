@@ -25,6 +25,7 @@ class ArticleCard extends StatefulWidget {
   final bool showFeedTitle;
   final bool showSummary;
   final bool isSelected;
+  final bool stableTitleWeight;
 
   const ArticleCard({
     super.key,
@@ -34,6 +35,7 @@ class ArticleCard extends StatefulWidget {
     this.showFeedTitle = true,
     this.showSummary = false,
     this.isSelected = false,
+    this.stableTitleWeight = false,
   });
 
   @override
@@ -65,6 +67,7 @@ class _ArticleCardState extends State<ArticleCard> {
       showSummary: widget.showSummary,
       isTranslated: _isTranslated,
       isSelected: widget.isSelected,
+      stableTitleWeight: widget.stableTitleWeight,
       onTranslateSuccess: _onTranslateSuccess,
     );
   }
@@ -78,6 +81,7 @@ class _ArticleCardContent extends StatefulWidget {
   final bool showSummary;
   final bool isTranslated;
   final bool isSelected;
+  final bool stableTitleWeight;
   final VoidCallback? onTranslateSuccess;
 
   const _ArticleCardContent({
@@ -88,6 +92,7 @@ class _ArticleCardContent extends StatefulWidget {
     required this.showSummary,
     required this.isTranslated,
     required this.isSelected,
+    required this.stableTitleWeight,
     this.onTranslateSuccess,
   });
 
@@ -103,6 +108,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
   bool get showSummary => widget.showSummary;
   bool get isTranslated => widget.isTranslated;
   bool get isSelected => widget.isSelected;
+  bool get stableTitleWeight => widget.stableTitleWeight;
   VoidCallback? get onTranslateSuccess => widget.onTranslateSuccess;
 
   @override
@@ -122,10 +128,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
 
       return RepaintBoundary(
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: Platform.isMacOS ? 8 : 12,
-            vertical: Platform.isMacOS ? 4 : 6,
-          ),
+          padding: ArticleCardChrome.outerPadding,
           child: CardPressEffect(
             onTap: onTap,
             onLongPress: Platform.isMacOS
@@ -147,14 +150,14 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                 : null,
             enableHover: true,
             enablePress: true,
-            borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
+            borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
             child: Card(
               margin: EdgeInsets.zero,
               clipBehavior: Clip.antiAlias,
               elevation: 0,
               color: ArticleCardChrome.fillColor(context, selected: isSelected),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(Platform.isMacOS ? 8 : 16),
+                borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
                 side: ArticleCardChrome.borderSide(
                   context,
                   selected: isSelected,
@@ -171,7 +174,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                         ),
                       )
                     : null,
-                padding: EdgeInsets.all(Platform.isMacOS ? 12 : 16),
+                padding: ArticleCardChrome.contentPadding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -250,7 +253,9 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     height: 1.4,
-                                    fontWeight: article.isRead
+                                    fontWeight: stableTitleWeight
+                                        ? FontWeight.w600
+                                        : article.isRead
                                         ? FontWeight.w400
                                         : FontWeight.w600,
                                     color: article.isRead

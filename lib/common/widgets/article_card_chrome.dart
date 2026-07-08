@@ -3,6 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 abstract final class ArticleCardChrome {
+  static double get radius => Platform.isMacOS ? 8 : 16;
+
+  static EdgeInsets get outerPadding => EdgeInsets.symmetric(
+    horizontal: Platform.isMacOS ? 8 : 12,
+    vertical: Platform.isMacOS ? 4 : 6,
+  );
+
+  static EdgeInsets get contentPadding =>
+      EdgeInsets.all(Platform.isMacOS ? 12 : 16);
+
   static Color? fillColor(BuildContext context, {required bool selected}) {
     final cs = Theme.of(context).colorScheme;
     if (selected) {

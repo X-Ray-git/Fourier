@@ -125,7 +125,6 @@ class _RecentReadPageState extends State<RecentReadPage> {
         };
 
         if (Platform.isMacOS) {
-          final cs = Theme.of(context).colorScheme;
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -144,19 +143,6 @@ class _RecentReadPageState extends State<RecentReadPage> {
                     centerTitle: false,
                     elevation: 0,
                     scrolledUnderElevation: 0,
-                    flexibleSpace: Stack(
-                      children: [
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: ColoredBox(
-                            color: cs.outlineVariant.withValues(alpha: 0.22),
-                            child: const SizedBox(height: 1),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                   body: content,
                 ),
@@ -246,6 +232,7 @@ class _RecentReadPageState extends State<RecentReadPage> {
                       article: article,
                       isSelected:
                           Platform.isMacOS && selectedId == article.entryId,
+                      stableTitleWeight: true,
                       onTap: () {
                         if (Platform.isMacOS) {
                           _handleMacArticleTap(article);

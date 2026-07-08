@@ -625,9 +625,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                           child: ImplicitlyAnimatedList<ArticleModel>(
                             items: _articles.toList(),
                             itemKey: (article) => article.entryId,
-                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 6),
+                            padding: const EdgeInsets.only(bottom: 8),
+                            separatorBuilder: (_, _) => const SizedBox.shrink(),
                             itemBuilder: _buildAnimatedReviewRow,
                             removedItemBuilder: _buildRemovedReviewRow,
                             onRemoveStart: _handleReviewRemoveStart,
@@ -865,15 +864,6 @@ class _MacReviewHeader extends StatelessWidget {
               );
             }),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: ColoredBox(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.22),
-              child: const SizedBox(height: 1),
-            ),
-          ),
         ],
       ),
     );
@@ -902,115 +892,118 @@ class _MacReviewRow extends StatelessWidget {
     final feedTitle = article.feedTitle == '?' ? '未知来源' : article.feedTitle;
     final reason = article.filterReason?.trim();
 
-    return CardPressEffect(
-      onTap: onTap,
-      onSecondaryTapDown: Platform.isMacOS
-          ? (details) {
-              ArticleActionsMenu.showMacOSContextMenu(
-                context,
-                position: details.globalPosition,
-                article: article,
-              );
-            }
-          : null,
-      enableHover: true,
-      enablePress: true,
-      borderRadius: BorderRadius.circular(8),
-      child: Material(
-        color: ArticleCardChrome.fillColor(context, selected: selected),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: ArticleCardChrome.borderSide(context, selected: selected),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      article.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.3,
-                        fontWeight: FontWeight.w600,
-                        color: selected ? cs.primary : cs.onSurface,
+    return Padding(
+      padding: ArticleCardChrome.outerPadding,
+      child: CardPressEffect(
+        onTap: onTap,
+        onSecondaryTapDown: Platform.isMacOS
+            ? (details) {
+                ArticleActionsMenu.showMacOSContextMenu(
+                  context,
+                  position: details.globalPosition,
+                  article: article,
+                );
+              }
+            : null,
+        enableHover: true,
+        enablePress: true,
+        borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
+        child: Material(
+          color: ArticleCardChrome.fillColor(context, selected: selected),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
+            side: ArticleCardChrome.borderSide(context, selected: selected),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: ArticleCardChrome.contentPadding,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        article.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? cs.primary : cs.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      feedTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                      const SizedBox(height: 5),
+                      Text(
+                        feedTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                    Obx(() {
-                      final summaryRecord = SummaryService.recordOf(
-                        article.entryId,
-                      );
-                      final summaryStatus =
-                          summaryRecord?.status ?? SummaryStatus.idle;
-                      final summaryText = _summaryTextFor(summaryRecord);
+                      Obx(() {
+                        final summaryRecord = SummaryService.recordOf(
+                          article.entryId,
+                        );
+                        final summaryStatus =
+                            summaryRecord?.status ?? SummaryStatus.idle;
+                        final summaryText = _summaryTextFor(summaryRecord);
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (reason != null && reason.isNotEmpty) ...[
-                            const SizedBox(height: 7),
-                            _ReviewInfoBlock(
-                              icon: Icons.auto_awesome,
-                              label: '拒绝理由',
-                              text: reason,
-                              color: const Color(0xFFD97706),
-                              maxLines: 2,
-                            ),
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (reason != null && reason.isNotEmpty) ...[
+                              const SizedBox(height: 7),
+                              _ReviewInfoBlock(
+                                icon: Icons.auto_awesome,
+                                label: '拒绝理由',
+                                text: reason,
+                                color: const Color(0xFFD97706),
+                                maxLines: 2,
+                              ),
+                            ],
+                            if (summaryText.isNotEmpty) ...[
+                              const SizedBox(height: 7),
+                              _ReviewInfoBlock(
+                                icon: _summaryIconFor(summaryStatus),
+                                label: '摘要',
+                                text: summaryText,
+                                color: _summaryColorFor(cs, summaryStatus),
+                                maxLines: summaryStatus == SummaryStatus.done
+                                    ? 3
+                                    : 1,
+                              ),
+                            ],
                           ],
-                          if (summaryText.isNotEmpty) ...[
-                            const SizedBox(height: 7),
-                            _ReviewInfoBlock(
-                              icon: _summaryIconFor(summaryStatus),
-                              label: '摘要',
-                              text: summaryText,
-                              color: _summaryColorFor(cs, summaryStatus),
-                              maxLines: summaryStatus == SummaryStatus.done
-                                  ? 3
-                                  : 1,
-                            ),
-                          ],
-                        ],
-                      );
-                    }),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  children: [
+                    _ReviewActionButton(
+                      icon: Icons.restore_rounded,
+                      tooltip: '保留',
+                      color: const Color(0xFF059669),
+                      onPressed: onKeep,
+                    ),
+                    const SizedBox(height: 2),
+                    _ReviewActionButton(
+                      icon: Icons.delete_sweep_outlined,
+                      tooltip: '移除',
+                      color: cs.error,
+                      onPressed: onReject,
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                children: [
-                  _ReviewActionButton(
-                    icon: Icons.restore_rounded,
-                    tooltip: '保留',
-                    color: const Color(0xFF059669),
-                    onPressed: onKeep,
-                  ),
-                  const SizedBox(height: 2),
-                  _ReviewActionButton(
-                    icon: Icons.delete_sweep_outlined,
-                    tooltip: '移除',
-                    color: cs.error,
-                    onPressed: onReject,
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -20,7 +20,7 @@ import '../widgets/article_search_delegate.dart';
 import 'main_controller.dart';
 import 'widgets/macos_sidebar.dart';
 
-const _macOSWindowContentRadius = 28.0;
+const _macOSWindowContentRadius = 24.0;
 
 /// 主页面 — 移动端保留底部导航，macOS 使用桌面分栏布局。
 class MainPage extends StatefulWidget {

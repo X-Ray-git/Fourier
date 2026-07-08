@@ -1076,7 +1076,7 @@ class _TaskPanel extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     if (Platform.isMacOS) {
       return AppGlassSurface(
-        borderRadius: 20,
+        borderRadius: AppGlassRadii.panel,
         padding: EdgeInsets.zero,
         tone: AppGlassTone.surface,
         nativeBackdrop: true,
@@ -1105,7 +1105,7 @@ class _MacEmptyTaskState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: AppGlassSurface(
-        borderRadius: 22,
+        borderRadius: AppGlassRadii.prominentPanel,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
         tone: AppGlassTone.panel,
         nativeBackdrop: true,

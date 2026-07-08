@@ -1489,7 +1489,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 }
 
 class _MacSplitArticleCornerClipper extends CustomClipper<Path> {
-  static const _outerRadius = 28.0;
+  static const _outerRadius = 24.0;
   static const _safeInset = 8.0;
 
   const _MacSplitArticleCornerClipper();

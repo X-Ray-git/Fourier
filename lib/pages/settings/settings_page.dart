@@ -801,7 +801,7 @@ class _SettingsPageState extends State<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AppGlassSurface(
-          borderRadius: 20,
+          borderRadius: AppGlassRadii.panel,
           padding: const EdgeInsets.all(16),
           tone: AppGlassTone.panel,
           nativeBackdrop: true,
@@ -846,7 +846,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 12),
         AppGlassSurface(
-          borderRadius: 20,
+          borderRadius: AppGlassRadii.panel,
           padding: const EdgeInsets.all(12),
           tone: AppGlassTone.surface,
           nativeBackdrop: true,
@@ -881,7 +881,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 12),
         AppGlassSurface(
-          borderRadius: 20,
+          borderRadius: AppGlassRadii.panel,
           padding: const EdgeInsets.all(12),
           tone: AppGlassTone.surface,
           nativeBackdrop: true,
@@ -917,7 +917,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
         Expanded(
           child: AppGlassSurface(
-            borderRadius: 20,
+            borderRadius: AppGlassRadii.panel,
             padding: const EdgeInsets.symmetric(vertical: 8),
             tone: AppGlassTone.surface,
             nativeBackdrop: true,
@@ -1583,7 +1583,7 @@ class _MacSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return AppGlassSurface(
-      borderRadius: 20,
+      borderRadius: AppGlassRadii.panel,
       padding: const EdgeInsets.all(18),
       tone: AppGlassTone.panel,
       nativeBackdrop: true,
@@ -1985,7 +1985,7 @@ class _MacSettingsConfirmDialog extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: AppGlassSurface(
-          borderRadius: 20,
+          borderRadius: AppGlassRadii.panel,
           padding: const EdgeInsets.all(18),
           tone: AppGlassTone.panel,
           nativeBackdrop: true,

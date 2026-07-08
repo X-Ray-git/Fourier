@@ -12,7 +12,7 @@ import '../../../services/feed_translation_settings_service.dart';
 import '../../subscriptions/subscriptions_controller.dart';
 import '../../timeline/timeline_controller.dart';
 
-const _macOSSidebarPanelRadius = 20.0;
+const _macOSSidebarPanelRadius = 18.0;
 const EdgeInsets _macOSSidebarPanelMargin = EdgeInsets.fromLTRB(8, 8, 8, 8);
 const _macOSSidebarExpandedWidth = 290.0;
 const _macOSSidebarCollapsedWidth = 80.0;

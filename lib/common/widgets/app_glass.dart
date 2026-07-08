@@ -15,6 +15,13 @@ enum AppGlassButtonRole { primary, secondary, destructive }
 
 enum AppGlassTooltipPlacement { bottom, right }
 
+abstract final class AppGlassRadii {
+  static const surface = 16.0;
+  static const panel = 18.0;
+  static const prominentPanel = 20.0;
+  static const pill = 999.0;
+}
+
 Color appGlassActiveControlFill(
   BuildContext context, {
   double accentAlpha = 0.05,
@@ -45,7 +52,7 @@ class AppGlassSurface extends StatelessWidget {
   const AppGlassSurface({
     super.key,
     required this.child,
-    this.borderRadius = 18,
+    this.borderRadius = AppGlassRadii.surface,
     this.padding,
     this.margin,
     this.tone = AppGlassTone.surface,
@@ -363,7 +370,7 @@ class AppGlassPanel extends StatelessWidget {
   const AppGlassPanel({
     super.key,
     required this.child,
-    this.borderRadius = 20,
+    this.borderRadius = AppGlassRadii.panel,
     this.padding = const EdgeInsets.all(12),
   });
 

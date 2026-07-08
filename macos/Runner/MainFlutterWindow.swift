@@ -3,9 +3,9 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   private enum Metrics {
-    static let windowRadius: CGFloat = 28
-    static let trafficLightCenterX: CGFloat = 28
-    static let trafficLightCenterYFromTop: CGFloat = 28
+    static let windowRadius: CGFloat = 24
+    static let trafficLightCenterX: CGFloat = 24
+    static let trafficLightCenterYFromTop: CGFloat = 24
     static let trafficLightCenterSpacing: CGFloat = 23
   }
 

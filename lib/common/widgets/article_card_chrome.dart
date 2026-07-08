@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 abstract final class ArticleCardChrome {
-  static double get radius => Platform.isMacOS ? 8 : 16;
+  static double get radius => Platform.isMacOS ? 10 : 16;
 
   static EdgeInsets get outerPadding => EdgeInsets.symmetric(
     horizontal: Platform.isMacOS ? 8 : 12,

@@ -1087,6 +1087,7 @@ class _MacFeedReadFilterToggleState extends State<_MacFeedReadFilterToggle> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
 
     return Obx(() {
       final filter = _visualFilter ?? widget.controller.readFilter.value;
@@ -1126,7 +1127,10 @@ class _MacFeedReadFilterToggleState extends State<_MacFeedReadFilterToggle> {
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(999),
-                              color: cs.onSurface.withValues(alpha: 0.035),
+                              color: controls.subtleNeutralOverlay(
+                                hovered: true,
+                                pressed: _pressed,
+                              ),
                             ),
                           ),
                         ),
@@ -1142,12 +1146,12 @@ class _MacFeedReadFilterToggleState extends State<_MacFeedReadFilterToggle> {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(999),
-                            color: appGlassActiveControlFill(
-                              context,
-                              accentAlpha: 0.085,
-                            ),
+                            color: controls.activeFill(accentAlpha: 0.085),
                             border: Border.all(
-                              color: cs.primary.withValues(alpha: 0.22),
+                              color: controls.activeBorder(
+                                darkAlpha: 0.22,
+                                lightAlpha: 0.22,
+                              ),
                               width: 0.5,
                             ),
                           ),

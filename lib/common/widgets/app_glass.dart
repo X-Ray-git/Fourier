@@ -37,6 +37,143 @@ Color appGlassActiveControlFill(
   );
 }
 
+class AppGlassControlPalette {
+  final BuildContext context;
+  late final ColorScheme _cs = Theme.of(context).colorScheme;
+  late final bool _isDark = Theme.of(context).brightness == Brightness.dark;
+
+  AppGlassControlPalette(this.context);
+
+  Color get primaryForeground => _cs.primary;
+  Color get neutralForeground => _cs.onSurface;
+  Color get mutedForeground => _cs.onSurfaceVariant;
+  Color get destructiveForeground => _cs.error;
+
+  Color foregroundFor(AppGlassButtonRole role) {
+    return switch (role) {
+      AppGlassButtonRole.primary => primaryForeground,
+      AppGlassButtonRole.secondary => neutralForeground,
+      AppGlassButtonRole.destructive => destructiveForeground,
+    };
+  }
+
+  Color activeFill({double accentAlpha = 0.05}) {
+    return appGlassActiveControlFill(context, accentAlpha: accentAlpha);
+  }
+
+  Color activeTint({double darkAlpha = 0.20, double lightAlpha = 0.12}) {
+    return _cs.primary.withValues(alpha: _isDark ? darkAlpha : lightAlpha);
+  }
+
+  Color activeBorder({double darkAlpha = 0.24, double lightAlpha = 0.18}) {
+    return _cs.primary.withValues(alpha: _isDark ? darkAlpha : lightAlpha);
+  }
+
+  Color neutralOverlay({
+    required bool hovered,
+    required bool pressed,
+    double darkHoverAlpha = 0.08,
+    double lightHoverAlpha = 0.055,
+    double darkPressedAlpha = 0.12,
+    double lightPressedAlpha = 0.08,
+  }) {
+    final overlay = _isDark ? Colors.white : Colors.black;
+    if (pressed) {
+      return overlay.withValues(
+        alpha: _isDark ? darkPressedAlpha : lightPressedAlpha,
+      );
+    }
+    if (hovered) {
+      return overlay.withValues(
+        alpha: _isDark ? darkHoverAlpha : lightHoverAlpha,
+      );
+    }
+    return Colors.transparent;
+  }
+
+  Color subtleNeutralOverlay({
+    required bool hovered,
+    required bool pressed,
+    double hoverAlpha = 0.035,
+    double pressedMultiplier = 1.2,
+  }) {
+    if (pressed) {
+      return _cs.onSurface.withValues(
+        alpha: (hoverAlpha * pressedMultiplier).clamp(0.0, 1.0),
+      );
+    }
+    if (hovered) {
+      return _cs.onSurface.withValues(alpha: hoverAlpha);
+    }
+    return Colors.transparent;
+  }
+
+  Color roleRestFill(AppGlassButtonRole role) {
+    return switch (role) {
+      AppGlassButtonRole.primary => activeFill(accentAlpha: 0.06),
+      AppGlassButtonRole.destructive => Color.alphaBlend(
+        _cs.error.withValues(alpha: 0.05),
+        _cs.scrim.withValues(alpha: 0.18),
+      ),
+      AppGlassButtonRole.secondary => _cs.onSurface.withValues(alpha: 0.03),
+    };
+  }
+
+  Color roleHoverFill(AppGlassButtonRole role) {
+    return switch (role) {
+      AppGlassButtonRole.primary => activeFill(accentAlpha: 0.065),
+      AppGlassButtonRole.destructive => _cs.error.withValues(alpha: 0.045),
+      AppGlassButtonRole.secondary => _cs.onSurface.withValues(alpha: 0.035),
+    };
+  }
+
+  Color rolePressedFill(AppGlassButtonRole role) {
+    final hoverFill = roleHoverFill(role);
+    return hoverFill.withValues(alpha: (hoverFill.a * 1.2).clamp(0.0, 1.0));
+  }
+
+  Color optionFill({
+    required bool selected,
+    required bool hovered,
+    required bool pressed,
+  }) {
+    if (selected) return activeTint();
+    return neutralOverlay(hovered: hovered, pressed: pressed);
+  }
+
+  Color optionBorder({
+    required bool selected,
+    required bool hovered,
+    double widthAlpha = 1.0,
+  }) {
+    if (selected) {
+      final border = activeBorder();
+      return border.withValues(alpha: border.a * widthAlpha);
+    }
+    if (hovered) {
+      final border = neutralOverlay(hovered: true, pressed: false);
+      return border.withValues(alpha: border.a * widthAlpha);
+    }
+    return Colors.transparent;
+  }
+
+  Color pillFill({required bool active}) {
+    if (active) return activeFill(accentAlpha: 0.06);
+    return _cs.surfaceContainerHighest.withValues(alpha: 0.58);
+  }
+
+  Color pillBorder({required bool active, required bool hovered}) {
+    if (active) return _cs.primary.withValues(alpha: 0.22);
+    return _cs.outlineVariant.withValues(alpha: hovered ? 0.62 : 0.52);
+  }
+
+  Color disabledFill() => _cs.onSurface.withValues(alpha: 0.03);
+}
+
+AppGlassControlPalette appGlassControlPalette(BuildContext context) {
+  return AppGlassControlPalette(context);
+}
+
 class AppGlassSurface extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -603,9 +740,9 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
     final enabled = widget.onPressed != null;
-    final selectedFill = appGlassActiveControlFill(
-      context,
+    final selectedFill = controls.activeFill(
       accentAlpha: widget.selectedFillOpacity,
     );
     return AppGlassTooltip(
@@ -644,9 +781,11 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
                   borderRadius: BorderRadius.circular(999),
                   color: widget.selected
                       ? selectedFill
-                      : _hovered
-                      ? cs.onSurface.withValues(alpha: 0.06)
-                      : Colors.transparent,
+                      : controls.subtleNeutralOverlay(
+                          hovered: _hovered,
+                          pressed: _pressed,
+                          hoverAlpha: 0.06,
+                        ),
                 ),
                 child: Icon(
                   widget.icon,
@@ -681,11 +820,12 @@ class AppGlassBadge extends StatelessWidget {
     if (count <= 0) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
     final displayText = count > maxCount ? '$maxCount+' : count.toString();
     final isWide = displayText.length > 1;
     final foreground = selected ? cs.primary : cs.onSurfaceVariant;
     final fill = selected
-        ? appGlassActiveControlFill(context, accentAlpha: 0.05)
+        ? controls.activeFill(accentAlpha: 0.05)
         : cs.onSurface.withValues(alpha: 0.05);
 
     return SelectionContainer.disabled(
@@ -755,38 +895,16 @@ class _AppGlassButtonState extends State<AppGlassButton> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
     final enabled = widget.onPressed != null;
-    final foreground = switch (widget.role) {
-      AppGlassButtonRole.primary => cs.primary,
-      AppGlassButtonRole.secondary => cs.onSurface,
-      AppGlassButtonRole.destructive => cs.error,
-    };
-    final selectedFill = switch (widget.role) {
-      AppGlassButtonRole.primary => appGlassActiveControlFill(
-        context,
-        accentAlpha: 0.06,
-      ),
-      AppGlassButtonRole.destructive => Color.alphaBlend(
-        cs.error.withValues(alpha: 0.05),
-        cs.scrim.withValues(alpha: 0.18),
-      ),
-      AppGlassButtonRole.secondary => cs.onSurface.withValues(alpha: 0.03),
-    };
-    final hoverFill = switch (widget.role) {
-      AppGlassButtonRole.primary => appGlassActiveControlFill(
-        context,
-        accentAlpha: 0.065,
-      ),
-      AppGlassButtonRole.destructive => cs.error.withValues(alpha: 0.045),
-      AppGlassButtonRole.secondary => cs.onSurface.withValues(alpha: 0.035),
-    };
+    final foreground = controls.foregroundFor(widget.role);
     final fill = !enabled
-        ? cs.onSurface.withValues(alpha: 0.03)
+        ? controls.disabledFill()
         : _pressed
-        ? hoverFill.withValues(alpha: (hoverFill.a * 1.2).clamp(0.0, 1.0))
+        ? controls.rolePressedFill(widget.role)
         : _hovered
-        ? hoverFill
-        : selectedFill;
+        ? controls.roleHoverFill(widget.role)
+        : controls.roleRestFill(widget.role);
     final content = AppGlassSurface(
       borderRadius: 12,
       padding: EdgeInsets.zero,

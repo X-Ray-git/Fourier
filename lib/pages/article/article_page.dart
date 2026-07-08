@@ -2195,26 +2195,22 @@ class _ArticleTocItemState extends State<_ArticleTocItem> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final neutralOverlay = isDark ? Colors.white : Colors.black;
+    final controls = appGlassControlPalette(context);
     final entry = widget.entry;
     final foreground = widget.isActive
         ? cs.primary
         : entry.level <= 2
         ? cs.onSurface
         : cs.onSurfaceVariant;
-    final backgroundColor = widget.isActive
-        ? cs.primary.withValues(alpha: isDark ? 0.20 : 0.12)
-        : _isPressed
-        ? neutralOverlay.withValues(alpha: isDark ? 0.12 : 0.08)
-        : _isHovered
-        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.055)
-        : Colors.transparent;
-    final borderColor = widget.isActive
-        ? cs.primary.withValues(alpha: isDark ? 0.24 : 0.18)
-        : _isHovered
-        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.06)
-        : Colors.transparent;
+    final backgroundColor = controls.optionFill(
+      selected: widget.isActive,
+      hovered: _isHovered,
+      pressed: _isPressed,
+    );
+    final borderColor = controls.optionBorder(
+      selected: widget.isActive,
+      hovered: _isHovered,
+    );
 
     return Semantics(
       button: true,
@@ -2292,13 +2288,15 @@ class _TocIconButtonState extends State<_TocIconButton> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final overlay = isDark ? Colors.white : Colors.black;
-    final backgroundColor = _isPressed
-        ? overlay.withValues(alpha: isDark ? 0.14 : 0.08)
-        : _isHovered
-        ? overlay.withValues(alpha: isDark ? 0.09 : 0.055)
-        : Colors.transparent;
+    final controls = appGlassControlPalette(context);
+    final backgroundColor = controls.neutralOverlay(
+      hovered: _isHovered,
+      pressed: _isPressed,
+      darkHoverAlpha: 0.09,
+      lightHoverAlpha: 0.055,
+      darkPressedAlpha: 0.14,
+      lightPressedAlpha: 0.08,
+    );
 
     return AppGlassTooltip(
       message: widget.tooltip,
@@ -2619,14 +2617,14 @@ class _MacPillActionChipState extends State<_MacPillActionChip> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
     final enabled = widget.onTap != null;
     final foreground = widget.active ? cs.primary : cs.onSurfaceVariant;
-    final background = widget.active
-        ? cs.primary.withValues(alpha: 0.10)
-        : cs.surfaceContainerHighest.withValues(alpha: 0.58);
-    final borderColor = widget.active
-        ? cs.primary.withValues(alpha: 0.22)
-        : cs.outlineVariant.withValues(alpha: _hovered ? 0.62 : 0.52);
+    final background = controls.pillFill(active: widget.active);
+    final borderColor = controls.pillBorder(
+      active: widget.active,
+      hovered: _hovered,
+    );
 
     return SelectionContainer.disabled(
       child: MouseRegion(

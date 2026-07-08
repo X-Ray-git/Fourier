@@ -1060,6 +1060,7 @@ class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
 
     return Obx(() {
       final mode = _visualMode ?? widget.controller.selectedMode.value;
@@ -1103,7 +1104,10 @@ class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(999),
-                              color: cs.onSurface.withValues(alpha: 0.035),
+                              color: controls.subtleNeutralOverlay(
+                                hovered: true,
+                                pressed: _pressed,
+                              ),
                             ),
                           ),
                         ),
@@ -1119,12 +1123,12 @@ class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(999),
-                            color: appGlassActiveControlFill(
-                              context,
-                              accentAlpha: 0.085,
-                            ),
+                            color: controls.activeFill(accentAlpha: 0.085),
                             border: Border.all(
-                              color: cs.primary.withValues(alpha: 0.22),
+                              color: controls.activeBorder(
+                                darkAlpha: 0.22,
+                                lightAlpha: 0.22,
+                              ),
                               width: 0.5,
                             ),
                           ),
@@ -1606,21 +1610,17 @@ class _MacTimelineSortOptionState extends State<_MacTimelineSortOption> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final neutralOverlay = isDark ? Colors.white : Colors.black;
+    final controls = appGlassControlPalette(context);
     final foreground = widget.selected ? cs.primary : cs.onSurface;
-    final backgroundColor = widget.selected
-        ? cs.primary.withValues(alpha: isDark ? 0.20 : 0.12)
-        : _pressed
-        ? neutralOverlay.withValues(alpha: isDark ? 0.12 : 0.08)
-        : _hovered
-        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.055)
-        : Colors.transparent;
-    final borderColor = widget.selected
-        ? cs.primary.withValues(alpha: isDark ? 0.24 : 0.18)
-        : _hovered
-        ? neutralOverlay.withValues(alpha: isDark ? 0.08 : 0.06)
-        : Colors.transparent;
+    final backgroundColor = controls.optionFill(
+      selected: widget.selected,
+      hovered: _hovered,
+      pressed: _pressed,
+    );
+    final borderColor = controls.optionBorder(
+      selected: widget.selected,
+      hovered: _hovered,
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1697,13 +1697,15 @@ class _MacTimelineSortCloseButtonState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final overlay = isDark ? Colors.white : Colors.black;
-    final backgroundColor = _pressed
-        ? overlay.withValues(alpha: isDark ? 0.14 : 0.08)
-        : _hovered
-        ? overlay.withValues(alpha: isDark ? 0.09 : 0.055)
-        : Colors.transparent;
+    final controls = appGlassControlPalette(context);
+    final backgroundColor = controls.neutralOverlay(
+      hovered: _hovered,
+      pressed: _pressed,
+      darkHoverAlpha: 0.09,
+      lightHoverAlpha: 0.055,
+      darkPressedAlpha: 0.14,
+      lightPressedAlpha: 0.08,
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

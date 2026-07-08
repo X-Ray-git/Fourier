@@ -1582,6 +1582,7 @@ class _MacSettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
     return AppGlassSurface(
       borderRadius: AppGlassRadii.panel,
       padding: const EdgeInsets.all(18),
@@ -1597,7 +1598,7 @@ class _MacSettingsSection extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: appGlassActiveControlFill(context, accentAlpha: 0.05),
+                  color: controls.activeFill(accentAlpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, size: 18, color: cs.primary),
@@ -2097,10 +2098,9 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(11),
-                              color: appGlassActiveControlFill(
+                              color: appGlassControlPalette(
                                 context,
-                                accentAlpha: 0.045,
-                              ),
+                              ).activeFill(accentAlpha: 0.045),
                             ),
                             child: const SizedBox.expand(),
                           ),
@@ -2210,6 +2210,11 @@ class _MacGlassSelectFieldState<T> extends State<_MacGlassSelectField<T>> {
     _overlayEntry = OverlayEntry(
       builder: (overlayContext) {
         final cs = Theme.of(overlayContext).colorScheme;
+        final isDark = Theme.of(overlayContext).brightness == Brightness.dark;
+        final menuFill = Color.alphaBlend(
+          cs.surface.withValues(alpha: isDark ? 0.88 : 0.92),
+          cs.surfaceContainerHighest.withValues(alpha: isDark ? 0.78 : 0.86),
+        );
         return Stack(
           children: [
             Positioned.fill(
@@ -2247,27 +2252,36 @@ class _MacGlassSelectFieldState<T> extends State<_MacGlassSelectField<T>> {
                     ),
                     child: AppGlassSurface(
                       borderRadius: 16,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      padding: EdgeInsets.zero,
                       tone: AppGlassTone.panel,
                       nativeBackdrop: true,
                       staticMaterial: true,
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (final option in widget.options)
-                              _MacGlassSelectOption<T>(
-                                value: option,
-                                label: widget.labelFor(option),
-                                selected: option == widget.value,
-                                onSelected: (value) {
-                                  widget.onChanged(value);
-                                  _hideOptions();
-                                },
-                                colorScheme: cs,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: menuFill),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: SingleChildScrollView(
+                              padding: EdgeInsets.zero,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (final option in widget.options)
+                                    _MacGlassSelectOption<T>(
+                                      value: option,
+                                      label: widget.labelFor(option),
+                                      selected: option == widget.value,
+                                      onSelected: (value) {
+                                        widget.onChanged(value);
+                                        _hideOptions();
+                                      },
+                                      colorScheme: cs,
+                                    ),
+                                ],
                               ),
-                          ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -2400,10 +2414,11 @@ class _MacGlassSelectOptionState<T> extends State<_MacGlassSelectOption<T>> {
   @override
   Widget build(BuildContext context) {
     final cs = widget.colorScheme;
+    final controls = appGlassControlPalette(context);
     final fill = widget.selected
-        ? appGlassActiveControlFill(context, accentAlpha: 0.05)
+        ? controls.activeFill(accentAlpha: 0.05)
         : _hovered
-        ? cs.onSurface.withValues(alpha: 0.035)
+        ? controls.subtleNeutralOverlay(hovered: true, pressed: false)
         : Colors.transparent;
     return MouseRegion(
       cursor: SystemMouseCursors.click,

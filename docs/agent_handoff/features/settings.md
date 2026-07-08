@@ -29,6 +29,8 @@ macOS UI：
 - 设置顶部 chrome 已简化：不再保留大块冗余标题/说明/版本号区域。
 - 设置底部/右侧 padding 应尽量保持和 macOS frame/侧边栏一致的边缘节奏。
 - Segmented 控件应使用当前 hover/cursor 行为，中性控件避免橙色 hover。
+- macOS 自定义下拉菜单使用 `_MacGlassSelectField`。下拉 overlay 不能完全透明：菜单面板需要局部静态底色遮住背后内容，且底色圆角必须和外框圆角对齐。
+- 下拉 overlay 的可读性修复是局部处理，不应通过全局提高 `AppGlassSurface` 不透明度解决，否则会影响其他已经验证过的玻璃控件。
 
 已知产品张力：
 

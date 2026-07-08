@@ -47,4 +47,3 @@ flutter test         # 运行测试
 ## 文档
 
 - 功能演进与实现细节详见 [`AGENT_HANDOFF.md`](AGENT_HANDOFF.md)
-- 版本日志详见 [`CHANGELOG.md`](CHANGELOG.md)

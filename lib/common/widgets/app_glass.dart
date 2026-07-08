@@ -865,6 +865,7 @@ class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
                   duration: const Duration(milliseconds: 120),
                   curve: Curves.easeOutCubic,
                   child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       if (_hovered)
                         Positioned.fill(

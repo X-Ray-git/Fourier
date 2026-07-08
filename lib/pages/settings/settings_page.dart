@@ -2088,6 +2088,7 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
                   builder: (context, constraints) {
                     final segmentWidth = constraints.maxWidth / options.length;
                     return Stack(
+                      clipBehavior: Clip.none,
                       children: [
                         AnimatedPositioned(
                           duration: const Duration(milliseconds: 230),

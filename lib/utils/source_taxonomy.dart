@@ -14,9 +14,9 @@ abstract final class SourceTaxonomy {
   };
 
   static String viewLabelFromInt(int? view) => switch (view) {
-    0 => '订阅源',
-    1 => '社交',
-    2 => '收件箱',
+    0 => 'Articles',
+    1 => 'Social Media',
+    2 => 'Inbox',
     _ => '未分类',
   };
 
@@ -35,9 +35,9 @@ abstract final class SourceTaxonomy {
   };
 
   static String viewLabelFromCategory(String? category) => switch (category) {
-    'feeds' => '订阅源',
-    'social' => '社交',
-    'inbox' => '收件箱',
+    'feeds' => 'Articles',
+    'social' => 'Social Media',
+    'inbox' => 'Inbox',
     _ => '未分类',
   };
 
@@ -67,7 +67,7 @@ abstract final class SourceTaxonomy {
       final value = candidate?.toString().trim() ?? '';
       if (value.isNotEmpty) return value;
     }
-    return '收件箱';
+    return 'Inbox';
   }
 
   static String inboxShortLabel(Map<String, dynamic> inbox) {
@@ -84,7 +84,7 @@ abstract final class SourceTaxonomy {
       final label = _normalizeInboxLabel(candidate?.toString() ?? '');
       if (label.isNotEmpty) return label;
     }
-    return '收件箱';
+    return 'Inbox';
   }
 
   static final _whitespaceRe = RegExp(r'\s+');

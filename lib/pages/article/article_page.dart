@@ -986,6 +986,243 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     final screenWidth = MediaQuery.of(context).size.width;
     final maxWidth = _articleContentMaxWidth(screenWidth - 32);
 
+    Widget articleBody = SelectionArea(
+      child: Padding(
+        padding: Platform.isMacOS
+            ? const EdgeInsets.only(bottom: 8)
+            : EdgeInsets.zero,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            _updateScrollProgress(notification.metrics);
+            return false;
+          },
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              // ─── 元数据区域 ──────────────────────
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: controller.openInBrowser,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 2,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    controller.article.title,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // 元数据
+                          _MetadataSection(
+                            controller: controller,
+                            cs: colorScheme,
+                          ),
+                          const SizedBox(height: 8),
+
+                          if (controller.article.publishedAt.isNotEmpty)
+                            Text(
+                              '发布于: ${controller.article.publishedAt}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.7,
+                                ),
+                              ),
+                            ),
+
+                          const Divider(height: 24),
+
+                          _ToolbarRow(controller: controller, cs: colorScheme),
+                          _SummaryCard(controller: controller),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // （已删除：高度为 0 的隐藏预加载栈代码）
+
+              // ─── 正文区域：逐块渲染 ──────────────
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: Obx(() {
+                  if (controller.isParsingContent.value || !_allowBodyBuild) {
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 64),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                '正在排版内容…',
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  final activeChunks =
+                      controller.showTranslation.value &&
+                          controller.translatedChunks.isNotEmpty
+                      ? controller.translatedChunks
+                      : controller.chunks;
+
+                  if (activeChunks.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: controller.isFetchingContent.value
+                            ? Column(
+                                children: [
+                                  const SizedBox(height: 32),
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: colorScheme.primary.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    '正在加载正文…',
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  Icon(
+                                    Icons.article_outlined,
+                                    size: 48,
+                                    color: colorScheme.onSurfaceVariant
+                                        .withValues(alpha: 0.5),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    '暂无正文内容',
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (controller.article.url.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    TextButton.icon(
+                                      icon: const Icon(
+                                        Icons.open_in_browser,
+                                        size: 18,
+                                      ),
+                                      label: const Text('在浏览器中查看原文'),
+                                      onPressed: () =>
+                                          controller.openInBrowser(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                      ),
+                    );
+                  }
+
+                  final totalChunks = activeChunks.length;
+                  final showTrans = controller.showTranslation.value;
+
+                  return SliverToBoxAdapter(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxWidth),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: List.generate(totalChunks, (idx) {
+                            final chunk = activeChunks[idx];
+                            final card = HtmlChunkCard(
+                              key: ValueKey(
+                                '${showTrans ? "trans" : "orig"}_$idx',
+                              ),
+                              chunk: chunk,
+                              maxWidth: maxWidth,
+                              hoveredUrl: _hoveredUrl,
+                              contentAnchorKey:
+                                  chunk.type == HtmlChunkType.heading
+                                  ? _headingKeyFor(showTrans, idx)
+                                  : null,
+                              onImageTap: (url) =>
+                                  controller.openImagePreview(url, context),
+                            );
+                            return card;
+                          }),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+
+              // 底部间距：移动端需要避让右下角 FAB，macOS 仅保留小的视觉间距。
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: Platform.isMacOS ? 16 : 80),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (Platform.isMacOS && widget.isSplitView) {
+      articleBody = ClipPath(
+        clipper: const _MacSplitArticleCornerClipper(),
+        clipBehavior: Clip.antiAlias,
+        child: articleBody,
+      );
+    }
+
     Widget scaffold = Scaffold(
       appBar: AppBar(
         title: Text(
@@ -1108,236 +1345,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 ),
               );
             }),
-      body: SelectionArea(
-        child: Padding(
-          padding: Platform.isMacOS
-              ? const EdgeInsets.only(bottom: 8)
-              : EdgeInsets.zero,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              _updateScrollProgress(notification.metrics);
-              return false;
-            },
-            child: CustomScrollView(
-              controller: _scrollController,
-              slivers: [
-                // ─── 元数据区域 ──────────────────────
-                SliverPadding(
-                  padding: const EdgeInsets.all(16),
-                  sliver: SliverToBoxAdapter(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: maxWidth),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            InkWell(
-                              onTap: controller.openInBrowser,
-                              borderRadius: BorderRadius.circular(8),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4,
-                                  horizontal: 2,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      controller.article.title,
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        height: 1.35,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // 元数据
-                            _MetadataSection(
-                              controller: controller,
-                              cs: colorScheme,
-                            ),
-                            const SizedBox(height: 8),
-
-                            if (controller.article.publishedAt.isNotEmpty)
-                              Text(
-                                '发布于: ${controller.article.publishedAt}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.7),
-                                ),
-                              ),
-
-                            const Divider(height: 24),
-
-                            _ToolbarRow(
-                              controller: controller,
-                              cs: colorScheme,
-                            ),
-                            _SummaryCard(controller: controller),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // （已删除：高度为 0 的隐藏预加载栈代码）
-
-                // ─── 正文区域：逐块渲染 ──────────────
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: Obx(() {
-                    if (controller.isParsingContent.value || !_allowBodyBuild) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 64),
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: colorScheme.primary.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  '正在排版内容…',
-                                  style: TextStyle(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-
-                    final activeChunks =
-                        controller.showTranslation.value &&
-                            controller.translatedChunks.isNotEmpty
-                        ? controller.translatedChunks
-                        : controller.chunks;
-
-                    if (activeChunks.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: controller.isFetchingContent.value
-                              ? Column(
-                                  children: [
-                                    const SizedBox(height: 32),
-                                    SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: colorScheme.primary.withValues(
-                                          alpha: 0.6,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      '正在加载正文…',
-                                      style: TextStyle(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  children: [
-                                    Icon(
-                                      Icons.article_outlined,
-                                      size: 48,
-                                      color: colorScheme.onSurfaceVariant
-                                          .withValues(alpha: 0.5),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      '暂无正文内容',
-                                      style: TextStyle(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    if (controller.article.url.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      TextButton.icon(
-                                        icon: const Icon(
-                                          Icons.open_in_browser,
-                                          size: 18,
-                                        ),
-                                        label: const Text('在浏览器中查看原文'),
-                                        onPressed: () =>
-                                            controller.openInBrowser(),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                        ),
-                      );
-                    }
-
-                    final totalChunks = activeChunks.length;
-                    final showTrans = controller.showTranslation.value;
-
-                    return SliverToBoxAdapter(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: maxWidth),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: List.generate(totalChunks, (idx) {
-                              final chunk = activeChunks[idx];
-                              final card = HtmlChunkCard(
-                                key: ValueKey(
-                                  '${showTrans ? "trans" : "orig"}_$idx',
-                                ),
-                                chunk: chunk,
-                                maxWidth: maxWidth,
-                                hoveredUrl: _hoveredUrl,
-                                contentAnchorKey:
-                                    chunk.type == HtmlChunkType.heading
-                                    ? _headingKeyFor(showTrans, idx)
-                                    : null,
-                                onImageTap: (url) =>
-                                    controller.openImagePreview(url, context),
-                              );
-                              return card;
-                            }),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-
-                // 底部间距：移动端需要避让右下角 FAB，macOS 仅保留小的视觉间距。
-                SliverPadding(
-                  padding: EdgeInsets.only(bottom: Platform.isMacOS ? 16 : 80),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      body: articleBody,
     );
 
     final result = Stack(
@@ -1477,6 +1485,29 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             child: result,
           )
         : result;
+  }
+}
+
+class _MacSplitArticleCornerClipper extends CustomClipper<Path> {
+  static const _outerRadius = 28.0;
+  static const _safeInset = 8.0;
+
+  const _MacSplitArticleCornerClipper();
+
+  @override
+  Path getClip(Size size) {
+    final width = math.max(0.0, size.width - _safeInset);
+    final height = math.max(0.0, size.height - _safeInset);
+    final radius = math.max(0.0, _outerRadius - _safeInset);
+    final rect = Rect.fromLTWH(0, 0, width, height);
+    return Path()..addRRect(
+      RRect.fromRectAndCorners(rect, bottomRight: Radius.circular(radius)),
+    );
+  }
+
+  @override
+  bool shouldReclip(covariant _MacSplitArticleCornerClipper oldClipper) {
+    return false;
   }
 }
 

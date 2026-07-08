@@ -1049,127 +1049,18 @@ class _MacTimelineModeToggle extends StatefulWidget {
 
 class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
   TimelineViewMode? _visualMode;
-  bool _hovered = false;
-  bool _pressed = false;
-
-  static const _trackWidth = 62.0;
-  static const _trackHeight = 30.0;
-  static const _padding = 3.0;
-  static const _thumbWidth = 42.0;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final controls = appGlassControlPalette(context);
-
     return Obx(() {
       final mode = _visualMode ?? widget.controller.selectedMode.value;
       final selectedIndex = mode == TimelineViewMode.unread ? 0 : 1;
 
-      return SelectionContainer.disabled(
-        child: AppGlassSurface(
-          borderRadius: 999,
-          padding: const EdgeInsets.all(_padding),
-          tone: AppGlassTone.control,
-          nativeBackdrop: true,
-          staticMaterial: true,
-          child: SizedBox(
-            width: _trackWidth,
-            height: _trackHeight,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              onEnter: (_) => setState(() => _hovered = true),
-              onExit: (_) => setState(() {
-                _hovered = false;
-                _pressed = false;
-              }),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (_) => setState(() => _pressed = true),
-                onTapUp: (_) => setState(() => _pressed = false),
-                onTapCancel: () => setState(() => _pressed = false),
-                onTap: () => _setMode(
-                  selectedIndex == 0
-                      ? TimelineViewMode.all
-                      : TimelineViewMode.unread,
-                ),
-                child: AnimatedScale(
-                  scale: _pressed ? 0.975 : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOutCubic,
-                  child: Stack(
-                    children: [
-                      if (_hovered)
-                        Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              color: controls.subtleNeutralOverlay(
-                                hovered: true,
-                                pressed: _pressed,
-                              ),
-                            ),
-                          ),
-                        ),
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 240),
-                        curve: Curves.easeOutBack,
-                        left: selectedIndex == 0
-                            ? 0
-                            : _trackWidth - _thumbWidth,
-                        top: 0,
-                        bottom: 0,
-                        width: _thumbWidth,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            color: controls.activeFill(accentAlpha: 0.085),
-                            border: Border.all(
-                              color: controls.activeBorder(
-                                darkAlpha: 0.22,
-                                lightAlpha: 0.22,
-                              ),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Center(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 140),
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeOutCubic,
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: ScaleTransition(
-                                    scale: Tween<double>(
-                                      begin: 0.94,
-                                      end: 1,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: Text(
-                                selectedIndex == 0 ? '未读' : '全部',
-                                key: ValueKey(selectedIndex),
-                                maxLines: 1,
-                                overflow: TextOverflow.clip,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: cs.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+      return AppGlassCompactSwitch(
+        selectedIndex: selectedIndex,
+        labels: const ['未读', '全部'],
+        onChanged: (index) => _setMode(
+          index == 0 ? TimelineViewMode.unread : TimelineViewMode.all,
         ),
       );
     });

@@ -787,6 +787,149 @@ class AppGlassRoundControlChrome extends StatelessWidget {
   }
 }
 
+class AppGlassCompactSwitch extends StatefulWidget {
+  final int selectedIndex;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+  final double trackWidth;
+  final double trackHeight;
+  final double thumbWidth;
+
+  const AppGlassCompactSwitch({
+    super.key,
+    required this.selectedIndex,
+    required this.labels,
+    required this.onChanged,
+    this.trackWidth = 62,
+    this.trackHeight = 30,
+    this.thumbWidth = 42,
+  }) : assert(labels.length == 2),
+       assert(selectedIndex == 0 || selectedIndex == 1);
+
+  @override
+  State<AppGlassCompactSwitch> createState() => _AppGlassCompactSwitchState();
+}
+
+class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
+  static const _padding = 3.0;
+
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
+
+    return SelectionContainer.disabled(
+      child: AppGlassSurface(
+        borderRadius: AppGlassRadii.pill,
+        padding: const EdgeInsets.all(_padding),
+        tone: AppGlassTone.control,
+        nativeBackdrop: true,
+        staticMaterial: true,
+        child: SizedBox(
+          width: widget.trackWidth,
+          height: widget.trackHeight,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            }),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTapCancel: () => setState(() => _pressed = false),
+              onTap: () => widget.onChanged(widget.selectedIndex == 0 ? 1 : 0),
+              child: AnimatedScale(
+                scale: _pressed ? 0.975 : 1.0,
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOutCubic,
+                child: Stack(
+                  children: [
+                    if (_hovered)
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              AppGlassRadii.pill,
+                            ),
+                            color: controls.subtleNeutralOverlay(
+                              hovered: true,
+                              pressed: _pressed,
+                            ),
+                          ),
+                        ),
+                      ),
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 240),
+                      curve: Curves.easeOutBack,
+                      left: widget.selectedIndex == 0
+                          ? 0
+                          : widget.trackWidth - widget.thumbWidth,
+                      top: 0,
+                      bottom: 0,
+                      width: widget.thumbWidth,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            AppGlassRadii.pill,
+                          ),
+                          color: controls.activeFill(accentAlpha: 0.085),
+                          border: Border.all(
+                            color: controls.activeBorder(
+                              darkAlpha: 0.22,
+                              lightAlpha: 0.22,
+                            ),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Center(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 140),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeOutCubic,
+                            transitionBuilder: (child, animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: ScaleTransition(
+                                  scale: Tween<double>(
+                                    begin: 0.94,
+                                    end: 1,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              widget.labels[widget.selectedIndex],
+                              key: ValueKey(widget.selectedIndex),
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AppGlassIconButtonState extends State<AppGlassIconButton> {
   bool _hovered = false;
   bool _pressed = false;

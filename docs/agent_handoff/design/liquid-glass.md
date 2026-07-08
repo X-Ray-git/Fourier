@@ -45,6 +45,9 @@
 - 第一阶段只把散落的 hover、pressed、active、border、disabled 色值收敛到 palette，刻意保持原视觉体感基本不变。
 - `AppGlassRoundControlChrome` 是固定 34px 圆形工具按钮的共享外壳。文章右上角普通按钮、时间线排序按钮和同步按钮应尽量复用它，而不是各自手写 `AppGlassSurface`。
 - `AppGlassCompactSwitch` 是紧凑二态 switch 的共享控件。主时间线和订阅源详情的 `未读/全部` 不应再分别维护两套实现。
+- `AppGlassCompactSwitch` 和设置页 segmented 的滑块已改成真正的 `AppGlassSurface` control 材质，而不是手绘渐变模拟。用户验证它比静态模拟更接近右侧圆形玻璃按钮，功能和动画没有明显掉帧。
+- 紧凑 switch/segmented 的选中态不要做成明显橙色按钮。当前规则是：滑块保持中性玻璃，只叠极弱主色 tint；选中文字使用主色表达当前状态。
+- 紧凑 switch/segmented 外层可以保留玻璃轨道，但外侧 rim 必须低存在感。当前通过 `staticBorderOpacity` 只在这类控件外层降弱静态边框，不要全局削弱 `AppGlassSurface`。
 - 圆形工具按钮角色规则：普通命令使用中性玻璃背景和中性 hover/press；未读文章的“标为已读”属于主动作，可以保留橙色图标和很浅橙色背景；排序长文/短文、同步中这类“状态提示”只让图标变橙，背景保持中性。
 - 目录按钮仍使用 morph 玻璃实现，但关闭态材质已调到更接近普通圆形 control；不要重新调回明显更深的独立玻璃按钮。
 - 真正的贴图/预绘制优化应放在角色规则稳定之后。优先候选是固定尺寸圆形按钮、固定高度 pill、badge；不要先对大面板或密集内容区做贴图化。

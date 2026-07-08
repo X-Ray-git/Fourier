@@ -167,6 +167,12 @@ class AppGlassControlPalette {
     return _cs.outlineVariant.withValues(alpha: hovered ? 0.62 : 0.52);
   }
 
+  Color compactControlTrackFill() {
+    return (_isDark ? Colors.white : Colors.black).withValues(
+      alpha: _isDark ? 0.035 : 0.025,
+    );
+  }
+
   Color disabledFill() => _cs.onSurface.withValues(alpha: 0.03);
 }
 
@@ -185,6 +191,7 @@ class AppGlassSurface extends StatelessWidget {
   final Clip clipBehavior;
   final bool nativeBackdrop;
   final bool staticMaterial;
+  final double staticBorderOpacity;
 
   const AppGlassSurface({
     super.key,
@@ -198,6 +205,7 @@ class AppGlassSurface extends StatelessWidget {
     this.clipBehavior = Clip.antiAlias,
     this.nativeBackdrop = false,
     this.staticMaterial = false,
+    this.staticBorderOpacity = 1.0,
   });
 
   @override
@@ -220,6 +228,7 @@ class AppGlassSurface extends StatelessWidget {
         padding: padding,
         margin: margin,
         tone: tone,
+        borderOpacity: staticBorderOpacity,
         child: child,
       );
     }
@@ -828,98 +837,106 @@ class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
         tone: AppGlassTone.control,
         nativeBackdrop: true,
         staticMaterial: true,
+        staticBorderOpacity: 0.35,
         child: SizedBox(
           width: widget.trackWidth,
           height: widget.trackHeight,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() {
-              _hovered = false;
-              _pressed = false;
-            }),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (_) => setState(() => _pressed = true),
-              onTapUp: (_) => setState(() => _pressed = false),
-              onTapCancel: () => setState(() => _pressed = false),
-              onTap: () => widget.onChanged(widget.selectedIndex == 0 ? 1 : 0),
-              child: AnimatedScale(
-                scale: _pressed ? 0.975 : 1.0,
-                duration: const Duration(milliseconds: 120),
-                curve: Curves.easeOutCubic,
-                child: Stack(
-                  children: [
-                    if (_hovered)
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(
-                              AppGlassRadii.pill,
-                            ),
-                            color: controls.subtleNeutralOverlay(
-                              hovered: true,
-                              pressed: _pressed,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppGlassRadii.pill),
+              color: controls.compactControlTrackFill(),
+            ),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _hovered = true),
+              onExit: (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              }),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (_) => setState(() => _pressed = true),
+                onTapUp: (_) => setState(() => _pressed = false),
+                onTapCancel: () => setState(() => _pressed = false),
+                onTap: () =>
+                    widget.onChanged(widget.selectedIndex == 0 ? 1 : 0),
+                child: AnimatedScale(
+                  scale: _pressed ? 0.975 : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOutCubic,
+                  child: Stack(
+                    children: [
+                      if (_hovered)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                AppGlassRadii.pill,
+                              ),
+                              color: controls.subtleNeutralOverlay(
+                                hovered: true,
+                                pressed: _pressed,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 240),
-                      curve: Curves.easeOutBack,
-                      left: widget.selectedIndex == 0
-                          ? 0
-                          : widget.trackWidth - widget.thumbWidth,
-                      top: 0,
-                      bottom: 0,
-                      width: widget.thumbWidth,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(
-                            AppGlassRadii.pill,
-                          ),
-                          color: controls.activeFill(accentAlpha: 0.085),
-                          border: Border.all(
-                            color: controls.activeBorder(
-                              darkAlpha: 0.22,
-                              lightAlpha: 0.22,
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOutBack,
+                        left: widget.selectedIndex == 0
+                            ? 0
+                            : widget.trackWidth - widget.thumbWidth,
+                        top: 0,
+                        bottom: 0,
+                        width: widget.thumbWidth,
+                        child: AppGlassSurface(
+                          borderRadius: AppGlassRadii.pill,
+                          padding: EdgeInsets.zero,
+                          tone: AppGlassTone.control,
+                          useOwnLayer: false,
+                          interactive: true,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                AppGlassRadii.pill,
+                              ),
+                              color: controls.activeFill(accentAlpha: 0.018),
                             ),
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 140),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeOutCubic,
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: ScaleTransition(
-                                  scale: Tween<double>(
-                                    begin: 0.94,
-                                    end: 1,
-                                  ).animate(animation),
-                                  child: child,
+                            child: Center(
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 140),
+                                switchInCurve: Curves.easeOutCubic,
+                                switchOutCurve: Curves.easeOutCubic,
+                                transitionBuilder: (child, animation) {
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: ScaleTransition(
+                                      scale: Tween<double>(
+                                        begin: 0.94,
+                                        end: 1,
+                                      ).animate(animation),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  widget.labels[widget.selectedIndex],
+                                  key: ValueKey(widget.selectedIndex),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.primary,
+                                  ),
                                 ),
-                              );
-                            },
-                            child: Text(
-                              widget.labels[widget.selectedIndex],
-                              key: ValueKey(widget.selectedIndex),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: cs.primary,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1379,11 +1396,13 @@ class _StaticGlassSurface extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
   final AppGlassTone tone;
+  final double borderOpacity;
 
   const _StaticGlassSurface({
     required this.child,
     required this.borderRadius,
     required this.tone,
+    required this.borderOpacity,
     this.padding,
     this.margin,
   });
@@ -1403,7 +1422,9 @@ class _StaticGlassSurface extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: cs.onSurfaceVariant.withValues(alpha: borderAlpha),
+          color: cs.onSurfaceVariant.withValues(
+            alpha: borderAlpha * borderOpacity.clamp(0.0, 1.0),
+          ),
           width: 0.75,
         ),
       ),

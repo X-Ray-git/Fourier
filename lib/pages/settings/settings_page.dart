@@ -2052,6 +2052,7 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final controls = appGlassControlPalette(context);
     final rawIndex = options.indexOf(value);
     final selectedIndex = rawIndex < 0 ? 0 : rawIndex;
     return SelectionContainer.disabled(
@@ -2075,70 +2076,75 @@ class _MacGlassSegmentedField<T> extends StatelessWidget {
             tone: AppGlassTone.control,
             nativeBackdrop: true,
             staticMaterial: true,
-            child: SizedBox(
-              height: 34,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final segmentWidth = constraints.maxWidth / options.length;
-                  return Stack(
-                    children: [
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 230),
-                        curve: Curves.easeOutBack,
-                        left: segmentWidth * selectedIndex,
-                        top: 0,
-                        bottom: 0,
-                        width: segmentWidth,
-                        child: AppGlassSurface(
-                          borderRadius: 11,
-                          padding: EdgeInsets.zero,
-                          tone: AppGlassTone.control,
-                          useOwnLayer: false,
-                          staticMaterial: true,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(11),
-                              color: appGlassControlPalette(
-                                context,
-                              ).activeFill(accentAlpha: 0.045),
+            staticBorderOpacity: 0.35,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: controls.compactControlTrackFill(),
+              ),
+              child: SizedBox(
+                height: 34,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final segmentWidth = constraints.maxWidth / options.length;
+                    return Stack(
+                      children: [
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 230),
+                          curve: Curves.easeOutBack,
+                          left: segmentWidth * selectedIndex,
+                          top: 0,
+                          bottom: 0,
+                          width: segmentWidth,
+                          child: AppGlassSurface(
+                            borderRadius: 11,
+                            padding: EdgeInsets.zero,
+                            tone: AppGlassTone.control,
+                            useOwnLayer: false,
+                            interactive: true,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(11),
+                                color: controls.activeFill(accentAlpha: 0.014),
+                              ),
+                              child: const SizedBox.expand(),
                             ),
-                            child: const SizedBox.expand(),
                           ),
                         ),
-                      ),
-                      Row(
-                        children: [
-                          for (var i = 0; i < options.length; i++)
-                            Expanded(
-                              child: MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => onChanged(options[i]),
-                                  child: Center(
-                                    child: Text(
-                                      labelFor(options[i]),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: selectedIndex == i
-                                            ? FontWeight.w800
-                                            : FontWeight.w600,
-                                        color: selectedIndex == i
-                                            ? cs.primary
-                                            : cs.onSurfaceVariant,
+                        Row(
+                          children: [
+                            for (var i = 0; i < options.length; i++)
+                              Expanded(
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => onChanged(options[i]),
+                                    child: Center(
+                                      child: Text(
+                                        labelFor(options[i]),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: selectedIndex == i
+                                              ? FontWeight.w800
+                                              : FontWeight.w600,
+                                          color: selectedIndex == i
+                                              ? cs.primary
+                                              : cs.onSurfaceVariant,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),

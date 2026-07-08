@@ -62,7 +62,7 @@ class ArticleController extends GetxController {
   void onInit() {
     super.onInit();
     isRead.value =
-        GStorage.readStatus.get(article.entryId, defaultValue: false) as bool;
+        LocalArticleDbService.readOverrideOf(article.entryId) ?? article.isRead;
     if (article.category == 'inbox' &&
         (article.content == null || article.content!.trim().isEmpty)) {
       isFetchingContent.value = true;

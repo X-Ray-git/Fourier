@@ -13,6 +13,7 @@
 - 解析后的 chunk 在文章 scroll 内通过 `Column` 渲染。
 - 不要随意把文章正文切换到 `SliverList.builder`：此前讨论后保留 `Column`，原因是选择、目录锚点 key、图片生命周期和滚动稳定性。
 - 渲染器刻意拆分 HTML 规范化、chunk 解析、widget 渲染。修复应尽量放在问题所属阶段。
+- `ArticleController` 初始化右上角已读/未读按钮时，必须使用 `LocalArticleDbService.readOverrideOf(article.entryId) ?? article.isRead`。不要只读 `GStorage.readStatus`，因为最近阅读页传入的文章本身已经是已读，而同步成功后本地覆盖状态可能不存在。
 
 图片：
 

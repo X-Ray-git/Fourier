@@ -695,8 +695,8 @@ class TimelineController extends GetxController {
 
   List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {
     return source.map((a) {
-      final readVal = GStorage.readStatus.get(a.entryId);
-      if (readVal == true && !a.isRead) {
+      final readVal = LocalArticleDbService.readOverrideOf(a.entryId);
+      if (readVal != null && readVal != a.isRead) {
         return ArticleModel(
           entryId: a.entryId,
           feedId: a.feedId,
@@ -706,7 +706,7 @@ class TimelineController extends GetxController {
           url: a.url,
           content: a.content,
           publishedAt: a.publishedAt,
-          isRead: true,
+          isRead: readVal,
           category: a.category,
           subscriptionCategory: a.subscriptionCategory,
           author: a.author,

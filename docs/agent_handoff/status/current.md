@@ -28,9 +28,11 @@
 - 垃圾拦截页开始复用普通时间线的同步按钮和文章 AI 右键菜单：刷新按钮位置已按时间线 header 对齐，文章审核行右键也有翻译/摘要相关动作。
 - `flutter run -d macos --no-pub` 的“构建成功但等不到 debug connection”问题已定位为 Xcode Debug Dylib 被 macOS 系统策略拒载，并通过 Debug 配置 `ENABLE_DEBUG_DYLIB = NO` 修复。
 - macOS 分屏文章详情右下角圆角安全区处理已由用户验证方向正确：正文 body 使用右下角 clip 避开窗口外框圆弧，避免内容贴到应用外框圆角。
+- 最近阅读页文章进入详情后不应显示“标为已读”。根因是 `ArticleController` 只读 `GStorage.readStatus`，忽略了传入文章自身的 `isRead`；已修为 `LocalArticleDbService.readOverrideOf(entryId) ?? article.isRead`。时间线和最近阅读列表的本地已读合并也同步改为 `readOverrideOf()`，同时支持本地标已读和恢复未读。
 
 本次待用户继续验证：
 
+- macOS 最近阅读页进入文章详情时，右上角应显示符合已读状态的操作，不应把最近阅读文章误判为未读。
 - macOS 无文章订阅源/筛选状态下，左侧列表空态勾图标和右侧文章空态图标的 y 轴对齐。
 - 从具体订阅源回到“全部文章”时，中间时间线不再出现明显掉帧。
 - 标为已读/恢复未读仍保留局部列表动画。

@@ -78,11 +78,11 @@ class RecentReadController extends GetxController {
     _loadData();
   }
 
-  /// 同步合并未读覆盖状态，这和 TimelineController 的逻辑类似
+  /// 同步合并已读/未读覆盖状态，这和 TimelineController 的逻辑类似
   List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {
     return source.map((a) {
-      final readVal = GStorage.readStatus.get(a.entryId);
-      if (readVal == true && !a.isRead) {
+      final readVal = LocalArticleDbService.readOverrideOf(a.entryId);
+      if (readVal != null && readVal != a.isRead) {
         return ArticleModel(
           entryId: a.entryId,
           feedId: a.feedId,
@@ -92,7 +92,7 @@ class RecentReadController extends GetxController {
           url: a.url,
           content: a.content,
           publishedAt: a.publishedAt,
-          isRead: true,
+          isRead: readVal,
           category: a.category,
           subscriptionCategory: a.subscriptionCategory,
           author: a.author,

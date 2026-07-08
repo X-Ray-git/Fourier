@@ -29,7 +29,8 @@ class SourceViewNode {
     required this.categories,
   });
 
-  int get sourceCount => categories.fold(0, (sum, cat) => sum + cat.feeds.length);
+  int get sourceCount =>
+      categories.fold(0, (sum, cat) => sum + cat.feeds.length);
   int get categoryCount => categories.length;
 }
 
@@ -80,9 +81,7 @@ class SubscriptionsController extends GetxController {
       sources.addAll(feedsResult.response);
     }
     if (inboxesResult is Success<List<Map<String, dynamic>>>) {
-      sources.addAll(
-        inboxesResult.response.map(FeedModel.fromInboxJson),
-      );
+      sources.addAll(inboxesResult.response.map(FeedModel.fromInboxJson));
     }
 
     if (sources.isNotEmpty) {
@@ -125,8 +124,7 @@ class SubscriptionsController extends GetxController {
           int count = 0;
           for (final item in GStorage.articleDb.values) {
             if (item is Map) {
-              if (item['feedId'] == feedId &&
-                  item['isRead'] != true) {
+              if (item['feedId'] == feedId && item['isRead'] != true) {
                 count++;
               }
             }
@@ -174,7 +172,9 @@ class SubscriptionsController extends GetxController {
     final result = <FeedModel>[];
     for (final view in filteredNodes) {
       for (final cat in view.categories) {
-        result.addAll(cat.feeds.where((f) => FeedSilentSettingsService.isSilent(f.feedId)));
+        result.addAll(
+          cat.feeds.where((f) => FeedSilentSettingsService.isSilent(f.feedId)),
+        );
       }
     }
     return result;
@@ -193,7 +193,13 @@ class SubscriptionsController extends GetxController {
         }
       }
       if (categories.isNotEmpty) {
-        result.add(SourceViewNode(view: view.view, name: view.name, categories: categories));
+        result.add(
+          SourceViewNode(
+            view: view.view,
+            name: view.name,
+            categories: categories,
+          ),
+        );
       }
     }
     return result;
@@ -236,7 +242,11 @@ class SubscriptionsController extends GetxController {
 
       if (categories.isNotEmpty) {
         result.add(
-          SourceViewNode(view: view.view, name: view.name, categories: categories),
+          SourceViewNode(
+            view: view.view,
+            name: view.name,
+            categories: categories,
+          ),
         );
       }
     }
@@ -259,20 +269,24 @@ class SubscriptionsController extends GetxController {
               (viewEntry) => SourceViewNode(
                 view: viewEntry.key,
                 name: SourceTaxonomy.viewLabelFromInt(viewEntry.key),
-                categories: viewEntry.value.entries
-                    .map(
-                      (catEntry) => SourceCategoryNode(
-                        name: catEntry.key,
-                        feeds: catEntry.value..sort(_compareFeeds),
-                      ),
-                    )
-                    .toList()
-                  ..sort((a, b) => a.name.compareTo(b.name)),
+                categories:
+                    viewEntry.value.entries
+                        .map(
+                          (catEntry) => SourceCategoryNode(
+                            name: catEntry.key,
+                            feeds: catEntry.value..sort(_compareFeeds),
+                          ),
+                        )
+                        .toList()
+                      ..sort((a, b) => a.name.compareTo(b.name)),
               ),
             )
             .toList()
-          ..sort((a, b) => SourceTaxonomy.viewOrderFromInt(a.view)
-              .compareTo(SourceTaxonomy.viewOrderFromInt(b.view)));
+          ..sort(
+            (a, b) => SourceTaxonomy.viewOrderFromInt(
+              a.view,
+            ).compareTo(SourceTaxonomy.viewOrderFromInt(b.view)),
+          );
     return nodes;
   }
 
@@ -308,7 +322,7 @@ class SubscriptionsController extends GetxController {
   }
 
   void _syncExpandedState(List<SourceViewNode> nodes) {
-    final allowed = <String>{};
+    final allowed = <String>{'special:silent'};
     for (final view in nodes) {
       allowed.add('view:${view.name}');
       for (final category in view.categories) {

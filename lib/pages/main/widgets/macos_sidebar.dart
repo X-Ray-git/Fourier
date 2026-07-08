@@ -15,18 +15,15 @@ import '../../timeline/timeline_controller.dart';
 const _macOSSidebarPanelRadius = 18.0;
 const EdgeInsets _macOSSidebarPanelMargin = EdgeInsets.fromLTRB(8, 8, 8, 8);
 const _macOSSidebarExpandedWidth = 290.0;
-const _macOSSidebarCollapsedWidth = 80.0;
 
 class MacOSSidebar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onIndexChanged;
-  final VoidCallback onCollapse;
 
   const MacOSSidebar({
     super.key,
     required this.currentIndex,
     required this.onIndexChanged,
-    required this.onCollapse,
   });
 
   @override
@@ -41,7 +38,7 @@ class MacOSSidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SidebarHeader(onCollapse: onCollapse),
+            const _SidebarHeader(),
             Obx(() {
               final isSelected =
                   currentIndex == 0 &&
@@ -78,86 +75,6 @@ class MacOSSidebar extends StatelessWidget {
               badgeCount: 0,
               onTap: () => onIndexChanged(2),
             ),
-            Obx(() {
-              final isSelected =
-                  currentIndex == 0 &&
-                  timelineController.isSilentSelected.value == true;
-              final silentFeeds = subController.silentFeeds;
-              final isExpanded = isSelected;
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _SidebarItem(
-                    icon: Icons.notifications_off_outlined,
-                    label: '静默订阅源',
-                    isSelected:
-                        isSelected &&
-                        timelineController.selectedFeedId.value == null,
-                    badgeCount: timelineController.silentUnreadCount,
-                    onTap: () {
-                      timelineController.setTimelineScope(silent: true);
-                      onIndexChanged(0);
-                    },
-                  ),
-                  ClipRect(
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.topCenter,
-                      child: isExpanded && silentFeeds.isNotEmpty
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: silentFeeds.map((feed) {
-                                return Obx(() {
-                                  final feedSelected =
-                                      currentIndex == 0 &&
-                                      timelineController.selectedFeedId.value ==
-                                          feed.feedId &&
-                                      timelineController
-                                              .isSilentSelected
-                                              .value ==
-                                          true;
-                                  return _SidebarItem(
-                                    icon: Icons.rss_feed,
-                                    imageUrl: feed.image,
-                                    label: feed.title,
-                                    isSelected: feedSelected,
-                                    badgeCount: subController.rawUnreadFor(
-                                      feed.feedId,
-                                    ),
-                                    indentLevel: 2,
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _FeedAutoReadabilityIcon(
-                                          feedId: feed.feedId,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        _FeedAutoTranslateIcon(
-                                          feedId: feed.feedId,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        _FeedSilentIcon(feedId: feed.feedId),
-                                      ],
-                                    ),
-                                    onTap: () {
-                                      timelineController.setTimelineScope(
-                                        silent: true,
-                                        feedId: feed.feedId,
-                                      );
-                                      onIndexChanged(0);
-                                    },
-                                  );
-                                });
-                              }).toList(),
-                            )
-                          : const SizedBox(width: double.infinity),
-                    ),
-                  ),
-                ],
-              );
-            }),
             const SizedBox(height: 10),
             const _SectionLabel(label: '订阅源'),
             Expanded(
@@ -176,7 +93,8 @@ class MacOSSidebar extends StatelessWidget {
                 }
 
                 final nodes = subController.sidebarNodes;
-                if (nodes.isEmpty) {
+                final silentFeeds = subController.silentFeeds;
+                if (nodes.isEmpty && silentFeeds.isEmpty) {
                   return Center(
                     child: Text(
                       '暂无订阅源',
@@ -187,8 +105,17 @@ class MacOSSidebar extends StatelessWidget {
 
                 return ListView.builder(
                   padding: const EdgeInsets.only(bottom: 18),
-                  itemCount: nodes.length,
+                  itemCount: nodes.length + 1,
                   itemBuilder: (context, index) {
+                    if (index == nodes.length) {
+                      return _SilentFeedsGroup(
+                        currentIndex: currentIndex,
+                        timelineController: timelineController,
+                        subController: subController,
+                        onIndexChanged: onIndexChanged,
+                      );
+                    }
+
                     final viewNode = nodes[index];
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -304,88 +231,102 @@ class MacOSSidebar extends StatelessWidget {
   }
 }
 
-class MacOSCollapsedSidebar extends StatelessWidget {
+class _SilentFeedsGroup extends StatelessWidget {
   final int currentIndex;
+  final TimelineController timelineController;
+  final SubscriptionsController subController;
   final ValueChanged<int> onIndexChanged;
-  final VoidCallback onExpand;
 
-  const MacOSCollapsedSidebar({
-    super.key,
+  const _SilentFeedsGroup({
     required this.currentIndex,
+    required this.timelineController,
+    required this.subController,
     required this.onIndexChanged,
-    required this.onExpand,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _MacOSSidebarSlot(
-      width: _macOSSidebarCollapsedWidth,
-      child: _MacOSGlassPane(
-        child: Column(
-          children: [
-            const SizedBox(height: 42),
-            _RailButton(
-              icon: Icons.keyboard_double_arrow_right_rounded,
-              tooltip: '展开侧边栏',
-              onTap: onExpand,
+    return Obx(() {
+      final silentFeeds = subController.silentFeeds;
+      if (silentFeeds.isEmpty) return const SizedBox.shrink();
+
+      const groupKey = 'special:silent';
+      final isSilentSelected =
+          currentIndex == 0 && timelineController.isSilentSelected.value;
+      final isExpanded = isSilentSelected || subController.isExpanded(groupKey);
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 10),
+          const _ViewLabel(label: '静默'),
+          _CategoryItem(
+            label: '静默订阅源',
+            collapsedIcon: Icons.notifications_off_outlined,
+            expandedIcon: Icons.notifications_off,
+            isSelected:
+                isSilentSelected &&
+                timelineController.selectedFeedId.value == null,
+            badgeCount: timelineController.silentUnreadCount,
+            isExpanded: isExpanded,
+            onToggle: () {
+              subController.setExpanded(groupKey, !isExpanded);
+            },
+            onTap: () {
+              subController.setExpanded(groupKey, true);
+              timelineController.setTimelineScope(silent: true);
+              onIndexChanged(0);
+            },
+          ),
+          ClipRect(
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: isExpanded
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: silentFeeds.map((feed) {
+                        return Obx(() {
+                          final feedSelected =
+                              currentIndex == 0 &&
+                              timelineController.selectedFeedId.value ==
+                                  feed.feedId &&
+                              timelineController.isSilentSelected.value;
+                          return _SidebarItem(
+                            icon: Icons.rss_feed,
+                            imageUrl: feed.image,
+                            label: feed.title,
+                            isSelected: feedSelected,
+                            badgeCount: subController.rawUnreadFor(feed.feedId),
+                            indentLevel: 2,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _FeedAutoReadabilityIcon(feedId: feed.feedId),
+                                const SizedBox(width: 2),
+                                _FeedAutoTranslateIcon(feedId: feed.feedId),
+                                const SizedBox(width: 2),
+                                _FeedSilentIcon(feedId: feed.feedId),
+                              ],
+                            ),
+                            onTap: () {
+                              timelineController.setTimelineScope(
+                                silent: true,
+                                feedId: feed.feedId,
+                              );
+                              onIndexChanged(0);
+                            },
+                          );
+                        });
+                      }).toList(),
+                    )
+                  : const SizedBox(width: double.infinity),
             ),
-            const SizedBox(height: 10),
-            Obx(() {
-              final timelineController = Get.find<TimelineController>();
-              final isAllSelected =
-                  currentIndex == 0 &&
-                  timelineController.isSilentSelected.value == false &&
-                  timelineController.selectedFeedId.value == null &&
-                  timelineController.selectedCategory.value == null;
-              return _RailButton(
-                icon: Icons.article_outlined,
-                tooltip: '全部文章',
-                selected: isAllSelected,
-                onTap: () {
-                  timelineController.setTimelineScope();
-                  onIndexChanged(0);
-                },
-              );
-            }),
-            _RailButton(
-              icon: Icons.shield_outlined,
-              tooltip: '垃圾拦截',
-              selected: currentIndex == 1,
-              onTap: () => onIndexChanged(1),
-            ),
-            _RailButton(
-              icon: Icons.history_rounded,
-              tooltip: '最近阅读',
-              selected: currentIndex == 2,
-              onTap: () => onIndexChanged(2),
-            ),
-            Obx(() {
-              final timelineController = Get.find<TimelineController>();
-              final isSilentSelected =
-                  currentIndex == 0 &&
-                  timelineController.isSilentSelected.value == true;
-              return _RailButton(
-                icon: Icons.notifications_off_outlined,
-                tooltip: '静默订阅源',
-                selected: isSilentSelected,
-                onTap: () {
-                  timelineController.setTimelineScope(silent: true);
-                  onIndexChanged(0);
-                },
-              );
-            }),
-            const Spacer(),
-            _RailButton(
-              icon: Icons.settings_outlined,
-              tooltip: '设置',
-              selected: currentIndex == 3,
-              onTap: () => onIndexChanged(3),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
+          ),
+        ],
+      );
+    });
   }
 }
 
@@ -463,9 +404,7 @@ class _MacOSGlassPane extends StatelessWidget {
 }
 
 class _SidebarHeader extends StatelessWidget {
-  final VoidCallback onCollapse;
-
-  const _SidebarHeader({required this.onCollapse});
+  const _SidebarHeader();
 
   @override
   Widget build(BuildContext context) {
@@ -580,6 +519,8 @@ class _CategoryGroup extends StatelessWidget {
 
 class _CategoryItem extends StatelessWidget {
   final String label;
+  final IconData collapsedIcon;
+  final IconData expandedIcon;
   final bool isExpanded;
   final bool isSelected;
   final int badgeCount;
@@ -588,6 +529,8 @@ class _CategoryItem extends StatelessWidget {
 
   const _CategoryItem({
     required this.label,
+    this.collapsedIcon = Icons.folder_outlined,
+    this.expandedIcon = Icons.folder_open_outlined,
     required this.isExpanded,
     required this.isSelected,
     required this.badgeCount,
@@ -633,9 +576,7 @@ class _CategoryItem extends StatelessWidget {
                   ),
                 ),
                 Icon(
-                  isExpanded
-                      ? Icons.folder_open_outlined
-                      : Icons.folder_outlined,
+                  isExpanded ? expandedIcon : collapsedIcon,
                   size: 16,
                   color: isSelected ? cs.primary : cs.onSurfaceVariant,
                 ),
@@ -918,50 +859,6 @@ class _FeedSilentIconState extends State<_FeedSilentIcon> {
             color: _enabled
                 ? cs.error
                 : cs.onSurfaceVariant.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RailButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _RailButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.selected = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: AppGlassTooltip(
-        message: tooltip,
-        child: Material(
-          color: selected
-              ? cs.primaryContainer.withValues(alpha: 0.72)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 38,
-              height: 36,
-              child: Icon(
-                icon,
-                size: 19,
-                color: selected ? cs.primary : cs.onSurfaceVariant,
-              ),
-            ),
           ),
         ),
       ),

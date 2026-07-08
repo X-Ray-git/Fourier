@@ -3,7 +3,6 @@ import '../timeline/timeline_controller.dart';
 
 class MainController extends GetxController {
   final currentIndex = 0.obs;
-  final isMacSidebarCollapsed = false.obs;
   DateTime? _lastTimelineNavTapAt;
 
   void changeIndex(int index) {
@@ -25,9 +24,5 @@ class MainController extends GetxController {
     }
     currentIndex.value = index;
     _lastTimelineNavTapAt = index == 0 ? now : null;
-  }
-
-  void toggleMacSidebar() {
-    isMacSidebarCollapsed.value = !isMacSidebarCollapsed.value;
   }
 }

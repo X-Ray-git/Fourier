@@ -81,18 +81,9 @@ class _MainPageState extends State<MainPage> {
         child: Row(
           children: [
             Obx(() {
-              if (controller.isMacSidebarCollapsed.value) {
-                return MacOSCollapsedSidebar(
-                  currentIndex: controller.currentIndex.value,
-                  onIndexChanged: controller.changeIndex,
-                  onExpand: () =>
-                      controller.isMacSidebarCollapsed.value = false,
-                );
-              }
               return MacOSSidebar(
                 currentIndex: controller.currentIndex.value,
                 onIndexChanged: controller.changeIndex,
-                onCollapse: () => controller.isMacSidebarCollapsed.value = true,
               );
             }),
             Expanded(

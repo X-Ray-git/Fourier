@@ -326,11 +326,7 @@ class _SettingsPageState extends State<SettingsPage> {
     const closeButtonSize = 34.0;
     const closeButtonInset = dialogRadius - closeButtonSize / 2;
     final overlayTint = Theme.of(context).colorScheme.surface;
-    final sidebarWidth = Get.isRegistered<MainController>()
-        ? (Get.find<MainController>().isMacSidebarCollapsed.value
-              ? 80.0
-              : 290.0)
-        : 0.0;
+    final sidebarWidth = Get.isRegistered<MainController>() ? 290.0 : 0.0;
     showGeneralDialog<void>(
       context: context,
       useRootNavigator: true,

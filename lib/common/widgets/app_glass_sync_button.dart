@@ -30,6 +30,8 @@ class AppGlassSyncButton extends StatefulWidget {
 class _AppGlassSyncButtonState extends State<AppGlassSyncButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _spinController;
+  bool _hovered = false;
+  bool _pressed = false;
 
   @override
   void initState() {
@@ -71,22 +73,32 @@ class _AppGlassSyncButtonState extends State<AppGlassSyncButton>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final syncing = widget.syncing;
+    final enabled = !syncing && widget.onPressed != null;
     return AppGlassTooltip(
       message: syncing ? widget.syncingTooltip : widget.idleTooltip,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: syncing ? null : widget.onPressed,
-        child: MouseRegion(
-          cursor: syncing ? MouseCursor.defer : SystemMouseCursors.click,
-          child: AppGlassSurface(
-            borderRadius: 999,
-            padding: EdgeInsets.zero,
-            tone: AppGlassTone.control,
-            nativeBackdrop: true,
-            interactive: !syncing,
-            child: SizedBox(
-              width: 34,
-              height: 34,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: enabled
+            ? (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              })
+            : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTap: enabled ? widget.onPressed : null,
+          child: AnimatedScale(
+            scale: _pressed ? 0.96 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: AppGlassRoundControlChrome(
+              enabled: enabled,
+              hovered: _hovered,
+              pressed: _pressed,
               child: Center(
                 child: RotationTransition(
                   turns: _spinController,
@@ -98,7 +110,7 @@ class _AppGlassSyncButtonState extends State<AppGlassSyncButton>
                       size: 18,
                       color: syncing
                           ? (widget.syncingColor ?? cs.primary)
-                          : (widget.idleColor ?? cs.onSurfaceVariant),
+                          : (widget.idleColor ?? cs.onSurface),
                     ),
                   ),
                 ),

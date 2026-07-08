@@ -1828,13 +1828,13 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
   static const double _panelMaxHeight = 430;
   static const glass.LiquidGlassSettings _tocGlassSettings =
       glass.LiquidGlassSettings(
-        blur: 12,
-        thickness: 12,
-        glassColor: Color.fromRGBO(255, 255, 255, 0.14),
-        lightIntensity: 0.68,
-        ambientStrength: 0.38,
+        blur: 10,
+        thickness: 7,
+        glassColor: Color.fromRGBO(255, 255, 255, 0.23),
+        lightIntensity: 0.62,
+        ambientStrength: 0.36,
         saturation: 1.18,
-        refractiveIndex: 0.62,
+        refractiveIndex: 0.42,
         chromaticAberration: 0.0,
       );
 

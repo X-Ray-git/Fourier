@@ -856,7 +856,6 @@ class _MacReviewHeader extends StatelessWidget {
                   AppGlassSyncButton(
                     syncing: syncing,
                     onPressed: onSync,
-                    idleColor: colorScheme.onSurfaceVariant,
                     syncingColor: colorScheme.primary,
                   ),
                   const SizedBox(width: 8),

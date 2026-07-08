@@ -1220,6 +1220,7 @@ class _MacTimelineSortButtonState extends State<_MacTimelineSortButton>
   final _buttonKey = GlobalKey();
   late final glass.GlassMorphController _morphController;
   OverlayEntry? _overlayEntry;
+  bool _hovered = false;
   bool _pressed = false;
   bool _isMenuOpen = false;
 
@@ -1275,7 +1276,11 @@ class _MacTimelineSortButtonState extends State<_MacTimelineSortButton>
         message: '排序：${mode.label}',
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
-          onExit: (_) => setState(() => _pressed = false),
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() {
+            _hovered = false;
+            _pressed = false;
+          }),
           child: GestureDetector(
             key: _buttonKey,
             behavior: HitTestBehavior.opaque,
@@ -1287,28 +1292,17 @@ class _MacTimelineSortButtonState extends State<_MacTimelineSortButton>
               scale: _pressed ? 0.96 : 1.0,
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOutCubic,
-              child: AppGlassSurface(
-                borderRadius: 999,
-                padding: EdgeInsets.zero,
-                tone: AppGlassTone.control,
-                nativeBackdrop: true,
-                interactive: true,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOutCubic,
-                  width: _buttonSize,
-                  height: _buttonSize,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    color: Colors.transparent,
-                  ),
-                  child: Icon(
-                    mode.icon,
-                    size: 18,
-                    color: selected
-                        ? widget.colorScheme.primary
-                        : widget.colorScheme.onSurfaceVariant,
-                  ),
+              child: AppGlassRoundControlChrome(
+                enabled: true,
+                hovered: _hovered,
+                pressed: _pressed,
+                size: _buttonSize,
+                child: Icon(
+                  mode.icon,
+                  size: 18,
+                  color: selected
+                      ? widget.colorScheme.primary
+                      : widget.colorScheme.onSurface,
                 ),
               ),
             ),
@@ -1798,7 +1792,6 @@ class _MacSyncButtonState extends State<_MacSyncButton> {
     return AppGlassSyncButton(
       syncing: _syncing,
       onPressed: widget.controller.loadFeedsThenArticles,
-      idleColor: widget.colorScheme.onSurfaceVariant,
       syncingColor: widget.colorScheme.primary,
     );
   }

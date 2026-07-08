@@ -733,6 +733,60 @@ class AppGlassIconButton extends StatefulWidget {
   State<AppGlassIconButton> createState() => _AppGlassIconButtonState();
 }
 
+class AppGlassRoundControlChrome extends StatelessWidget {
+  final Widget child;
+  final bool enabled;
+  final bool selected;
+  final bool hovered;
+  final bool pressed;
+  final double selectedFillOpacity;
+  final bool useOwnLayer;
+  final double size;
+
+  const AppGlassRoundControlChrome({
+    super.key,
+    required this.child,
+    required this.enabled,
+    required this.hovered,
+    required this.pressed,
+    this.selected = false,
+    this.selectedFillOpacity = 0.16,
+    this.useOwnLayer = true,
+    this.size = 34,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final controls = appGlassControlPalette(context);
+    final fill = selected
+        ? controls.activeFill(accentAlpha: selectedFillOpacity)
+        : controls.subtleNeutralOverlay(
+            hovered: enabled && hovered,
+            pressed: enabled && pressed,
+            hoverAlpha: 0.06,
+          );
+
+    return AppGlassSurface(
+      borderRadius: 999,
+      padding: EdgeInsets.zero,
+      tone: AppGlassTone.control,
+      interactive: enabled,
+      useOwnLayer: useOwnLayer,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: fill,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
 class _AppGlassIconButtonState extends State<AppGlassIconButton> {
   bool _hovered = false;
   bool _pressed = false;
@@ -740,11 +794,7 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final controls = appGlassControlPalette(context);
     final enabled = widget.onPressed != null;
-    final selectedFill = controls.activeFill(
-      accentAlpha: widget.selectedFillOpacity,
-    );
     return AppGlassTooltip(
       message: widget.tooltip,
       child: MouseRegion(
@@ -766,32 +816,21 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
             scale: _pressed ? 0.96 : 1.0,
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOutCubic,
-            child: AppGlassSurface(
-              borderRadius: 999,
-              padding: EdgeInsets.zero,
-              tone: AppGlassTone.control,
-              interactive: enabled,
+            child: AppGlassRoundControlChrome(
+              enabled: enabled,
+              selected: widget.selected,
+              hovered: _hovered,
+              pressed: _pressed,
+              selectedFillOpacity: widget.selectedFillOpacity,
               useOwnLayer: widget.useOwnLayer,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOutCubic,
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  color: widget.selected
-                      ? selectedFill
-                      : controls.subtleNeutralOverlay(
-                          hovered: _hovered,
-                          pressed: _pressed,
-                          hoverAlpha: 0.06,
-                        ),
-                ),
-                child: Icon(
-                  widget.icon,
-                  size: 18,
-                  color: widget.selected ? cs.primary : cs.onSurface,
-                ),
+              child: Icon(
+                widget.icon,
+                size: 18,
+                color: !enabled
+                    ? cs.onSurfaceVariant.withValues(alpha: 0.58)
+                    : widget.selected
+                    ? cs.primary
+                    : cs.onSurface,
               ),
             ),
           ),

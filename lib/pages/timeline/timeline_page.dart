@@ -1062,6 +1062,13 @@ class _MacTimelineModeToggle extends StatefulWidget {
 
 class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
   TimelineViewMode? _visualMode;
+  bool _hovered = false;
+  bool _pressed = false;
+
+  static const _trackWidth = 62.0;
+  static const _trackHeight = 30.0;
+  static const _padding = 3.0;
+  static const _thumbWidth = 42.0;
 
   @override
   Widget build(BuildContext context) {
@@ -1074,56 +1081,102 @@ class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
       return SelectionContainer.disabled(
         child: AppGlassSurface(
           borderRadius: 999,
-          padding: const EdgeInsets.all(3),
+          padding: const EdgeInsets.all(_padding),
           tone: AppGlassTone.control,
           nativeBackdrop: true,
           staticMaterial: true,
           child: SizedBox(
-            width: 104,
-            height: 30,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final segmentWidth = constraints.maxWidth / 2;
-                return Stack(
-                  children: [
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 240),
-                      curve: Curves.easeOutBack,
-                      left: segmentWidth * selectedIndex,
-                      top: 0,
-                      bottom: 0,
-                      width: segmentWidth,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          color: appGlassActiveControlFill(
-                            context,
-                            accentAlpha: 0.085,
+            width: _trackWidth,
+            height: _trackHeight,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _hovered = true),
+              onExit: (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              }),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (_) => setState(() => _pressed = true),
+                onTapUp: (_) => setState(() => _pressed = false),
+                onTapCancel: () => setState(() => _pressed = false),
+                onTap: () => _setMode(
+                  selectedIndex == 0
+                      ? TimelineViewMode.all
+                      : TimelineViewMode.unread,
+                ),
+                child: AnimatedScale(
+                  scale: _pressed ? 0.975 : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOutCubic,
+                  child: Stack(
+                    children: [
+                      if (_hovered)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: cs.onSurface.withValues(alpha: 0.035),
+                            ),
                           ),
-                          border: Border.all(
-                            color: cs.primary.withValues(alpha: 0.22),
-                            width: 0.5,
+                        ),
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOutBack,
+                        left: selectedIndex == 0
+                            ? 0
+                            : _trackWidth - _thumbWidth,
+                        top: 0,
+                        bottom: 0,
+                        width: _thumbWidth,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: appGlassActiveControlFill(
+                              context,
+                              accentAlpha: 0.085,
+                            ),
+                            border: Border.all(
+                              color: cs.primary.withValues(alpha: 0.22),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 140),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeOutCubic,
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: ScaleTransition(
+                                    scale: Tween<double>(
+                                      begin: 0.94,
+                                      end: 1,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                selectedIndex == 0 ? '未读' : '全部',
+                                key: ValueKey(selectedIndex),
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: cs.primary,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Row(
-                      children: [
-                        _MacTimelineModeSegment(
-                          label: '未读',
-                          selected: selectedIndex == 0,
-                          onTap: () => _setMode(TimelineViewMode.unread),
-                        ),
-                        _MacTimelineModeSegment(
-                          label: '全部',
-                          selected: selectedIndex == 1,
-                          onTap: () => _setMode(TimelineViewMode.all),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -1140,80 +1193,6 @@ class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {
       widget.controller.setViewMode(mode);
       setState(() => _visualMode = null);
     });
-  }
-}
-
-class _MacTimelineModeSegment extends StatefulWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _MacTimelineModeSegment({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  State<_MacTimelineModeSegment> createState() =>
-      _MacTimelineModeSegmentState();
-}
-
-class _MacTimelineModeSegmentState extends State<_MacTimelineModeSegment> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final foreground = widget.selected ? cs.primary : cs.onSurfaceVariant;
-
-    return Expanded(
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() {
-          _hovered = false;
-          _pressed = false;
-        }),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => setState(() => _pressed = true),
-          onTapUp: (_) => setState(() => _pressed = false),
-          onTapCancel: () => setState(() => _pressed = false),
-          onTap: widget.onTap,
-          child: AnimatedScale(
-            scale: _pressed ? 0.975 : 1.0,
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOutCubic,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                color: !widget.selected && _hovered
-                    ? cs.onSurface.withValues(alpha: 0.055)
-                    : Colors.transparent,
-              ),
-              child: Center(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: widget.selected
-                        ? FontWeight.w800
-                        : FontWeight.w600,
-                    color: foreground,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 

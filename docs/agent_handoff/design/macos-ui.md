@@ -13,6 +13,7 @@
 - 图标按钮在适当位置使用现有 glass/tooltip 组件。
 - macOS 上仍能看到的旧 `IconButton(tooltip: ...)` 应优先迁移为 `AppGlassIconButton` 或外包 `AppGlassTooltip`；如果底层控件必须保留，例如 `PopupMenuButton` 或尺寸很小的展开箭头，应把原生 `tooltip` 置空，避免同时出现两套 tooltip。
 - `AppGlassTooltip` 当前支持底部和右侧两种位置。默认底部用于普通工具栏按钮；垃圾拦截审核行这种靠右的垂直小按钮沿用右侧 tooltip，避免用户已经确认过的交互位置被改掉。
+- 二态且空间紧张的 header 筛选不要默认使用完整 segment。时间线“未读/全部”采用类似 switch 的紧凑滑块，只显示当前态文字；完整 segment 更适合三态以上或需要同时展示所有选项的设置项。
 - 翻译/摘要文字胶囊是轻量普通胶囊。
 - Hover 应微妙且稳定；避免闪烁或布局变化。
 - 密集、重复出现的列表按钮不应为了追求玻璃效果而全部改为重型 glass surface；优先使用轻量 hover/描边，并只把 tooltip 统一到玻璃语言。

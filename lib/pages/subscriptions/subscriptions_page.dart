@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/pill_tag.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/refresh_aware_scroll_physics.dart';
@@ -26,7 +29,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   late final SubscriptionsController controller;
   final _searchController = TextEditingController();
   final _refreshKey = GlobalKey<custom_refresh.RefreshIndicatorState>();
-  late final _refreshPhysics = RefreshAwareScrollPhysics(refreshKey: _refreshKey);
+  late final _refreshPhysics = RefreshAwareScrollPhysics(
+    refreshKey: _refreshKey,
+  );
 
   @override
   void initState() {
@@ -59,55 +64,71 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
           behavior: const NoOverscrollIndicatorBehavior(),
           child: CustomScrollView(
             physics: _refreshPhysics,
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  MediaQuery.paddingOf(context).top + 8,
-                  16,
-                  8,
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: controller.updateSearchQuery,
-                  decoration: InputDecoration(
-                    hintText: '搜索 view、分类或订阅源',
-                    hintStyle:
-                        TextStyle(color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
-                    prefixIcon: Icon(Icons.search_rounded, color: cs.primary),
-                    filled: true,
-                    fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    MediaQuery.paddingOf(context).top + 8,
+                    16,
+                    8,
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: controller.updateSearchQuery,
+                    decoration: InputDecoration(
+                      hintText: '搜索 view、分类或订阅源',
+                      hintStyle: TextStyle(
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
+                      prefixIcon: Icon(Icons.search_rounded, color: cs.primary),
+                      filled: true,
+                      fillColor: cs.surfaceContainerHighest.withValues(
+                        alpha: 0.4,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide.none,
+                      ),
+                      suffixIcon: controller.searchQuery.value.isEmpty
+                          ? const SizedBox.shrink()
+                          : Platform.isMacOS
+                          ? AppGlassIconButton(
+                              icon: Icons.cancel,
+                              tooltip: '清空',
+                              useOwnLayer: false,
+                              onPressed: () {
+                                _searchController.clear();
+                                controller.updateSearchQuery('');
+                              },
+                            )
+                          : IconButton(
+                              tooltip: '清空',
+                              onPressed: () {
+                                _searchController.clear();
+                                controller.updateSearchQuery('');
+                              },
+                              icon: Icon(
+                                Icons.cancel,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
                     ),
-                    suffixIcon: controller.searchQuery.value.isEmpty
-                        ? const SizedBox.shrink()
-                        : IconButton(
-                            tooltip: '清空',
-                            onPressed: () {
-                              _searchController.clear();
-                              controller.updateSearchQuery('');
-                            },
-                            icon: Icon(Icons.cancel, color: cs.onSurfaceVariant),
-                          ),
                   ),
                 ),
               ),
-            ),
-            switch (state) {
-              Loading() => const SliverFillRemaining(
+              switch (state) {
+                Loading() => const SliverFillRemaining(
                   child: _SubscriptionsSkeleton(),
                 ),
-              LoadError(:final errMsg) => SliverFillRemaining(
+                LoadError(:final errMsg) => SliverFillRemaining(
                   child: _ErrorView(
                     message: errMsg,
                     onRetry: controller.loadData,
                   ),
                 ),
-              Success() => () {
+                Success() => () {
                   final filtered = controller.filteredNodes;
                   if (filtered.isEmpty) {
                     return SliverFillRemaining(
@@ -123,7 +144,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   return SliverPadding(
                     padding: EdgeInsets.only(
                       top: 8,
-                      bottom: 16 +
+                      bottom:
+                          16 +
                           kBottomNavigationBarHeight +
                           MediaQuery.of(context).padding.bottom,
                     ),
@@ -140,11 +162,11 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                     ),
                   );
                 }(),
-            },
-          ],
+              },
+            ],
+          ),
         ),
-      ),
-    );
+      );
     });
   }
 }
@@ -267,7 +289,10 @@ class _ErrorView extends StatelessWidget {
             Text(
               '无法获取订阅数据',
               style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -310,7 +335,11 @@ class _EmptyView extends StatelessWidget {
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.search_off_rounded, size: 56, color: cs.primary),
+              child: Icon(
+                Icons.search_off_rounded,
+                size: 56,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
@@ -374,10 +403,13 @@ class _ViewSectionState extends State<_ViewSection> {
   }
 
   void _openAll() {
-    Get.toNamed(Routes.feedDetail, arguments: {
-      'view': widget.viewNode.view,
-      'viewName': widget.viewNode.name,
-    });
+    Get.toNamed(
+      Routes.feedDetail,
+      arguments: {
+        'view': widget.viewNode.view,
+        'viewName': widget.viewNode.name,
+      },
+    );
   }
 
   @override
@@ -403,9 +435,9 @@ class _ViewSectionState extends State<_ViewSection> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Obx(() {
-                    final unread =
-                        widget.controller.unreadForView(
-                            widget.viewNode.categories);
+                    final unread = widget.controller.unreadForView(
+                      widget.viewNode.categories,
+                    );
                     return Row(
                       children: [
                         Text(
@@ -420,7 +452,9 @@ class _ViewSectionState extends State<_ViewSection> {
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: cs.primaryContainer,
                               borderRadius: BorderRadius.circular(10),
@@ -478,8 +512,9 @@ class _ViewSectionState extends State<_ViewSection> {
               const SizedBox(height: 8),
             ],
           ),
-          crossFadeState:
-              _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          crossFadeState: _expanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
           duration: const Duration(milliseconds: 250),
           sizeCurve: Curves.easeInOut,
         ),
@@ -530,10 +565,13 @@ class _CategorySectionState extends State<_CategorySection> {
   }
 
   void _openAll() {
-    Get.toNamed(Routes.feedDetail, arguments: {
-      'category': widget.category.name,
-      'categoryName': widget.category.name,
-    });
+    Get.toNamed(
+      Routes.feedDetail,
+      arguments: {
+        'category': widget.category.name,
+        'categoryName': widget.category.name,
+      },
+    );
   }
 
   @override
@@ -564,11 +602,15 @@ class _CategorySectionState extends State<_CategorySection> {
                 const SizedBox(width: 8),
                 Obx(() {
                   final unread = widget.controller.unreadForCategory(
-                      widget.category.name, widget.category.feeds);
+                    widget.category.name,
+                    widget.category.feeds,
+                  );
                   if (unread == 0) return const SizedBox.shrink();
                   return Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: cs.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
@@ -669,12 +711,15 @@ class _FeedCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            Get.toNamed(Routes.feedDetail, arguments: {
-              'feedId': feed.feedId,
-              'feedTitle': feed.title,
-              'feedImage': feed.image,
-              'category': feed.category,
-            });
+            Get.toNamed(
+              Routes.feedDetail,
+              arguments: {
+                'feedId': feed.feedId,
+                'feedTitle': feed.title,
+                'feedImage': feed.image,
+                'category': feed.category,
+              },
+            );
           },
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -692,8 +737,9 @@ class _FeedCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 15,
-                          fontWeight:
-                              hasUnread ? FontWeight.w600 : FontWeight.w500,
+                          fontWeight: hasUnread
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                           color: cs.onSurface,
                         ),
                       ),
@@ -715,8 +761,10 @@ class _FeedCard extends StatelessWidget {
                 if (hasUnread) ...[
                   const SizedBox(width: 12),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: cs.primaryContainer,
                       borderRadius: BorderRadius.circular(12),

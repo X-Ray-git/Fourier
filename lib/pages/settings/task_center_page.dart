@@ -116,11 +116,11 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
         leading: Platform.isMacOS
             ? Padding(
                 padding: const EdgeInsets.only(left: 66),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                  iconSize: 17,
+                child: AppGlassIconButton(
+                  icon: Icons.arrow_back_ios_new_rounded,
                   tooltip: '返回',
                   onPressed: Get.back,
+                  useOwnLayer: false,
                 ),
               )
             : null,
@@ -483,11 +483,11 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
         leading: Platform.isMacOS
             ? Padding(
                 padding: const EdgeInsets.only(left: 66),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                  iconSize: 17,
+                child: AppGlassIconButton(
+                  icon: Icons.arrow_back_ios_new_rounded,
                   tooltip: '返回',
                   onPressed: Get.back,
+                  useOwnLayer: false,
                 ),
               )
             : null,

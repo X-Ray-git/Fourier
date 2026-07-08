@@ -13,6 +13,8 @@ enum AppGlassTone { surface, panel, control }
 
 enum AppGlassButtonRole { primary, secondary, destructive }
 
+enum AppGlassTooltipPlacement { bottom, right }
+
 Color appGlassActiveControlFill(
   BuildContext context, {
   double accentAlpha = 0.05,
@@ -380,12 +382,14 @@ class AppGlassTooltip extends StatefulWidget {
   final String message;
   final Widget child;
   final Duration waitDuration;
+  final AppGlassTooltipPlacement placement;
 
   const AppGlassTooltip({
     super.key,
     required this.message,
     required this.child,
     this.waitDuration = const Duration(milliseconds: 420),
+    this.placement = AppGlassTooltipPlacement.bottom,
   });
 
   @override
@@ -416,6 +420,7 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
     if (overlay == null) return;
     final theme = Theme.of(context);
     final textScale = MediaQuery.textScalerOf(context);
+    final placement = _tooltipPlacement(widget.placement);
     _entry = OverlayEntry(
       builder: (context) => Theme(
         data: theme,
@@ -429,10 +434,13 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
                   CompositedTransformFollower(
                     link: _link,
                     showWhenUnlinked: false,
-                    targetAnchor: Alignment.bottomCenter,
-                    followerAnchor: Alignment.topCenter,
-                    offset: const Offset(0, 9),
-                    child: _AppGlassTooltipBubble(message: widget.message),
+                    targetAnchor: placement.targetAnchor,
+                    followerAnchor: placement.followerAnchor,
+                    offset: placement.offset,
+                    child: _AppGlassTooltipBubble(
+                      message: widget.message,
+                      scaleAlignment: placement.scaleAlignment,
+                    ),
                   ),
                 ],
               ),
@@ -442,6 +450,25 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
       ),
     );
     overlay.insert(_entry!);
+  }
+
+  _AppGlassTooltipPlacementData _tooltipPlacement(
+    AppGlassTooltipPlacement placement,
+  ) {
+    return switch (placement) {
+      AppGlassTooltipPlacement.bottom => const _AppGlassTooltipPlacementData(
+        targetAnchor: Alignment.bottomCenter,
+        followerAnchor: Alignment.topCenter,
+        offset: Offset(0, 9),
+        scaleAlignment: Alignment.topCenter,
+      ),
+      AppGlassTooltipPlacement.right => const _AppGlassTooltipPlacementData(
+        targetAnchor: Alignment.centerRight,
+        followerAnchor: Alignment.centerLeft,
+        offset: Offset(9, 0),
+        scaleAlignment: Alignment.centerLeft,
+      ),
+    };
   }
 
   void _hideTooltip() {
@@ -471,10 +498,28 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
   }
 }
 
+class _AppGlassTooltipPlacementData {
+  final Alignment targetAnchor;
+  final Alignment followerAnchor;
+  final Offset offset;
+  final Alignment scaleAlignment;
+
+  const _AppGlassTooltipPlacementData({
+    required this.targetAnchor,
+    required this.followerAnchor,
+    required this.offset,
+    required this.scaleAlignment,
+  });
+}
+
 class _AppGlassTooltipBubble extends StatelessWidget {
   final String message;
+  final Alignment scaleAlignment;
 
-  const _AppGlassTooltipBubble({required this.message});
+  const _AppGlassTooltipBubble({
+    required this.message,
+    this.scaleAlignment = Alignment.topCenter,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -488,7 +533,7 @@ class _AppGlassTooltipBubble extends StatelessWidget {
           opacity: value,
           child: Transform.scale(
             scale: 0.97 + value * 0.03,
-            alignment: Alignment.topCenter,
+            alignment: scaleAlignment,
             child: child,
           ),
         );

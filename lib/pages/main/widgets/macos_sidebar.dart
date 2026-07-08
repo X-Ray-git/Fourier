@@ -612,22 +612,25 @@ class _CategoryItem extends StatelessWidget {
             padding: const EdgeInsets.only(left: 2, right: 10),
             child: Row(
               children: [
-                IconButton(
-                  icon: AnimatedRotation(
-                    turns: isExpanded ? 0.25 : 0,
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOutCubic,
-                    child: const Icon(Icons.chevron_right_rounded),
+                AppGlassTooltip(
+                  message: isExpanded ? '折叠' : '展开',
+                  child: IconButton(
+                    icon: AnimatedRotation(
+                      turns: isExpanded ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutCubic,
+                      child: const Icon(Icons.chevron_right_rounded),
+                    ),
+                    iconSize: 18,
+                    tooltip: '',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 28,
+                      height: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                    onPressed: onToggle,
                   ),
-                  iconSize: 18,
-                  tooltip: isExpanded ? '折叠' : '展开',
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 32,
-                  ),
-                  padding: EdgeInsets.zero,
-                  onPressed: onToggle,
                 ),
                 Icon(
                   isExpanded

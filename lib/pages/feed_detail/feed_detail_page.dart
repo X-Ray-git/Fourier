@@ -17,6 +17,7 @@ import '../../router/app_pages.dart';
 import '../../utils/security_utils.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
@@ -944,12 +945,11 @@ class _MacFeedHeader extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(74, 8, 8, 8),
         child: Row(
           children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded),
-              iconSize: 17,
+            AppGlassIconButton(
+              icon: Icons.arrow_back_ios_new_rounded,
               tooltip: '返回',
-              visualDensity: VisualDensity.compact,
               onPressed: Get.back,
+              useOwnLayer: false,
             ),
             const SizedBox(width: 4),
             _MacFeedAvatar(imageUrl: imageUrl, colorScheme: colorScheme),
@@ -992,46 +992,50 @@ class _MacFeedHeader extends StatelessWidget {
               ),
             ),
             Obx(
-              () => PopupMenuButton<int>(
-                tooltip: '筛选文章状态',
-                icon: Icon(
-                  controller.readFilter.value == 0
-                      ? Icons.mark_email_unread_outlined
-                      : controller.readFilter.value == 1
-                      ? Icons.inbox
-                      : Icons.done_all,
-                  size: 20,
+              () => AppGlassTooltip(
+                message: '筛选文章状态',
+                child: PopupMenuButton<int>(
+                  tooltip: '',
+                  child: SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: Icon(
+                      controller.readFilter.value == 0
+                          ? Icons.mark_email_unread_outlined
+                          : controller.readFilter.value == 1
+                          ? Icons.inbox
+                          : Icons.done_all,
+                      size: 18,
+                    ),
+                  ),
+                  onSelected: (v) {
+                    controller.readFilter.value = v;
+                    controller._applyFilter();
+                    controller.selectedArticle.value = null;
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 0, child: Text('仅未读')),
+                    PopupMenuItem(value: 1, child: Text('全部')),
+                    PopupMenuItem(value: 2, child: Text('仅已读')),
+                  ],
                 ),
-                onSelected: (v) {
-                  controller.readFilter.value = v;
-                  controller._applyFilter();
-                  controller.selectedArticle.value = null;
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 0, child: Text('仅未读')),
-                  PopupMenuItem(value: 1, child: Text('全部')),
-                  PopupMenuItem(value: 2, child: Text('仅已读')),
-                ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.sync, size: 20),
+            AppGlassIconButton(
+              icon: Icons.sync,
               tooltip: '同步',
               onPressed: controller.loadData,
+              useOwnLayer: false,
             ),
             if (controller.filterFeedId != null)
               Obx(() {
                 final isEnabled = controller.isAutoReadabilityEnabled.value;
-                return IconButton(
-                  icon: Icon(
-                    isEnabled ? Icons.article : Icons.article_outlined,
-                    size: 20,
-                    color: isEnabled
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                  ),
+                return AppGlassIconButton(
+                  icon: isEnabled ? Icons.article : Icons.article_outlined,
                   tooltip: isEnabled ? '自动拉取全文已开启' : '自动拉取全文',
-                  visualDensity: VisualDensity.compact,
+                  selected: isEnabled,
+                  selectedFillOpacity: 0.07,
+                  useOwnLayer: false,
                   onPressed: () async {
                     await FeedReadabilitySettingsService.toggleAutoReadability(
                       controller.filterFeedId ?? '',
@@ -1043,16 +1047,12 @@ class _MacFeedHeader extends StatelessWidget {
             if (controller.filterFeedId != null)
               Obx(() {
                 final isEnabled = controller.isAutoTranslateEnabled.value;
-                return IconButton(
-                  icon: Icon(
-                    isEnabled ? Icons.translate : Icons.translate_outlined,
-                    size: 20,
-                    color: isEnabled
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                  ),
+                return AppGlassIconButton(
+                  icon: isEnabled ? Icons.translate : Icons.translate_outlined,
                   tooltip: isEnabled ? '自动翻译已开启' : '自动翻译',
-                  visualDensity: VisualDensity.compact,
+                  selected: isEnabled,
+                  selectedFillOpacity: 0.07,
+                  useOwnLayer: false,
                   onPressed: () async {
                     await FeedTranslationSettingsService.toggleAutoTranslate(
                       controller.filterFeedId ?? '',
@@ -1064,18 +1064,14 @@ class _MacFeedHeader extends StatelessWidget {
             if (controller.filterFeedId != null)
               Obx(() {
                 final isEnabled = controller.isSilentEnabled.value;
-                return IconButton(
-                  icon: Icon(
-                    isEnabled
-                        ? Icons.notifications_off
-                        : Icons.notifications_off_outlined,
-                    size: 20,
-                    color: isEnabled
-                        ? colorScheme.error
-                        : colorScheme.onSurfaceVariant,
-                  ),
+                return AppGlassIconButton(
+                  icon: isEnabled
+                      ? Icons.notifications_off
+                      : Icons.notifications_off_outlined,
                   tooltip: isEnabled ? '已开启静默' : '设为静默',
-                  visualDensity: VisualDensity.compact,
+                  selected: isEnabled,
+                  selectedFillOpacity: 0.07,
+                  useOwnLayer: false,
                   onPressed: () async {
                     await FeedSilentSettingsService.toggleSilent(
                       controller.filterFeedId ?? '',

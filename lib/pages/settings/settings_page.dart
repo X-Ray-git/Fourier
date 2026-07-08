@@ -987,11 +987,11 @@ class _SettingsPageState extends State<SettingsPage> {
               leading: Platform.isMacOS && Navigator.of(context).canPop()
                   ? Padding(
                       padding: const EdgeInsets.only(left: 66),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                        iconSize: 17,
+                      child: AppGlassIconButton(
+                        icon: Icons.arrow_back_ios_new_rounded,
                         tooltip: '返回',
                         onPressed: Get.back,
+                        useOwnLayer: false,
                       ),
                     )
                   : null,

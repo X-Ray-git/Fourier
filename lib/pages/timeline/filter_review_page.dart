@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
@@ -21,6 +22,7 @@ import '../widgets/article_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/card_press_effect.dart';
+import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
@@ -186,6 +188,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   void _removeReviewedArticle(String entryId) {
     _articles.removeWhere((a) => a.entryId == entryId);
+    _refreshPointerAnnotationsAfterReviewChange();
   }
 
   void _selectReviewedSuccessor(ArticleModel? nextArticle) {
@@ -204,6 +207,22 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
     _selectedArticle.value = selected;
     _scrollToArticle(selected.entryId);
+    _refreshPointerAnnotationsAfterReviewChange();
+  }
+
+  void _refreshPointerAnnotationsAfterReviewChange() {
+    if (!Platform.isMacOS) return;
+
+    void update() {
+      if (!mounted) return;
+      RendererBinding.instance.mouseTracker.updateAllDevices();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      update();
+      Future<void>.delayed(const Duration(milliseconds: 90), update);
+      Future<void>.delayed(const Duration(milliseconds: 190), update);
+    });
   }
 
   void _selectRelativeArticle(int delta) {
@@ -979,25 +998,18 @@ class _MacReviewRow extends StatelessWidget {
               const SizedBox(width: 8),
               Column(
                 children: [
-                  _SideTooltip(
-                    message: '保留',
-                    child: IconButton(
-                      icon: const Icon(Icons.restore_rounded),
-                      iconSize: 18,
-                      visualDensity: VisualDensity.compact,
-                      color: const Color(0xFF10B981),
-                      onPressed: onKeep,
-                    ),
+                  _ReviewActionButton(
+                    icon: Icons.restore_rounded,
+                    tooltip: '保留',
+                    color: const Color(0xFF10B981),
+                    onPressed: onKeep,
                   ),
-                  _SideTooltip(
-                    message: '移除',
-                    child: IconButton(
-                      icon: const Icon(Icons.delete_sweep_outlined),
-                      iconSize: 18,
-                      visualDensity: VisualDensity.compact,
-                      color: cs.error,
-                      onPressed: onReject,
-                    ),
+                  const SizedBox(height: 2),
+                  _ReviewActionButton(
+                    icon: Icons.delete_sweep_outlined,
+                    tooltip: '移除',
+                    color: cs.error,
+                    onPressed: onReject,
                   ),
                 ],
               ),
@@ -1104,98 +1116,73 @@ class _ReviewInfoBlock extends StatelessWidget {
   }
 }
 
-class _SideTooltip extends StatefulWidget {
-  final String message;
-  final Widget child;
+class _ReviewActionButton extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onPressed;
 
-  const _SideTooltip({required this.message, required this.child});
+  const _ReviewActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onPressed,
+  });
 
   @override
-  State<_SideTooltip> createState() => _SideTooltipState();
+  State<_ReviewActionButton> createState() => _ReviewActionButtonState();
 }
 
-class _SideTooltipState extends State<_SideTooltip> {
-  OverlayEntry? _entry;
-
-  void _show() {
-    if (_entry != null) return;
-
-    final target = context.findRenderObject();
-    final overlay = Overlay.of(context).context.findRenderObject();
-    if (target is! RenderBox || overlay is! RenderBox) return;
-
-    final targetOffset = target.localToGlobal(Offset.zero, ancestor: overlay);
-    final targetSize = target.size;
-    final top = (targetOffset.dy + targetSize.height / 2 - 16).clamp(
-      8.0,
-      overlay.size.height - 40.0,
-    );
-    final rightSide = targetOffset.dx + targetSize.width + 8;
-    final left = rightSide + 72 < overlay.size.width
-        ? rightSide
-        : targetOffset.dx - 72;
-
-    _entry = OverlayEntry(
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        return Positioned(
-          left: left,
-          top: top,
-          child: IgnorePointer(
-            child: Material(
-              color: Colors.transparent,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: cs.inverseSurface.withValues(alpha: 0.96),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.20),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  child: Text(
-                    widget.message,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onInverseSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    Overlay.of(context).insert(_entry!);
-  }
-
-  void _hide() {
-    _entry?.remove();
-    _entry = null;
-  }
-
-  @override
-  void dispose() {
-    _hide();
-    super.dispose();
-  }
+class _ReviewActionButtonState extends State<_ReviewActionButton> {
+  bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => _show(),
-      onExit: (_) => _hide(),
-      child: widget.child,
+    final cs = Theme.of(context).colorScheme;
+    final fill = _pressed
+        ? widget.color.withValues(alpha: 0.12)
+        : _hovered
+        ? widget.color.withValues(alpha: 0.08)
+        : Colors.transparent;
+
+    return AppGlassTooltip(
+      message: widget.tooltip,
+      placement: AppGlassTooltipPlacement.right,
+      child: SelectionContainer.disabled(
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() {
+            _hovered = false;
+            _pressed = false;
+          }),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapUp: (_) => setState(() => _pressed = false),
+            onTapCancel: () => setState(() => _pressed = false),
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: fill,
+                border: Border.all(
+                  color: _hovered
+                      ? widget.color.withValues(alpha: 0.22)
+                      : cs.outlineVariant.withValues(alpha: 0.16),
+                  width: 0.6,
+                ),
+              ),
+              child: Icon(widget.icon, size: 18, color: widget.color),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

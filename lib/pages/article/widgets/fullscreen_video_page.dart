@@ -28,14 +28,16 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     widget.controller.addListener(_onControllerUpdate);
     HardwareKeyboard.instance.addHandler(_handleGlobalKey);
-    _focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
     _startHideTimer();
   }
 
   bool _handleGlobalKey(KeyEvent event) {
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
-         event.logicalKey == LogicalKeyboardKey.space)) {
+            event.logicalKey == LogicalKeyboardKey.space)) {
       _togglePlayPause();
       return true;
     }
@@ -113,7 +115,6 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     setState(() {});
   }
 
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -129,143 +130,158 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-            Center(
-              child: AspectRatio(
-                aspectRatio: widget.controller.value.aspectRatio,
-                child: VideoPlayer(widget.controller),
-              ),
-            ),
-            
-            // 顶部渐变条与返回按钮
-            AnimatedOpacity(
-              opacity: _showControls ? 1 : 0,
-              duration: const Duration(milliseconds: 250),
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.6),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                  padding: const EdgeInsets.only(top: 20, left: 16, right: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.screen_rotation, color: Colors.white, size: 24),
-                        onPressed: _toggleOrientation,
-                      ),
-                    ],
-                  ),
+              Center(
+                child: AspectRatio(
+                  aspectRatio: widget.controller.value.aspectRatio,
+                  child: VideoPlayer(widget.controller),
                 ),
               ),
-            ),
 
-            // 底部控制栏
-            AnimatedOpacity(
-              opacity: _showControls ? 1 : 0,
-              duration: const Duration(milliseconds: 250),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.8),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      VideoProgressIndicator(
-                        widget.controller,
-                        allowScrubbing: true,
-                        colors: VideoProgressColors(
-                          playedColor: cs.primary,
-                          bufferedColor: Colors.white30,
-                          backgroundColor: Colors.white12,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: _togglePlayPause,
-                            child: Icon(
-                              widget.controller.value.isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Text(
-                            '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: const Icon(
-                              Icons.fullscreen_exit,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
+              // 顶部渐变条与返回按钮
+              AnimatedOpacity(
+                opacity: _showControls ? 1 : 0,
+                duration: const Duration(milliseconds: 250),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.6),
+                          Colors.transparent,
                         ],
                       ),
-                    ],
+                    ),
+                    padding: const EdgeInsets.only(
+                      top: 20,
+                      left: 16,
+                      right: 16,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.screen_rotation,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          onPressed: _toggleOrientation,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // 中央播放/暂停按钮
-            if (!_showControls && !widget.controller.value.isPlaying)
-              Center(
-                child: GestureDetector(
-                  onTap: _togglePlayPause,
+              // 底部控制栏
+              AnimatedOpacity(
+                opacity: _showControls ? 1 : 0,
+                duration: const Duration(milliseconds: 250),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
                   child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.85),
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
                     ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      size: 40,
-                      color: Colors.white,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.8),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        VideoProgressIndicator(
+                          widget.controller,
+                          allowScrubbing: true,
+                          colors: VideoProgressColors(
+                            playedColor: cs.primary,
+                            bufferedColor: Colors.white30,
+                            backgroundColor: Colors.white12,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: _togglePlayPause,
+                              child: Icon(
+                                widget.controller.value.isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: const Icon(
+                                Icons.fullscreen_exit,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-          ],
+
+              // 中央播放/暂停按钮
+              if (!_showControls && !widget.controller.value.isPlaying)
+                Center(
+                  child: GestureDetector(
+                    onTap: _togglePlayPause,
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.85),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        size: 40,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

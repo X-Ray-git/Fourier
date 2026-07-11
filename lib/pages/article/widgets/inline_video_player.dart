@@ -49,7 +49,9 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     }
     _focusNode.dispose();
     _hideTimer?.cancel();
-    _controller?..removeListener(_onControllerUpdate)..dispose();
+    _controller
+      ?..removeListener(_onControllerUpdate)
+      ..dispose();
     super.dispose();
   }
 
@@ -58,7 +60,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   bool _handleGlobalKey(KeyEvent event) {
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
-         event.logicalKey == LogicalKeyboardKey.space)) {
+            event.logicalKey == LogicalKeyboardKey.space)) {
       if (activePlayer == this) {
         if (_controller != null && _controller!.value.isInitialized) {
           _togglePlayPause();
@@ -73,21 +75,36 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     _hideTimer?.cancel();
     if (_showControls && (_controller?.value.isPlaying ?? false)) {
       _hideTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted && _showControls && (_controller?.value.isPlaying ?? false)) {
+        if (mounted &&
+            _showControls &&
+            (_controller?.value.isPlaying ?? false)) {
           setState(() => _showControls = false);
         }
       });
     }
   }
 
-  void _enterFullscreen() {
+  Future<void> _enterFullscreen() async {
     if (_controller == null) return;
-    Navigator.push(
+    final shouldRestoreActivePlayer = activePlayer == this;
+    if (shouldRestoreActivePlayer) {
+      activePlayer = null;
+    }
+
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => FullscreenVideoPage(controller: _controller!),
       ),
     );
+
+    if (mounted &&
+        shouldRestoreActivePlayer &&
+        _controller != null &&
+        _controller!.value.isInitialized) {
+      activePlayer = this;
+      _focusNode.requestFocus();
+    }
   }
 
   Future<void> _initAndPlay() async {
@@ -140,7 +157,6 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     _startHideTimer();
   }
 
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -159,137 +175,141 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
             child: GestureDetector(
               onTap: _toggleControls,
               child: Stack(
-              fit: StackFit.expand,
-              children: [
-                VideoPlayer(_controller!),
+                fit: StackFit.expand,
+                children: [
+                  VideoPlayer(_controller!),
 
-                // 控制层
-                AnimatedOpacity(
-                  opacity: _showControls ? 1 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // 顶部渐变条
-                      Container(
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.4),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-
-                      // 底部控制栏
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.6),
-                            ],
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // 可拖拽进度条
-                            VideoProgressIndicator(
-                              _controller!,
-                              allowScrubbing: true,
-                              colors: VideoProgressColors(
-                                playedColor: cs.primary,
-                                bufferedColor:
-                                    cs.onSurface.withValues(alpha: 0.3),
-                                backgroundColor:
-                                    cs.onSurface.withValues(alpha: 0.15),
-                              ),
-                              padding: EdgeInsets.zero,
-                            ),
-                            const SizedBox(height: 6),
-                            // 时间 + 播放/暂停
-                            Row(
-                              children: [
-                                // 播放/暂停
-                                GestureDetector(
-                                  onTap: _togglePlayPause,
-                                  child: Icon(
-                                    _controller!.value.isPlaying
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                // 时间
-                                Text(
-                                  '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    fontFeatures: [
-                                      FontFeature.tabularFigures(),
-                                    ],
-                                  ),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: _enterFullscreen,
-                                  child: const Icon(
-                                    Icons.fullscreen,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
+                  // 控制层
+                  AnimatedOpacity(
+                    opacity: _showControls ? 1 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // 顶部渐变条
+                        Container(
+                          height: 40,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.4),
+                                Colors.transparent,
                               ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
+                        const Spacer(),
 
-                // 中央播放/暂停按钮（仅在控制层隐藏且暂停时显示）
-                if (!_showControls && !(_controller!.value.isPlaying))
-                  Center(
-                    child: GestureDetector(
-                      onTap: _togglePlayPause,
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
+                        // 底部控制栏
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.6),
+                              ],
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // 可拖拽进度条
+                              VideoProgressIndicator(
+                                _controller!,
+                                allowScrubbing: true,
+                                colors: VideoProgressColors(
+                                  playedColor: cs.primary,
+                                  bufferedColor: cs.onSurface.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                  backgroundColor: cs.onSurface.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                              const SizedBox(height: 6),
+                              // 时间 + 播放/暂停
+                              Row(
+                                children: [
+                                  // 播放/暂停
+                                  GestureDetector(
+                                    onTap: _togglePlayPause,
+                                    child: Icon(
+                                      _controller!.value.isPlaying
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  // 时间
+                                  Text(
+                                    '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  GestureDetector(
+                                    onTap: _enterFullscreen,
+                                    child: const Icon(
+                                      Icons.fullscreen,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Icon(
-                          _controller!.value.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          size: 32,
-                          color: Colors.white,
+                      ],
+                    ),
+                  ),
+
+                  // 中央播放/暂停按钮（仅在控制层隐藏且暂停时显示）
+                  if (!_showControls && !(_controller!.value.isPlaying))
+                    Center(
+                      child: GestureDetector(
+                        onTap: _togglePlayPause,
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: cs.primary.withValues(alpha: 0.85),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _controller!.value.isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            size: 32,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
     // 错误态
     if (_hasError) {
@@ -365,8 +385,11 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.play_arrow_rounded,
-                          size: 40, color: Colors.white),
+                      : const Icon(
+                          Icons.play_arrow_rounded,
+                          size: 40,
+                          color: Colors.white,
+                        ),
                 ),
               ),
             ),

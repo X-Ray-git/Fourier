@@ -24,6 +24,12 @@
 - 避免会改变图片布局尺寸的 hover 效果；哪怕很小的尺寸变化也会移动后续文字，在桌面端显得不稳定。
 - 很小的分隔符类图片不应被拉伸成大占位。
 
+视频：
+
+- inline player 和全屏 player 都支持空格播放/暂停，但同一时刻只能由当前可见播放器处理全局按键。
+- 进入全屏前，inline player 如果是 `activePlayer`，应暂时释放该身份；全屏页在首帧后请求焦点并接管空格。退出全屏后，inline player 再恢复 `activePlayer` 和焦点。
+- 不要让 inline 与全屏页面同时响应同一次空格事件，否则可能发生连续切换两次、视觉上像“空格无效”。也不要在全屏 widget 尚未挂载完成前同步请求焦点。
+
 表格：
 
 - `_buildTable()` 刻意不在横向 scroll viewport 外包 `ClipRRect`。

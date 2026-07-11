@@ -16,6 +16,7 @@
 - macOS 中间栏 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截，不要只在某个页面单独处理。
 - macOS 文章卡片普通态使用极轻中性色填充，统一由 `ArticleCardChrome` 控制；当前深色模式 alpha 为 `0.018`，浅色模式为 `0.012`。时间线、最近阅读和垃圾拦截不要分别覆盖该值。
 - macOS 普通文章卡片与垃圾拦截审核卡片的标题字号统一为 `14`，由 `ArticleCardChrome.titleFontSize` 提供；普通卡片辅助正文在 macOS 使用 `12`，由 `ArticleCardChrome.bodyFontSize` 提供。Android 保持原字号，不要在两个 macOS 卡片实现中分别硬编码标题字号。
+- macOS 主时间线和垃圾拦截列表共用 `MacArticleListChrome` 的两层下边距：`viewportPadding` 是滚动过程中始终存在的窗口下边界，`contentPadding` 是滚到列表末尾后出现的内容留白。不要只增加 `ListView.padding.bottom` 来替代视口边界，也不要在两个页面分别硬编码。
 - macOS 订阅源详情页的 header 筛选也应跟随这个二态开关语言；不要重新引入 `仅已读` 入口。
 - 已读模式/页面仍在其他入口存在，不应删除。
 - 过滤支持选中订阅源、分类和静默订阅源。

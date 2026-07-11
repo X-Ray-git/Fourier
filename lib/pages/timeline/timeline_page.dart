@@ -16,6 +16,7 @@ import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
+import '../../common/widgets/article_card_chrome.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 
 import '../../http/init.dart';
@@ -578,7 +579,7 @@ class _TimelinePageState extends State<TimelinePage> {
       Widget content;
       if (Platform.isMacOS) {
         content = Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: MacArticleListChrome.viewportPadding,
           child: Stack(
             children: [
               Positioned.fill(
@@ -588,9 +589,7 @@ class _TimelinePageState extends State<TimelinePage> {
                   ),
                   physics: _refreshPhysics,
                   controller: _scrollController,
-                  padding: EdgeInsets.only(
-                    bottom: 8 + MediaQuery.of(context).padding.bottom,
-                  ),
+                  padding: MacArticleListChrome.contentPadding(context),
                   items: controller.articles.toList(),
                   itemKey: (article) => article.entryId,
                   itemBuilder: _buildAnimatedTimelineItem,

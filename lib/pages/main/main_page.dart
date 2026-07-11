@@ -78,24 +78,37 @@ class _MainPageState extends State<MainPage> {
       backgroundColor: Colors.transparent,
       body: ContinuousRectangleClip(
         radius: _macOSWindowContentRadius,
-        child: Row(
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            Obx(() {
-              return MacOSSidebar(
-                currentIndex: controller.currentIndex.value,
-                onIndexChanged: controller.changeIndex,
-              );
-            }),
-            Expanded(
-              child: ColoredBox(
-                color: colorScheme.surface,
-                child: Obx(
-                  () => IndexedStack(
-                    index: controller.currentIndex.value,
-                    children: _macPages,
+            Positioned.fill(
+              child: Row(
+                children: [
+                  const SizedBox(width: macOSSidebarExpandedWidth),
+                  Expanded(
+                    child: ColoredBox(
+                      color: colorScheme.surface,
+                      child: Obx(
+                        () => IndexedStack(
+                          index: controller.currentIndex.value,
+                          children: _macPages,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Obx(() {
+                return MacOSSidebar(
+                  currentIndex: controller.currentIndex.value,
+                  onIndexChanged: controller.changeIndex,
+                );
+              }),
             ),
           ],
         ),

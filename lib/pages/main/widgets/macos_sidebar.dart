@@ -14,7 +14,7 @@ import '../../timeline/timeline_controller.dart';
 
 const _macOSSidebarPanelRadius = 18.0;
 const EdgeInsets _macOSSidebarPanelMargin = EdgeInsets.fromLTRB(8, 8, 8, 8);
-const _macOSSidebarExpandedWidth = 290.0;
+const macOSSidebarExpandedWidth = 290.0;
 
 class MacOSSidebar extends StatelessWidget {
   final int currentIndex;
@@ -33,7 +33,7 @@ class MacOSSidebar extends StatelessWidget {
     final subController = Get.find<SubscriptionsController>();
 
     return _MacOSSidebarSlot(
-      width: _macOSSidebarExpandedWidth,
+      width: macOSSidebarExpandedWidth,
       child: _MacOSGlassPane(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

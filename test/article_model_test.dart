@@ -48,4 +48,25 @@ void main() {
       expect(article.content, '<p>OpenClaw &amp; DeepSeek</p>');
     },
   );
+
+  test('fromCache decodes legacy text entities without touching content', () {
+    final article = ArticleModel.fromCache({
+      'entryId': 'e-cache',
+      'feedTitle': 'AI &amp; Tools',
+      'title': 'OpenClaw&ensp;Companion',
+      'subscriptionCategory': 'News &amp; Analysis',
+      'author': 'A &amp; B',
+      'filterReason': 'Low&ensp;value',
+      'url': 'https://example.com?a=1&amp;b=2',
+      'content': '<p>A &ensp; B</p>',
+    });
+
+    expect(article.title, 'OpenClaw Companion');
+    expect(article.feedTitle, 'AI & Tools');
+    expect(article.subscriptionCategory, 'News & Analysis');
+    expect(article.author, 'A & B');
+    expect(article.filterReason, 'Low value');
+    expect(article.url, 'https://example.com?a=1&amp;b=2');
+    expect(article.content, '<p>A &ensp; B</p>');
+  });
 }

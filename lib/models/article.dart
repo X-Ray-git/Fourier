@@ -139,19 +139,23 @@ class ArticleModel {
   factory ArticleModel.fromCache(Map<String, dynamic> json) => ArticleModel(
     entryId: json['entryId'] as String? ?? '',
     feedId: json['feedId'] as String? ?? '',
-    feedTitle: json['feedTitle'] as String? ?? '?',
+    feedTitle: HtmlEntityUtils.decodeText(json['feedTitle'] as String? ?? '?'),
     feedImage: json['feedImage'] as String?,
-    title: json['title'] as String? ?? '?',
+    title: HtmlEntityUtils.decodeText(json['title'] as String? ?? '?'),
     url: json['url'] as String? ?? '',
     content: json['content'] as String?,
     publishedAt: json['publishedAt'] as String? ?? '',
     isRead: json['isRead'] as bool? ?? false,
     category: json['category'] as String? ?? 'feeds',
-    subscriptionCategory: json['subscriptionCategory'] as String? ?? '',
-    author: json['author'] as String?,
+    subscriptionCategory: HtmlEntityUtils.decodeText(
+      json['subscriptionCategory'] as String? ?? '',
+    ),
+    author: HtmlEntityUtils.decodeNullableText(json['author'] as String?),
     imageUrl: json['imageUrl'] as String?,
     isRejectedByAi: json['isRejectedByAi'] as bool? ?? false,
-    filterReason: json['filterReason'] as String?,
+    filterReason: HtmlEntityUtils.decodeNullableText(
+      json['filterReason'] as String?,
+    ),
     filterReviewed: json['filterReviewed'] as bool? ?? false,
     filteredAt: json['filteredAt'] as int?,
   );

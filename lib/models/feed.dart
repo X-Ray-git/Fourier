@@ -56,8 +56,8 @@ class FeedModel {
 
   factory FeedModel.fromCache(Map<String, dynamic> json) => FeedModel(
     feedId: json['feedId'] as String? ?? '',
-    title: json['title'] as String? ?? '?',
-    category: json['category'] as String?,
+    title: HtmlEntityUtils.decodeText(json['title'] as String? ?? '?'),
+    category: HtmlEntityUtils.decodeNullableText(json['category'] as String?),
     view: json['view'] as int?,
     url: json['url'] as String?,
     image: json['image'] as String?,

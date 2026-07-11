@@ -62,7 +62,9 @@ class TranslationRecord {
     );
     return TranslationRecord(
       status: status,
-      translatedTitle: json['translatedTitle'] as String?,
+      translatedTitle: HtmlEntityUtils.decodeNullableText(
+        json['translatedTitle'] as String?,
+      ),
       translatedContent: json['translatedContent'] as String?,
       errorMessage: json['errorMessage'] as String?,
       updatedAt:

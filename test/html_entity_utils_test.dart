@@ -11,6 +11,13 @@ void main() {
     );
     expect(HtmlEntityUtils.decodeText('A &#x26; B'), 'A & B');
     expect(HtmlEntityUtils.decodeText('A &ndash; B'), 'A \u2013 B');
+    expect(HtmlEntityUtils.decodeText('A&ensp;B'), 'A B');
+    expect(HtmlEntityUtils.decodeText('A&emsp;B'), 'A B');
+    expect(HtmlEntityUtils.decodeText('A&middot;B'), 'A\u00B7B');
+    expect(
+      HtmlEntityUtils.decodeText('A&notARealEntity;B'),
+      'A&notARealEntity;B',
+    );
   });
 
   test(

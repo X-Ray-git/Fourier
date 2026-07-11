@@ -1,3 +1,5 @@
+import 'package:html/parser.dart' show HtmlParser;
+
 abstract final class HtmlEntityUtils {
   static final RegExp _entityPattern = RegExp(
     r'&(#(?:x[0-9a-fA-F]+|\d+)|[a-zA-Z][a-zA-Z0-9]+);',
@@ -10,6 +12,7 @@ abstract final class HtmlEntityUtils {
     'quot': '"',
     'apos': "'",
     'nbsp': ' ',
+    'ensp': ' ',
     'ndash': '\u2013',
     'mdash': '\u2014',
     'hellip': '\u2026',
@@ -21,6 +24,7 @@ abstract final class HtmlEntityUtils {
     'reg': '\u00AE',
     'trade': '\u2122',
   };
+  static final Map<String, String> _decodedNamedEntityCache = {};
 
   static String decodeText(String value) {
     if (!value.contains('&')) return value;
@@ -39,7 +43,16 @@ abstract final class HtmlEntityUtils {
         return _charForCodePoint(codePoint) ?? match.group(0)!;
       }
 
-      return _namedEntities[entity] ?? match.group(0)!;
+      final knownEntity = _namedEntities[entity];
+      if (knownEntity != null) return knownEntity;
+
+      return _decodedNamedEntityCache.putIfAbsent(entity, () {
+        final source = match.group(0)!;
+        final parser = HtmlParser(source);
+        final decoded = parser.parseFragment().text;
+        if (parser.errors.isNotEmpty || decoded == null) return source;
+        return _normalizeWhitespaceEntity(decoded);
+      });
     });
   }
 
@@ -54,5 +67,12 @@ abstract final class HtmlEntityUtils {
     }
     if (codePoint >= 0xD800 && codePoint <= 0xDFFF) return null;
     return String.fromCharCode(codePoint);
+  }
+
+  static String _normalizeWhitespaceEntity(String value) {
+    return switch (value) {
+      '\u00A0' || '\u2002' || '\u2003' || '\u2009' => ' ',
+      _ => value,
+    };
   }
 }

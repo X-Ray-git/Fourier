@@ -17,4 +17,17 @@ void main() {
     expect(feed.category, 'AI & Dev');
     expect(feed.url, 'https://example.com?a=1&amp;b=2');
   });
+
+  test('fromCache should decode legacy text entities', () {
+    final feed = FeedModel.fromCache({
+      'feedId': 'f-cache',
+      'title': 'AI&ensp;News',
+      'category': 'Research &amp; Development',
+      'url': 'https://example.com?a=1&amp;b=2',
+    });
+
+    expect(feed.title, 'AI News');
+    expect(feed.category, 'Research & Development');
+    expect(feed.url, 'https://example.com?a=1&amp;b=2');
+  });
 }

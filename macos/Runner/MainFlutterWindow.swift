@@ -2,6 +2,8 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
+  private var trafficLightsHidden = false
+
   private enum Metrics {
     static let windowRadius: CGFloat = 24
     static let trafficLightCenterX: CGFloat = 24
@@ -72,7 +74,11 @@ class MainFlutterWindow: NSWindow {
     }
 
     let buttons = [close, minimize, zoom]
-    buttons.forEach { $0.isHidden = false }
+    buttons.forEach { $0.isHidden = trafficLightsHidden }
+
+    guard !trafficLightsHidden else {
+      return
+    }
 
     let buttonSize = close.frame.size
     let originY = contentView.isFlipped
@@ -91,5 +97,10 @@ class MainFlutterWindow: NSWindow {
         button.frame.origin = buttonSuperview.convert(rect, from: contentView).origin
       }
     }
+  }
+
+  func setTrafficLightsHidden(_ hidden: Bool) {
+    trafficLightsHidden = hidden
+    positionStandardWindowButtons()
   }
 }

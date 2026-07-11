@@ -121,9 +121,9 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
       await controller.initialize();
+      await controller.setLooping(false);
       controller.addListener(_onControllerUpdate);
       await controller.play();
-      controller.setLooping(true);
       activePlayer = this;
       if (mounted) _focusNode.requestFocus();
       setState(() {});
@@ -135,19 +135,23 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     }
   }
 
-  void _togglePlayPause() {
+  Future<void> _togglePlayPause() async {
     if (_controller == null) return;
     activePlayer = this;
     if (mounted) _focusNode.requestFocus();
     if (_controller!.value.isPlaying) {
-      _controller!.pause();
+      await _controller!.pause();
       _hideTimer?.cancel();
       _showControls = true;
     } else {
-      _controller!.play();
+      final value = _controller!.value;
+      if (value.duration > Duration.zero && value.position >= value.duration) {
+        await _controller!.seekTo(Duration.zero);
+      }
+      await _controller!.play();
       _startHideTimer();
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   void _toggleControls() {

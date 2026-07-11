@@ -45,6 +45,8 @@ abstract final class ArticleCardChrome {
 abstract final class MacArticleListChrome {
   static const EdgeInsets viewportPadding = EdgeInsets.only(bottom: 8);
 
-  static EdgeInsets contentPadding(BuildContext context) =>
-      EdgeInsets.only(bottom: 8 + MediaQuery.paddingOf(context).bottom);
+  static EdgeInsets contentPadding(BuildContext context) => EdgeInsets.only(
+    right: 2,
+    bottom: 8 + MediaQuery.paddingOf(context).bottom,
+  );
 }

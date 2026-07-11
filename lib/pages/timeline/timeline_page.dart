@@ -578,38 +578,41 @@ class _TimelinePageState extends State<TimelinePage> {
       final filterBarCount = Platform.isMacOS ? 0 : 1;
       Widget content;
       if (Platform.isMacOS) {
-        content = Padding(
-          padding: MacArticleListChrome.viewportPadding,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: ImplicitlyAnimatedList<ArticleModel>(
-                  key: ValueKey(
-                    '${controller.selectedMode.value}:${controller.timelineScopeKey}:${controller.timelineListResetVersion}',
-                  ),
-                  physics: _refreshPhysics,
-                  controller: _scrollController,
-                  padding: MacArticleListChrome.contentPadding(context),
-                  items: controller.articles.toList(),
-                  itemKey: (article) => article.entryId,
-                  itemBuilder: _buildAnimatedTimelineItem,
-                  removedItemBuilder: _buildRemovedTimelineItem,
-                  onRemoveStart: _handleTimelineRemoveStart,
-                  onRemoveEnd: _handleTimelineRemoveEnd,
-                ),
-              ),
-              if (controller.articles.isEmpty)
+        content = ScrollbarTheme(
+          data: MacGlassScrollbarStyle.articlePaneTheme(context),
+          child: Padding(
+            padding: MacArticleListChrome.viewportPadding,
+            child: Stack(
+              children: [
                 Positioned.fill(
-                  child: DelayedVisibility(
-                    visible: controller.articles.isEmpty,
-                    delay: const Duration(milliseconds: 220),
-                    child: _EmptyView(
-                      message: controller.emptyMessage,
-                      onRetry: controller.loadFeedsThenArticles,
+                  child: ImplicitlyAnimatedList<ArticleModel>(
+                    key: ValueKey(
+                      '${controller.selectedMode.value}:${controller.timelineScopeKey}:${controller.timelineListResetVersion}',
+                    ),
+                    physics: _refreshPhysics,
+                    controller: _scrollController,
+                    padding: MacArticleListChrome.contentPadding(context),
+                    items: controller.articles.toList(),
+                    itemKey: (article) => article.entryId,
+                    itemBuilder: _buildAnimatedTimelineItem,
+                    removedItemBuilder: _buildRemovedTimelineItem,
+                    onRemoveStart: _handleTimelineRemoveStart,
+                    onRemoveEnd: _handleTimelineRemoveEnd,
+                  ),
+                ),
+                if (controller.articles.isEmpty)
+                  Positioned.fill(
+                    child: DelayedVisibility(
+                      visible: controller.articles.isEmpty,
+                      delay: const Duration(milliseconds: 220),
+                      child: _EmptyView(
+                        message: controller.emptyMessage,
+                        onRetry: controller.loadFeedsThenArticles,
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       } else if (controller.articles.isEmpty) {

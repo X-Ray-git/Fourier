@@ -1181,6 +1181,32 @@ class _AppGlassButtonState extends State<AppGlassButton> {
   }
 }
 
+abstract final class MacGlassScrollbarStyle {
+  static ScrollbarThemeData articlePaneTheme(BuildContext context) =>
+      theme(context, thickness: 8, crossAxisMargin: 1);
+
+  static ScrollbarThemeData theme(
+    BuildContext context, {
+    double thickness = 5,
+    double crossAxisMargin = 4,
+    double mainAxisMargin = 4,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return ScrollbarThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        final baseAlpha = states.contains(WidgetState.hovered) ? 0.34 : 0.22;
+        return cs.onSurface.withValues(alpha: baseAlpha);
+      }),
+      trackColor: WidgetStateProperty.all(Colors.transparent),
+      trackBorderColor: WidgetStateProperty.all(Colors.transparent),
+      thickness: WidgetStateProperty.all(thickness),
+      radius: const Radius.circular(999),
+      crossAxisMargin: crossAxisMargin,
+      mainAxisMargin: mainAxisMargin,
+    );
+  }
+}
+
 class MacGlassScrollArea extends StatelessWidget {
   final ScrollController? controller;
   final Widget child;
@@ -1202,17 +1228,10 @@ class MacGlassScrollArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!Platform.isMacOS) return child;
-    final cs = Theme.of(context).colorScheme;
     return ScrollbarTheme(
-      data: ScrollbarThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) {
-          final baseAlpha = states.contains(WidgetState.hovered) ? 0.34 : 0.22;
-          return cs.onSurface.withValues(alpha: baseAlpha);
-        }),
-        trackColor: WidgetStateProperty.all(Colors.transparent),
-        trackBorderColor: WidgetStateProperty.all(Colors.transparent),
-        thickness: WidgetStateProperty.all(thickness),
-        radius: const Radius.circular(999),
+      data: MacGlassScrollbarStyle.theme(
+        context,
+        thickness: thickness,
         crossAxisMargin: crossAxisMargin,
         mainAxisMargin: mainAxisMargin,
       ),

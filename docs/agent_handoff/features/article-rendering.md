@@ -29,6 +29,10 @@
 - inline player 和全屏 player 都支持空格播放/暂停，但同一时刻只能由当前可见播放器处理全局按键。
 - 进入全屏前，inline player 如果是 `activePlayer`，应暂时释放该身份；全屏页在首帧后请求焦点并接管空格。退出全屏后，inline player 再恢复 `activePlayer` 和焦点。
 - 不要让 inline 与全屏页面同时响应同一次空格事件，否则可能发生连续切换两次、视觉上像“空格无效”。也不要在全屏 widget 尚未挂载完成前同步请求焦点。
+- 视频不自动循环。controller 初始化后显式 `setLooping(false)`；播放自然结束时停在最后一帧，只有用户再次主动播放才 seek 到开头后继续。这一规则同时适用于 inline 和全屏，因为二者复用同一个 controller。
+- macOS 全屏视频不显示顶部返回、旋转按钮和顶部渐变条：返回按钮与红黄绿位置冲突，旋转对桌面没有意义，底部已有退出全屏入口。Android 仍保留移动端顶部返回和横竖屏控制，不要误删为全平台统一行为。
+- macOS 进入全屏视频时通过 `MacOSWindowControls`/`window_controls` 原生通道临时隐藏 AppKit 红黄绿按钮，退出页面时必须恢复。`MainFlutterWindow` 保存显隐状态，窗口重新布局时不得强制把按钮提前显示出来。
+- 全屏视频键盘：`Space`/媒体键播放暂停，`Left` 后退 5 秒，`Right` 前进 5 秒，`Esc` 退出。seek 必须 clamp 到 `0..duration`；只处理首次 `KeyDownEvent`，不把系统按键重复当作连续快进。
 
 表格：
 
@@ -44,6 +48,8 @@
 - macOS 分屏文章详情使用 `_MacSplitArticleCornerClipper` 对文章 body 做右下角圆角安全裁剪。背景原因是窗口外层圆角会向内收，普通矩形 padding 在右下角不能保持“正文到应用外框”的视觉距离。
 - 该 clip 只应用于 `Platform.isMacOS && isSplitView`，且只包裹文章 body，不包裹 AppBar、进度条、右上工具按钮或 hover 链接状态栏。用户已验证这是正确问题位置。
 - 当前参数：外层窗口半径 `24`，安全 inset `8`，内侧右下角半径 `16`。如果后续窗口圆角或外框间距改动，需要同步评估这些值。
+- `_MacSplitArticleCornerClipper` 会裁掉正文整个右边缘的 `8px`；如果依赖 Flutter 自动 scrollbar，thumb 也会位于 clip 内并几乎被完全裁掉，只剩抗锯齿细线。当前 macOS 分屏正文关闭自动 scrollbar，改用同一 `_scrollController` 的显式 `Scrollbar` 包在 clip 外层；不要把 scrollbar 再移回安全裁剪内部，也不要为修 scrollbar 删除正文圆角安全裁剪。
+- 分屏正文显式 scrollbar 使用 `MacGlassScrollbarStyle.articlePaneTheme`：宽 `8px`、距离右边界 `1px`，仍可拖动。它位于正文安全裁剪之上、应用最外层窗口圆角裁剪之下。
 
 HTML entity 解码：
 

@@ -619,38 +619,41 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                     final p = AutoFilterWorker.processingCount.value;
                     final llmActive = q > 0 || p > 0;
 
-                    return Padding(
-                      padding: MacArticleListChrome.viewportPadding,
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: ImplicitlyAnimatedList<ArticleModel>(
-                              items: _articles.toList(),
-                              itemKey: (article) => article.entryId,
-                              padding: MacArticleListChrome.contentPadding(
-                                context,
-                              ),
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox.shrink(),
-                              itemBuilder: _buildAnimatedReviewRow,
-                              removedItemBuilder: _buildRemovedReviewRow,
-                              onRemoveStart: _handleReviewRemoveStart,
-                              onRemoveEnd: _handleReviewRemoveEnd,
-                            ),
-                          ),
-                          if (_articles.isEmpty)
+                    return ScrollbarTheme(
+                      data: MacGlassScrollbarStyle.articlePaneTheme(context),
+                      child: Padding(
+                        padding: MacArticleListChrome.viewportPadding,
+                        child: Stack(
+                          children: [
                             Positioned.fill(
-                              child: DelayedVisibility(
-                                visible: _articles.isEmpty,
-                                delay: const Duration(milliseconds: 220),
-                                child: _buildEmptyState(
-                                  cs,
-                                  llmActive: llmActive,
-                                  llmCount: q + p,
+                              child: ImplicitlyAnimatedList<ArticleModel>(
+                                items: _articles.toList(),
+                                itemKey: (article) => article.entryId,
+                                padding: MacArticleListChrome.contentPadding(
+                                  context,
+                                ),
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox.shrink(),
+                                itemBuilder: _buildAnimatedReviewRow,
+                                removedItemBuilder: _buildRemovedReviewRow,
+                                onRemoveStart: _handleReviewRemoveStart,
+                                onRemoveEnd: _handleReviewRemoveEnd,
+                              ),
+                            ),
+                            if (_articles.isEmpty)
+                              Positioned.fill(
+                                child: DelayedVisibility(
+                                  visible: _articles.isEmpty,
+                                  delay: const Duration(milliseconds: 220),
+                                  child: _buildEmptyState(
+                                    cs,
+                                    llmActive: llmActive,
+                                    llmCount: q + p,
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   }),

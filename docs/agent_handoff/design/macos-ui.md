@@ -28,6 +28,8 @@
 
 - 边缘应尽量和侧边栏/窗口 margin 视觉对齐。
 - Scrollbar 不应占用不对称布局宽度，也不应覆盖正文内容。
+- `MacGlassScrollbarStyle` 是 macOS scrollbar 颜色、圆角和尺寸的共享入口。文章正文及中间文章列表使用 `articlePaneTheme`（`8px` thumb、右侧 `1px` margin）；设置页和任务中心的 `MacGlassScrollArea` 仍默认使用更轻的 `5px`，不要盲目全局统一宽度。
+- scrollbar 与内容裁剪要按语义分层：右侧文章正文的 scrollbar 必须显式放在圆角安全 clip 之外；主时间线和垃圾拦截没有横向 clip 问题，可以保留 Flutter 自动 scrollbar，仅用局部 theme 和极小内容间距避让。
 - 文章卡片之间保留比旧版略大的间距，避免轻填充卡片粘连。
 - 文章列表卡片的外边距、内部 padding、圆角和普通态外壳由 `ArticleCardChrome` 统一控制。普通时间线、最近阅读和垃圾拦截审核行应共用这些参数，而不是分别复制数值。macOS 卡片圆角当前为 `10`，是用户要求相对旧 `8` 略微增大的取舍。
 - macOS 分屏文章详情右下角需要额外处理圆角安全区：矩形 padding 只能保证到直线边的距离，不能沿窗口右下圆弧保持等距。当前通过文章 body 的右下角 clip 避开外框圆弧，不要用全局加大 padding 代替，否则会改变直线区域间距。

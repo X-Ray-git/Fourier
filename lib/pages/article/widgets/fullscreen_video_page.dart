@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../utils/duration_extension.dart';
+import '../../../utils/macos_window_controls.dart';
 
 class FullscreenVideoPage extends StatefulWidget {
   final VideoPlayerController controller;
@@ -26,6 +28,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     _isLandscape = widget.controller.value.aspectRatio > 1.0;
     _applyOrientation();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    MacOSWindowControls.setTrafficLightsHidden(true);
     widget.controller.addListener(_onControllerUpdate);
     HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -35,10 +38,23 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
   }
 
   bool _handleGlobalKey(KeyEvent event) {
-    if (event is KeyDownEvent &&
-        (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
-            event.logicalKey == LogicalKeyboardKey.space)) {
+    if (event is! KeyDownEvent) return false;
+
+    if (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
+        event.logicalKey == LogicalKeyboardKey.space) {
       _togglePlayPause();
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _seekBy(const Duration(seconds: -5));
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _seekBy(const Duration(seconds: 5));
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.maybePop(context);
       return true;
     }
     return false;
@@ -72,6 +88,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     _focusNode.dispose();
     widget.controller.removeListener(_onControllerUpdate);
     _hideTimer?.cancel();
+    MacOSWindowControls.setTrafficLightsHidden(false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -103,16 +120,33 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
     _startHideTimer();
   }
 
-  void _togglePlayPause() {
+  Future<void> _togglePlayPause() async {
     if (widget.controller.value.isPlaying) {
-      widget.controller.pause();
+      await widget.controller.pause();
       _hideTimer?.cancel();
       _showControls = true;
     } else {
-      widget.controller.play();
+      final value = widget.controller.value;
+      if (value.duration > Duration.zero && value.position >= value.duration) {
+        await widget.controller.seekTo(Duration.zero);
+      }
+      await widget.controller.play();
       _startHideTimer();
     }
-    setState(() {});
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _seekBy(Duration offset) async {
+    final value = widget.controller.value;
+    final targetMicros = (value.position + offset).inMicroseconds.clamp(
+      0,
+      value.duration.inMicroseconds,
+    );
+    await widget.controller.seekTo(Duration(microseconds: targetMicros));
+    if (mounted) {
+      setState(() => _showControls = true);
+      _startHideTimer();
+    }
   }
 
   @override
@@ -137,53 +171,54 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
                 ),
               ),
 
-              // 顶部渐变条与返回按钮
-              AnimatedOpacity(
-                opacity: _showControls ? 1 : 0,
-                duration: const Duration(milliseconds: 250),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.6),
-                          Colors.transparent,
+              if (!Platform.isMacOS)
+                // 移动端保留显式返回和横竖屏控制；macOS 使用 Esc 与底栏退出。
+                AnimatedOpacity(
+                  opacity: _showControls ? 1 : 0,
+                  duration: const Duration(milliseconds: 250),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      height: 80,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.6),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                      padding: const EdgeInsets.only(
+                        top: 20,
+                        left: 16,
+                        right: 16,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.screen_rotation,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            onPressed: _toggleOrientation,
+                          ),
                         ],
                       ),
                     ),
-                    padding: const EdgeInsets.only(
-                      top: 20,
-                      left: 16,
-                      right: 16,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.arrow_back,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.screen_rotation,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                          onPressed: _toggleOrientation,
-                        ),
-                      ],
-                    ),
                   ),
                 ),
-              ),
 
               // 底部控制栏
               AnimatedOpacity(

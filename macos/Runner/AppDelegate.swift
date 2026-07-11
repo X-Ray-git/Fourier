@@ -84,6 +84,18 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    let windowControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/window_controls", binaryMessenger: controller.engine.binaryMessenger)
+    windowControlsChannel.setMethodCallHandler { [weak self] (call, result) in
+      if call.method == "setTrafficLightsHidden", let hidden = call.arguments as? Bool {
+        (self?.mainFlutterWindow as? MainFlutterWindow)?.setTrafficLightsHidden(hidden)
+        result(nil)
+      } else if call.method == "setTrafficLightsHidden" {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected a Boolean", details: nil))
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 }
 

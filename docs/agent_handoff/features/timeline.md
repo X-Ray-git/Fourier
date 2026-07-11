@@ -17,6 +17,7 @@
 - macOS 文章卡片普通态使用极轻中性色填充，统一由 `ArticleCardChrome` 控制；当前深色模式 alpha 为 `0.018`，浅色模式为 `0.012`。时间线、最近阅读和垃圾拦截不要分别覆盖该值。
 - macOS 普通文章卡片与垃圾拦截审核卡片的标题字号统一为 `14`，由 `ArticleCardChrome.titleFontSize` 提供；普通卡片辅助正文在 macOS 使用 `12`，由 `ArticleCardChrome.bodyFontSize` 提供。Android 保持原字号，不要在两个 macOS 卡片实现中分别硬编码标题字号。
 - macOS 主时间线和垃圾拦截列表共用 `MacArticleListChrome` 的两层下边距：`viewportPadding` 是滚动过程中始终存在的窗口下边界，`contentPadding` 是滚到列表末尾后出现的内容留白。不要只增加 `ListView.padding.bottom` 来替代视口边界，也不要在两个页面分别硬编码。
+- macOS 主时间线和垃圾拦截继续使用 Flutter 自动 scrollbar，但局部包裹共享的 `MacGlassScrollbarStyle.articlePaneTheme`，固定 thumb 宽 `8px`、距离右边界 `1px`。`MacArticleListChrome.contentPadding` 另保留 `2px` 右侧内容间隔，结合卡片自身 `8px` 外边距，让卡片与 scrollbar 约有 `1px` 空隙。不要分别调整两个页面，也不要把设置/任务中心的轻量 `5px` scrollbar 一并改成 `8px`。
 - macOS 订阅源详情页的 header 筛选也应跟随这个二态开关语言；不要重新引入 `仅已读` 入口。
 - 已读模式/页面仍在其他入口存在，不应删除。
 - 过滤支持选中订阅源、分类和静默订阅源。

@@ -113,7 +113,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  void _save() {
+  bool _saveAccountCredentials({bool showSuccess = true}) {
     final token = SecurityUtils.normalizeCredential(_tokenController.text);
     final clientId = SecurityUtils.normalizeCredential(
       _clientIdController.text,
@@ -123,15 +123,15 @@ class _SettingsPageState extends State<SettingsPage> {
     );
 
     if (token.isEmpty || clientId.isEmpty || sessionId.isEmpty) {
-      AppFeedback.warning('配置未保存', '请填写全部三项');
-      return;
+      AppFeedback.warning('认证未保存', '请填写全部三项');
+      return false;
     }
 
     if (!SecurityUtils.isSafeCookieValue(token) ||
         !SecurityUtils.isSafeHeaderValue(clientId) ||
         !SecurityUtils.isSafeHeaderValue(sessionId)) {
-      AppFeedback.error('配置未保存', '输入格式不合法，请检查是否包含换行或特殊分隔符');
-      return;
+      AppFeedback.error('认证未保存', '输入格式不合法，请检查是否包含换行或特殊分隔符');
+      return false;
     }
 
     _accountService.saveTokens(
@@ -139,30 +139,55 @@ class _SettingsPageState extends State<SettingsPage> {
       clientId: clientId,
       sessionId: sessionId,
     );
+    if (showSuccess) AppFeedback.success('认证已保存', 'Folo API 认证已更新');
+    return true;
+  }
 
-    // 保存 DeepSeek API key
+  void _saveDeepSeekApiKey() {
     final deepseekKey = _deepseekApiKeyController.text.trim();
     if (deepseekKey.isNotEmpty) {
       TranslationService.setApiKey(deepseekKey);
+      SummaryService.setApiKey(deepseekKey);
       GStorage.setting.put('deepseek_api_key', deepseekKey);
+      AppFeedback.success('API Key 已保存', '新请求会使用当前 Key');
+    } else {
+      TranslationService.setApiKey('');
+      SummaryService.setApiKey('');
+      GStorage.setting.delete('deepseek_api_key');
+      AppFeedback.info('API Key 已清除', 'DeepSeek API Key 已从本机移除');
     }
+  }
 
+  void _saveReadSyncWindowDays() {
     final readWindowDays = int.tryParse(
       _readSyncWindowDaysController.text.trim(),
     );
     if (readWindowDays == null || readWindowDays < 1) {
-      AppFeedback.warning('配置未保存', '已读拉取窗口请填写大于 0 的天数');
+      AppFeedback.warning('设置未保存', '已读拉取窗口请填写大于 0 的天数');
       return;
     }
+    GStorage.setting.put(StorageKeys.readSyncWindowDays, readWindowDays);
+    AppFeedback.success('已读拉取窗口已保存', '后台同步将使用 $readWindowDays 天');
+  }
+
+  void _saveArticleContentMaxWidth() {
     final articleContentMaxWidth = int.tryParse(
       _articleContentMaxWidthController.text.trim(),
     );
     if (articleContentMaxWidth == null ||
         articleContentMaxWidth < 480 ||
         articleContentMaxWidth > 1200) {
-      AppFeedback.warning('配置未保存', '正文最大宽度请填写 480～1200 之间的整数');
+      AppFeedback.warning('设置未保存', '正文最大宽度请填写 480～1200 之间的整数');
       return;
     }
+    GStorage.setting.put(
+      StorageKeys.articleContentMaxWidth,
+      articleContentMaxWidth,
+    );
+    AppFeedback.success('正文宽度已保存', '文章页将使用 $articleContentMaxWidth px');
+  }
+
+  void _saveMacosMaxFlingVelocity() {
     final macosMaxFlingVelocity = int.tryParse(
       _macosMaxFlingVelocityController.text.trim(),
     );
@@ -171,23 +196,24 @@ class _SettingsPageState extends State<SettingsPage> {
             NoOverscrollIndicatorBehavior.macosMinFlingVelocity ||
         macosMaxFlingVelocity >
             NoOverscrollIndicatorBehavior.macosMaxAllowedFlingVelocity) {
-      AppFeedback.warning('配置未保存', 'macOS 滚动惯性上限请填写 1000～8000 之间的整数');
+      AppFeedback.warning('设置未保存', 'macOS 滚动惯性上限请填写 1000～8000 之间的整数');
       return;
     }
-    GStorage.setting.put(StorageKeys.readSyncWindowDays, readWindowDays);
-    GStorage.setting.put(
-      StorageKeys.articleContentMaxWidth,
-      articleContentMaxWidth,
-    );
     GStorage.setting.put(
       StorageKeys.macosMaxFlingVelocity,
       macosMaxFlingVelocity,
     );
-    GStorage.setting.put(StorageKeys.appearanceMode, _appearanceMode);
-    GStorage.setting.put(StorageKeys.badgeStrategy, _badgeStrategy);
-    GStorage.setting.put('auto_retry_max_count', _autoRetryMaxCount);
+    AppFeedback.success('滚动惯性已保存', '下一次滚动会使用 $macosMaxFlingVelocity');
+  }
 
-    AppFeedback.success('配置已保存', '设置已更新');
+  void _setBadgeStrategy(String value) {
+    setState(() => _badgeStrategy = value);
+    GStorage.setting.put(StorageKeys.badgeStrategy, value);
+  }
+
+  void _setAutoRetryMaxCount(int value) {
+    setState(() => _autoRetryMaxCount = value);
+    GStorage.setting.put('auto_retry_max_count', value);
   }
 
   void _setAppearanceMode(String value) {
@@ -469,6 +495,89 @@ class _SettingsPageState extends State<SettingsPage> {
     return IconButton(tooltip: tooltip, onPressed: onPressed, icon: Icon(icon));
   }
 
+  Widget _buildMacSavedTextField({
+    required TextEditingController controller,
+    required String label,
+    required VoidCallback onSave,
+    String? hint,
+    String? helper,
+    Widget? suffixIcon,
+    bool obscureText = false,
+    TextInputAction? textInputAction,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String saveLabel = '保存',
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: AppGlassTextField(
+            controller: controller,
+            label: label,
+            hint: hint,
+            helper: helper,
+            suffixIcon: suffixIcon,
+            obscureText: obscureText,
+            textInputAction: textInputAction,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: AppGlassButton(
+            label: saveLabel,
+            icon: Icons.save_rounded,
+            onPressed: onSave,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileSavedTextField({
+    required TextEditingController controller,
+    required String label,
+    required VoidCallback onSave,
+    String? hint,
+    String? helper,
+    Widget? suffixIcon,
+    bool obscureText = false,
+    TextInputAction? textInputAction,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String saveLabel = '保存',
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hint,
+              helperText: helper,
+              border: const OutlineInputBorder(),
+              suffixIcon: suffixIcon,
+            ),
+            obscureText: obscureText,
+            textInputAction: textInputAction,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FilledButton(onPressed: onSave, child: Text(saveLabel)),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMacOSScaffold(BuildContext context, ColorScheme colorScheme) {
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -552,6 +661,16 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: AppGlassButton(
+                                label: '保存 Folo 认证',
+                                icon: Icons.save_rounded,
+                                onPressed: _saveAccountCredentials,
+                                role: AppGlassButtonRole.primary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -586,11 +705,9 @@ class _SettingsPageState extends State<SettingsPage> {
                               ],
                               label: '桌面角标显示规则',
                               helper: '退到后台后图标右上角的红点行为',
-                              onChanged: (val) {
-                                setState(() => _badgeStrategy = val);
-                              },
+                              onChanged: _setBadgeStrategy,
                             ),
-                            AppGlassTextField(
+                            _buildMacSavedTextField(
                               controller: _articleContentMaxWidthController,
                               label: '正文最大宽度（px）',
                               hint: '720',
@@ -599,8 +716,9 @@ class _SettingsPageState extends State<SettingsPage> {
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
+                              onSave: _saveArticleContentMaxWidth,
                             ),
-                            AppGlassTextField(
+                            _buildMacSavedTextField(
                               controller: _macosMaxFlingVelocityController,
                               label: 'macOS 滚动惯性上限',
                               hint: '4500',
@@ -609,8 +727,9 @@ class _SettingsPageState extends State<SettingsPage> {
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
+                              onSave: _saveMacosMaxFlingVelocity,
                             ),
-                            AppGlassTextField(
+                            _buildMacSavedTextField(
                               controller: _readSyncWindowDaysController,
                               label: '已读拉取窗口（天）',
                               hint: '2',
@@ -619,6 +738,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
+                              onSave: _saveReadSyncWindowDays,
                             ),
                             _MacGlassSelectField<int>(
                               value: _autoRetryMaxCount,
@@ -632,9 +752,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               options: const [0, 1, 3, 5],
                               label: '自动重试次数',
                               helper: '设为 0 表示不重试',
-                              onChanged: (val) {
-                                setState(() => _autoRetryMaxCount = val);
-                              },
+                              onChanged: _setAutoRetryMaxCount,
                             ),
                           ],
                         ),
@@ -647,7 +765,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: '翻译、摘要和过滤共用 DeepSeek API Key，各任务可单独调整模型参数。',
                         child: Column(
                           children: [
-                            AppGlassTextField(
+                            _buildMacSavedTextField(
                               controller: _deepseekApiKeyController,
                               label: 'DeepSeek API Key',
                               hint: 'sk-...',
@@ -662,6 +780,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                               obscureText: _obscureDeepseekKey,
                               textInputAction: TextInputAction.done,
+                              onSave: _saveDeepSeekApiKey,
                             ),
                             const SizedBox(height: 14),
                             _LlmConfigCard(
@@ -850,14 +969,6 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AppGlassButton(
-                onPressed: _save,
-                icon: Icons.save_rounded,
-                label: '保存账号与偏好',
-                role: AppGlassButtonRole.primary,
-                expand: true,
-              ),
-              const SizedBox(height: 8),
               AppGlassButton(
                 onPressed: _clear,
                 icon: Icons.delete_outline_rounded,
@@ -1140,6 +1251,17 @@ class _SettingsPageState extends State<SettingsPage> {
             textInputAction: TextInputAction.next,
           ),
 
+          const SizedBox(height: 12),
+
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _saveAccountCredentials,
+              icon: const Icon(Icons.save_rounded),
+              label: const Text('保存 Folo 认证'),
+            ),
+          ),
+
           const SizedBox(height: 32),
 
           // 外观模式
@@ -1206,7 +1328,7 @@ class _SettingsPageState extends State<SettingsPage> {
               DropdownMenuItem(value: 'off', child: Text('关闭角标')),
             ],
             onChanged: (val) {
-              if (val != null) setState(() => _badgeStrategy = val);
+              if (val != null) _setBadgeStrategy(val);
             },
           ),
 
@@ -1228,30 +1350,26 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 16),
 
-          TextField(
+          _buildMobileSavedTextField(
             controller: _articleContentMaxWidthController,
-            decoration: const InputDecoration(
-              labelText: '正文最大宽度（px）',
-              hintText: '720',
-              border: OutlineInputBorder(),
-              helperText: 'macOS 文章页生效；默认 720，建议 640～800 之间调试',
-            ),
+            label: '正文最大宽度（px）',
+            hint: '720',
+            helper: 'macOS 文章页生效；默认 720，建议 640～800 之间调试',
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onSave: _saveArticleContentMaxWidth,
           ),
 
           const SizedBox(height: 12),
 
-          TextField(
+          _buildMobileSavedTextField(
             controller: _macosMaxFlingVelocityController,
-            decoration: const InputDecoration(
-              labelText: 'macOS 滚动惯性上限',
-              hintText: '4500',
-              border: OutlineInputBorder(),
-              helperText: '限制松手后的惯性滚动速度；范围 1000～8000，默认 4500',
-            ),
+            label: 'macOS 滚动惯性上限',
+            hint: '4500',
+            helper: '限制松手后的惯性滚动速度；范围 1000～8000，默认 4500',
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onSave: _saveMacosMaxFlingVelocity,
           ),
 
           const SizedBox(height: 32),
@@ -1272,38 +1390,34 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 16),
 
-          TextField(
+          _buildMobileSavedTextField(
             controller: _deepseekApiKeyController,
-            decoration: InputDecoration(
-              labelText: 'DeepSeek API Key',
-              hintText: 'sk-...',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                tooltip: _obscureDeepseekKey ? '显示' : '隐藏',
-                onPressed: () {
-                  setState(() => _obscureDeepseekKey = !_obscureDeepseekKey);
-                },
-                icon: Icon(
-                  _obscureDeepseekKey ? Icons.visibility : Icons.visibility_off,
-                ),
+            label: 'DeepSeek API Key',
+            hint: 'sk-...',
+            suffixIcon: IconButton(
+              tooltip: _obscureDeepseekKey ? '显示' : '隐藏',
+              onPressed: () {
+                setState(() => _obscureDeepseekKey = !_obscureDeepseekKey);
+              },
+              icon: Icon(
+                _obscureDeepseekKey ? Icons.visibility : Icons.visibility_off,
               ),
             ),
             obscureText: _obscureDeepseekKey,
             textInputAction: TextInputAction.done,
+            onSave: _saveDeepSeekApiKey,
           ),
 
           const SizedBox(height: 16),
 
-          TextField(
+          _buildMobileSavedTextField(
             controller: _readSyncWindowDaysController,
-            decoration: const InputDecoration(
-              labelText: '已读拉取窗口（天）',
-              hintText: '2',
-              border: OutlineInputBorder(),
-              helperText: '后台静默拉取最近已读文章的时间范围',
-            ),
+            label: '已读拉取窗口（天）',
+            hint: '2',
+            helper: '后台静默拉取最近已读文章的时间范围',
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onSave: _saveReadSyncWindowDays,
           ),
 
           const SizedBox(height: 32),
@@ -1338,26 +1452,16 @@ class _SettingsPageState extends State<SettingsPage> {
               DropdownMenuItem(value: 5, child: Text('5 次')),
             ],
             onChanged: (val) {
-              if (val != null) setState(() => _autoRetryMaxCount = val);
+              if (val != null) _setAutoRetryMaxCount(val);
             },
           ),
 
           const SizedBox(height: 24),
 
-          // 按钮
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(onPressed: _save, child: const Text('保存')),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _clear,
-                  child: const Text('清除'),
-                ),
-              ),
-            ],
+          OutlinedButton.icon(
+            onPressed: _clear,
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('清除账号与 API Key'),
           ),
 
           const SizedBox(height: 24),

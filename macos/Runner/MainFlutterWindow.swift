@@ -17,6 +17,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
     self.isOpaque = false
     self.backgroundColor = NSColor.clear
+    self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
     self.styleMask.insert(.fullSizeContentView)
 
@@ -39,6 +40,11 @@ class MainFlutterWindow: NSWindow {
 
     super.awakeFromNib()
     scheduleTrafficLightPositioning()
+  }
+
+  override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
+    super.order(place, relativeTo: otherWin)
+    hiddenWindowAtLaunch()
   }
 
   override func setFrame(_ frameRect: NSRect, display flag: Bool) {

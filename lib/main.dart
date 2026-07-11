@@ -12,6 +12,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common/constants/constants.dart';
+import 'common/liquid_glass/liquid_glass.dart';
 import 'common/widgets/loading_widget.dart';
 import 'common/widgets/no_overscroll_indicator_behavior.dart';
 import 'http/init.dart';
@@ -36,7 +37,7 @@ class RefreshTimelineIntent extends Intent {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
 
   // 扩大全局图片内存缓存池到 300MB，解决长列表大图滚动时由于频繁换入换出导致的解码掉帧问题
   PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 300;
@@ -74,10 +75,12 @@ void main() async {
     }
   }
 
-  // macOS 窗口设置
+  // macOS 窗口先在隐藏状态完成配置，首帧栅格化后再一次性显示。
+  var shouldShowMacWindow = false;
   if (Platform.isMacOS) {
+    await LiquidGlassWidgets.initialize();
     await windowManager.ensureInitialized();
-    WindowOptions windowOptions = const WindowOptions(
+    const windowOptions = WindowOptions(
       size: Size(1000, 750),
       minimumSize: Size(600, 500),
       center: true,
@@ -85,13 +88,22 @@ void main() async {
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
     );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    await windowManager.waitUntilReadyToShow(windowOptions);
+    shouldShowMacWindow = true;
   }
 
   runApp(const AutoFoloApp());
+
+  if (shouldShowMacWindow) {
+    try {
+      await binding.waitUntilFirstFrameRasterized.timeout(
+        const Duration(seconds: 5),
+      );
+    } on TimeoutException {
+      debugPrint('macOS first frame timed out; showing the window fallback.');
+    }
+    await windowManager.show();
+  }
 }
 
 /// 应用入口

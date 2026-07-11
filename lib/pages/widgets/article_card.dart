@@ -251,7 +251,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                                 TextSpan(
                                   text: displayTitle,
                                   style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: ArticleCardChrome.titleFontSize,
                                     height: 1.4,
                                     fontWeight: stableTitleWeight
                                         ? FontWeight.w600
@@ -333,7 +333,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                       Text(
                         article.author!,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: ArticleCardChrome.bodyFontSize,
                           color: colorScheme.onSurfaceVariant,
                         ),
                         maxLines: 1,
@@ -479,7 +479,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                       data: displayContent,
                       style: {
                         'body': Style(
-                          fontSize: FontSize(13),
+                          fontSize: FontSize(ArticleCardChrome.bodyFontSize),
                           color: textColor,
                           lineHeight: const LineHeight(1.5),
                           margin: Margins.zero,
@@ -507,7 +507,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                   : Text(
                       displayContent,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: ArticleCardChrome.bodyFontSize,
                         color: textColor,
                         height: 1.5,
                       ),

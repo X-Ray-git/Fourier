@@ -928,7 +928,7 @@ class _MacReviewRow extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: ArticleCardChrome.titleFontSize,
                           height: 1.3,
                           fontWeight: FontWeight.w600,
                           color: selected ? cs.primary : cs.onSurface,

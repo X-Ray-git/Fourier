@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 abstract final class ArticleCardChrome {
   static double get radius => Platform.isMacOS ? 10 : 16;
+  static double get titleFontSize => Platform.isMacOS ? 14 : 16;
+  static double get bodyFontSize => Platform.isMacOS ? 12 : 13;
 
   static EdgeInsets get outerPadding => EdgeInsets.symmetric(
     horizontal: Platform.isMacOS ? 8 : 12,
@@ -22,7 +24,7 @@ abstract final class ArticleCardChrome {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return (isDark ? Colors.white : Colors.black).withValues(
-      alpha: isDark ? 0.035 : 0.025,
+      alpha: isDark ? 0.018 : 0.012,
     );
   }
 

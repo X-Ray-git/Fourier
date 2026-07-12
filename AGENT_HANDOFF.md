@@ -27,3 +27,7 @@
 - [翻译与摘要](docs/agent_handoff/features/translation-summary.md)
 - [Liquid Glass 设计](docs/agent_handoff/design/liquid-glass.md)
 - [决策日志](docs/agent_handoff/history/decisions.md)
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.27 -m "- feat: support inline YouTube playback and macOS system fullscreen\n- fix: improve local video loading, aspect ratio, controls and keyboard behavior\n- style: refine macOS timeline, article cards, scrollbars and compact glass controls\n- fix: improve article metadata rendering, timeline interactions and macOS startup stability" --push`*

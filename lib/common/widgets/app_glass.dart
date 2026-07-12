@@ -169,7 +169,7 @@ class AppGlassControlPalette {
 
   Color compactControlTrackFill() {
     return (_isDark ? Colors.white : Colors.black).withValues(
-      alpha: _isDark ? 0.035 : 0.025,
+      alpha: _isDark ? 0.06 : 0.05,
     );
   }
 

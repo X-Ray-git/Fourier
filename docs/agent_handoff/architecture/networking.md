@@ -12,6 +12,12 @@ DeepSeek API：
 - 用于翻译、摘要和 AI 过滤服务。
 - API key 以 `deepseek_api_key` 存在 settings 中。
 
+YouTube embed：
+
+- 不抓取或解析 YouTube 真实媒体流；只使用官方 iframe/WebView 播放器。
+- WebView 请求必须保留可识别的 Referer。当前本地 HTML 以公开仓库地址为 base URL，使用 `strict-origin-when-cross-origin`，避免错误 `153`。
+- 默认使用 `youtube-nocookie.com`。只有用户点击播放后才创建 WebView，但这仍会与 YouTube 建立网络连接；不要在文章初始渲染时静默加载播放器。
+
 Debug 日志：
 
 - Debug Dio 日志刻意不打印请求头、请求体或响应体。

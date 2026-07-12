@@ -7,19 +7,14 @@ import 'package:video_player/video_player.dart';
 import '../../../services/article_image_service.dart';
 import '../../../utils/duration_extension.dart';
 import 'fullscreen_video_page.dart';
+import 'media_play_button.dart';
 
 /// 内联视频播放器 — poster → 加载 → 播放（含进度条 + 拖拽定位）
 class InlineVideoPlayer extends StatefulWidget {
   final String videoUrl;
   final String? posterUrl;
-  final double aspectRatio;
 
-  const InlineVideoPlayer({
-    super.key,
-    required this.videoUrl,
-    this.posterUrl,
-    this.aspectRatio = 16 / 9,
-  });
+  const InlineVideoPlayer({super.key, required this.videoUrl, this.posterUrl});
 
   @override
   State<InlineVideoPlayer> createState() => _InlineVideoPlayerState();
@@ -109,7 +104,10 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
 
   Future<void> _initAndPlay() async {
     if (_isInitializing) return;
-    _isInitializing = true;
+    setState(() {
+      _isInitializing = true;
+      _hasError = false;
+    });
 
     try {
       final uri = Uri.tryParse(widget.videoUrl);
@@ -173,7 +171,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: AspectRatio(
-          aspectRatio: widget.aspectRatio,
+          aspectRatio: 16 / 9,
           child: Focus(
             focusNode: _focusNode,
             child: GestureDetector(
@@ -181,107 +179,121 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  VideoPlayer(_controller!),
+                  ColoredBox(
+                    color: Colors.black,
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: _controller!.value.aspectRatio,
+                        child: VideoPlayer(_controller!),
+                      ),
+                    ),
+                  ),
 
                   // 控制层
-                  AnimatedOpacity(
-                    opacity: _showControls ? 1 : 0,
-                    duration: const Duration(milliseconds: 250),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        // 顶部渐变条
-                        Container(
-                          height: 40,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.4),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-
-                        // 底部控制栏
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.6),
-                              ],
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // 可拖拽进度条
-                              VideoProgressIndicator(
-                                _controller!,
-                                allowScrubbing: true,
-                                colors: VideoProgressColors(
-                                  playedColor: cs.primary,
-                                  bufferedColor: cs.onSurface.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                  backgroundColor: cs.onSurface.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                ),
-                                padding: EdgeInsets.zero,
-                              ),
-                              const SizedBox(height: 6),
-                              // 时间 + 播放/暂停
-                              Row(
-                                children: [
-                                  // 播放/暂停
-                                  GestureDetector(
-                                    onTap: _togglePlayPause,
-                                    child: Icon(
-                                      _controller!.value.isPlaying
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded,
-                                      color: Colors.white,
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  // 时间
-                                  Text(
-                                    '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                      fontFeatures: [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  GestureDetector(
-                                    onTap: _enterFullscreen,
-                                    child: const Icon(
-                                      Icons.fullscreen,
-                                      color: Colors.white,
-                                      size: 24,
-                                    ),
-                                  ),
+                  IgnorePointer(
+                    ignoring: !_showControls,
+                    child: AnimatedOpacity(
+                      opacity: _showControls ? 1 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // 顶部渐变条
+                          Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.4),
+                                  Colors.transparent,
                                 ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                          const Spacer(),
+
+                          // 底部控制栏
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withValues(alpha: 0.6),
+                                ],
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 可拖拽进度条
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: VideoProgressIndicator(
+                                    _controller!,
+                                    allowScrubbing: true,
+                                    colors: VideoProgressColors(
+                                      playedColor: cs.primary,
+                                      bufferedColor: cs.onSurface.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      backgroundColor: cs.onSurface.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                // 时间 + 播放/暂停
+                                Row(
+                                  children: [
+                                    // 播放/暂停
+                                    GestureDetector(
+                                      onTap: _togglePlayPause,
+                                      child: Icon(
+                                        _controller!.value.isPlaying
+                                            ? Icons.pause_rounded
+                                            : Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    // 时间
+                                    Text(
+                                      '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                        fontFeatures: [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    GestureDetector(
+                                      onTap: _enterFullscreen,
+                                      child: const Icon(
+                                        Icons.fullscreen,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -320,7 +332,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: AspectRatio(
-          aspectRatio: widget.aspectRatio,
+          aspectRatio: 16 / 9,
           child: Container(
             color: cs.surfaceContainerHighest,
             child: Center(
@@ -351,50 +363,32 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: AspectRatio(
-        aspectRatio: widget.aspectRatio,
+        aspectRatio: 16 / 9,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (widget.posterUrl != null)
-              CachedNetworkImage(
-                cacheKey: 'v2_${widget.posterUrl}',
-                imageUrl: widget.posterUrl!,
-                httpHeaders: ArticleImageService.httpHeaders,
-                fit: BoxFit.cover,
-                fadeInDuration: const Duration(milliseconds: 80),
-                fadeOutDuration: const Duration(milliseconds: 80),
-                placeholder: (context, url) =>
-                    Container(color: cs.surfaceContainerHighest),
-                errorWidget: (context, url, error) =>
-                    Container(color: cs.surfaceContainerHighest),
-              )
-            else
-              Container(color: cs.surfaceContainerHighest),
+            ColoredBox(
+              color: Colors.black,
+              child: widget.posterUrl != null
+                  ? CachedNetworkImage(
+                      cacheKey: 'v2_${widget.posterUrl}',
+                      imageUrl: widget.posterUrl!,
+                      httpHeaders: ArticleImageService.httpHeaders,
+                      fit: BoxFit.contain,
+                      fadeInDuration: const Duration(milliseconds: 80),
+                      fadeOutDuration: const Duration(milliseconds: 80),
+                      placeholder: (context, url) =>
+                          Container(color: cs.surfaceContainerHighest),
+                      errorWidget: (context, url, error) =>
+                          Container(color: cs.surfaceContainerHighest),
+                    )
+                  : Container(color: cs.surfaceContainerHighest),
+            ),
             Container(color: Colors.black.withValues(alpha: 0.2)),
             Center(
-              child: GestureDetector(
-                onTap: _isInitializing ? null : _initAndPlay,
-                child: Container(
-                  width: _isInitializing ? 48 : 64,
-                  height: _isInitializing ? 48 : 64,
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.85),
-                    shape: BoxShape.circle,
-                  ),
-                  child: _isInitializing
-                      ? const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.play_arrow_rounded,
-                          size: 40,
-                          color: Colors.white,
-                        ),
-                ),
+              child: MediaPlayButton(
+                isLoading: _isInitializing,
+                onPressed: _initAndPlay,
               ),
             ),
           ],

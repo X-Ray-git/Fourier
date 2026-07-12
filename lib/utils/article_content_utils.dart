@@ -4,6 +4,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../services/article_image_service.dart';
+import 'youtube_embed_utils.dart';
 
 abstract final class ArticleContentUtils {
   static const int _cacheMax = 200;
@@ -262,10 +263,15 @@ abstract final class ArticleContentUtils {
   static dom.Element? getReadabilityContent(dom.Document document) {
     // 1. Remove unwanted elements
     final junk = document.querySelectorAll(
-      'script, style, noscript, nav, header, footer, aside, form, iframe, button',
+      'script, style, noscript, nav, header, footer, aside, form, button',
     );
     for (final el in junk) {
       el.remove();
+    }
+    for (final iframe in document.querySelectorAll('iframe')) {
+      if (YouTubeEmbedInfo.tryParse(iframe.attributes['src']) == null) {
+        iframe.remove();
+      }
     }
 
     // 2. Score paragraphs

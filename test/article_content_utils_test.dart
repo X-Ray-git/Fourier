@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 
 import 'package:autofolo/utils/article_content_utils.dart';
 
@@ -51,5 +52,21 @@ void main() {
       contains('<code>https://code.example/path?a=1&amp;b=2</code>'),
     );
     expect(RegExp(r'<a[^>]*>\s*<a').hasMatch(normalized), isFalse);
+  });
+
+  test('readability keeps YouTube embeds and removes other iframes', () {
+    final document = html_parser.parse('''
+<article>
+  <p>This paragraph contains enough useful article text to become a readability candidate.</p>
+  <iframe src="https://www.youtube-nocookie.com/embed/sH6mlUzAMzU"></iframe>
+  <iframe src="https://tracking.example.com/widget"></iframe>
+  <p>Another substantial paragraph keeps the selected article container stable for this test.</p>
+</article>
+''');
+
+    final content = ArticleContentUtils.getReadabilityContent(document);
+    expect(content, isNotNull);
+    expect(content!.outerHtml, contains('youtube-nocookie.com/embed'));
+    expect(content.outerHtml, isNot(contains('tracking.example.com')));
   });
 }

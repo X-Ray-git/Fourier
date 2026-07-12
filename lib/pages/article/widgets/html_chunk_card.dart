@@ -16,11 +16,13 @@ import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/app_context_menu.dart';
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
+import '../../../utils/youtube_embed_utils.dart';
 import '../../../utils/html_contrast_utils.dart';
 import '../../../utils/image_clipboard.dart';
 import '../../../utils/macos_zoom_in_cursor.dart';
 import '../../../services/article_image_service.dart';
 import 'inline_video_player.dart';
+import 'youtube_embed_player.dart';
 
 double _fallbackImageHeight(double width) =>
     (width * 0.6).clamp(180.0, 420.0).toDouble();
@@ -561,11 +563,15 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     if (isVideo && videoUrl != null && videoUrl.isNotEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: InlineVideoPlayer(
-          videoUrl: videoUrl,
-          posterUrl: posterUrl,
-          aspectRatio: aspectRatio,
-        ),
+        child: InlineVideoPlayer(videoUrl: videoUrl, posterUrl: posterUrl),
+      );
+    }
+
+    final youtube = YouTubeEmbedInfo.tryParse(videoUrl);
+    if (youtube != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: YouTubeEmbedPlayer(info: youtube),
       );
     }
 

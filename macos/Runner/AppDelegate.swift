@@ -1,5 +1,7 @@
 import Cocoa
 import FlutterMacOS
+import WebKit
+import webview_flutter_wkwebview
 
 @main
 class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
@@ -95,6 +97,30 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       } else {
         result(FlutterMethodNotImplemented)
       }
+    }
+
+    let webViewControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/webview_controls", binaryMessenger: controller.engine.binaryMessenger)
+    webViewControlsChannel.setMethodCallHandler { [weak controller] (call, result) in
+      guard call.method == "enableElementFullscreen" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard #available(macOS 12.3, *) else {
+        result(FlutterError(code: "UNAVAILABLE", message: "Element fullscreen requires macOS 12.3 or later", details: nil))
+        return
+      }
+      guard let args = call.arguments as? [String: Any],
+            let identifier = args["webViewIdentifier"] as? Int64,
+            let registry = controller,
+            let webView = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+              forIdentifier: identifier,
+              withPluginRegistry: registry
+            ) else {
+        result(FlutterError(code: "WEBVIEW_NOT_FOUND", message: "Unable to resolve WKWebView", details: nil))
+        return
+      }
+      webView.configuration.preferences.isElementFullscreenEnabled = true
+      result(nil)
     }
   }
 }

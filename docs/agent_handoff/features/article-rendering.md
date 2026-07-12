@@ -33,6 +33,24 @@
 - macOS 全屏视频不显示顶部返回、旋转按钮和顶部渐变条：返回按钮与红黄绿位置冲突，旋转对桌面没有意义，底部已有退出全屏入口。Android 仍保留移动端顶部返回和横竖屏控制，不要误删为全平台统一行为。
 - macOS 进入全屏视频时通过 `MacOSWindowControls`/`window_controls` 原生通道临时隐藏 AppKit 红黄绿按钮，退出页面时必须恢复。`MainFlutterWindow` 保存显隐状态，窗口重新布局时不得强制把按钮提前显示出来。
 - 全屏视频键盘：`Space`/媒体键播放暂停，`Left` 后退 5 秒，`Right` 前进 5 秒，`Esc` 退出。seek 必须 clamp 到 `0..duration`；只处理首次 `KeyDownEvent`，不把系统按键重复当作连续快进。
+- 文章内普通视频视口固定为 `16:9`，不再用 feed HTML 的 width/height 改变正文布局。poster 和真实视频都在黑色视口内按自身比例 `contain`，允许黑边但禁止裁切、拉伸和加载后重排正文。全屏仍按视频真实比例显示。
+- 普通视频和 YouTube 播放前共用 `MediaPlayButton`：macOS hover 使用手指光标；点击后按钮保持 `64x64`，只把图标替换为转圈。初始化状态必须立即 `setState`，避免网络较慢时用户误以为没有点击成功。
+- `AnimatedOpacity` 不会自动停止命中测试。inline 与全屏视频控制栏隐藏时必须同时 `IgnorePointer`，否则不可见的全屏/退出按钮仍会拦截角落点击。
+- inline 与全屏普通视频的 `VideoProgressIndicator` 均已启用 `allowScrubbing: true`。`video_player` 内部支持点击定位和水平拖拽：拖动开始时暂时暂停，拖动中连续 seek，结束后按拖动前状态恢复。两处进度条都用 `MouseRegion(SystemMouseCursors.click)` 提示可交互；这只适用于本地 `video_player`，YouTube 进度条由 WebView/YouTube 自己管理。
+
+YouTube：
+
+- Folo/Newtype 等源会返回 `youtube.com` 或 `youtube-nocookie.com/embed/...` iframe。它不是媒体文件，不能交给 `video_player`；当前使用 Flutter 官方 `webview_flutter`，Android 与 macOS 平台实现作为直接依赖。
+- `YouTubeEmbedInfo` 只识别明确的 YouTube embed/watch/shorts/live/youtu.be URL，并统一生成隐私增强 `youtube-nocookie.com` 地址。非 YouTube iframe 继续保持静态占位并用外部浏览器打开，不要宽泛内嵌任意网页。
+- YouTube WebView 必须懒加载：文章初始只显示固定 `16:9` 缩略图和共用播放按钮，用户点击后才创建原生 WebView，避免长文章一次创建多个 platform view。播放后遵循 YouTube 自带控制栏、字幕、清晰度和结束行为，不强行伪装成本地 `video_player`。
+- YouTube 错误 `153` 表示 embed 请求缺少 HTTP Referer/客户端身份。不要直接把 embed URL 当作 WebView 顶层请求；当前通过受控本地 HTML iframe、`YouTubeEmbedInfo.clientBaseUrl`（公开仓库地址）、`strict-origin-when-cross-origin` 和 `allowfullscreen` 提供合法身份与全屏权限。导航代理需精确放行该 client document URL，否则会误把初始化 base URL 打开到默认浏览器并留下白屏转圈。
+- readability 仅保留能被 `YouTubeEmbedInfo` 识别的 iframe，仍删除其他 iframe。这个白名单是安全与复杂度边界，不要为了支持更多站点直接取消 iframe 清理。
+- macOS 网页元素系统全屏需要 `WKPreferences.isElementFullscreenEnabled`（macOS 12.3+）。当前 Dart 通过 `WebKitWebViewController.webViewIdentifier` 和 `MacOSWebViewControls` 通道，Runner 再用插件官方 `FWFWebViewFlutterWKWebViewExternalAPI` 找回原生 WKWebView 并启用该属性；不要修改 pub cache 或 fork 插件。用户已验证 YouTube 内联播放、按钮操作和系统全屏可用，细节优化留待后续需求。
+
+已确认但暂不修复的源内容边界：
+
+- OpenAI News 的 `Improving health intelligence in ChatGPT`：Folo 条目只有短摘要，没有 media、attachments、video 或 iframe。全文 readability 会从 OpenAI 动态页面留下一个无 `src`/`source` 的 `<audio preload="none">`；它原本属于依赖网页 JavaScript 后续注入资源的“朗读文章”控件，不是视频。当前 parser 会把空 audio 当媒体占位，这是错误空框的来源。未来若处理，应跳过没有任何有效资源的 audio/video，不要尝试猜测 OpenAI 的动态音频地址。
+- MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“仅 YouTube iframe”白名单。
 
 表格：
 

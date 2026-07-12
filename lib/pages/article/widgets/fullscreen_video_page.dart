@@ -173,121 +173,130 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
 
               if (!Platform.isMacOS)
                 // 移动端保留显式返回和横竖屏控制；macOS 使用 Esc 与底栏退出。
-                AnimatedOpacity(
-                  opacity: _showControls ? 1 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Container(
-                      height: 80,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.6),
-                            Colors.transparent,
+                IgnorePointer(
+                  ignoring: !_showControls,
+                  child: AnimatedOpacity(
+                    opacity: _showControls ? 1 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        height: 80,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.6),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                        padding: const EdgeInsets.only(
+                          top: 20,
+                          left: 16,
+                          right: 16,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.screen_rotation,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              onPressed: _toggleOrientation,
+                            ),
                           ],
                         ),
-                      ),
-                      padding: const EdgeInsets.only(
-                        top: 20,
-                        left: 16,
-                        right: 16,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.screen_rotation,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            onPressed: _toggleOrientation,
-                          ),
-                        ],
                       ),
                     ),
                   ),
                 ),
 
               // 底部控制栏
-              AnimatedOpacity(
-                opacity: _showControls ? 1 : 0,
-                duration: const Duration(milliseconds: 250),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.8),
-                        ],
+              IgnorePointer(
+                ignoring: !_showControls,
+                child: AnimatedOpacity(
+                  opacity: _showControls ? 1 : 0,
+                  duration: const Duration(milliseconds: 250),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 20,
                       ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        VideoProgressIndicator(
-                          widget.controller,
-                          allowScrubbing: true,
-                          colors: VideoProgressColors(
-                            playedColor: cs.primary,
-                            bufferedColor: Colors.white30,
-                            backgroundColor: Colors.white12,
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _togglePlayPause,
-                              child: Icon(
-                                widget.controller.value.isPlaying
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontFeatures: [FontFeature.tabularFigures()],
-                              ),
-                            ),
-                            const Spacer(),
-                            GestureDetector(
-                              onTap: () => Navigator.pop(context),
-                              child: const Icon(
-                                Icons.fullscreen_exit,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.8),
                           ],
                         ),
-                      ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: VideoProgressIndicator(
+                              widget.controller,
+                              allowScrubbing: true,
+                              colors: VideoProgressColors(
+                                playedColor: cs.primary,
+                                bufferedColor: Colors.white30,
+                                backgroundColor: Colors.white12,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: _togglePlayPause,
+                                child: Icon(
+                                  widget.controller.value.isPlaying
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Text(
+                                '${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () => Navigator.pop(context),
+                                child: const Icon(
+                                  Icons.fullscreen_exit,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

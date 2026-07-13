@@ -120,6 +120,8 @@ abstract final class ArticleActionsMenu {
     required Offset position,
     required ArticleModel article,
     VoidCallback? onTranslateSuccess,
+    VoidCallback? onKeep,
+    VoidCallback? onReject,
   }) async {
     final colorScheme = Theme.of(context).colorScheme;
     final state = _ArticleActionState.from(article);
@@ -128,6 +130,21 @@ abstract final class ArticleActionsMenu {
       context,
       position: position,
       entries: [
+        if (onKeep != null)
+          const AppContextMenuAction(
+            value: 'review_keep',
+            icon: Icons.restore_rounded,
+            label: '保留',
+            color: Color(0xFF059669),
+          ),
+        if (onReject != null)
+          const AppContextMenuAction(
+            value: 'review_reject',
+            icon: Icons.delete_sweep_outlined,
+            label: '移除',
+            destructive: true,
+          ),
+        if (onKeep != null || onReject != null) const AppContextMenuDivider(),
         AppContextMenuAction(
           value: 'translate',
           icon: Icons.translate,
@@ -166,7 +183,11 @@ abstract final class ArticleActionsMenu {
       ],
     );
 
-    if (result == 'translate') {
+    if (result == 'review_keep') {
+      onKeep?.call();
+    } else if (result == 'review_reject') {
+      onReject?.call();
+    } else if (result == 'translate') {
       await translateArticle(article, onTranslateSuccess: onTranslateSuccess);
     } else if (result == 'delete_translation') {
       TranslationService.deleteTranslation(article.entryId);

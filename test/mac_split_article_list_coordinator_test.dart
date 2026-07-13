@@ -59,6 +59,7 @@ void main() {
   test('blocks another selected removal until completion', () {
     expect(coordinator.beginRemoval('b'), isTrue);
     expect(coordinator.beginRemoval('b'), isFalse);
+    expect(coordinator.beginRemoval('a'), isFalse);
   });
 
   test('relative selection and restoration share reveal behavior', () {

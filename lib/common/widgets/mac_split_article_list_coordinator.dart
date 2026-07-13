@@ -44,11 +44,11 @@ class MacSplitArticleListCoordinator {
   }
 
   /// Stages the successor before business state changes can prune selection.
-  /// Returns false only when another selected-item removal is still running.
+  /// Returns false while another selected-item removal is still running.
   bool beginRemoval(String entryId) {
+    if (_pendingRemoval != null) return false;
     final selected = _selectedArticle();
     if (selected?.entryId != entryId) return true;
-    if (_pendingRemoval != null) return false;
 
     final articles = _articles();
     final index = articles.indexWhere((article) => article.entryId == entryId);

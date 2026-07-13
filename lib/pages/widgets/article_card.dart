@@ -26,6 +26,7 @@ class ArticleCard extends StatefulWidget {
   final bool showSummary;
   final bool isSelected;
   final bool stableTitleWeight;
+  final EdgeInsetsGeometry? outerPadding;
 
   const ArticleCard({
     super.key,
@@ -36,6 +37,7 @@ class ArticleCard extends StatefulWidget {
     this.showSummary = false,
     this.isSelected = false,
     this.stableTitleWeight = false,
+    this.outerPadding,
   });
 
   @override
@@ -68,6 +70,7 @@ class _ArticleCardState extends State<ArticleCard> {
       isTranslated: _isTranslated,
       isSelected: widget.isSelected,
       stableTitleWeight: widget.stableTitleWeight,
+      outerPadding: widget.outerPadding,
       onTranslateSuccess: _onTranslateSuccess,
     );
   }
@@ -82,6 +85,7 @@ class _ArticleCardContent extends StatefulWidget {
   final bool isTranslated;
   final bool isSelected;
   final bool stableTitleWeight;
+  final EdgeInsetsGeometry? outerPadding;
   final VoidCallback? onTranslateSuccess;
 
   const _ArticleCardContent({
@@ -93,6 +97,7 @@ class _ArticleCardContent extends StatefulWidget {
     required this.isTranslated,
     required this.isSelected,
     required this.stableTitleWeight,
+    this.outerPadding,
     this.onTranslateSuccess,
   });
 
@@ -109,6 +114,8 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
   bool get isTranslated => widget.isTranslated;
   bool get isSelected => widget.isSelected;
   bool get stableTitleWeight => widget.stableTitleWeight;
+  EdgeInsetsGeometry get outerPadding =>
+      widget.outerPadding ?? ArticleCardChrome.outerPadding;
   VoidCallback? get onTranslateSuccess => widget.onTranslateSuccess;
 
   @override
@@ -128,7 +135,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
 
       return RepaintBoundary(
         child: Padding(
-          padding: ArticleCardChrome.outerPadding,
+          padding: outerPadding,
           child: CardPressEffect(
             onTap: onTap,
             onLongPress: Platform.isMacOS

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +41,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final _articles = <ArticleModel>[].obs;
   final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
+  final Set<String> _trackpadDismissedIds = {};
+  final Map<String, UndoRestoreEvent> _deferredTrackpadRestores = {};
   late final MacSplitArticleListCoordinator _listCoordinator;
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
@@ -125,7 +128,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   void _loadArticles() {
     final all = LocalArticleDbService.readAllArticles()
-        .where((a) => a.isRejectedByAi && !a.isRead)
+        .where(
+          (a) =>
+              a.isRejectedByAi &&
+              !a.isRead &&
+              !_trackpadDismissedIds.contains(a.entryId),
+        )
         .toList();
     all.sort((a, b) {
       final tA = a.filteredAt ?? 0;
@@ -167,6 +175,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       _pruneInvalidSelection();
       return;
     }
+
+    if (index < 0 && _trackpadDismissedIds.contains(entryId)) return;
 
     _seenIds.add(entryId);
     if (index >= 0) {
@@ -286,6 +296,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_isActiveMacReviewPage) return;
 
+      if (_trackpadDismissedIds.contains(event.article.entryId)) {
+        _deferredTrackpadRestores[event.article.entryId] = event;
+        _listCoordinator.cancelPendingRemoval();
+        return;
+      }
+
       var index = _articles.indexWhere(
         (a) => a.entryId == event.article.entryId,
       );
@@ -301,8 +317,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     });
   }
 
-  void _keep(ArticleModel article) {
-    if (Platform.isMacOS && !_listCoordinator.beginRemoval(article.entryId)) {
+  void _keep(ArticleModel article, {bool removalAlreadyStaged = false}) {
+    if (Platform.isMacOS &&
+        !removalAlreadyStaged &&
+        !_listCoordinator.beginRemoval(article.entryId)) {
       return;
     }
     final bool shouldAdvance =
@@ -338,8 +356,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
   }
 
-  void _reject(ArticleModel article) {
-    if (Platform.isMacOS && !_listCoordinator.beginRemoval(article.entryId)) {
+  void _reject(ArticleModel article, {bool removalAlreadyStaged = false}) {
+    if (Platform.isMacOS &&
+        !removalAlreadyStaged &&
+        !_listCoordinator.beginRemoval(article.entryId)) {
       return;
     }
     final bool shouldAdvance =
@@ -398,7 +418,16 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _handleReviewRemoveEnd(ArticleModel article) {
+    _trackpadDismissedIds.remove(article.entryId);
     _listCoordinator.onRemoveEnd(article);
+
+    final restored = _deferredTrackpadRestores.remove(article.entryId);
+    if (restored == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isActiveMacReviewPage) return;
+      _syncArticleFromDb(restored.article.entryId);
+      _listCoordinator.restoreSelection(restored.article.entryId);
+    });
   }
 
   @override
@@ -522,28 +551,27 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                       itemCount: _articles.length,
                       itemBuilder: (context, index) {
                         final article = _articles[index];
-                        return Dismissible(
-                          key: ValueKey(article.entryId),
-                          direction: DismissDirection.horizontal,
-                          dismissThresholds: const {
-                            DismissDirection.startToEnd: 0.35,
-                            DismissDirection.endToStart: 0.35,
-                          },
-                          confirmDismiss: (direction) async {
-                            if (direction == DismissDirection.startToEnd) {
-                              _keep(article);
-                            } else {
-                              _reject(article);
-                            }
-                            return false;
-                          },
-                          background: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
+                        return Padding(
+                          padding: ArticleCardChrome.outerPadding,
+                          child: Dismissible(
+                            key: ValueKey(article.entryId),
+                            direction: DismissDirection.horizontal,
+                            dismissThresholds: const {
+                              DismissDirection.startToEnd: 0.35,
+                              DismissDirection.endToStart: 0.35,
+                            },
+                            confirmDismiss: (direction) async {
+                              if (direction == DismissDirection.startToEnd) {
+                                _keep(article);
+                              } else {
+                                _reject(article);
+                              }
+                              return false;
+                            },
+                            background: ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                ArticleCardChrome.radius,
+                              ),
                               child: Container(
                                 color: const Color(0xFF10B981),
                                 alignment: Alignment.centerLeft,
@@ -555,14 +583,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                                 ),
                               ),
                             ),
-                          ),
-                          secondaryBackground: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
+                            secondaryBackground: ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                ArticleCardChrome.radius,
+                              ),
                               child: Container(
                                 color: cs.error,
                                 alignment: Alignment.centerRight,
@@ -574,32 +598,34 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                                 ),
                               ),
                             ),
+                            child: Obx(() {
+                              final selectedId =
+                                  _selectedArticle.value?.entryId;
+                              return ArticleCard(
+                                article: article,
+                                isSelected:
+                                    Platform.isMacOS &&
+                                    selectedId == article.entryId,
+                                showFeedTitle: true,
+                                showSummary: true,
+                                outerPadding: EdgeInsets.zero,
+                                onTap: () {
+                                  if (Platform.isMacOS) {
+                                    _selectedArticle.value = article;
+                                  } else {
+                                    Get.toNamed(
+                                      Routes.article,
+                                      arguments: {
+                                        'article': article,
+                                        'sequence': _articles,
+                                        'index': index,
+                                      },
+                                    );
+                                  }
+                                },
+                              );
+                            }),
                           ),
-                          child: Obx(() {
-                            final selectedId = _selectedArticle.value?.entryId;
-                            return ArticleCard(
-                              article: article,
-                              isSelected:
-                                  Platform.isMacOS &&
-                                  selectedId == article.entryId,
-                              showFeedTitle: true,
-                              showSummary: true,
-                              onTap: () {
-                                if (Platform.isMacOS) {
-                                  _selectedArticle.value = article;
-                                } else {
-                                  Get.toNamed(
-                                    Routes.article,
-                                    arguments: {
-                                      'article': article,
-                                      'sequence': _articles,
-                                      'index': index,
-                                    },
-                                  );
-                                }
-                              },
-                            );
-                          }),
                         );
                       },
                     ),
@@ -748,23 +774,33 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       axisAlignment: 1,
       child: FadeTransition(
         opacity: animation,
-        child: Obx(() {
-          final selected = _selectedArticle.value?.entryId == article.entryId;
-          return _MacReviewRow(
-            key: _listCoordinator.itemKeyFor(article.entryId),
-            article: article,
-            selected: selected,
-            onTap: () => _selectedArticle.value = article,
-            onKeep: () {
-              _selectedArticle.value = article;
-              _keep(article);
-            },
-            onReject: () {
-              _selectedArticle.value = article;
-              _reject(article);
-            },
-          );
-        }),
+        child: _MacTrackpadReviewSwipe(
+          key: ValueKey('review-swipe-${article.entryId}'),
+          keepColor: const Color(0xFF059669),
+          rejectColor: Theme.of(context).colorScheme.error,
+          onWillCommit: () => _listCoordinator.beginRemoval(article.entryId),
+          onCommitAborted: _listCoordinator.cancelPendingRemoval,
+          onCommitted: (action) {
+            _trackpadDismissedIds.add(article.entryId);
+            switch (action) {
+              case _ReviewSwipeAction.keep:
+                _keep(article, removalAlreadyStaged: true);
+              case _ReviewSwipeAction.reject:
+                _reject(article, removalAlreadyStaged: true);
+            }
+          },
+          child: Obx(() {
+            final selected = _selectedArticle.value?.entryId == article.entryId;
+            return _MacReviewRow(
+              key: _listCoordinator.itemKeyFor(article.entryId),
+              article: article,
+              selected: selected,
+              onTap: () => _selectedArticle.value = article,
+              onKeep: () => _keep(article),
+              onReject: () => _reject(article),
+            );
+          }),
+        ),
       ),
     );
   }
@@ -780,16 +816,265 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       axisAlignment: -1,
       child: FadeTransition(
         opacity: animation,
-        child: _MacReviewRow(
-          key: _listCoordinator.removedItemKeyFor(article.entryId),
-          article: article,
-          selected: false,
-          onTap: () {},
-          onKeep: () {},
-          onReject: () {},
+        child: Opacity(
+          opacity: _trackpadDismissedIds.contains(article.entryId) ? 0 : 1,
+          child: _MacReviewRow(
+            key: _listCoordinator.removedItemKeyFor(article.entryId),
+            article: article,
+            selected: false,
+            onTap: () {},
+            onKeep: () {},
+            onReject: () {},
+          ),
         ),
       ),
     );
+  }
+}
+
+enum _ReviewSwipeAction { keep, reject }
+
+class _MacTrackpadReviewSwipe extends StatefulWidget {
+  const _MacTrackpadReviewSwipe({
+    super.key,
+    required this.child,
+    required this.keepColor,
+    required this.rejectColor,
+    required this.onWillCommit,
+    required this.onCommitAborted,
+    required this.onCommitted,
+  });
+
+  final Widget child;
+  final Color keepColor;
+  final Color rejectColor;
+  final bool Function() onWillCommit;
+  final VoidCallback onCommitAborted;
+  final ValueChanged<_ReviewSwipeAction> onCommitted;
+
+  @override
+  State<_MacTrackpadReviewSwipe> createState() =>
+      _MacTrackpadReviewSwipeState();
+}
+
+class _MacTrackpadReviewSwipeState extends State<_MacTrackpadReviewSwipe>
+    with SingleTickerProviderStateMixin {
+  static const double _distanceThreshold = 0.30;
+  static const double _minimumFlingDistance = 32;
+  static const double _flingVelocityThreshold = 900;
+
+  late final AnimationController _offsetController;
+  double _width = 0;
+  bool _committing = false;
+  bool _didCommit = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _offsetController = AnimationController.unbounded(vsync: this);
+  }
+
+  @override
+  void dispose() {
+    if (_committing && !_didCommit) widget.onCommitAborted();
+    _offsetController.dispose();
+    super.dispose();
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    if (_committing) return;
+    _offsetController.stop();
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    if (_committing || _width <= 0) return;
+    final next = _offsetController.value + (details.primaryDelta ?? 0);
+    _offsetController.value = next.clamp(-_width * 0.82, _width * 0.82);
+  }
+
+  Future<void> _handleDragEnd(DragEndDetails details) async {
+    if (_committing || _width <= 0) return;
+
+    final offset = _offsetController.value;
+    final velocity = details.primaryVelocity ?? 0;
+    final crossedDistance = offset.abs() >= _width * _distanceThreshold;
+    final crossedFling =
+        offset.abs() >= _minimumFlingDistance &&
+        velocity.abs() >= _flingVelocityThreshold &&
+        velocity.sign == offset.sign;
+    if (!crossedDistance && !crossedFling) {
+      await _reset();
+      return;
+    }
+    if (!widget.onWillCommit()) {
+      await _reset();
+      return;
+    }
+
+    _committing = true;
+    final action = offset > 0
+        ? _ReviewSwipeAction.keep
+        : _ReviewSwipeAction.reject;
+    await _offsetController.animateTo(
+      offset > 0 ? _width : -_width,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted) return;
+    _didCommit = true;
+    widget.onCommitted(action);
+  }
+
+  Future<void> _reset() async {
+    await _offsetController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _width = constraints.maxWidth;
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          supportedDevices: const {PointerDeviceKind.trackpad},
+          onHorizontalDragStart: _handleDragStart,
+          onHorizontalDragUpdate: _handleDragUpdate,
+          onHorizontalDragEnd: _handleDragEnd,
+          onHorizontalDragCancel: _reset,
+          child: AnimatedBuilder(
+            animation: _offsetController,
+            builder: (context, child) {
+              final offset = _offsetController.value;
+              final action = offset >= 0
+                  ? _ReviewSwipeAction.keep
+                  : _ReviewSwipeAction.reject;
+              final color = action == _ReviewSwipeAction.keep
+                  ? widget.keepColor
+                  : widget.rejectColor;
+              final progress = _width <= 0
+                  ? 0.0
+                  : (offset.abs() / (_width * _distanceThreshold)).clamp(
+                      0.0,
+                      1.0,
+                    );
+
+              return ClipRect(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ClipPath(
+                          clipper: _ReviewSwipeRevealClipper(
+                            offset,
+                            outerPadding: ArticleCardChrome.outerPadding,
+                            radius: ArticleCardChrome.radius,
+                          ),
+                          child: Opacity(
+                            opacity: progress,
+                            child: Padding(
+                              padding: ArticleCardChrome.outerPadding,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(
+                                    ArticleCardChrome.radius,
+                                  ),
+                                ),
+                                child: Align(
+                                  alignment: action == _ReviewSwipeAction.keep
+                                      ? Alignment.centerLeft
+                                      : Alignment.centerRight,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 22,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          action == _ReviewSwipeAction.keep
+                                              ? Icons.restore_rounded
+                                              : Icons.delete_sweep_outlined,
+                                          size: 20,
+                                          color: color,
+                                        ),
+                                        const SizedBox(width: 7),
+                                        Text(
+                                          action == _ReviewSwipeAction.keep
+                                              ? '保留'
+                                              : '移除',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Transform.translate(
+                      offset: Offset(offset, 0),
+                      child: child,
+                    ),
+                  ],
+                ),
+              );
+            },
+            child: widget.child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
+  const _ReviewSwipeRevealClipper(
+    this.offset, {
+    required this.outerPadding,
+    required this.radius,
+  });
+
+  final double offset;
+  final EdgeInsets outerPadding;
+  final double radius;
+
+  @override
+  Path getClip(Size size) {
+    final originalRect = Rect.fromLTRB(
+      outerPadding.left,
+      outerPadding.top,
+      size.width - outerPadding.right,
+      size.height - outerPadding.bottom,
+    );
+    if (offset == 0 || originalRect.isEmpty) return Path();
+
+    final corner = Radius.circular(radius);
+    final original = Path()
+      ..addRRect(RRect.fromRectAndRadius(originalRect, corner));
+    final translated = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(originalRect.shift(Offset(offset, 0)), corner),
+      );
+    return Path.combine(PathOperation.difference, original, translated);
+  }
+
+  @override
+  bool shouldReclip(_ReviewSwipeRevealClipper oldClipper) {
+    return oldClipper.offset != offset ||
+        oldClipper.outerPadding != outerPadding ||
+        oldClipper.radius != radius;
   }
 }
 
@@ -920,6 +1205,8 @@ class _MacReviewRow extends StatelessWidget {
                   context,
                   position: details.globalPosition,
                   article: article,
+                  onKeep: onKeep,
+                  onReject: onReject,
                 );
               }
             : null,
@@ -1001,24 +1288,6 @@ class _MacReviewRow extends StatelessWidget {
                       }),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  children: [
-                    _ReviewActionButton(
-                      icon: Icons.restore_rounded,
-                      tooltip: '保留',
-                      color: const Color(0xFF059669),
-                      onPressed: onKeep,
-                    ),
-                    const SizedBox(height: 2),
-                    _ReviewActionButton(
-                      icon: Icons.delete_sweep_outlined,
-                      tooltip: '移除',
-                      color: cs.error,
-                      onPressed: onReject,
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -1118,77 +1387,6 @@ class _ReviewInfoBlock extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ReviewActionButton extends StatefulWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _ReviewActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onPressed,
-  });
-
-  @override
-  State<_ReviewActionButton> createState() => _ReviewActionButtonState();
-}
-
-class _ReviewActionButtonState extends State<_ReviewActionButton> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final fill = _pressed
-        ? widget.color.withValues(alpha: 0.12)
-        : _hovered
-        ? widget.color.withValues(alpha: 0.08)
-        : Colors.transparent;
-
-    return AppGlassTooltip(
-      message: widget.tooltip,
-      placement: AppGlassTooltipPlacement.right,
-      child: SelectionContainer.disabled(
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() {
-            _hovered = false;
-            _pressed = false;
-          }),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTapCancel: () => setState(() => _pressed = false),
-            onTap: widget.onPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOutCubic,
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: fill,
-                border: Border.all(
-                  color: _hovered
-                      ? widget.color.withValues(alpha: 0.22)
-                      : cs.outlineVariant.withValues(alpha: 0.16),
-                  width: 0.6,
-                ),
-              ),
-              child: Icon(widget.icon, size: 18, color: widget.color),
-            ),
-          ),
         ),
       ),
     );

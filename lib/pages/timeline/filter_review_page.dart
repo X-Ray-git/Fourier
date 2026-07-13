@@ -25,6 +25,7 @@ import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/card_press_effect.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
+import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
@@ -39,8 +40,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final _articles = <ArticleModel>[].obs;
   final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
-  final Map<String, GlobalKey> _itemKeys = {};
-  final Map<String, GlobalKey> _removingItemKeys = {};
+  late final MacSplitArticleListCoordinator _listCoordinator;
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
   Worker? _undoRestoreWorker;
@@ -48,6 +48,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   @override
   void initState() {
     super.initState();
+    _listCoordinator = MacSplitArticleListCoordinator(
+      articles: () => _articles.toList(),
+      selectedArticle: () => _selectedArticle.value,
+      setSelectedArticle: (article) => _selectedArticle.value = article,
+      revealArticle: _revealCoordinatedArticle,
+    );
     HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     _loadArticles();
     _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
@@ -91,6 +97,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   @override
   void dispose() {
     AutoFilterWorker.onRejected = null;
+    _listCoordinator.dispose();
     _articleStateWorker?.dispose();
     _filterCountWorker?.dispose();
     _undoRestoreWorker?.dispose();
@@ -173,6 +180,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _pruneInvalidSelection() {
+    if (Platform.isMacOS) {
+      _listCoordinator.reconcileSelection();
+      return;
+    }
     final selected = _selectedArticle.value;
     if (selected == null) return;
     if (_articles.any((a) => a.entryId == selected.entryId)) return;
@@ -226,17 +237,16 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     });
   }
 
-  void _selectRelativeArticle(int delta) {
-    if (_articles.isEmpty) return;
+  void _revealCoordinatedArticle(String entryId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToArticleWhenReady(entryId, attempt: 1);
+      _refreshPointerAnnotationsAfterReviewChange();
+    });
+  }
 
-    final selected = _selectedArticle.value;
-    final currentIndex = selected == null
-        ? -1
-        : _articles.indexWhere((a) => a.entryId == selected.entryId);
-    final nextIndex = (currentIndex + delta).clamp(0, _articles.length - 1);
-    if (nextIndex < 0 || nextIndex >= _articles.length) return;
-    _selectedArticle.value = _articles[nextIndex];
-    _scrollToArticle(_articles[nextIndex].entryId);
+  void _selectRelativeArticle(int delta) {
+    _listCoordinator.selectRelative(delta);
   }
 
   void _scrollToArticle(String entryId) {
@@ -253,7 +263,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       return;
     }
 
-    final key = _itemKeys[entryId];
+    final key = _listCoordinator.itemKeys[entryId];
     if (key != null && key.currentContext != null) {
       ScrollUtils.ensureVisible(key.currentContext!);
       return;
@@ -292,9 +302,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _keep(ArticleModel article) {
+    if (Platform.isMacOS && !_listCoordinator.beginRemoval(article.entryId)) {
+      return;
+    }
     final bool shouldAdvance =
         _selectedArticle.value?.entryId == article.entryId;
-    final ArticleModel? nextArticle = shouldAdvance
+    final ArticleModel? nextArticle = shouldAdvance && !Platform.isMacOS
         ? _nextArticleAfterRemoving(article.entryId)
         : null;
 
@@ -320,15 +333,18 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
 
     _removeReviewedArticle(article.entryId);
-    if (shouldAdvance) {
+    if (shouldAdvance && !Platform.isMacOS) {
       _selectReviewedSuccessor(nextArticle);
     }
   }
 
   void _reject(ArticleModel article) {
+    if (Platform.isMacOS && !_listCoordinator.beginRemoval(article.entryId)) {
+      return;
+    }
     final bool shouldAdvance =
         _selectedArticle.value?.entryId == article.entryId;
-    final ArticleModel? nextArticle = shouldAdvance
+    final ArticleModel? nextArticle = shouldAdvance && !Platform.isMacOS
         ? _nextArticleAfterRemoving(article.entryId)
         : null;
 
@@ -372,20 +388,17 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     ArticleStateNotifier.tick(article.entryId);
 
     _removeReviewedArticle(article.entryId);
-    if (shouldAdvance) {
+    if (shouldAdvance && !Platform.isMacOS) {
       _selectReviewedSuccessor(nextArticle);
     }
   }
 
   void _handleReviewRemoveStart(ArticleModel article) {
-    final key = _itemKeys.remove(article.entryId);
-    if (key != null) {
-      _removingItemKeys[article.entryId] = key;
-    }
+    _listCoordinator.onRemoveStart(article);
   }
 
   void _handleReviewRemoveEnd(ArticleModel article) {
-    _removingItemKeys.remove(article.entryId);
+    _listCoordinator.onRemoveEnd(article);
   }
 
   @override
@@ -738,7 +751,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         child: Obx(() {
           final selected = _selectedArticle.value?.entryId == article.entryId;
           return _MacReviewRow(
-            key: _itemKeys.putIfAbsent(article.entryId, () => GlobalKey()),
+            key: _listCoordinator.itemKeyFor(article.entryId),
             article: article,
             selected: selected,
             onTap: () => _selectedArticle.value = article,
@@ -768,10 +781,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       child: FadeTransition(
         opacity: animation,
         child: _MacReviewRow(
-          key:
-              _removingItemKeys[article.entryId] ??
-              _itemKeys[article.entryId] ??
-              ValueKey('removed-${article.entryId}'),
+          key: _listCoordinator.removedItemKeyFor(article.entryId),
           article: article,
           selected: false,
           onTap: () {},

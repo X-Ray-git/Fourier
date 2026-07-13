@@ -8,6 +8,7 @@
 - `lib/common/widgets/article_card_chrome.dart`
 - `lib/common/widgets/app_glass_sync_button.dart`
 - `lib/pages/widgets/article_actions_menu.dart`
+- `lib/common/widgets/mac_split_article_list_coordinator.dart`
 
 当前行为：
 
@@ -25,6 +26,13 @@
 - 已读/未读变化会更新本地状态并通知其他视图。
 - 时间线和最近阅读列表合并本地已读状态时，使用 `LocalArticleDbService.readOverrideOf(entryId)`，没有覆盖时保留 `ArticleModel.isRead`。该规则同时支持本地标为已读和恢复未读，不要退回到只处理 `readStatus == true` 的旧逻辑。
 - 垃圾拦截/审核这类列表如果语义要求稳定追加，新文章应稳定附加。
+
+macOS 分栏选择与移除协调：
+
+- `MacSplitArticleListCoordinator` 统一承载分栏文章列表中的稳定 item key、删除前后继项计算、删除期间选择保持、`onRemoveEnd` 后详情切换、相对导航和 reveal 回调。页面继续负责已读、审核、数据库和网络等业务动作，不要把这些业务塞进协调器。
+- 页面必须在任何数据库写入、`ArticleStateNotifier.tick()` 或列表删除之前调用 `beginRemoval(entryId)`。垃圾拦截曾在动画开始前由 `_pruneInvalidSelection()` 立即切换右侧详情，首次正文构建因此抢占移除动画帧；协调器通过 `reconcileSelection()` 在退出期间保留旧详情，直到真实 `onRemoveEnd`。
+- 垃圾拦截已接入协调器，`M`、保留、移除共用同一删除生命周期；移动端仍保持原业务路径。
+- 主时间线和最近阅读尚未接入。后续迁移时保留主时间线的虚拟列表粗定位实现；最近阅读恢复未读后的选择语义需要单独确认。不要为了共享而把三个页面强行做成同一个大 Widget。
 
 排序：
 

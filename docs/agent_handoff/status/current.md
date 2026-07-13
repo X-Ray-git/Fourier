@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-07-08：
+截至 2026-07-13：
 
 - `main` 是当前集成分支。
 - 本次文档重构前，最新已推送提交是 `5e11c9d fix: refresh summary controls immediately`。
@@ -37,6 +37,7 @@
 - 玻璃按钮角色统一第二阶段已完成并由用户验证：`AppGlassRoundControlChrome` 统一圆形工具按钮外壳；排序/同步按钮背景保持中性，非默认排序和同步中只让图标变橙；刷新空闲态图标回到更接近白色的中性前景；目录按钮关闭态材质调浅，和复制按钮不再明显割裂。未读文章“标为已读”按钮继续保留橙色图标和浅橙背景，作为主动作语义。
 - `未读/全部` 紧凑二态 switch 的 2.1 结构收敛已完成并由用户验证：主时间线与订阅源详情页现在共用 `AppGlassCompactSwitch`，点击、滑块动画、hover/press、筛选结果和性能体感保持一致。
 - `未读/全部` switch 与设置页 segmented 的 2.2 视觉收敛已完成并由用户验证：选中滑块改为中性 `AppGlassSurface` control 材质，橙色只作为极弱 tint 和文字状态色；外层静态 rim 通过 `staticBorderOpacity` 局部降弱，用户确认效果不错且没有明显掉帧。
+- macOS 分栏文章列表协调器第一阶段已完成：新增 `MacSplitArticleListCoordinator`，垃圾拦截的 `M`、保留和移除在业务状态变化前登记后继项，退出动画期间保持旧详情，真实 `onRemoveEnd` 后才切换并 reveal 下一篇。用户初步验证体验良好；主时间线和最近阅读仍待分阶段迁移。
 
 本次待用户继续验证：
 

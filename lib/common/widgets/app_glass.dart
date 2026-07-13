@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../liquid_glass/liquid_glass.dart';
 import 'continuous_rectangle.dart';
+import 'macos_window_drag_guard.dart';
 
 enum AppGlassTone { surface, panel, control }
 
@@ -775,22 +776,24 @@ class AppGlassRoundControlChrome extends StatelessWidget {
             hoverAlpha: 0.06,
           );
 
-    return AppGlassSurface(
-      borderRadius: 999,
-      padding: EdgeInsets.zero,
-      tone: AppGlassTone.control,
-      interactive: enabled,
-      useOwnLayer: useOwnLayer,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          color: fill,
+    return MacOSWindowDragGuard(
+      child: AppGlassSurface(
+        borderRadius: 999,
+        padding: EdgeInsets.zero,
+        tone: AppGlassTone.control,
+        interactive: enabled,
+        useOwnLayer: useOwnLayer,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: fill,
+          ),
+          child: child,
         ),
-        child: child,
       ),
     );
   }
@@ -809,7 +812,7 @@ class AppGlassCompactSwitch extends StatefulWidget {
     required this.selectedIndex,
     required this.labels,
     required this.onChanged,
-    this.trackWidth = 62,
+    this.trackWidth = 58,
     this.trackHeight = 30,
     this.thumbWidth = 42,
   }) : assert(labels.length == 2),
@@ -820,8 +823,6 @@ class AppGlassCompactSwitch extends StatefulWidget {
 }
 
 class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
-  static const _padding = 3.0;
-
   bool _hovered = false;
   bool _pressed = false;
 
@@ -830,113 +831,115 @@ class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
     final cs = Theme.of(context).colorScheme;
     final controls = appGlassControlPalette(context);
 
-    return SelectionContainer.disabled(
-      child: AppGlassSurface(
-        borderRadius: AppGlassRadii.pill,
-        padding: const EdgeInsets.all(_padding),
-        tone: AppGlassTone.control,
-        nativeBackdrop: true,
-        staticMaterial: true,
-        staticBorderOpacity: 0.35,
-        child: SizedBox(
-          width: widget.trackWidth,
-          height: widget.trackHeight,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppGlassRadii.pill),
-              color: controls.compactControlTrackFill(),
-            ),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              onEnter: (_) => setState(() => _hovered = true),
-              onExit: (_) => setState(() {
-                _hovered = false;
-                _pressed = false;
-              }),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (_) => setState(() => _pressed = true),
-                onTapUp: (_) => setState(() => _pressed = false),
-                onTapCancel: () => setState(() => _pressed = false),
-                onTap: () =>
-                    widget.onChanged(widget.selectedIndex == 0 ? 1 : 0),
-                child: AnimatedScale(
-                  scale: _pressed ? 0.975 : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOutCubic,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      if (_hovered)
-                        Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(
-                                AppGlassRadii.pill,
-                              ),
-                              color: controls.subtleNeutralOverlay(
-                                hovered: true,
-                                pressed: _pressed,
+    return MacOSWindowDragGuard(
+      child: SelectionContainer.disabled(
+        child: AppGlassSurface(
+          borderRadius: AppGlassRadii.pill,
+          padding: EdgeInsets.zero,
+          tone: AppGlassTone.control,
+          nativeBackdrop: true,
+          staticMaterial: true,
+          staticBorderOpacity: 0.70,
+          child: SizedBox(
+            width: widget.trackWidth,
+            height: widget.trackHeight,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppGlassRadii.pill),
+                color: controls.compactControlTrackFill(),
+              ),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                onEnter: (_) => setState(() => _hovered = true),
+                onExit: (_) => setState(() {
+                  _hovered = false;
+                  _pressed = false;
+                }),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (_) => setState(() => _pressed = true),
+                  onTapUp: (_) => setState(() => _pressed = false),
+                  onTapCancel: () => setState(() => _pressed = false),
+                  onTap: () =>
+                      widget.onChanged(widget.selectedIndex == 0 ? 1 : 0),
+                  child: AnimatedScale(
+                    scale: _pressed ? 0.975 : 1.0,
+                    duration: const Duration(milliseconds: 120),
+                    curve: Curves.easeOutCubic,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (_hovered)
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  AppGlassRadii.pill,
+                                ),
+                                color: controls.subtleNeutralOverlay(
+                                  hovered: true,
+                                  pressed: _pressed,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 240),
-                        curve: Curves.easeOutBack,
-                        left: widget.selectedIndex == 0
-                            ? 0
-                            : widget.trackWidth - widget.thumbWidth,
-                        top: 0,
-                        bottom: 0,
-                        width: widget.thumbWidth,
-                        child: AppGlassSurface(
-                          borderRadius: AppGlassRadii.pill,
-                          padding: EdgeInsets.zero,
-                          tone: AppGlassTone.control,
-                          useOwnLayer: false,
-                          interactive: true,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(
-                                AppGlassRadii.pill,
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeOutBack,
+                          left: widget.selectedIndex == 0
+                              ? 0
+                              : widget.trackWidth - widget.thumbWidth,
+                          top: 0,
+                          bottom: 0,
+                          width: widget.thumbWidth,
+                          child: AppGlassSurface(
+                            borderRadius: AppGlassRadii.pill,
+                            padding: EdgeInsets.zero,
+                            tone: AppGlassTone.control,
+                            useOwnLayer: false,
+                            interactive: true,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  AppGlassRadii.pill,
+                                ),
+                                color: controls.activeFill(accentAlpha: 0.018),
                               ),
-                              color: controls.activeFill(accentAlpha: 0.018),
-                            ),
-                            child: Center(
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 140),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeOutCubic,
-                                transitionBuilder: (child, animation) {
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: ScaleTransition(
-                                      scale: Tween<double>(
-                                        begin: 0.94,
-                                        end: 1,
-                                      ).animate(animation),
-                                      child: child,
+                              child: Center(
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 140),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeOutCubic,
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: ScaleTransition(
+                                        scale: Tween<double>(
+                                          begin: 0.94,
+                                          end: 1,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: Text(
+                                    widget.labels[widget.selectedIndex],
+                                    key: ValueKey(widget.selectedIndex),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.clip,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: cs.primary,
                                     ),
-                                  );
-                                },
-                                child: Text(
-                                  widget.labels[widget.selectedIndex],
-                                  key: ValueKey(widget.selectedIndex),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    color: cs.primary,
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -13,4 +13,9 @@ class MacOSWindowControls {
     if (!Platform.isMacOS) return;
     await _channel.invokeMethod<void>('setTrafficLightsHidden', hidden);
   }
+
+  static Future<void> setMovable(bool movable) async {
+    if (!Platform.isMacOS) return;
+    await _channel.invokeMethod<void>('setMovable', movable);
+  }
 }

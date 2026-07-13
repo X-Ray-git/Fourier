@@ -23,12 +23,13 @@
 - Hover 应微妙且稳定；避免闪烁或布局变化。
 - 密集、重复出现的列表按钮不应为了追求玻璃效果而全部改为重型 glass surface；优先使用轻量 hover/描边，并只把 tooltip 统一到玻璃语言。
 - 密集文章列表卡片不使用普通边框作为默认态。用户验证后认为细线边框不够理想，当前取舍是 macOS 普通态极高透明度白/黑中性色填充，浅色模式反向使用黑/灰透明填充。
+- full-size content view 的 header 可拖动窗口，但可点击控件不能把轻微指针位移传给 AppKit。共享圆形玻璃按钮、紧凑 switch 和目录 morph 入口使用 `MacOSWindowDragGuard`；按下期间通过原生 channel 临时设置 `NSWindow.isMovable = false`，最后一个指针释放/取消/组件销毁后恢复。不要把整个 header 禁止拖动，空白区仍是窗口拖动入口。
 
 间距：
 
 - 边缘应尽量和侧边栏/窗口 margin 视觉对齐。
 - Scrollbar 不应占用不对称布局宽度，也不应覆盖正文内容。
-- `MacGlassScrollbarStyle` 是 macOS scrollbar 颜色、圆角和尺寸的共享入口。文章正文及中间文章列表使用 `articlePaneTheme`（`8px` thumb、右侧 `1px` margin）；设置页和任务中心的 `MacGlassScrollArea` 仍默认使用更轻的 `5px`，不要盲目全局统一宽度。
+- `MacGlassScrollbarStyle` 是 macOS scrollbar 颜色、圆角和尺寸的共享入口。中间文章列表使用 `articlePaneTheme`（`8px` thumb、右侧 `1px` margin）；右侧文章正文同样是 `8px` thumb，但局部使用 `crossAxisMargin: 4`。设置页和任务中心的 `MacGlassScrollArea` 仍默认使用更轻的 `5px`，不要盲目全局统一宽度或 margin。
 - scrollbar 与内容裁剪要按语义分层：右侧文章正文的 scrollbar 必须显式放在圆角安全 clip 之外；主时间线和垃圾拦截没有横向 clip 问题，可以保留 Flutter 自动 scrollbar，仅用局部 theme 和极小内容间距避让。
 - 文章卡片之间保留比旧版略大的间距，避免轻填充卡片粘连。
 - 文章列表卡片的外边距、内部 padding、圆角和普通态外壳由 `ArticleCardChrome` 统一控制。普通时间线、最近阅读和垃圾拦截审核行应共用这些参数，而不是分别复制数值。macOS 卡片圆角当前为 `10`，是用户要求相对旧 `8` 略微增大的取舍。

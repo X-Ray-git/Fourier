@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
 import '../../common/widgets/app_badger.dart';
@@ -48,6 +49,7 @@ class TimelineController extends GetxController {
   bool _isBatchingScopeChange = false;
   int _timelineListResetVersion = 0;
   String _timelineScopeKey = 'normal::';
+  final Map<String, Object> _deferredReadVisualUpdates = {};
 
   final Map<String, FeedModel> _feedMap = {};
   bool _feedsLoaded = false;
@@ -381,7 +383,11 @@ class TimelineController extends GetxController {
   }
 
   /// 标记文章为已读（仅本地）
-  void markAsReadLocal(String entryId, {bool recordHistory = true}) {
+  void markAsReadLocal(
+    String entryId, {
+    bool recordHistory = true,
+    bool deferVisualUpdateToFrameBoundary = false,
+  }) {
     if (entryId.trim().isEmpty) return;
     GStorage.readStatus.put(entryId, true);
     LocalArticleDbService.setReadState(
@@ -389,12 +395,31 @@ class TimelineController extends GetxController {
       true,
       recordHistory: recordHistory,
     );
-    _updateReadStateInMemory(entryId, true);
-    ArticleStateNotifier.tick(entryId);
+
+    void updateVisualState() {
+      _updateReadStateInMemory(entryId, true);
+      ArticleStateNotifier.tick(entryId);
+    }
+
+    if (deferVisualUpdateToFrameBoundary) {
+      final token = Object();
+      _deferredReadVisualUpdates[entryId] = token;
+      unawaited(
+        SchedulerBinding.instance.endOfFrame.then((_) {
+          if (!identical(_deferredReadVisualUpdates[entryId], token)) return;
+          _deferredReadVisualUpdates.remove(entryId);
+          updateVisualState();
+        }),
+      );
+      return;
+    }
+    _deferredReadVisualUpdates.remove(entryId);
+    updateVisualState();
   }
 
   void markAsUnreadLocal(String entryId) {
     if (entryId.trim().isEmpty) return;
+    _deferredReadVisualUpdates.remove(entryId);
     GStorage.readStatus.delete(entryId);
     LocalArticleDbService.setReadState(entryId, false);
     _updateReadStateInMemory(entryId, false);

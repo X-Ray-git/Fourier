@@ -17,6 +17,7 @@ import '../../router/app_pages.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
+import '../../common/widgets/macos_window_drag_guard.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -1222,7 +1223,11 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         child: articleBody,
       );
       articleBody = ScrollbarTheme(
-        data: MacGlassScrollbarStyle.articlePaneTheme(context),
+        data: MacGlassScrollbarStyle.theme(
+          context,
+          thickness: 8,
+          crossAxisMargin: 4,
+        ),
         child: Scrollbar(
           controller: _scrollController,
           interactive: true,
@@ -2008,74 +2013,78 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
           Positioned(
             top: 0,
             right: 0,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              onEnter: (_) => setState(() => _isHovered = true),
-              onExit: (_) => setState(() {
-                _isHovered = false;
-                _isPressed = false;
-              }),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: clampedValue < 0.86
-                    ? (_) => setState(() => _isPressed = true)
-                    : null,
-                onTapUp: clampedValue < 0.86
-                    ? (_) => setState(() => _isPressed = false)
-                    : null,
-                onTapCancel: clampedValue < 0.86
-                    ? () => setState(() => _isPressed = false)
-                    : null,
-                onTap: clampedValue < 0.86 ? widget.onToggle : null,
-                child: AnimatedScale(
-                  scale: isIdle ? idleScale : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOutCubic,
-                  child: glass.GlassContainer(
-                    width: currentWidth,
-                    height: currentHeight,
-                    useOwnLayer: false,
-                    settings: widget.glassSettings,
-                    quality: glass.GlassQuality.standard,
-                    allowElevation: false,
-                    glowIntensity: isIdle && _isHovered ? 0.14 : 0.0,
-                    clipBehavior: Clip.antiAlias,
-                    shape: glass.LiquidRoundedSuperellipse(
-                      borderRadius: currentRadius,
-                    ),
-                    child: Stack(
-                      alignment: Alignment.topRight,
-                      children: [
-                        if (showTriggerIcon)
-                          Opacity(
-                            opacity: triggerIconOpacity,
-                            child: SizedBox(
-                              width: widget.buttonSize,
-                              height: widget.buttonSize,
-                              child: _TocIconButtonChrome(
-                                icon: Icons.format_list_bulleted_rounded,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                        if (showContent)
-                          Opacity(
-                            opacity: contentOpacity,
-                            child: IgnorePointer(
-                              ignoring: contentOpacity < 0.95,
+            child: MacOSWindowDragGuard(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                onEnter: (_) => setState(() => _isHovered = true),
+                onExit: (_) => setState(() {
+                  _isHovered = false;
+                  _isPressed = false;
+                }),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: clampedValue < 0.86
+                      ? (_) => setState(() => _isPressed = true)
+                      : null,
+                  onTapUp: clampedValue < 0.86
+                      ? (_) => setState(() => _isPressed = false)
+                      : null,
+                  onTapCancel: clampedValue < 0.86
+                      ? () => setState(() => _isPressed = false)
+                      : null,
+                  onTap: clampedValue < 0.86 ? widget.onToggle : null,
+                  child: AnimatedScale(
+                    scale: isIdle ? idleScale : 1.0,
+                    duration: const Duration(milliseconds: 120),
+                    curve: Curves.easeOutCubic,
+                    child: glass.GlassContainer(
+                      width: currentWidth,
+                      height: currentHeight,
+                      useOwnLayer: false,
+                      settings: widget.glassSettings,
+                      quality: glass.GlassQuality.standard,
+                      allowElevation: false,
+                      glowIntensity: isIdle && _isHovered ? 0.14 : 0.0,
+                      clipBehavior: Clip.antiAlias,
+                      shape: glass.LiquidRoundedSuperellipse(
+                        borderRadius: currentRadius,
+                      ),
+                      child: Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          if (showTriggerIcon)
+                            Opacity(
+                              opacity: triggerIconOpacity,
                               child: SizedBox(
-                                width: widget.panelWidth,
-                                height: widget.panelHeight,
-                                child: _ArticleTocPanelContent(
-                                  entries: widget.entries,
-                                  activeTocId: widget.activeTocId,
-                                  onToggle: widget.onToggle,
-                                  onEntryTap: widget.onEntryTap,
+                                width: widget.buttonSize,
+                                height: widget.buttonSize,
+                                child: _TocIconButtonChrome(
+                                  icon: Icons.format_list_bulleted_rounded,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                          if (showContent)
+                            Opacity(
+                              opacity: contentOpacity,
+                              child: IgnorePointer(
+                                ignoring: contentOpacity < 0.95,
+                                child: SizedBox(
+                                  width: widget.panelWidth,
+                                  height: widget.panelHeight,
+                                  child: _ArticleTocPanelContent(
+                                    entries: widget.entries,
+                                    activeTocId: widget.activeTocId,
+                                    onToggle: widget.onToggle,
+                                    onEntryTap: widget.onEntryTap,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

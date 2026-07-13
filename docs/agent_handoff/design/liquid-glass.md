@@ -47,7 +47,8 @@
 - `AppGlassCompactSwitch` 是紧凑二态 switch 的共享控件。主时间线和订阅源详情的 `未读/全部` 不应再分别维护两套实现。
 - `AppGlassCompactSwitch` 和设置页 segmented 的滑块已改成真正的 `AppGlassSurface` control 材质，而不是手绘渐变模拟。用户验证它比静态模拟更接近右侧圆形玻璃按钮，功能和动画没有明显掉帧。
 - 紧凑 switch/segmented 的选中态不要做成明显橙色按钮。当前规则是：滑块保持中性玻璃，只叠极弱主色 tint；选中文字使用主色表达当前状态。
-- 紧凑 switch/segmented 外层可以保留玻璃轨道，但外侧 rim 必须低存在感。当前通过 `staticBorderOpacity` 只在这类控件外层降弱静态边框，不要全局削弱 `AppGlassSurface`。
+- 紧凑 switch/segmented 外层可以保留玻璃轨道。`未读/全部` switch 当前需要清晰但纤细的 rim，不要用全局修改 `AppGlassSurface` 的方式调整；设置页 segmented 仍可按自身密度使用更克制的边界。
+- `未读/全部` switch 后续视觉实验把轨道收窄到 `58`、滑块保持 `42`，外层 padding 归零，rim opacity 调为 `0.70`。这里的目标是让外框贴合控件并保持清晰，不要套用早期 `62px + 3px padding + 0.35 rim` 的参数。
 - `AppGlassCompactSwitch` 未被滑块覆盖的空余轨道需要可辨认，但不能抢过滑块。用户两轮视觉反馈后，`compactControlTrackFill()` 当前深色模式使用白色 `6%`、浅色模式使用黑色 `5%`；这次只增强固定轨道，不改变移动滑块、主色文字、外框、hover 或动画。
 - 紧凑 switch/segmented 的滑块有弹性 overshoot。内部 `Stack` 必须允许 `Clip.none`，让滑块越界时绘制在外层轨道之上；不要让外框裁切或遮挡滑块。
 - 圆形工具按钮角色规则：普通命令使用中性玻璃背景和中性 hover/press；未读文章的“标为已读”属于主动作，可以保留橙色图标和很浅橙色背景；排序长文/短文、同步中这类“状态提示”只让图标变橙，背景保持中性。

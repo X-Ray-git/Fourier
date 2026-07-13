@@ -94,6 +94,11 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         result(nil)
       } else if call.method == "setTrafficLightsHidden" {
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected a Boolean", details: nil))
+      } else if call.method == "setMovable", let movable = call.arguments as? Bool {
+        self?.mainFlutterWindow?.isMovable = movable
+        result(nil)
+      } else if call.method == "setMovable" {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected a Boolean", details: nil))
       } else {
         result(FlutterMethodNotImplemented)
       }

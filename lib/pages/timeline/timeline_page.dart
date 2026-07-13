@@ -3,8 +3,10 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -33,6 +35,79 @@ import '../subscriptions/subscriptions_controller.dart';
 import '../widgets/article_card.dart';
 import 'timeline_controller.dart';
 import '../../utils/scroll_utils.dart';
+
+class _TimelineDoubleTapProbe {
+  static const bool _requested = bool.fromEnvironment(
+    'AUTO_FOLO_ANIMATION_PROBE',
+  );
+  static final Stopwatch _clock = Stopwatch()..start();
+  static String? _activeEntryId;
+  static int _startedAtUs = 0;
+  static bool _timingsInstalled = false;
+
+  static bool get enabled => _requested && kDebugMode && Platform.isMacOS;
+
+  static void begin(String entryId, Map<String, Object?> fields) {
+    if (!enabled) return;
+    _installTimingsProbe();
+    _activeEntryId = entryId;
+    _startedAtUs = _clock.elapsedMicroseconds;
+    log(entryId, 'double-tap.detected', fields);
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (_activeEntryId != entryId) return;
+      log(entryId, 'session.timeout');
+      _activeEntryId = null;
+    });
+  }
+
+  static void log(
+    String entryId,
+    String event, [
+    Map<String, Object?> fields = const {},
+  ]) {
+    if (!enabled || _activeEntryId != entryId) return;
+    final elapsedMs = (_clock.elapsedMicroseconds - _startedAtUs) / 1000;
+    final details = fields.entries
+        .map((entry) => '${entry.key}=${entry.value}')
+        .join(' ');
+    debugPrintSynchronously(
+      '[TimelineDoubleTapProbe +${elapsedMs.toStringAsFixed(1)}ms '
+      'id=${_shortId(entryId)}] '
+      '$event${details.isEmpty ? '' : ' $details'}',
+      wrapWidth: 2000,
+    );
+  }
+
+  static void finish(String entryId) {
+    if (!enabled || _activeEntryId != entryId) return;
+    log(entryId, 'session.finished');
+    _activeEntryId = null;
+  }
+
+  static void _installTimingsProbe() {
+    if (_timingsInstalled) return;
+    _timingsInstalled = true;
+    SchedulerBinding.instance.addTimingsCallback((timings) {
+      final entryId = _activeEntryId;
+      if (entryId == null) return;
+      for (final timing in timings) {
+        final buildMs = timing.buildDuration.inMicroseconds / 1000;
+        final rasterMs = timing.rasterDuration.inMicroseconds / 1000;
+        if (buildMs < 16.7 && rasterMs < 16.7) continue;
+        log(entryId, 'frame.slow', {
+          'buildMs': buildMs.toStringAsFixed(1),
+          'rasterMs': rasterMs.toStringAsFixed(1),
+          'totalMs': timing.totalSpan.inMicroseconds ~/ 1000,
+        });
+      }
+    });
+  }
+
+  static String _shortId(String entryId) {
+    if (entryId.length <= 8) return entryId;
+    return entryId.substring(entryId.length - 8);
+  }
+}
 
 /// 时间线页 — 本地文章库（未读/全部/已读）
 class TimelinePage extends StatefulWidget {
@@ -63,6 +138,7 @@ class _TimelinePageState extends State<TimelinePage> {
   DateTime? _lastArticleTapAt;
   final Map<String, GlobalKey> _itemKeys = {};
   final Map<String, GlobalKey> _removingItemKeys = {};
+  final Map<String, ArticleModel> _pendingOriginalOpenAfterRemoval = {};
   double _estimatedMacTimelineItemExtent = _defaultMacTimelineItemExtent;
   bool _isHandlingMacReadShortcut = false;
   Worker? _undoRestoreWorker;
@@ -332,25 +408,94 @@ class _TimelinePageState extends State<TimelinePage> {
     _lastArticleTapAt = now;
 
     if (isDoubleTap) {
+      final expectsRemoval =
+          !article.isRead &&
+          controller.selectedMode.value == TimelineViewMode.unread;
+      _TimelineDoubleTapProbe.begin(article.entryId, {
+        'count': controller.articles.length,
+        'index': controller.articles.indexWhere(
+          (candidate) => candidate.entryId == article.entryId,
+        ),
+        'mode': controller.selectedMode.value.name,
+        'listVersion': controller.timelineListResetVersion,
+      });
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
       _selectRelativeArticle(1, scrollTo: false);
-
-      // Let the current frame paint the double-tap ripple before heavy work.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!article.isRead) {
-          unawaited(UndoService.markAsRead(article, showSuccess: false));
-        }
-
-        // 延迟打开浏览器，避免 platform channel 调用阻塞主线程导致卡片移除动画掉帧
-        Future.delayed(const Duration(milliseconds: 200), () {
-          _openOriginalArticle(article);
-        });
+      _TimelineDoubleTapProbe.log(article.entryId, 'selection.advanced', {
+        'selected': controller.selectedArticle.value?.entryId,
       });
+
+      // Run persistence after the current frame has fully ended. A post-frame
+      // callback still belongs to that frame and can consume the first part of
+      // the removal animation when local database writes are slow.
+      unawaited(
+        SchedulerBinding.instance.endOfFrame.then((_) {
+          if (!mounted) return;
+          _TimelineDoubleTapProbe.log(article.entryId, 'frame-boundary');
+          if (!article.isRead) {
+            final before = controller.articles.length;
+            final future = UndoService.markAsRead(
+              article,
+              showSuccess: false,
+              deferTimelineVisualUpdate: true,
+            );
+            _TimelineDoubleTapProbe.log(
+              article.entryId,
+              'mark-read.dispatched',
+              {
+                'before': before,
+                'after': controller.articles.length,
+                'listVersion': controller.timelineListResetVersion,
+              },
+            );
+            unawaited(future);
+            unawaited(
+              SchedulerBinding.instance.endOfFrame.then((_) {
+                _TimelineDoubleTapProbe.log(
+                  article.entryId,
+                  'visual-update.frame-boundary',
+                  {
+                    'count': controller.articles.length,
+                    'listVersion': controller.timelineListResetVersion,
+                  },
+                );
+              }),
+            );
+          } else {
+            _TimelineDoubleTapProbe.log(article.entryId, 'mark-read.skipped');
+          }
+
+          if (expectsRemoval) {
+            _pendingOriginalOpenAfterRemoval[article.entryId] = article;
+            _TimelineDoubleTapProbe.log(
+              article.entryId,
+              'browser.deferred-until-remove-end',
+            );
+            Future<void>.delayed(const Duration(seconds: 2), () {
+              if (!mounted) return;
+              final pending = _pendingOriginalOpenAfterRemoval.remove(
+                article.entryId,
+              );
+              if (pending == null) return;
+              unawaited(_openOriginalArticle(pending));
+            });
+          } else {
+            // No list removal will run, so only leave time for press feedback.
+            Future<void>.delayed(const Duration(milliseconds: 200), () {
+              if (mounted) unawaited(_openOriginalArticle(article));
+            });
+          }
+        }),
+      );
     }
   }
 
   void _handleTimelineRemoveStart(ArticleModel article) {
+    _TimelineDoubleTapProbe.log(article.entryId, 'remove.start', {
+      'count': controller.articles.length,
+      'listVersion': controller.timelineListResetVersion,
+    });
     final key = _itemKeys.remove(article.entryId);
     if (key != null) {
       _removingItemKeys[article.entryId] = key;
@@ -359,6 +504,22 @@ class _TimelinePageState extends State<TimelinePage> {
 
   void _handleTimelineRemoveEnd(ArticleModel article) {
     _removingItemKeys.remove(article.entryId);
+    _TimelineDoubleTapProbe.log(article.entryId, 'remove.end');
+    final pendingOpen = _pendingOriginalOpenAfterRemoval.remove(
+      article.entryId,
+    );
+    if (pendingOpen != null) {
+      _TimelineDoubleTapProbe.log(
+        article.entryId,
+        'browser.scheduled-after-remove-end',
+      );
+      unawaited(
+        SchedulerBinding.instance.endOfFrame.then((_) {
+          if (mounted) unawaited(_openOriginalArticle(pendingOpen));
+        }),
+      );
+    }
+    _TimelineDoubleTapProbe.finish(article.entryId);
   }
 
   void _handleMacReadShortcut() {
@@ -722,7 +883,7 @@ class _TimelinePageState extends State<TimelinePage> {
         _removingItemKeys[article.entryId] ??
         _itemKeys[article.entryId] ??
         ValueKey('removed-${article.entryId}');
-    return SizeTransition(
+    final transition = SizeTransition(
       sizeFactor: animation,
       axisAlignment: -1,
       child: FadeTransition(
@@ -736,7 +897,97 @@ class _TimelinePageState extends State<TimelinePage> {
         ),
       ),
     );
+    if (!_TimelineDoubleTapProbe.enabled) return transition;
+    return _TimelineRemovalAnimationProbe(
+      entryId: article.entryId,
+      animation: animation,
+      child: transition,
+    );
   }
+}
+
+class _TimelineRemovalAnimationProbe extends StatefulWidget {
+  const _TimelineRemovalAnimationProbe({
+    required this.entryId,
+    required this.animation,
+    required this.child,
+  });
+
+  final String entryId;
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  State<_TimelineRemovalAnimationProbe> createState() =>
+      _TimelineRemovalAnimationProbeState();
+}
+
+class _TimelineRemovalAnimationProbeState
+    extends State<_TimelineRemovalAnimationProbe> {
+  int? _lastBucket;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.animation.addListener(_handleAnimation);
+    widget.animation.addStatusListener(_handleStatus);
+    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.builder-attached', {
+      'value': widget.animation.value.toStringAsFixed(3),
+      'status': widget.animation.status.name,
+    });
+    _handleAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_TimelineRemovalAnimationProbe oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animation == widget.animation) return;
+    oldWidget.animation.removeListener(_handleAnimation);
+    oldWidget.animation.removeStatusListener(_handleStatus);
+    _lastBucket = null;
+    widget.animation.addListener(_handleAnimation);
+    widget.animation.addStatusListener(_handleStatus);
+    _handleAnimation();
+  }
+
+  @override
+  void dispose() {
+    widget.animation.removeListener(_handleAnimation);
+    widget.animation.removeStatusListener(_handleStatus);
+    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.builder-disposed', {
+      'value': widget.animation.value.toStringAsFixed(3),
+      'status': widget.animation.status.name,
+    });
+    super.dispose();
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.animation-status', {
+      'status': status.name,
+      'value': widget.animation.value.toStringAsFixed(3),
+    });
+  }
+
+  void _handleAnimation() {
+    final value = widget.animation.value;
+    final bucket = switch (value) {
+      >= 0.95 => 4,
+      >= 0.70 => 3,
+      >= 0.45 => 2,
+      >= 0.20 => 1,
+      _ => 0,
+    };
+    if (_lastBucket == bucket) return;
+    _lastBucket = bucket;
+    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.animation-progress', {
+      'bucket': bucket,
+      'value': value.toStringAsFixed(3),
+      'status': widget.animation.status.name,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 // ─── 优雅的加载骨架屏（与新版卡片像素级对齐） ───
@@ -1028,12 +1279,12 @@ class _MacTimelineAppBar extends StatelessWidget
         actions: [
           if (controller.selectedMode.value != TimelineViewMode.read) ...[
             _MacTimelineModeToggle(controller: controller),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
           ],
           _MacTimelineSortButton(controller: controller, colorScheme: cs),
-          const SizedBox(width: 10),
-          _MacSyncButton(controller: controller, colorScheme: cs),
           const SizedBox(width: 8),
+          _MacSyncButton(controller: controller, colorScheme: cs),
+          const SizedBox(width: 10),
         ],
       );
     });

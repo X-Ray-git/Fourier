@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
@@ -30,6 +32,109 @@ import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
+class _ReviewAnimProbe {
+  static const bool _requested = bool.fromEnvironment(
+    'AUTO_FOLO_ANIMATION_PROBE',
+  );
+  static final Stopwatch _clock = Stopwatch()..start();
+  static _ReviewAnimProbeSession? _active;
+  static bool _timingsInstalled = false;
+
+  static bool get enabled => _requested && kDebugMode && Platform.isMacOS;
+
+  static void begin(
+    String entryId, {
+    required String source,
+    required String event,
+    Map<String, Object?> fields = const {},
+  }) {
+    if (!enabled) return;
+    _installTimingsProbe();
+    final active = _active;
+    if (active != null &&
+        active.entryId == entryId &&
+        active.source == source) {
+      log(entryId, event, fields);
+      return;
+    }
+    _active = _ReviewAnimProbeSession(
+      entryId: entryId,
+      source: source,
+      startedAtUs: _clock.elapsedMicroseconds,
+    );
+    log(entryId, event, fields);
+  }
+
+  static void log(
+    String entryId,
+    String event, [
+    Map<String, Object?> fields = const {},
+  ]) {
+    if (!enabled) return;
+    final session = _active;
+    if (session == null || session.entryId != entryId) return;
+    final elapsedMs = (_clock.elapsedMicroseconds - session.startedAtUs) / 1000;
+    final details = fields.entries
+        .map((entry) => '${entry.key}=${entry.value}')
+        .join(' ');
+    debugPrintSynchronously(
+      '[ReviewAnimProbe +${elapsedMs.toStringAsFixed(1)}ms '
+      'id=${_shortId(entryId)} source=${session.source}] '
+      '$event${details.isEmpty ? '' : ' $details'}',
+      wrapWidth: 2000,
+    );
+  }
+
+  static void finish(String entryId) {
+    if (!enabled) return;
+    log(entryId, 'session.finish-scheduled');
+    Future<void>.delayed(const Duration(milliseconds: 650), () {
+      final session = _active;
+      if (session == null || session.entryId != entryId) return;
+      log(entryId, 'session.finished');
+      _active = null;
+    });
+  }
+
+  static void _installTimingsProbe() {
+    if (_timingsInstalled) return;
+    _timingsInstalled = true;
+    SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
+  }
+
+  static void _handleFrameTimings(List<FrameTiming> timings) {
+    final session = _active;
+    if (session == null) return;
+    for (final timing in timings) {
+      final buildMs = timing.buildDuration.inMicroseconds / 1000;
+      final rasterMs = timing.rasterDuration.inMicroseconds / 1000;
+      if (buildMs < 16.7 && rasterMs < 16.7) continue;
+      log(session.entryId, 'frame.slow', {
+        'buildMs': buildMs.toStringAsFixed(1),
+        'rasterMs': rasterMs.toStringAsFixed(1),
+        'totalMs': timing.totalSpan.inMicroseconds ~/ 1000,
+      });
+    }
+  }
+
+  static String _shortId(String entryId) {
+    if (entryId.length <= 8) return entryId;
+    return entryId.substring(entryId.length - 8);
+  }
+}
+
+class _ReviewAnimProbeSession {
+  const _ReviewAnimProbeSession({
+    required this.entryId,
+    required this.source,
+    required this.startedAtUs,
+  });
+
+  final String entryId;
+  final String source;
+  final int startedAtUs;
+}
+
 class FilterReviewPage extends StatefulWidget {
   const FilterReviewPage({super.key});
 
@@ -42,7 +147,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final _selectedArticle = Rxn<ArticleModel>();
   final Set<String> _seenIds = {};
   final Set<String> _trackpadDismissedIds = {};
+  final Set<String> _pendingReviewActionIds = {};
   final Map<String, UndoRestoreEvent> _deferredTrackpadRestores = {};
+  bool _reloadAfterPendingReviewAction = false;
   late final MacSplitArticleListCoordinator _listCoordinator;
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
@@ -118,7 +225,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       if (event.logicalKey == LogicalKeyboardKey.keyK) {
         final selected = _selectedArticle.value;
         if (selected != null) {
-          _keep(selected);
+          _keep(selected, source: 'keyK');
           return true;
         }
       }
@@ -127,6 +234,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _loadArticles() {
+    if (Platform.isMacOS && _pendingReviewActionIds.isNotEmpty) {
+      _reloadAfterPendingReviewAction = true;
+      return;
+    }
     final all = LocalArticleDbService.readAllArticles()
         .where(
           (a) =>
@@ -155,6 +266,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _syncArticleFromDb(String entryId) {
+    if (Platform.isMacOS && _pendingReviewActionIds.contains(entryId)) {
+      _ReviewAnimProbe.log(entryId, 'state-sync.deferred');
+      return;
+    }
     final raw = GStorage.articleDb.get(entryId);
     final index = _articles.indexWhere((a) => a.entryId == entryId);
 
@@ -209,8 +324,34 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   void _removeReviewedArticle(String entryId) {
+    _ReviewAnimProbe.log(entryId, 'list.remove-request', {
+      'before': _articles.length,
+    });
     _articles.removeWhere((a) => a.entryId == entryId);
+    _ReviewAnimProbe.log(entryId, 'list.remove-complete', {
+      'after': _articles.length,
+    });
     _refreshPointerAnnotationsAfterReviewChange();
+  }
+
+  void _scheduleReviewedArticleRemoval(String entryId) {
+    if (!Platform.isMacOS) {
+      _removeReviewedArticle(entryId);
+      return;
+    }
+
+    _ReviewAnimProbe.log(entryId, 'list.remove-scheduled-after-frame');
+    SchedulerBinding.instance.endOfFrame.then((_) {
+      if (!mounted || !_pendingReviewActionIds.contains(entryId)) return;
+      _ReviewAnimProbe.log(entryId, 'list.remove-frame-boundary');
+      _removeReviewedArticle(entryId);
+      _pendingReviewActionIds.remove(entryId);
+
+      if (_pendingReviewActionIds.isEmpty && _reloadAfterPendingReviewAction) {
+        _reloadAfterPendingReviewAction = false;
+        _loadArticles();
+      }
+    });
   }
 
   void _selectReviewedSuccessor(ArticleModel? nextArticle) {
@@ -317,11 +458,36 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     });
   }
 
-  void _keep(ArticleModel article, {bool removalAlreadyStaged = false}) {
-    if (Platform.isMacOS &&
-        !removalAlreadyStaged &&
-        !_listCoordinator.beginRemoval(article.entryId)) {
-      return;
+  void _keep(
+    ArticleModel article, {
+    bool removalAlreadyStaged = false,
+    String source = 'unknown',
+  }) {
+    _ReviewAnimProbe.begin(
+      article.entryId,
+      source: source,
+      event: 'action.keep',
+      fields: {
+        'selected': _selectedArticle.value?.entryId == article.entryId,
+        'index': _articles.indexWhere((a) => a.entryId == article.entryId),
+        'count': _articles.length,
+        'preStaged': removalAlreadyStaged,
+      },
+    );
+    if (Platform.isMacOS && !removalAlreadyStaged) {
+      final accepted = _listCoordinator.beginRemoval(article.entryId);
+      _ReviewAnimProbe.log(article.entryId, 'coordinator.begin', {
+        'accepted': accepted,
+      });
+      if (!accepted) {
+        _ReviewAnimProbe.finish(article.entryId);
+        return;
+      }
+    } else if (Platform.isMacOS) {
+      _ReviewAnimProbe.log(article.entryId, 'coordinator.pre-staged');
+    }
+    if (Platform.isMacOS) {
+      _pendingReviewActionIds.add(article.entryId);
     }
     final bool shouldAdvance =
         _selectedArticle.value?.entryId == article.entryId;
@@ -350,17 +516,42 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       }
     }
 
-    _removeReviewedArticle(article.entryId);
+    _scheduleReviewedArticleRemoval(article.entryId);
     if (shouldAdvance && !Platform.isMacOS) {
       _selectReviewedSuccessor(nextArticle);
     }
   }
 
-  void _reject(ArticleModel article, {bool removalAlreadyStaged = false}) {
-    if (Platform.isMacOS &&
-        !removalAlreadyStaged &&
-        !_listCoordinator.beginRemoval(article.entryId)) {
-      return;
+  void _reject(
+    ArticleModel article, {
+    bool removalAlreadyStaged = false,
+    String source = 'unknown',
+  }) {
+    _ReviewAnimProbe.begin(
+      article.entryId,
+      source: source,
+      event: 'action.reject',
+      fields: {
+        'selected': _selectedArticle.value?.entryId == article.entryId,
+        'index': _articles.indexWhere((a) => a.entryId == article.entryId),
+        'count': _articles.length,
+        'preStaged': removalAlreadyStaged,
+      },
+    );
+    if (Platform.isMacOS && !removalAlreadyStaged) {
+      final accepted = _listCoordinator.beginRemoval(article.entryId);
+      _ReviewAnimProbe.log(article.entryId, 'coordinator.begin', {
+        'accepted': accepted,
+      });
+      if (!accepted) {
+        _ReviewAnimProbe.finish(article.entryId);
+        return;
+      }
+    } else if (Platform.isMacOS) {
+      _ReviewAnimProbe.log(article.entryId, 'coordinator.pre-staged');
+    }
+    if (Platform.isMacOS) {
+      _pendingReviewActionIds.add(article.entryId);
     }
     final bool shouldAdvance =
         _selectedArticle.value?.entryId == article.entryId;
@@ -407,19 +598,30 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     unawaited(ReadSyncService.syncPendingReads());
     ArticleStateNotifier.tick(article.entryId);
 
-    _removeReviewedArticle(article.entryId);
+    _scheduleReviewedArticleRemoval(article.entryId);
     if (shouldAdvance && !Platform.isMacOS) {
       _selectReviewedSuccessor(nextArticle);
     }
   }
 
   void _handleReviewRemoveStart(ArticleModel article) {
+    _ReviewAnimProbe.log(article.entryId, 'remove.start', {
+      'selected': _selectedArticle.value?.entryId == article.entryId,
+      'count': _articles.length,
+    });
     _listCoordinator.onRemoveStart(article);
   }
 
   void _handleReviewRemoveEnd(ArticleModel article) {
+    _ReviewAnimProbe.log(article.entryId, 'remove.end-before-selection', {
+      'selected': _selectedArticle.value?.entryId,
+    });
     _trackpadDismissedIds.remove(article.entryId);
     _listCoordinator.onRemoveEnd(article);
+    _ReviewAnimProbe.log(article.entryId, 'remove.end-after-selection', {
+      'selected': _selectedArticle.value?.entryId,
+    });
+    _ReviewAnimProbe.finish(article.entryId);
 
     final restored = _deferredTrackpadRestores.remove(article.entryId);
     if (restored == null) return;
@@ -728,7 +930,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 onMKeyPressed: () {
                   final currentSelected = _selectedArticle.value;
                   if (currentSelected != null) {
-                    _reject(currentSelected);
+                    _reject(currentSelected, source: 'keyM');
                   }
                 },
               );
@@ -776,6 +978,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         opacity: animation,
         child: _MacTrackpadReviewSwipe(
           key: ValueKey('review-swipe-${article.entryId}'),
+          probeId: article.entryId,
           keepColor: const Color(0xFF059669),
           rejectColor: Theme.of(context).colorScheme.error,
           onWillCommit: () => _listCoordinator.beginRemoval(article.entryId),
@@ -784,9 +987,17 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
             _trackpadDismissedIds.add(article.entryId);
             switch (action) {
               case _ReviewSwipeAction.keep:
-                _keep(article, removalAlreadyStaged: true);
+                _keep(
+                  article,
+                  removalAlreadyStaged: true,
+                  source: 'trackpadKeep',
+                );
               case _ReviewSwipeAction.reject:
-                _reject(article, removalAlreadyStaged: true);
+                _reject(
+                  article,
+                  removalAlreadyStaged: true,
+                  source: 'trackpadReject',
+                );
             }
           },
           child: Obx(() {
@@ -796,8 +1007,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
               article: article,
               selected: selected,
               onTap: () => _selectedArticle.value = article,
-              onKeep: () => _keep(article),
-              onReject: () => _reject(article),
+              onKeep: () => _keep(article, source: 'contextMenuKeep'),
+              onReject: () => _reject(article, source: 'contextMenuReject'),
             );
           }),
         ),
@@ -811,7 +1022,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     int index,
     Animation<double> animation,
   ) {
-    return SizeTransition(
+    final transition = SizeTransition(
       sizeFactor: animation,
       axisAlignment: -1,
       child: FadeTransition(
@@ -829,7 +1040,97 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         ),
       ),
     );
+    if (!_ReviewAnimProbe.enabled) return transition;
+    return _ReviewRemovalAnimationProbe(
+      entryId: article.entryId,
+      animation: animation,
+      child: transition,
+    );
   }
+}
+
+class _ReviewRemovalAnimationProbe extends StatefulWidget {
+  const _ReviewRemovalAnimationProbe({
+    required this.entryId,
+    required this.animation,
+    required this.child,
+  });
+
+  final String entryId;
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  State<_ReviewRemovalAnimationProbe> createState() =>
+      _ReviewRemovalAnimationProbeState();
+}
+
+class _ReviewRemovalAnimationProbeState
+    extends State<_ReviewRemovalAnimationProbe> {
+  int? _lastBucket;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.animation.addListener(_handleAnimation);
+    widget.animation.addStatusListener(_handleStatus);
+    _ReviewAnimProbe.log(widget.entryId, 'remove.builder-attached', {
+      'value': widget.animation.value.toStringAsFixed(3),
+      'status': widget.animation.status.name,
+    });
+    _handleAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_ReviewRemovalAnimationProbe oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animation == widget.animation) return;
+    oldWidget.animation.removeListener(_handleAnimation);
+    oldWidget.animation.removeStatusListener(_handleStatus);
+    _lastBucket = null;
+    widget.animation.addListener(_handleAnimation);
+    widget.animation.addStatusListener(_handleStatus);
+    _handleAnimation();
+  }
+
+  @override
+  void dispose() {
+    widget.animation.removeListener(_handleAnimation);
+    widget.animation.removeStatusListener(_handleStatus);
+    _ReviewAnimProbe.log(widget.entryId, 'remove.builder-disposed', {
+      'value': widget.animation.value.toStringAsFixed(3),
+      'status': widget.animation.status.name,
+    });
+    super.dispose();
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    _ReviewAnimProbe.log(widget.entryId, 'remove.animation-status', {
+      'status': status.name,
+      'value': widget.animation.value.toStringAsFixed(3),
+    });
+  }
+
+  void _handleAnimation() {
+    final value = widget.animation.value;
+    final bucket = switch (value) {
+      >= 0.95 => 4,
+      >= 0.70 => 3,
+      >= 0.45 => 2,
+      >= 0.20 => 1,
+      _ => 0,
+    };
+    if (_lastBucket == bucket) return;
+    _lastBucket = bucket;
+    _ReviewAnimProbe.log(widget.entryId, 'remove.animation-progress', {
+      'bucket': bucket,
+      'value': value.toStringAsFixed(3),
+      'status': widget.animation.status.name,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 enum _ReviewSwipeAction { keep, reject }
@@ -837,6 +1138,7 @@ enum _ReviewSwipeAction { keep, reject }
 class _MacTrackpadReviewSwipe extends StatefulWidget {
   const _MacTrackpadReviewSwipe({
     super.key,
+    required this.probeId,
     required this.child,
     required this.keepColor,
     required this.rejectColor,
@@ -845,6 +1147,7 @@ class _MacTrackpadReviewSwipe extends StatefulWidget {
     required this.onCommitted,
   });
 
+  final String probeId;
   final Widget child;
   final Color keepColor;
   final Color rejectColor;
@@ -906,21 +1209,38 @@ class _MacTrackpadReviewSwipeState extends State<_MacTrackpadReviewSwipe>
       await _reset();
       return;
     }
+    final action = offset > 0
+        ? _ReviewSwipeAction.keep
+        : _ReviewSwipeAction.reject;
+    final source = action == _ReviewSwipeAction.keep
+        ? 'trackpadKeep'
+        : 'trackpadReject';
+    _ReviewAnimProbe.begin(
+      widget.probeId,
+      source: source,
+      event: 'swipe.commit-request',
+      fields: {
+        'offset': offset.toStringAsFixed(1),
+        'width': _width.toStringAsFixed(1),
+        'velocity': velocity.toStringAsFixed(1),
+      },
+    );
     if (!widget.onWillCommit()) {
+      _ReviewAnimProbe.log(widget.probeId, 'swipe.commit-rejected');
+      _ReviewAnimProbe.finish(widget.probeId);
       await _reset();
       return;
     }
 
     _committing = true;
-    final action = offset > 0
-        ? _ReviewSwipeAction.keep
-        : _ReviewSwipeAction.reject;
+    _ReviewAnimProbe.log(widget.probeId, 'swipe.horizontal-start');
     await _offsetController.animateTo(
       offset > 0 ? _width : -_width,
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOutCubic,
     );
     if (!mounted) return;
+    _ReviewAnimProbe.log(widget.probeId, 'swipe.horizontal-end');
     _didCommit = true;
     widget.onCommitted(action);
   }

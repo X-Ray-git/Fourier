@@ -68,9 +68,11 @@ class UndoService {
   static Future<void> markAsRead(
     ArticleModel article, {
     bool showSuccess = true,
+    bool deferTimelineVisualUpdate = false,
   }) async {
     if (article.isRead || article.entryId.trim().isEmpty) return;
-    if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
+    if (!deferTimelineVisualUpdate &&
+        Get.isRegistered<ArticleController>(tag: article.entryId)) {
       await Get.find<ArticleController>(
         tag: article.entryId,
       ).markAsRead(showSuccess: showSuccess);
@@ -80,7 +82,10 @@ class UndoService {
     recordRead(article);
 
     if (Get.isRegistered<TimelineController>()) {
-      Get.find<TimelineController>().markAsReadLocal(article.entryId);
+      Get.find<TimelineController>().markAsReadLocal(
+        article.entryId,
+        deferVisualUpdateToFrameBoundary: deferTimelineVisualUpdate,
+      );
     } else {
       GStorage.readStatus.put(article.entryId, true);
       LocalArticleDbService.setReadState(

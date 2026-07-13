@@ -3,7 +3,6 @@
 截至 2026-07-13：
 
 - `main` 是当前集成分支。
-- 本次文档重构前，最新已推送提交是 `5e11c9d fix: refresh summary controls immediately`。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
 - 最近一批 worktree 功能已经用 merge commit 合入 `main`，保留了分支历史。
 - 除非用户明确要求，否则不要创建 release/tag。
@@ -40,6 +39,12 @@
 - macOS 分栏文章列表协调器第一阶段已完成：新增 `MacSplitArticleListCoordinator`，垃圾拦截的 `M`、保留和移除在业务状态变化前登记后继项，退出动画期间保持旧详情，真实 `onRemoveEnd` 后才切换并 reveal 下一篇。用户初步验证体验良好；主时间线和最近阅读仍待分阶段迁移。
 - 垃圾拦截审核交互已收敛：macOS 卡片改为仅触控板双指横滑（右滑保留、左滑移除），鼠标拖动不触发；`K/M` 和右键菜单作为后备入口。横滑背景使用圆角路径差集，只显示在卡片真实让出的区域，用户已确认视觉符合预期；快速 `Command-Z` 会等待旧退出动画结束后再恢复同一文章。
 - Android 垃圾拦截继续使用 `Dismissible`，但卡片外边距移到滑动组件外部，解决圆角卡片与保留/移除背景之间的空带。`ArticleCard` 的可选 `outerPadding` 默认不改变其他页面。
+- macOS 顶部玻璃工具按钮、紧凑 switch 和目录 morph 按钮已接入 `MacOSWindowDragGuard`：指针按住这些控件时临时关闭 AppKit 窗口拖动，避免轻微位移把按钮点击误判为移动窗口；空白 header 区域仍可拖动窗口。
+- macOS `未读/全部` 紧凑 switch 已按用户视觉实验收窄为 `58px` 轨道、`42px` 滑块，去掉外层内缩 padding，并把静态 rim 提高到 `0.70`；时间线 header 间距为 switch→排序 `8px`、排序→同步 `8px`、同步→右边界 `10px`。
+- macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界改为 `4px`；中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
+- macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。
+- macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。
+- 两条动画链保留默认关闭的诊断埋点。仅在 Debug 并显式传 `--dart-define=AUTO_FOLO_ANIMATION_PROBE=true` 时启用；Release 和普通 Debug 不注册帧耗时回调，也不挂载动画监听器。
 
 本次待用户继续验证：
 

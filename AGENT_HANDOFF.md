@@ -31,3 +31,7 @@
 ---
 *🤖 Automated Release Footprint:*
 *执行指令: `./scripts/release.sh 1.1.27 -m "- feat: support inline YouTube playback and macOS system fullscreen\n- fix: improve local video loading, aspect ratio, controls and keyboard behavior\n- style: refine macOS timeline, article cards, scrollbars and compact glass controls\n- fix: improve article metadata rendering, timeline interactions and macOS startup stability" --push`*
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.28 -m "- feat: add swipe review actions and coordinated list transitions\n- fix: stabilize macOS control interactions and timeline read animations\n- style: refine compact timeline controls and article scrollbar spacing" --push`*

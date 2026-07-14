@@ -11,7 +11,9 @@
 - 当前侧边栏阴影以连续融合为目标，不要求肉眼明确看见。用户已验证断层消失、外围底板消失，且玻璃透视、布局和点击行为没有回归；不要为了强调阴影而主动加深或加宽。
 - Header 分隔线应克制；中间时间线 header 不再使用大面积玻璃。
 - macOS 中间栏 header 的底部分隔线已取消。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截；列表层级主要依赖卡片轻填充、间距和右侧分栏结构。
-- 文章详情保留当前右侧处理，除非用户要求更大范围重构。
+- macOS 中间栏与文章详情的 header 使用透明叠层，不再用整块 `BackdropFilter` 把 header 和内容硬分割。滚动内容可以进入 header 下方，但通过共享 `MacHeaderScrollEdge` / `GlassScrollEdgeEffect` 逐渐融入页面背景；玻璃仍只属于 header 内的交互控件。
+- 顶部软边缘不是“模糊半径逐渐增大”。参考工程的 `.scrollEdgeEffectStyle(.soft)` 思路是在内容上覆盖页面背景纹理/底色并渐变 alpha，避免 `ShaderMask + BackdropFilter` 的额外 saveLayer 和 Impeller 风险。
+- 当前渐隐几何：从 header 下方额外延伸 `24px`；内容在 header 上半段完全被背景覆盖，之后按近似 `easeInOutCubic` 的 alpha 曲线过渡为完全清晰。不要退回线性渐变，也不要把完全消失位置放到按钮下缘，用户认为那样过于激进。
 
 控件：
 
@@ -28,9 +30,13 @@
 间距：
 
 - 边缘应尽量和侧边栏/窗口 margin 视觉对齐。
-- Scrollbar 不应占用不对称布局宽度，也不应覆盖正文内容。
+- Scrollbar 不应占用不对称布局宽度，也不应覆盖正文内容；在透明 header 场景中，轨道应真正从 header 下缘开始，而不是从窗口顶端绘制后再用色块遮挡。
 - `MacGlassScrollbarStyle` 是 macOS scrollbar 颜色、圆角和尺寸的共享入口。中间文章列表使用 `articlePaneTheme`（`8px` thumb、右侧 `1px` margin）；右侧文章正文同样是 `8px` thumb，但局部使用 `crossAxisMargin: 4`。设置页和任务中心的 `MacGlassScrollArea` 仍默认使用更轻的 `5px`，不要盲目全局统一宽度或 margin。
-- scrollbar 与内容裁剪要按语义分层：右侧文章正文的 scrollbar 必须显式放在圆角安全 clip 之外；主时间线和垃圾拦截没有横向 clip 问题，可以保留 Flutter 自动 scrollbar，仅用局部 theme 和极小内容间距避让。
+- `MacHeaderScrollEdge` 同时负责各类中间栏的 header 叠层、顶部内容 padding、软渐隐和 header-aware scrollbar。主时间线、垃圾拦截、最近阅读、订阅源详情不要各自复制这套结构。
+- header-aware scrollbar 使用显式 `RawScrollbar.padding` 限定轨道起点，并保留 theme 中的宽度、margin、hover 和拖拽。顶部渐隐需要通过 trailing inset 避开 scrollbar 轨道，不能盖住 thumb。
+- 不要用 header 高、约 `12px` 宽的实色矩形遮 scrollbar：这会让顶部 thumb 消失，并切掉滚入 header 的卡片右上角。也不要仅通过 `MediaQuery.padding` 间接提示 Material scrollbar；本轮实测没有稳定改变自动轨道。
+- 页面内部不能再嵌套普通 `ScrollConfiguration(NoOverscrollIndicatorBehavior)` 覆盖 `MacHeaderScrollEdge`。主时间线和最近阅读曾有这种遗留层，导致共享 scrollbar 被替换成从窗口顶端开始的默认 scrollbar。应用根节点已经提供相同 overscroll/fling 规则。
+- scrollbar 与内容裁剪要按语义分层：右侧文章正文的 scrollbar 必须显式放在圆角安全 clip 之外；中间栏 scrollbar 由 `MacHeaderScrollEdge` 统一放置。
 - 文章卡片之间保留比旧版略大的间距，避免轻填充卡片粘连。
 - 文章列表卡片的外边距、内部 padding、圆角和普通态外壳由 `ArticleCardChrome` 统一控制。普通时间线、最近阅读和垃圾拦截审核行应共用这些参数，而不是分别复制数值。macOS 卡片圆角当前为 `10`，是用户要求相对旧 `8` 略微增大的取舍。
 - macOS 分屏文章详情右下角需要额外处理圆角安全区：矩形 padding 只能保证到直线边的距离，不能沿窗口右下圆弧保持等距。当前通过文章 body 的右下角 clip 避开外框圆弧，不要用全局加大 padding 代替，否则会改变直线区域间距。

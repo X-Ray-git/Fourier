@@ -29,6 +29,7 @@ import '../../common/widgets/card_press_effect.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
+import '../../common/widgets/mac_header_scroll_edge.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
@@ -846,60 +847,63 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         children: [
           SizedBox(
             width: 380,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _MacReviewHeader(
-                  articles: _articles,
-                  colorScheme: cs,
-                  onSync: _syncReviewArticles,
-                ),
-                Expanded(
-                  child: Obx(() {
-                    final q = AutoFilterWorker.queuedCount.value;
-                    final p = AutoFilterWorker.processingCount.value;
-                    final llmActive = q > 0 || p > 0;
+            child: MacHeaderScrollEdge(
+              headerHeight: kToolbarHeight,
+              header: _MacReviewHeader(
+                articles: _articles,
+                colorScheme: cs,
+                onSync: _syncReviewArticles,
+              ),
+              body: Obx(() {
+                final q = AutoFilterWorker.queuedCount.value;
+                final p = AutoFilterWorker.processingCount.value;
+                final llmActive = q > 0 || p > 0;
 
-                    return ScrollbarTheme(
-                      data: MacGlassScrollbarStyle.articlePaneTheme(context),
-                      child: Padding(
-                        padding: MacArticleListChrome.viewportPadding,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: ImplicitlyAnimatedList<ArticleModel>(
-                                items: _articles.toList(),
-                                itemKey: (article) => article.entryId,
-                                padding: MacArticleListChrome.contentPadding(
-                                  context,
-                                ),
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox.shrink(),
-                                itemBuilder: _buildAnimatedReviewRow,
-                                removedItemBuilder: _buildRemovedReviewRow,
-                                onRemoveStart: _handleReviewRemoveStart,
-                                onRemoveEnd: _handleReviewRemoveEnd,
+                return ScrollbarTheme(
+                  data: MacGlassScrollbarStyle.articlePaneTheme(context),
+                  child: Padding(
+                    padding: MacArticleListChrome.viewportPadding,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ImplicitlyAnimatedList<ArticleModel>(
+                            items: _articles.toList(),
+                            itemKey: (article) => article.entryId,
+                            padding: MacArticleListChrome.contentPadding(
+                              context,
+                              top: MacHeaderScrollEdge.contentTopPadding(
+                                kToolbarHeight,
                               ),
                             ),
-                            if (_articles.isEmpty)
-                              Positioned.fill(
-                                child: DelayedVisibility(
-                                  visible: _articles.isEmpty,
-                                  delay: const Duration(milliseconds: 220),
-                                  child: _buildEmptyState(
-                                    cs,
-                                    llmActive: llmActive,
-                                    llmCount: q + p,
-                                  ),
+                            separatorBuilder: (_, _) => const SizedBox.shrink(),
+                            itemBuilder: _buildAnimatedReviewRow,
+                            removedItemBuilder: _buildRemovedReviewRow,
+                            onRemoveStart: _handleReviewRemoveStart,
+                            onRemoveEnd: _handleReviewRemoveEnd,
+                          ),
+                        ),
+                        if (_articles.isEmpty)
+                          Positioned.fill(
+                            child: DelayedVisibility(
+                              visible: _articles.isEmpty,
+                              delay: const Duration(milliseconds: 220),
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  top: kToolbarHeight,
+                                ),
+                                child: _buildEmptyState(
+                                  cs,
+                                  llmActive: llmActive,
+                                  llmCount: q + p,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ),
           ),
           VerticalDivider(

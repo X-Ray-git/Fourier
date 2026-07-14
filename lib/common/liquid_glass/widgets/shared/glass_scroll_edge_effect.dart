@@ -4,6 +4,19 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import '../interactive/liquid_glass_scope.dart';
 
+const _easeInOutFadeOpacities = [1.0, 0.9375, 0.5, 0.0625, 0.0];
+
+List<double> _easeInOutFadeStops(double opaqueStop) {
+  final transitionExtent = 1 - opaqueStop;
+  return [
+    opaqueStop,
+    opaqueStop + transitionExtent * 0.25,
+    opaqueStop + transitionExtent * 0.5,
+    opaqueStop + transitionExtent * 0.75,
+    1,
+  ];
+}
+
 /// Edge effect style matching iOS 26's `.scrollEdgeEffectStyle`.
 ///
 /// Controls how scroll content fades at the edges when it meets a glass
@@ -93,6 +106,8 @@ class GlassScrollEdgeEffect extends StatefulWidget {
     this.fadeBottom = true,
     this.style = GlassScrollEdgeStyle.soft,
     this.fadeColor,
+    this.topOpaqueExtent = 0,
+    this.topFadeTrailingInset = 0,
   });
 
   /// The scrollable content to apply edge fading to.
@@ -141,6 +156,14 @@ class GlassScrollEdgeEffect extends StatefulWidget {
   /// When `null`, falls back to the scaffold background colour from the
   /// current theme.
   final Color? fadeColor;
+
+  /// Distance from the top edge that remains fully covered before fading.
+  final double topOpaqueExtent;
+
+  /// Space at the trailing edge excluded from the top overlay.
+  ///
+  /// Use this for a scrollbar that must remain above the content fade.
+  final double topFadeTrailingInset;
   @override
   State<GlassScrollEdgeEffect> createState() => _GlassScrollEdgeEffectState();
 }
@@ -245,6 +268,8 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
             height: _effectiveHeight(widget.topFadeHeight, screenSize.height),
             screenSize: screenSize,
             hasTexture: hasTexture,
+            opaqueExtent: widget.topOpaqueExtent,
+            trailingInset: widget.topFadeTrailingInset,
           ),
         // 3. Bottom fade overlay.
         if (widget.fadeBottom)
@@ -256,6 +281,8 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
             ),
             screenSize: screenSize,
             hasTexture: hasTexture,
+            opaqueExtent: 0,
+            trailingInset: 0,
           ),
       ],
     );
@@ -266,12 +293,14 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
     required double height,
     required Size screenSize,
     required bool hasTexture,
+    required double opaqueExtent,
+    required double trailingInset,
   }) {
     return Positioned(
       top: isTop ? 0 : null,
       bottom: isTop ? null : 0,
       left: 0,
-      right: 0,
+      right: trailingInset,
       height: height,
       child: IgnorePointer(
         child: hasTexture
@@ -281,23 +310,39 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
                   image: _backgroundImage!,
                   isTop: isTop,
                   screenHeight: screenSize.height,
+                  opaqueExtent: opaqueExtent,
                 ),
               )
-            : _buildColorOverlay(isTop: isTop),
+            : _buildColorOverlay(
+                isTop: isTop,
+                height: height,
+                opaqueExtent: opaqueExtent,
+              ),
       ),
     );
   }
 
   /// Fallback: solid-colour gradient overlay for use outside [GlassPage].
-  Widget _buildColorOverlay({required bool isTop}) {
+  Widget _buildColorOverlay({
+    required bool isTop,
+    required double height,
+    required double opaqueExtent,
+  }) {
     final color =
         widget.fadeColor ?? CupertinoTheme.of(context).scaffoldBackgroundColor;
+    final opaqueStop = height <= 0
+        ? 0.0
+        : (opaqueExtent / height).clamp(0.0, 1.0);
+    final fadeColors = _easeInOutFadeOpacities
+        .map((opacity) => color.withValues(alpha: color.a * opacity))
+        .toList(growable: false);
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
           end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
-          colors: [color, color.withValues(alpha: 0)],
+          colors: fadeColors,
+          stops: _easeInOutFadeStops(opaqueStop),
         ),
       ),
     );
@@ -329,10 +374,12 @@ class _TextureFadePainter extends CustomPainter {
     required this.image,
     required this.isTop,
     required this.screenHeight,
+    required this.opaqueExtent,
   });
   final ui.Image image;
   final bool isTop;
   final double screenHeight;
+  final double opaqueExtent;
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
@@ -361,7 +408,15 @@ class _TextureFadePainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
         end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
-        colors: const [Color(0xFF000000), Color(0x00000000)],
+        colors: _easeInOutFadeOpacities
+            .map(
+              (opacity) =>
+                  Color.from(alpha: opacity, red: 0, green: 0, blue: 0),
+            )
+            .toList(growable: false),
+        stops: _easeInOutFadeStops(
+          (opaqueExtent / size.height).clamp(0.0, 1.0),
+        ),
       ).createShader(dstRect);
     canvas.drawRect(dstRect, gradientPaint);
     canvas.restore();
@@ -371,5 +426,6 @@ class _TextureFadePainter extends CustomPainter {
   bool shouldRepaint(_TextureFadePainter oldDelegate) =>
       image != oldDelegate.image ||
       isTop != oldDelegate.isTop ||
-      screenHeight != oldDelegate.screenHeight;
+      screenHeight != oldDelegate.screenHeight ||
+      opaqueExtent != oldDelegate.opaqueExtent;
 }

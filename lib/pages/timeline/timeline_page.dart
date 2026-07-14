@@ -12,12 +12,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/refresh_aware_scroll_physics.dart';
-import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
+import '../../common/widgets/mac_header_scroll_edge.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 
@@ -672,8 +672,9 @@ class _TimelinePageState extends State<TimelinePage> {
             children: [
               SizedBox(
                 width: 380,
-                child: Scaffold(
-                  appBar: _MacTimelineAppBar(controller: controller),
+                child: MacHeaderScrollEdge(
+                  headerHeight: kToolbarHeight,
+                  header: _MacTimelineAppBar(controller: controller),
                   body: content,
                 ),
               ),
@@ -752,7 +753,12 @@ class _TimelinePageState extends State<TimelinePage> {
                     ),
                     physics: _refreshPhysics,
                     controller: _scrollController,
-                    padding: MacArticleListChrome.contentPadding(context),
+                    padding: MacArticleListChrome.contentPadding(
+                      context,
+                      top: MacHeaderScrollEdge.contentTopPadding(
+                        kToolbarHeight,
+                      ),
+                    ),
                     items: controller.articles.toList(),
                     itemKey: (article) => article.entryId,
                     itemBuilder: _buildAnimatedTimelineItem,
@@ -766,9 +772,12 @@ class _TimelinePageState extends State<TimelinePage> {
                     child: DelayedVisibility(
                       visible: controller.articles.isEmpty,
                       delay: const Duration(milliseconds: 220),
-                      child: _EmptyView(
-                        message: controller.emptyMessage,
-                        onRetry: controller.loadFeedsThenArticles,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: kToolbarHeight),
+                        child: _EmptyView(
+                          message: controller.emptyMessage,
+                          onRetry: controller.loadFeedsThenArticles,
+                        ),
                       ),
                     ),
                   ),
@@ -838,10 +847,7 @@ class _TimelinePageState extends State<TimelinePage> {
         );
       }
 
-      return ScrollConfiguration(
-        behavior: const NoOverscrollIndicatorBehavior(),
-        child: content,
-      );
+      return content;
     });
   }
 

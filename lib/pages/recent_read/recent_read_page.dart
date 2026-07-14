@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/mac_empty_placeholder.dart';
-import '../../common/widgets/no_overscroll_indicator_behavior.dart';
+import '../../common/widgets/mac_header_scroll_edge.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -130,8 +130,9 @@ class _RecentReadPageState extends State<RecentReadPage> {
             children: [
               SizedBox(
                 width: 380,
-                child: Scaffold(
-                  appBar: AppBar(
+                child: MacHeaderScrollEdge(
+                  headerHeight: kToolbarHeight,
+                  header: AppBar(
                     title: const Text(
                       '最近阅读',
                       style: TextStyle(
@@ -186,10 +187,12 @@ class _RecentReadPageState extends State<RecentReadPage> {
 
   Widget _buildListView(BuildContext context) {
     return Obx(() {
-      return ScrollConfiguration(
-        behavior: const NoOverscrollIndicatorBehavior(),
-        child: controller.articles.isEmpty
-            ? Center(
+      return controller.articles.isEmpty
+          ? Padding(
+              padding: EdgeInsets.only(
+                top: Platform.isMacOS ? kToolbarHeight : 0,
+              ),
+              child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -209,53 +212,55 @@ class _RecentReadPageState extends State<RecentReadPage> {
                     ),
                   ],
                 ),
-              )
-            : ListView.builder(
-                controller: _scrollController,
-                padding: EdgeInsets.only(
-                  top: Platform.isMacOS ? 0 : MediaQuery.paddingOf(context).top,
-                  bottom:
-                      8 +
-                      (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
-                      MediaQuery.of(context).padding.bottom,
-                ),
-                itemCount: controller.articles.length,
-                itemBuilder: (context, index) {
-                  final article = controller.articles[index];
-                  return Obx(() {
-                    final selectedId = selectedArticle.value?.entryId;
-                    return ArticleCard(
-                      key: _itemKeys.putIfAbsent(
-                        article.entryId,
-                        () => GlobalKey(),
-                      ),
-                      article: article,
-                      isSelected:
-                          Platform.isMacOS && selectedId == article.entryId,
-                      stableTitleWeight: true,
-                      onTap: () {
-                        if (Platform.isMacOS) {
-                          _handleMacArticleTap(article);
-                        } else {
-                          LocalArticleDbService.recordReadHistory(
-                            article.entryId,
-                          );
-                          controller.refreshData();
-                          Get.toNamed(
-                            Routes.article,
-                            arguments: {
-                              'article': article,
-                              'sequence': controller.articles.toList(),
-                              'index': index,
-                            },
-                          );
-                        }
-                      },
-                    );
-                  });
-                },
               ),
-      );
+            )
+          : ListView.builder(
+              controller: _scrollController,
+              padding: EdgeInsets.only(
+                top: Platform.isMacOS
+                    ? MacHeaderScrollEdge.contentTopPadding(kToolbarHeight)
+                    : MediaQuery.paddingOf(context).top,
+                bottom:
+                    8 +
+                    (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
+                    MediaQuery.of(context).padding.bottom,
+              ),
+              itemCount: controller.articles.length,
+              itemBuilder: (context, index) {
+                final article = controller.articles[index];
+                return Obx(() {
+                  final selectedId = selectedArticle.value?.entryId;
+                  return ArticleCard(
+                    key: _itemKeys.putIfAbsent(
+                      article.entryId,
+                      () => GlobalKey(),
+                    ),
+                    article: article,
+                    isSelected:
+                        Platform.isMacOS && selectedId == article.entryId,
+                    stableTitleWeight: true,
+                    onTap: () {
+                      if (Platform.isMacOS) {
+                        _handleMacArticleTap(article);
+                      } else {
+                        LocalArticleDbService.recordReadHistory(
+                          article.entryId,
+                        );
+                        controller.refreshData();
+                        Get.toNamed(
+                          Routes.article,
+                          arguments: {
+                            'article': article,
+                            'sequence': controller.articles.toList(),
+                            'index': index,
+                          },
+                        );
+                      }
+                    },
+                  );
+                });
+              },
+            );
     });
   }
 }

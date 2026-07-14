@@ -38,6 +38,8 @@
 - 边框/高光应细腻稳定。用户只期待高光线时，避免边缘效果把整个内部区域变亮。
 - Tooltip 属于低频浮层，适合统一使用玻璃样式；但触发 tooltip 的按钮本体不一定要变成玻璃按钮。
 - 垃圾拦截审核行的“保留/移除”按钮数量很多，且用户明确担心重玻璃造成性能问题，因此当前保持圆形轻量按钮，只使用玻璃 tooltip。
+- macOS 透明 header 与滚动正文之间采用参考工程 `GlassScrollEdgeEffect` 的 soft edge 思路：覆盖背景纹理/底色并渐变透明度，不在整块 header 上持续做动态毛玻璃，也不实现逐位置变化的 blur radius。
+- soft edge 的 alpha 使用固定采样点近似 `easeInOutCubic`，两端缓、中段快；它仍是普通线性渐变的分段采样，不需要新增实时 shader。共享组件支持顶部完全覆盖区和 trailing scrollbar gutter。
 
 玻璃控制色：
 

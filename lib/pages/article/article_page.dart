@@ -18,7 +18,9 @@ import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/macos_window_drag_guard.dart';
+import '../../common/widgets/mac_header_scroll_edge.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
+import '../../common/liquid_glass/widgets/shared/glass_scroll_edge_effect.dart';
 import '../../services/article_image_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
@@ -1000,6 +1002,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
+              if (Platform.isMacOS)
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: kToolbarHeight),
+                ),
               // ─── 元数据区域 ──────────────────────
               SliverPadding(
                 padding: const EdgeInsets.all(16),
@@ -1216,6 +1222,18 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       ),
     );
 
+    if (Platform.isMacOS) {
+      articleBody = GlassScrollEdgeEffect(
+        topFadeHeight: kToolbarHeight + MacHeaderScrollEdge.fadeExtent,
+        fadeBottom: false,
+        style: GlassScrollEdgeStyle.soft,
+        fadeColor: colorScheme.surface,
+        topOpaqueExtent: MacHeaderScrollEdge.opaqueExtent(kToolbarHeight),
+        topFadeTrailingInset: 12,
+        child: articleBody,
+      );
+    }
+
     if (Platform.isMacOS && widget.isSplitView) {
       articleBody = ClipPath(
         clipper: const _MacSplitArticleCornerClipper(),
@@ -1228,10 +1246,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           thickness: 8,
           crossAxisMargin: 4,
         ),
-        child: Scrollbar(
+        child: MacHeaderScrollbar(
           controller: _scrollController,
-          interactive: true,
-          notificationPredicate: (notification) => notification.depth == 0,
+          headerHeight: kToolbarHeight,
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(
               context,
@@ -1243,6 +1260,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     Widget scaffold = Scaffold(
+      extendBodyBehindAppBar: Platform.isMacOS,
       appBar: AppBar(
         title: Text(
           widget.pageLabel ?? '文章详情',
@@ -1254,15 +1272,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           ),
         ),
         centerTitle: true,
-        backgroundColor: colorScheme.surface.withValues(alpha: 0.5),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(color: Colors.transparent),
-          ),
-        ),
         actions: Platform.isMacOS
             ? [
                 Obx(() {
@@ -1313,27 +1325,31 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 }),
               ]
             : const [],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: ValueListenableBuilder<double>(
-            valueListenable: _scrollProgress,
-            builder: (context, progress, child) {
-              return progress > 0.0
-                  ? LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 1.0,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        colorScheme.primary,
-                      ),
-                    )
-                  : ColoredBox(
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.22),
-                      child: const SizedBox(height: 1),
-                    );
-            },
-          ),
-        ),
+        bottom: Platform.isMacOS
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(1.0),
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _scrollProgress,
+                  builder: (context, progress, child) {
+                    return progress > 0.0
+                        ? LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 1.0,
+                            backgroundColor: Colors.transparent,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              colorScheme.primary,
+                            ),
+                          )
+                        : ColoredBox(
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.22,
+                            ),
+                            child: const SizedBox(height: 1),
+                          );
+                  },
+                ),
+              ),
       ),
       floatingActionButton: Platform.isMacOS
           ? null
@@ -1370,6 +1386,29 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     final result = Stack(
       children: [
         scaffold,
+        if (Platform.isMacOS)
+          Positioned(
+            top: 1,
+            left: 0,
+            right: 0,
+            height: 1,
+            child: IgnorePointer(
+              child: ValueListenableBuilder<double>(
+                valueListenable: _scrollProgress,
+                builder: (context, progress, child) {
+                  if (progress <= 0) return const SizedBox.shrink();
+                  return LinearProgressIndicator(
+                    value: progress.clamp(0.0, 1.0),
+                    minHeight: 1,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      colorScheme.primary,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
         Positioned(
           bottom: 0,
           left: 0,

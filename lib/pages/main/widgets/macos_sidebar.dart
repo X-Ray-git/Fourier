@@ -253,7 +253,7 @@ class _SilentFeedsGroup extends StatelessWidget {
       const groupKey = 'special:silent';
       final isSilentSelected =
           currentIndex == 0 && timelineController.isSilentSelected.value;
-      final isExpanded = isSilentSelected || subController.isExpanded(groupKey);
+      final isExpanded = subController.isExpanded(groupKey);
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -273,7 +273,6 @@ class _SilentFeedsGroup extends StatelessWidget {
               subController.setExpanded(groupKey, !isExpanded);
             },
             onTap: () {
-              subController.setExpanded(groupKey, true);
               timelineController.setTimelineScope(silent: true);
               onIndexChanged(0);
             },

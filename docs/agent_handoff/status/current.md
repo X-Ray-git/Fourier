@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-07-13：
+截至 2026-07-14：
 
 - `main` 是当前集成分支。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
@@ -45,6 +45,10 @@
 - macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。
 - macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。
 - 两条动画链保留默认关闭的诊断埋点。仅在 Debug 并显式传 `--dart-define=AUTO_FOLO_ANIMATION_PROBE=true` 时启用；Release 和普通 Debug 不注册帧耗时回调，也不挂载动画监听器。
+- macOS 静默订阅源分组不再因“被选中”而自动展开。点击分组行只进入静默时间线，只有独立展开按钮会改变子列表展开状态。
+- macOS 中间栏与文章详情已接入透明 header + soft scroll edge：内容滚入 header 后按 ease-in-out alpha 融入页面背景，不做逐位置动态模糊。主时间线、垃圾拦截、最近阅读和订阅源详情共用 `MacHeaderScrollEdge`。
+- header-aware scrollbar 已改为显式 `RawScrollbar.padding`，轨道真正从 header 下缘开始，渐隐层避开 thumb。主时间线和最近阅读内部会覆盖共享行为的旧局部 `ScrollConfiguration` 已清理；用户确认主时间线 scrollbar 起点和卡片遮挡关系正常。
+- macOS 文章 header 的整块 `BackdropFilter` 已移除，避免相邻按钮光效被采样到左侧；阅读进度条移至文章面板最顶端。Android header/进度条行为不变。
 
 本次待用户继续验证：
 

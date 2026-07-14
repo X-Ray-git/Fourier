@@ -66,8 +66,10 @@ YouTube：
 - macOS 分屏文章详情使用 `_MacSplitArticleCornerClipper` 对文章 body 做右下角圆角安全裁剪。背景原因是窗口外层圆角会向内收，普通矩形 padding 在右下角不能保持“正文到应用外框”的视觉距离。
 - 该 clip 只应用于 `Platform.isMacOS && isSplitView`，且只包裹文章 body，不包裹 AppBar、进度条、右上工具按钮或 hover 链接状态栏。用户已验证这是正确问题位置。
 - 当前参数：外层窗口半径 `24`，安全 inset `8`，内侧右下角半径 `16`。如果后续窗口圆角或外框间距改动，需要同步评估这些值。
-- `_MacSplitArticleCornerClipper` 会裁掉正文整个右边缘的 `8px`；如果依赖 Flutter 自动 scrollbar，thumb 也会位于 clip 内并几乎被完全裁掉，只剩抗锯齿细线。当前 macOS 分屏正文关闭自动 scrollbar，改用同一 `_scrollController` 的显式 `Scrollbar` 包在 clip 外层；不要把 scrollbar 再移回安全裁剪内部，也不要为修 scrollbar 删除正文圆角安全裁剪。
-- 分屏正文显式 scrollbar 使用 `MacGlassScrollbarStyle.articlePaneTheme`：宽 `8px`、距离右边界 `1px`，仍可拖动。它位于正文安全裁剪之上、应用最外层窗口圆角裁剪之下。
+- `_MacSplitArticleCornerClipper` 会裁掉正文整个右边缘的 `8px`；如果依赖 Flutter 自动 scrollbar，thumb 也会位于 clip 内并几乎被完全裁掉，只剩抗锯齿细线。当前 macOS 分屏正文关闭自动 scrollbar，改用同一 `_scrollController` 的 `MacHeaderScrollbar` 包在 clip 外层；不要把 scrollbar 再移回安全裁剪内部，也不要为修 scrollbar 删除正文圆角安全裁剪。
+- 分屏正文 header 改为透明叠层，正文顶部预留一个 `kToolbarHeight` 空间并通过 soft edge 滚入 header 下方。整块 header 不再使用 `BackdropFilter`，避免左侧采样到相邻时间线按钮光效；右上角交互按钮仍保留各自玻璃材质。
+- 分屏正文 `MacHeaderScrollbar` 使用 `MacGlassScrollbarStyle.theme`：宽 `8px`、距离右边界 `4px`，仍可拖动；轨道从 header 下缘开始，位于正文安全裁剪之上、应用最外层窗口圆角裁剪之下。顶部 soft edge 的 trailing inset 必须避开该轨道。
+- macOS 阅读进度条位于文章面板最顶端，不再占用 header 底边；Android 保留原 appbar 底部进度条和分隔逻辑。
 
 HTML entity 解码：
 

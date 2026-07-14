@@ -280,3 +280,31 @@
 - 不要把同步数据库写入和 `ImplicitlyAnimatedList` 列表变更重新放进同一个 post-frame callback。
 - 不要用固定短延迟在移除动画中途打开外部浏览器；应依赖真实移除生命周期。
 - 不要默认开启同步诊断日志；需要排查时用 dart-define 临时启用。
+
+## macOS 透明 header 使用 soft scroll edge，而不是整块毛玻璃
+
+背景：用户希望正文和各类时间线滚入 header 时没有硬分界，同时发现文章 header 左侧会出现疑似相邻刷新按钮投射的白光。参考工程的 `GlassScrollEdgeEffect` 并不是让模糊半径随位置增加，而是在滚动内容上覆盖页面背景纹理/底色并渐变 alpha。
+
+决策：主时间线、垃圾拦截、最近阅读、订阅源详情共用 `MacHeaderScrollEdge`；文章详情使用同源 `GlassScrollEdgeEffect`。header 自身透明，玻璃只保留在交互控件。顶部先完全覆盖到 header 高度的一半，再以固定采样近似 `easeInOutCubic` 过渡到清晰，过渡区延伸到 header 下方 `24px`。文章进度条移到面板最顶端。
+
+后果：视觉分界更柔和，不引入逐位置 blur 或新的实时 shader；Android 保持原 appbar 行为。共享组件同时承担列表首项顶部 padding，避免每个时间线分别维护几何参数。
+
+不要回退：
+
+- 不要恢复文章 header 的整块 `BackdropFilter`，否则可能重新采样相邻分栏控件的高光。
+- 不要把 soft edge 误实现成动态变化的模糊半径；当前背景覆盖 alpha 已是明确的性能取舍。
+- 不要把渐隐改回线性或把完全消失位置下移到按钮底边，用户已认为后者过于激进。
+
+## macOS header 下方 scrollbar 使用真实轨道 inset
+
+背景：透明 header 允许卡片滚入其下方，但 scrollbar 应从 header 下缘开始。早期用实色色块盖住顶部 thumb，会同时切掉卡片右上角；改为 `MediaQuery.padding` 的间接方案又没有稳定约束自动 scrollbar。主时间线和最近阅读内部遗留的局部 `ScrollConfiguration` 还会覆盖共享行为，重新生成从窗口顶端开始的 scrollbar。
+
+决策：`MacHeaderScrollbar` 基于 `RawScrollbar.padding` 直接设置顶部轨道 inset，并从 `MacGlassScrollbarStyle` 解析宽度、颜色、margin、hover 和拖拽规则。soft edge 通过 trailing inset 避开 scrollbar。页面依赖应用根节点的全局 overscroll/fling behavior，不再嵌套会覆盖共享实现的普通 `ScrollConfiguration`。
+
+后果：thumb 从 header 下缘开始且一开始可见，卡片仍可完整进入软渐隐区。中间栏和右侧正文共享轨道原则，但保留各自 `crossAxisMargin`。
+
+不要回退：
+
+- 不要用矩形色块遮住从窗口顶端绘制的 scrollbar。
+- 不要让顶部渐隐覆盖 scrollbar 轨道。
+- 不要在 `MacHeaderScrollEdge` 内部页面重新引入更近的默认 `ScrollConfiguration`。

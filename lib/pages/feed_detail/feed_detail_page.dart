@@ -22,6 +22,7 @@ import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
+import '../../common/widgets/mac_header_scroll_edge.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_service.dart';
 import '../../services/content_cache_service.dart';
@@ -886,16 +887,14 @@ class FeedDetailPage extends StatelessWidget {
         children: [
           SizedBox(
             width: 380,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _MacFeedHeader(
-                  controller: controller,
-                  colorScheme: cs,
-                  imageUrl: safeImageUrl,
-                ),
-                Expanded(child: _MacFeedArticleList(controller: controller)),
-              ],
+            child: MacHeaderScrollEdge(
+              headerHeight: 68,
+              header: _MacFeedHeader(
+                controller: controller,
+                colorScheme: cs,
+                imageUrl: safeImageUrl,
+              ),
+              body: _MacFeedArticleList(controller: controller),
             ),
           ),
           VerticalDivider(
@@ -1145,14 +1144,22 @@ class _MacFeedArticleList extends StatelessWidget {
         Success() => Obx(() {
           final list = controller.articles;
           if (list.isEmpty) {
-            return _EmptyView(
-              onRetry: controller.loadData,
-              readFilter: controller.readFilter.value,
+            return Padding(
+              padding: const EdgeInsets.only(top: 68),
+              child: _EmptyView(
+                onRetry: controller.loadData,
+                readFilter: controller.readFilter.value,
+              ),
             );
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(0, 8, 0, 18),
+            padding: EdgeInsets.fromLTRB(
+              0,
+              MacHeaderScrollEdge.contentTopPadding(68, 8),
+              0,
+              18,
+            ),
             itemCount: list.length,
             itemBuilder: (context, index) {
               final article = list[index];

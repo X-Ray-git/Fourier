@@ -4,17 +4,25 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import '../interactive/liquid_glass_scope.dart';
 
-const _easeInOutFadeOpacities = [1.0, 0.9375, 0.5, 0.0625, 0.0];
+const _fadeSampleCount = 32;
+
+final _easeInOutFadeOpacities = List<double>.unmodifiable(
+  List<double>.generate(_fadeSampleCount + 1, (index) {
+    final t = index / _fadeSampleCount;
+    final eased = t < 0.5
+        ? 4 * t * t * t
+        : 1 - ((-2 * t + 2) * (-2 * t + 2) * (-2 * t + 2)) / 2;
+    return 1 - eased;
+  }),
+);
 
 List<double> _easeInOutFadeStops(double opaqueStop) {
   final transitionExtent = 1 - opaqueStop;
-  return [
-    opaqueStop,
-    opaqueStop + transitionExtent * 0.25,
-    opaqueStop + transitionExtent * 0.5,
-    opaqueStop + transitionExtent * 0.75,
-    1,
-  ];
+  return List<double>.generate(
+    _fadeSampleCount + 1,
+    (index) => opaqueStop + transitionExtent * index / _fadeSampleCount,
+    growable: false,
+  );
 }
 
 /// Edge effect style matching iOS 26's `.scrollEdgeEffectStyle`.

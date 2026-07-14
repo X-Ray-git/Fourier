@@ -193,6 +193,7 @@ class AppGlassSurface extends StatelessWidget {
   final bool nativeBackdrop;
   final bool staticMaterial;
   final double staticBorderOpacity;
+  final double staticBorderWidth;
 
   const AppGlassSurface({
     super.key,
@@ -207,6 +208,7 @@ class AppGlassSurface extends StatelessWidget {
     this.nativeBackdrop = false,
     this.staticMaterial = false,
     this.staticBorderOpacity = 1.0,
+    this.staticBorderWidth = 0.75,
   });
 
   @override
@@ -230,6 +232,7 @@ class AppGlassSurface extends StatelessWidget {
         margin: margin,
         tone: tone,
         borderOpacity: staticBorderOpacity,
+        borderWidth: staticBorderWidth,
         child: child,
       );
     }
@@ -839,7 +842,8 @@ class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
           tone: AppGlassTone.control,
           nativeBackdrop: true,
           staticMaterial: true,
-          staticBorderOpacity: 0.70,
+          staticBorderOpacity: 1,
+          staticBorderWidth: 1,
           child: SizedBox(
             width: widget.trackWidth,
             height: widget.trackHeight,
@@ -1420,12 +1424,14 @@ class _StaticGlassSurface extends StatelessWidget {
   final EdgeInsetsGeometry? margin;
   final AppGlassTone tone;
   final double borderOpacity;
+  final double borderWidth;
 
   const _StaticGlassSurface({
     required this.child,
     required this.borderRadius,
     required this.tone,
     required this.borderOpacity,
+    required this.borderWidth,
     this.padding,
     this.margin,
   });
@@ -1448,7 +1454,7 @@ class _StaticGlassSurface extends StatelessWidget {
           color: cs.onSurfaceVariant.withValues(
             alpha: borderAlpha * borderOpacity.clamp(0.0, 1.0),
           ),
-          width: 0.75,
+          width: borderWidth,
         ),
       ),
       child: child,

@@ -756,13 +756,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                         final article = _articles[index];
                         return Padding(
                           padding: ArticleCardChrome.outerPadding,
-                          child: Dismissible(
-                            key: ValueKey(article.entryId),
-                            direction: DismissDirection.horizontal,
-                            dismissThresholds: const {
-                              DismissDirection.startToEnd: 0.35,
-                              DismissDirection.endToStart: 0.35,
-                            },
+                          child: _MobileReviewDismissible(
+                            key: ValueKey('mobile-swipe-${article.entryId}'),
+                            dismissibleKey: ValueKey(article.entryId),
                             confirmDismiss: (direction) async {
                               if (direction == DismissDirection.startToEnd) {
                                 _keep(article);
@@ -771,36 +767,8 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                               }
                               return false;
                             },
-                            background: ClipRRect(
-                              borderRadius: BorderRadius.circular(
-                                ArticleCardChrome.radius,
-                              ),
-                              child: Container(
-                                color: const Color(0xFF10B981),
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.only(left: 24),
-                                child: const Icon(
-                                  Icons.restore_rounded,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                            ),
-                            secondaryBackground: ClipRRect(
-                              borderRadius: BorderRadius.circular(
-                                ArticleCardChrome.radius,
-                              ),
-                              child: Container(
-                                color: cs.error,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 24),
-                                child: const Icon(
-                                  Icons.delete_sweep_rounded,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                            ),
+                            keepColor: const Color(0xFF10B981),
+                            rejectColor: cs.error,
                             child: Obx(() {
                               final selectedId =
                                   _selectedArticle.value?.entryId;
@@ -1138,6 +1106,103 @@ class _ReviewRemovalAnimationProbeState
 }
 
 enum _ReviewSwipeAction { keep, reject }
+
+class _MobileReviewDismissible extends StatefulWidget {
+  const _MobileReviewDismissible({
+    super.key,
+    required this.dismissibleKey,
+    required this.confirmDismiss,
+    required this.keepColor,
+    required this.rejectColor,
+    required this.child,
+  });
+
+  final Key dismissibleKey;
+  final ConfirmDismissCallback confirmDismiss;
+  final Color keepColor;
+  final Color rejectColor;
+  final Widget child;
+
+  @override
+  State<_MobileReviewDismissible> createState() =>
+      _MobileReviewDismissibleState();
+}
+
+class _MobileReviewDismissibleState extends State<_MobileReviewDismissible> {
+  double _width = 0;
+  double _offset = 0;
+
+  void _handleUpdate(DismissUpdateDetails details) {
+    final direction = switch (details.direction) {
+      DismissDirection.startToEnd => 1.0,
+      DismissDirection.endToStart => -1.0,
+      _ => 0.0,
+    };
+    final nextOffset = direction * details.progress * _width;
+    if (nextOffset == _offset) return;
+    setState(() => _offset = nextOffset);
+  }
+
+  Widget _buildBackground({
+    required Color color,
+    required Alignment alignment,
+    required EdgeInsets padding,
+    required IconData icon,
+  }) {
+    return ClipPath(
+      clipper: _ReviewSwipeRevealClipper(
+        _offset,
+        outerPadding: EdgeInsets.zero,
+        radius: ArticleCardChrome.radius,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
+        ),
+        child: Align(
+          alignment: alignment,
+          child: Padding(
+            padding: padding,
+            child: Icon(icon, color: Colors.white, size: 28),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _width = constraints.maxWidth;
+        return Dismissible(
+          key: widget.dismissibleKey,
+          direction: DismissDirection.horizontal,
+          dismissThresholds: const {
+            DismissDirection.startToEnd: 0.35,
+            DismissDirection.endToStart: 0.35,
+          },
+          confirmDismiss: widget.confirmDismiss,
+          onUpdate: _handleUpdate,
+          background: _buildBackground(
+            color: widget.keepColor,
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 24),
+            icon: Icons.restore_rounded,
+          ),
+          secondaryBackground: _buildBackground(
+            color: widget.rejectColor,
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 24),
+            icon: Icons.delete_sweep_rounded,
+          ),
+          child: widget.child,
+        );
+      },
+    );
+  }
+}
 
 class _MacTrackpadReviewSwipe extends StatefulWidget {
   const _MacTrackpadReviewSwipe({

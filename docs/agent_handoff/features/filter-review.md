@@ -31,6 +31,7 @@
 - macOS 横滑不能直接复用 `Dismissible`，否则会和现有 `ImplicitlyAnimatedList` 的纵向退出重复。当前由 `_MacTrackpadReviewSwipe` 负责横向跟手、阈值判断和横向离场，业务状态变化后再由列表完成纵向收缩。
 - macOS 操作背景只允许出现在卡片实际让出的区域。由于卡片半透明，不能把背景铺满后依赖卡片遮挡；当前用“固定卡片圆角路径减去横移后卡片圆角路径”的差集裁剪，避免背景透过卡片、圆角旁出现直角裁剪线或外边距空带。颜色透明度随滑动距离增加。
 - Android 继续使用 `Dismissible`，但列表外边距必须位于 `Dismissible` 外部，滑动组件内部的 `ArticleCard` 使用零外边距，使操作背景与真实圆角卡片同尺寸。`ArticleCard.outerPadding` 是可选覆盖项，其他入口默认仍使用 `ArticleCardChrome.outerPadding`。
+- Android 的操作背景也必须复用 `_ReviewSwipeRevealClipper`：根据 `DismissUpdateDetails.progress` 还原当前横移距离，用“原卡片圆角路径减去移动后卡片圆角路径”的差集只绘制真实让出的区域。仅给整块背景套 `ClipRRect` 不能得到和 macOS 一致的圆角遮挡关系，会在移动卡片圆角旁露出不应出现的背景。
 - 横滑完成后立即 `Command-Z` 时，不得在旧卡片退出动画结束前把相同 entry id 重新插入列表。当前先恢复数据库状态并延迟 UI 重插，等 `onRemoveEnd` 后再重新加入并选中，否则恢复项会被旧退出生命周期吞掉。
 - `M/K`、右键保留/移除和触控板提交在 macOS 上都必须先登记 `_pendingReviewActionIds`。`AutoFilterWorker.unReject()` 与 `TimelineController.markAsReadLocal()` 会同步触发 `ArticleStateNotifier`；如果页面立即响应该通知，列表项会在显式删除前先消失一次，移除动画会随机压缩或瞬移。
 - pending action 期间，单篇 `_syncArticleFromDb()` 和整表 `_loadArticles()` 都不能提前改写审核列表。业务持久化完成后，页面在 `SchedulerBinding.endOfFrame` 边界只执行一次 `_removeReviewedArticle()`，然后再处理被延后的 reload。

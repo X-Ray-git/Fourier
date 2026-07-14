@@ -49,6 +49,7 @@
 - macOS 中间栏与文章详情已接入透明 header + soft scroll edge：内容滚入 header 后按 ease-in-out alpha 融入页面背景，不做逐位置动态模糊。主时间线、垃圾拦截、最近阅读和订阅源详情共用 `MacHeaderScrollEdge`。
 - header-aware scrollbar 已改为显式 `RawScrollbar.padding`，轨道真正从 header 下缘开始，渐隐层避开 thumb。主时间线和最近阅读内部会覆盖共享行为的旧局部 `ScrollConfiguration` 已清理；用户确认主时间线 scrollbar 起点和卡片遮挡关系正常。
 - macOS 文章 header 的整块 `BackdropFilter` 已移除，避免相邻按钮光效被采样到左侧；阅读进度条移至文章面板最顶端。Android header/进度条行为不变。
+- Android 垃圾拦截横滑背景已补齐和 macOS 相同的圆角路径差集裁剪；移动端仍由 `Dismissible` 处理手势和阈值，只共享卡片前后层级的几何规则。
 
 本次待用户继续验证：
 

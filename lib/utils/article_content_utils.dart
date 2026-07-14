@@ -206,15 +206,74 @@ abstract final class ArticleContentUtils {
   static void _flattenLayoutTables(dom.DocumentFragment fragment) {
     final tables = fragment.querySelectorAll('table').toList();
     for (final table in tables) {
-      // 有 <th> 的表格通常是数据表，保留不拆
-      if (table.querySelector('th') != null) continue;
-      _unwrapElements(table.querySelectorAll('td').toList());
-      _unwrapElements(table.querySelectorAll('tr').toList());
-      _unwrapElements(table.querySelectorAll('thead').toList());
-      _unwrapElements(table.querySelectorAll('tbody').toList());
-      _unwrapElements(table.querySelectorAll('tfoot').toList());
+      if (_looksLikeDataTable(table)) continue;
+      _unwrapElements(_elementsBelongingToTable(table, 'td'));
+      _unwrapElements(_elementsBelongingToTable(table, 'tr'));
+      _unwrapElements(_elementsBelongingToTable(table, 'thead'));
+      _unwrapElements(_elementsBelongingToTable(table, 'tbody'));
+      _unwrapElements(_elementsBelongingToTable(table, 'tfoot'));
       _unwrapElements([table]);
     }
+  }
+
+  static bool _looksLikeDataTable(dom.Element table) {
+    if (table.attributes['role']?.toLowerCase() == 'presentation') return false;
+    if (table.querySelector('table') != null) return false;
+    if (_elementsBelongingToTable(table, 'th').isNotEmpty) return true;
+
+    final rows = _elementsBelongingToTable(table, 'tr');
+    if (rows.length < 2) return false;
+
+    final columnCounts = <int>[];
+    var populatedCells = 0;
+    var mediaCells = 0;
+    var totalCells = 0;
+
+    for (final row in rows) {
+      final cells = row.children.where((child) {
+        final tag = child.localName?.toLowerCase();
+        return tag == 'td' || tag == 'th';
+      }).toList();
+      if (cells.isEmpty) return false;
+
+      var columnCount = 0;
+      for (final cell in cells) {
+        final span = int.tryParse(cell.attributes['colspan'] ?? '') ?? 1;
+        columnCount += span.clamp(1, 12);
+        totalCells++;
+        if (cell.text.trim().isNotEmpty) populatedCells++;
+        if (cell.querySelector('img, video, iframe, table') != null) {
+          mediaCells++;
+        }
+      }
+      columnCounts.add(columnCount);
+    }
+
+    final widest = columnCounts.reduce((a, b) => a > b ? a : b);
+    if (widest < 2) return false;
+
+    final frequencies = <int, int>{};
+    for (final count in columnCounts) {
+      frequencies[count] = (frequencies[count] ?? 0) + 1;
+    }
+    final dominantCount = frequencies.values.reduce((a, b) => a > b ? a : b);
+    final hasStableGrid = dominantCount / rows.length >= 0.75;
+    final isTextRich = populatedCells / totalCells >= 0.5;
+    final isMediaHeavy = mediaCells / totalCells >= 0.5;
+    return hasStableGrid && isTextRich && !isMediaHeavy;
+  }
+
+  static List<dom.Element> _elementsBelongingToTable(
+    dom.Element table,
+    String selector,
+  ) {
+    return table.querySelectorAll(selector).where((element) {
+      dom.Element? ancestor = element.parent;
+      while (ancestor != null && ancestor.localName != 'table') {
+        ancestor = ancestor.parent;
+      }
+      return identical(ancestor, table);
+    }).toList();
   }
 
   static void _unwrapElements(List<dom.Element> elements) {

@@ -18,9 +18,7 @@ import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/macos_window_drag_guard.dart';
-import '../../common/widgets/mac_header_scroll_edge.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
-import '../../common/liquid_glass/widgets/shared/glass_scroll_edge_effect.dart';
 import '../../services/article_image_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
@@ -987,7 +985,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
-    final maxWidth = _articleContentMaxWidth(screenWidth - 32);
+    final maxWidth = _articleContentMaxWidth(screenWidth - 22);
 
     Widget articleBody = SelectionArea(
       child: Padding(
@@ -1002,13 +1000,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
-              if (Platform.isMacOS)
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: kToolbarHeight),
-                ),
               // ─── 元数据区域 ──────────────────────
               SliverPadding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(11, 16, 11, 16),
                 sliver: SliverToBoxAdapter(
                   child: Center(
                     child: ConstrainedBox(
@@ -1074,7 +1068,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
               // ─── 正文区域：逐块渲染 ──────────────
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 11),
                 sliver: Obx(() {
                   if (controller.isParsingContent.value || !_allowBodyBuild) {
                     return SliverToBoxAdapter(
@@ -1222,18 +1216,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       ),
     );
 
-    if (Platform.isMacOS) {
-      articleBody = GlassScrollEdgeEffect(
-        topFadeHeight: kToolbarHeight + MacHeaderScrollEdge.fadeExtent,
-        fadeBottom: false,
-        style: GlassScrollEdgeStyle.soft,
-        fadeColor: colorScheme.surface,
-        topOpaqueExtent: MacHeaderScrollEdge.opaqueExtent(kToolbarHeight),
-        topFadeTrailingInset: 12,
-        child: articleBody,
-      );
-    }
-
     if (Platform.isMacOS && widget.isSplitView) {
       articleBody = ClipPath(
         clipper: const _MacSplitArticleCornerClipper(),
@@ -1244,11 +1226,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         data: MacGlassScrollbarStyle.theme(
           context,
           thickness: 8,
-          crossAxisMargin: 4,
+          crossAxisMargin: 2,
         ),
-        child: MacHeaderScrollbar(
+        child: Scrollbar(
           controller: _scrollController,
-          headerHeight: kToolbarHeight,
+          interactive: true,
+          notificationPredicate: (notification) => notification.depth == 0,
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(
               context,
@@ -1260,7 +1243,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     Widget scaffold = Scaffold(
-      extendBodyBehindAppBar: Platform.isMacOS,
       appBar: AppBar(
         title: Text(
           widget.pageLabel ?? '文章详情',
@@ -1272,7 +1254,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
+        backgroundColor: colorScheme.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: Platform.isMacOS
@@ -1325,31 +1307,31 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 }),
               ]
             : const [],
-        bottom: Platform.isMacOS
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(1.0),
-                child: ValueListenableBuilder<double>(
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: SizedBox(
+            width: double.infinity,
+            height: 1.0,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
+                ValueListenableBuilder<double>(
                   valueListenable: _scrollProgress,
                   builder: (context, progress, child) {
-                    return progress > 0.0
-                        ? LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 1.0,
-                            backgroundColor: Colors.transparent,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              colorScheme.primary,
-                            ),
-                          )
-                        : ColoredBox(
-                            color: colorScheme.outlineVariant.withValues(
-                              alpha: 0.22,
-                            ),
-                            child: const SizedBox(height: 1),
-                          );
+                    return FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: progress.clamp(0.0, 1.0),
+                      child: ColoredBox(color: colorScheme.primary),
+                    );
                   },
                 ),
-              ),
+              ],
+            ),
+          ),
+        ),
       ),
       floatingActionButton: Platform.isMacOS
           ? null
@@ -1386,29 +1368,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     final result = Stack(
       children: [
         scaffold,
-        if (Platform.isMacOS)
-          Positioned(
-            top: 1,
-            left: 0,
-            right: 0,
-            height: 1,
-            child: IgnorePointer(
-              child: ValueListenableBuilder<double>(
-                valueListenable: _scrollProgress,
-                builder: (context, progress, child) {
-                  if (progress <= 0) return const SizedBox.shrink();
-                  return LinearProgressIndicator(
-                    value: progress.clamp(0.0, 1.0),
-                    minHeight: 1,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      colorScheme.primary,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
         Positioned(
           bottom: 0,
           left: 0,

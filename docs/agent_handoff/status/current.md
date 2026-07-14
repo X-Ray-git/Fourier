@@ -41,14 +41,14 @@
 - Android 垃圾拦截继续使用 `Dismissible`，但卡片外边距移到滑动组件外部，解决圆角卡片与保留/移除背景之间的空带。`ArticleCard` 的可选 `outerPadding` 默认不改变其他页面。
 - macOS 顶部玻璃工具按钮、紧凑 switch 和目录 morph 按钮已接入 `MacOSWindowDragGuard`：指针按住这些控件时临时关闭 AppKit 窗口拖动，避免轻微位移把按钮点击误判为移动窗口；空白 header 区域仍可拖动窗口。
 - macOS `未读/全部` 紧凑 switch 已按用户视觉实验收窄为 `58px` 轨道、`42px` 滑块，去掉外层内缩 padding；最外层静态 rim 当前为 `1px`、局部 opacity multiplier `1.0`。时间线 header 间距为 switch→排序 `8px`、排序→同步 `8px`、同步→右边界 `10px`。
-- macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界改为 `4px`；中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
+- macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界为 `2px`；正文基础左右 padding 为 `11px`。中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
 - macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。
 - macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。
 - 两条动画链保留默认关闭的诊断埋点。仅在 Debug 并显式传 `--dart-define=AUTO_FOLO_ANIMATION_PROBE=true` 时启用；Release 和普通 Debug 不注册帧耗时回调，也不挂载动画监听器。
 - macOS 静默订阅源分组不再因“被选中”而自动展开。点击分组行只进入静默时间线，只有独立展开按钮会改变子列表展开状态。
-- macOS 中间栏与文章详情已接入透明 header + soft scroll edge：内容滚入 header 后按 ease-in-out alpha 融入页面背景，不做逐位置动态模糊。主时间线、垃圾拦截、最近阅读和订阅源详情共用 `MacHeaderScrollEdge`。
-- header-aware scrollbar 已改为显式 `RawScrollbar.padding`，轨道真正从 header 下缘开始，渐隐层避开 thumb。主时间线和最近阅读内部会覆盖共享行为的旧局部 `ScrollConfiguration` 已清理；用户确认主时间线 scrollbar 起点和卡片遮挡关系正常。
-- macOS 文章 header 的整块 `BackdropFilter` 已移除，避免相邻按钮光效被采样到左侧；阅读进度条移至文章面板最顶端。Android header/进度条行为不变。
+- macOS 透明 header + soft scroll edge 实验已按用户长期视觉反馈撤销。主时间线、垃圾拦截、最近阅读和订阅源详情改用共享 `MacHeaderPane`：固定 `surface` header，内容和 scrollbar 从其下方开始，中间栏 header 仍无底部分隔线。
+- macOS 文章 header 同样恢复固定 `surface`，且继续不使用整块 `BackdropFilter`，避免采样相邻按钮高光。header 底部始终显示与主时间线栏间竖线一致的 `1px outlineVariant / alpha 0.30` 分隔线，橙色阅读进度覆盖在其上。
+- 垃圾拦截同步按钮与主时间线共用 `AppGlassSyncButton`，右侧 inset 也统一为 `10px`。
 - Android 垃圾拦截横滑背景已补齐和 macOS 相同的圆角路径差集裁剪；移动端仍由 `Dismissible` 处理手势和阈值，只共享卡片前后层级的几何规则。
 
 本次待用户继续验证：

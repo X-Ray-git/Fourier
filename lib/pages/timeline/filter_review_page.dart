@@ -29,7 +29,7 @@ import '../../common/widgets/card_press_effect.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
-import '../../common/widgets/mac_header_scroll_edge.dart';
+import '../../common/widgets/mac_header_pane.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
@@ -815,7 +815,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         children: [
           SizedBox(
             width: 380,
-            child: MacHeaderScrollEdge(
+            child: MacHeaderPane(
               headerHeight: kToolbarHeight,
               header: _MacReviewHeader(
                 articles: _articles,
@@ -839,9 +839,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                             itemKey: (article) => article.entryId,
                             padding: MacArticleListChrome.contentPadding(
                               context,
-                              top: MacHeaderScrollEdge.contentTopPadding(
-                                kToolbarHeight,
-                              ),
                             ),
                             separatorBuilder: (_, _) => const SizedBox.shrink(),
                             itemBuilder: _buildAnimatedReviewRow,
@@ -855,15 +852,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                             child: DelayedVisibility(
                               visible: _articles.isEmpty,
                               delay: const Duration(milliseconds: 220),
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                  top: kToolbarHeight,
-                                ),
-                                child: _buildEmptyState(
-                                  cs,
-                                  llmActive: llmActive,
-                                  llmCount: q + p,
-                                ),
+                              child: _buildEmptyState(
+                                cs,
+                                llmActive: llmActive,
+                                llmCount: q + p,
                               ),
                             ),
                           ),
@@ -1551,7 +1543,7 @@ class _MacReviewHeader extends StatelessWidget {
                     onPressed: onSync,
                     syncingColor: colorScheme.primary,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                 ],
               );
             }),

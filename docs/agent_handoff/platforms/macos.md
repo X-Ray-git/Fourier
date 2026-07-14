@@ -31,7 +31,7 @@ macOS 是近期 UI 工作的主要验证目标。
 - 即使同步在 widget 订阅前已经开始，同步按钮也应开始旋转。
 - 文章图片 hover 不再缩小图片，也不显示边框；可点击图片通过 native channel 使用 macOS zoom-in 光标。
 - 中间时间线/列表 header 不再使用玻璃背景，也不保留底部分隔线。
-- 文章详情 header 暂时保留当前处理，除非用户要求再次调整。
+- 文章详情使用固定 `surface` header，不做整块毛玻璃或顶部渐隐；底部始终显示细分隔线，阅读进度覆盖在其上。
 - macOS max fling velocity 是用户可配置项，并应全局应用于 macOS。
 - 普通时间线和垃圾拦截页的同步按钮复用 `AppGlassSyncButton`；如果调整 macOS 同步按钮样式、旋转或 tooltip，应改共用组件。
 

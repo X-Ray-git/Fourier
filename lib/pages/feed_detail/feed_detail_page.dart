@@ -22,7 +22,7 @@ import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
-import '../../common/widgets/mac_header_scroll_edge.dart';
+import '../../common/widgets/mac_header_pane.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_service.dart';
 import '../../services/content_cache_service.dart';
@@ -887,7 +887,7 @@ class FeedDetailPage extends StatelessWidget {
         children: [
           SizedBox(
             width: 380,
-            child: MacHeaderScrollEdge(
+            child: MacHeaderPane(
               headerHeight: 68,
               header: _MacFeedHeader(
                 controller: controller,
@@ -1144,22 +1144,14 @@ class _MacFeedArticleList extends StatelessWidget {
         Success() => Obx(() {
           final list = controller.articles;
           if (list.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.only(top: 68),
-              child: _EmptyView(
-                onRetry: controller.loadData,
-                readFilter: controller.readFilter.value,
-              ),
+            return _EmptyView(
+              onRetry: controller.loadData,
+              readFilter: controller.readFilter.value,
             );
           }
 
           return ListView.builder(
-            padding: EdgeInsets.fromLTRB(
-              0,
-              MacHeaderScrollEdge.contentTopPadding(68, 8),
-              0,
-              18,
-            ),
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 18),
             itemCount: list.length,
             itemBuilder: (context, index) {
               final article = list[index];

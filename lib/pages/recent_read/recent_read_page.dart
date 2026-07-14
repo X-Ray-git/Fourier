@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/mac_empty_placeholder.dart';
-import '../../common/widgets/mac_header_scroll_edge.dart';
+import '../../common/widgets/mac_header_pane.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -130,7 +130,7 @@ class _RecentReadPageState extends State<RecentReadPage> {
             children: [
               SizedBox(
                 width: 380,
-                child: MacHeaderScrollEdge(
+                child: MacHeaderPane(
                   headerHeight: kToolbarHeight,
                   header: AppBar(
                     title: const Text(
@@ -188,38 +188,31 @@ class _RecentReadPageState extends State<RecentReadPage> {
   Widget _buildListView(BuildContext context) {
     return Obx(() {
       return controller.articles.isEmpty
-          ? Padding(
-              padding: EdgeInsets.only(
-                top: Platform.isMacOS ? kToolbarHeight : 0,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.history_rounded,
-                      size: 48,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.history_rounded,
+                    size: 48,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '暂无阅读记录',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '暂无阅读记录',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             )
           : ListView.builder(
               controller: _scrollController,
               padding: EdgeInsets.only(
-                top: Platform.isMacOS
-                    ? MacHeaderScrollEdge.contentTopPadding(kToolbarHeight)
-                    : MediaQuery.paddingOf(context).top,
+                top: Platform.isMacOS ? 0 : MediaQuery.paddingOf(context).top,
                 bottom:
                     8 +
                     (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +

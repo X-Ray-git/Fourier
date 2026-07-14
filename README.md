@@ -11,8 +11,8 @@
 ## 主要功能
 
 <p align="center">
-<img src="./assets/article.png" alt="article" style="width:50%;" />
-<img src="./assets/filter.png" alt="filter" style="width:50%;" />
+<img src="./assets/article.png" alt="article" />
+<img src="./assets/filter.png" alt="filter" />
 </p>
 
 - **时间线** — 未读 / 全部 / 已读三态视图，无限滚动，macOS 分栏阅读

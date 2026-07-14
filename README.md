@@ -10,6 +10,11 @@
 
 ## 主要功能
 
+<p align="center">
+<img src="./assets/article.png" alt="article" style="width:50%;" />
+<img src="./assets/filter.png" alt="filter" style="width:50%;" />
+</p>
+
 - **时间线** — 未读 / 全部 / 已读三态视图，无限滚动，macOS 分栏阅读
 - **订阅源** — view → 分类 → 订阅源三级分组，搜索，按源筛选
 - **文章阅读** — DOM 拆块懒渲染，图片画廊 + 手势缩放，视频播放

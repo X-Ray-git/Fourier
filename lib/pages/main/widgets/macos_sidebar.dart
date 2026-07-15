@@ -338,6 +338,7 @@ class _MacOSSidebarSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       width: width,
       child: CustomPaint(
@@ -345,6 +346,7 @@ class _MacOSSidebarSlot extends StatelessWidget {
           backgroundColor: cs.surface,
           panelMargin: _macOSSidebarPanelMargin,
           panelRadius: _macOSSidebarPanelRadius,
+          isDark: isDark,
         ),
         child: child,
       ),
@@ -356,11 +358,13 @@ class _MacOSSidebarSlotPainter extends CustomPainter {
   final Color backgroundColor;
   final EdgeInsets panelMargin;
   final double panelRadius;
+  final bool isDark;
 
   const _MacOSSidebarSlotPainter({
     required this.backgroundColor,
     required this.panelMargin,
     required this.panelRadius,
+    required this.isDark,
   });
 
   @override
@@ -375,13 +379,48 @@ class _MacOSSidebarSlotPainter extends CustomPainter {
     final panel = continuousRectanglePath(panelRect, panelRadius);
     final backgroundPath = Path.combine(PathOperation.difference, outer, panel);
     canvas.drawPath(backgroundPath, Paint()..color = backgroundColor);
+    if (!isDark) {
+      canvas.save();
+      canvas.clipPath(backgroundPath);
+      _drawShadow(
+        canvas,
+        panel,
+        color: Colors.black.withValues(alpha: 0.045),
+        blurRadius: 6,
+        offset: const Offset(0, 1.5),
+      );
+      _drawShadow(
+        canvas,
+        panel,
+        color: Colors.black.withValues(alpha: 0.055),
+        blurRadius: 1.5,
+        offset: const Offset(0, 0.75),
+      );
+      canvas.restore();
+    }
+  }
+
+  void _drawShadow(
+    Canvas canvas,
+    Path path, {
+    required Color color,
+    required double blurRadius,
+    required Offset offset,
+  }) {
+    canvas.drawPath(
+      path.shift(offset),
+      Paint()
+        ..color = color
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurRadius),
+    );
   }
 
   @override
   bool shouldRepaint(covariant _MacOSSidebarSlotPainter oldDelegate) {
     return backgroundColor != oldDelegate.backgroundColor ||
         panelMargin != oldDelegate.panelMargin ||
-        panelRadius != oldDelegate.panelRadius;
+        panelRadius != oldDelegate.panelRadius ||
+        isDark != oldDelegate.isDark;
   }
 }
 
@@ -392,13 +431,50 @@ class _MacOSGlassPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppGlassSurface(
-      borderRadius: _macOSSidebarPanelRadius,
-      margin: _macOSSidebarPanelMargin,
-      tone: AppGlassTone.panel,
-      nativeBackdrop: true,
-      child: child,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: _macOSSidebarPanelMargin,
+      child: CustomPaint(
+        foregroundPainter: _MacOSSidebarBorderPainter(
+          radius: _macOSSidebarPanelRadius,
+          isDark: isDark,
+        ),
+        child: ContinuousRectangleClip(
+          radius: _macOSSidebarPanelRadius,
+          child: child,
+        ),
+      ),
     );
+  }
+}
+
+class _MacOSSidebarBorderPainter extends CustomPainter {
+  final double radius;
+  final bool isDark;
+
+  const _MacOSSidebarBorderPainter({
+    required this.radius,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = continuousRectanglePath(
+      (Offset.zero & size).deflate(0.25),
+      radius - 0.25,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.12)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _MacOSSidebarBorderPainter oldDelegate) {
+    return radius != oldDelegate.radius || isDark != oldDelegate.isDark;
   }
 }
 

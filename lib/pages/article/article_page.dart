@@ -1285,7 +1285,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                         AppGlassIconButton(
                           icon: Icons.content_copy_rounded,
                           tooltip: '复制原文全文 (C)',
-                          useOwnLayer: false,
                           onPressed: _copyOriginalArticleMarkdown,
                         ),
                         const SizedBox(width: _macToolbarButtonGap),
@@ -1296,7 +1295,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                           tooltip: isRead ? '恢复未读' : '标为已读 (M)',
                           selected: !isRead,
                           selectedFillOpacity: 0.07,
-                          useOwnLayer: false,
                           onPressed: isUpdating
                               ? null
                               : () {
@@ -1864,27 +1862,24 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
   static const double _buttonSize = 34;
   static const double _panelWidth = 304;
   static const double _panelMaxHeight = 430;
-  static const glass.LiquidGlassSettings _tocGlassSettings =
-      glass.LiquidGlassSettings(
-        blur: 10,
-        thickness: 7,
-        glassColor: Color.fromRGBO(255, 255, 255, 0.23),
-        lightIntensity: 0.62,
-        ambientStrength: 0.36,
-        saturation: 1.18,
-        refractiveIndex: 0.42,
-        chromaticAberration: 0.0,
-      );
-
   late final glass.GlassMorphController _morphController;
+  late bool _showMorphLayer;
 
   @override
   void initState() {
     super.initState();
+    _showMorphLayer = widget.isOpen;
     _morphController =
         glass.GlassMorphController(vsync: this, speed: glass.MorphSpeed.normal)
           ..addListener(() {
-            if (mounted) setState(() {});
+            if (!mounted) return;
+            if (!widget.isOpen &&
+                _showMorphLayer &&
+                _morphController.hasHandedOff) {
+              setState(() => _showMorphLayer = false);
+              return;
+            }
+            if (_showMorphLayer) setState(() {});
           });
     if (widget.isOpen) {
       _morphController.open();
@@ -1904,6 +1899,7 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
     super.didUpdateWidget(oldWidget);
     if (widget.isOpen != oldWidget.isOpen) {
       if (widget.isOpen) {
+        _showMorphLayer = true;
         _morphController.open();
       } else {
         _morphController.close();
@@ -1919,6 +1915,7 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final tocGlassSettings = appGlassSettingsFor(context, AppGlassTone.control);
     final estimatedRowsHeight = widget.entries.fold<double>(
       0,
       (sum, entry) => sum + _estimatedTocRowHeight(entry),
@@ -1933,17 +1930,28 @@ class _ArticleTocOverlayState extends State<_ArticleTocOverlay>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          _ArticleTocMorphLayer(
-            panelWidth: _panelWidth,
-            panelHeight: panelHeight,
-            buttonSize: _buttonSize,
-            morphController: _morphController,
-            entries: widget.entries,
-            activeTocId: widget.activeTocId,
-            onToggle: widget.onToggle,
-            onEntryTap: widget.onEntryTap,
-            glassSettings: _tocGlassSettings,
-          ),
+          if (_showMorphLayer)
+            _ArticleTocMorphLayer(
+              panelWidth: _panelWidth,
+              panelHeight: panelHeight,
+              buttonSize: _buttonSize,
+              morphController: _morphController,
+              entries: widget.entries,
+              activeTocId: widget.activeTocId,
+              onToggle: widget.onToggle,
+              onEntryTap: widget.onEntryTap,
+              glassSettings: tocGlassSettings,
+            )
+          else
+            Positioned(
+              top: 0,
+              right: 0,
+              child: AppGlassIconButton(
+                icon: Icons.format_list_bulleted_rounded,
+                tooltip: '目录',
+                onPressed: widget.onToggle,
+              ),
+            ),
         ],
       ),
     );
@@ -1989,6 +1997,7 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final rawValue = widget.morphController.value;
     final effectiveValue =
         widget.morphController.isClosing && widget.morphController.hasHandedOff
@@ -2068,41 +2077,52 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
                       shape: glass.LiquidRoundedSuperellipse(
                         borderRadius: currentRadius,
                       ),
-                      child: Stack(
-                        alignment: Alignment.topRight,
-                        children: [
-                          if (showTriggerIcon)
-                            Opacity(
-                              opacity: triggerIconOpacity,
-                              child: SizedBox(
-                                width: widget.buttonSize,
-                                height: widget.buttonSize,
-                                child: _TocIconButtonChrome(
-                                  icon: Icons.format_list_bulleted_rounded,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                ),
-                              ),
+                      child: DecoratedBox(
+                        position: DecorationPosition.foreground,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(currentRadius),
+                          border: Border.all(
+                            color: appGlassBorderColor(
+                              context,
+                              AppGlassTone.control,
                             ),
-                          if (showContent)
-                            Opacity(
-                              opacity: contentOpacity,
-                              child: IgnorePointer(
-                                ignoring: contentOpacity < 0.95,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Stack(
+                          alignment: Alignment.topRight,
+                          children: [
+                            if (showTriggerIcon)
+                              Opacity(
+                                opacity: triggerIconOpacity,
                                 child: SizedBox(
-                                  width: widget.panelWidth,
-                                  height: widget.panelHeight,
-                                  child: _ArticleTocPanelContent(
-                                    entries: widget.entries,
-                                    activeTocId: widget.activeTocId,
-                                    onToggle: widget.onToggle,
-                                    onEntryTap: widget.onEntryTap,
+                                  width: widget.buttonSize,
+                                  height: widget.buttonSize,
+                                  child: _TocIconButtonChrome(
+                                    icon: Icons.format_list_bulleted_rounded,
+                                    color: cs.onSurface,
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
+                            if (showContent)
+                              Opacity(
+                                opacity: contentOpacity,
+                                child: IgnorePointer(
+                                  ignoring: contentOpacity < 0.95,
+                                  child: SizedBox(
+                                    width: widget.panelWidth,
+                                    height: widget.panelHeight,
+                                    child: _ArticleTocPanelContent(
+                                      entries: widget.entries,
+                                      activeTocId: widget.activeTocId,
+                                      onToggle: widget.onToggle,
+                                      onEntryTap: widget.onEntryTap,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

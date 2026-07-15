@@ -23,6 +23,7 @@ import 'services/account_service.dart';
 import 'services/app_version_service.dart';
 import 'utils/storage.dart';
 import 'services/undo_service.dart';
+import 'utils/macos_window_controls.dart';
 
 class UndoReadIntent extends Intent {
   const UndoReadIntent();
@@ -117,6 +118,7 @@ class AutoFoloApp extends StatelessWidget {
         keys: const [StorageKeys.appearanceMode],
       ),
       builder: (context, settingsBox, child) {
+        final appearanceMode = _currentAppearanceMode;
         return GetMaterialApp(
           title: AppConstants.appName,
           debugShowCheckedModeBanner: false,
@@ -188,10 +190,11 @@ class AutoFoloApp extends StatelessWidget {
               },
             ),
           ),
-          themeMode: _currentThemeMode,
+          themeMode: _themeModeFor(appearanceMode),
 
           // SmartDialog 注入毛玻璃版全局基础 Toast
           builder: (context, child) {
+            final brightness = Theme.of(context).brightness;
             final smartDialogBuilder = FlutterSmartDialog.init(
               toastBuilder: (String msg) => _CustomToast(msg: msg),
               loadingBuilder: (msg) => LoadingWidget(msg: msg),
@@ -260,7 +263,7 @@ class AutoFoloApp extends StatelessWidget {
                 child: smartDialogBuilder(context, child),
               ),
             );
-            return ValueListenableBuilder(
+            Widget result = ValueListenableBuilder(
               valueListenable: GStorage.setting.listenable(
                 keys: const [StorageKeys.macosMaxFlingVelocity],
               ),
@@ -275,6 +278,18 @@ class AutoFoloApp extends StatelessWidget {
                 );
               },
             );
+            if (Platform.isMacOS) {
+              result = _MacOSAppearanceSync(
+                mode: appearanceMode,
+                child: MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(platformBrightness: brightness),
+                  child: result,
+                ),
+              );
+            }
+            return result;
           },
           navigatorObservers: [FlutterSmartDialog.observer],
         );
@@ -282,12 +297,19 @@ class AutoFoloApp extends StatelessWidget {
     );
   }
 
-  static ThemeMode get _currentThemeMode {
+  static String get _currentAppearanceMode {
     final raw = GStorage.setting.get(
       StorageKeys.appearanceMode,
       defaultValue: AppConstants.defaultAppearanceMode,
     );
     return switch (raw) {
+      'light' || 'dark' || 'system' => raw as String,
+      _ => AppConstants.defaultAppearanceMode,
+    };
+  }
+
+  static ThemeMode _themeModeFor(String mode) {
+    return switch (mode) {
       'light' => ThemeMode.light,
       'dark' => ThemeMode.dark,
       _ => ThemeMode.system,
@@ -359,6 +381,39 @@ class AutoFoloApp extends StatelessWidget {
     onInverseSurface: const Color(0xFF313033),
     inversePrimary: const Color(0xFFD96E2C),
   );
+}
+
+class _MacOSAppearanceSync extends StatefulWidget {
+  final String mode;
+  final Widget child;
+
+  const _MacOSAppearanceSync({required this.mode, required this.child});
+
+  @override
+  State<_MacOSAppearanceSync> createState() => _MacOSAppearanceSyncState();
+}
+
+class _MacOSAppearanceSyncState extends State<_MacOSAppearanceSync> {
+  @override
+  void initState() {
+    super.initState();
+    _syncAppearance();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MacOSAppearanceSync oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.mode != oldWidget.mode) {
+      _syncAppearance();
+    }
+  }
+
+  void _syncAppearance() {
+    unawaited(MacOSWindowControls.setAppearance(widget.mode));
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// 全局基础 Toast (毛玻璃胶囊形态)

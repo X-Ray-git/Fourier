@@ -99,6 +99,22 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         result(nil)
       } else if call.method == "setMovable" {
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected a Boolean", details: nil))
+      } else if call.method == "setAppearance", let mode = call.arguments as? String {
+        let appearance: NSAppearance?
+        switch mode {
+        case "light":
+          appearance = NSAppearance(named: .aqua)
+        case "dark":
+          appearance = NSAppearance(named: .darkAqua)
+        case "system":
+          appearance = nil
+        default:
+          result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected system, light, or dark", details: nil))
+          return
+        }
+        NSApp.appearance = appearance
+        self?.mainFlutterWindow?.appearance = appearance
+        result(nil)
       } else {
         result(FlutterMethodNotImplemented)
       }

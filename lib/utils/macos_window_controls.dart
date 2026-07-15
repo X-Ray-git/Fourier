@@ -18,4 +18,9 @@ class MacOSWindowControls {
     if (!Platform.isMacOS) return;
     await _channel.invokeMethod<void>('setMovable', movable);
   }
+
+  static Future<void> setAppearance(String mode) async {
+    if (!Platform.isMacOS) return;
+    await _channel.invokeMethod<void>('setAppearance', mode);
+  }
 }

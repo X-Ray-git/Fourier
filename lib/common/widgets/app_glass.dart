@@ -29,9 +29,9 @@ Color appGlassActiveControlFill(
 }) {
   final cs = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
-  final neutralBase = (isDark ? Colors.black : cs.scrim).withValues(
-    alpha: isDark ? 0.22 : 0.13,
-  );
+  final neutralBase = isDark
+      ? Colors.black.withValues(alpha: 0.22)
+      : const Color(0xA6F4F7FC);
   return Color.alphaBlend(
     cs.primary.withValues(alpha: accentAlpha),
     neutralBase,
@@ -181,6 +181,50 @@ AppGlassControlPalette appGlassControlPalette(BuildContext context) {
   return AppGlassControlPalette(context);
 }
 
+LiquidGlassSettings appGlassSettingsFor(
+  BuildContext context,
+  AppGlassTone tone,
+) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final tint = switch (tone) {
+    AppGlassTone.surface =>
+      isDark ? const Color(0x2AFFFFFF) : const Color(0x42FFFFFF),
+    AppGlassTone.panel =>
+      isDark ? const Color(0x32FFFFFF) : const Color(0x48FFFFFF),
+    AppGlassTone.control =>
+      isDark ? const Color(0x3AFFFFFF) : const Color(0x58FFFFFF),
+  };
+  return LiquidGlassSettings(
+    blur: switch (tone) {
+      AppGlassTone.surface => 14,
+      AppGlassTone.panel => 18,
+      AppGlassTone.control => 10,
+    },
+    thickness: switch (tone) {
+      AppGlassTone.surface => 8,
+      AppGlassTone.panel => 12,
+      AppGlassTone.control => 7,
+    },
+    glassColor: tint,
+    saturation: 1.18,
+    refractiveIndex: 0.42,
+    lightIntensity: isDark ? 0.62 : 0.74,
+    ambientStrength: isDark ? 0.36 : 0.48,
+    shadowElevation: !isDark && tone == AppGlassTone.control ? 1.25 : 1.0,
+  );
+}
+
+Color appGlassBorderColor(BuildContext context, AppGlassTone tone) {
+  final cs = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  if (isDark) {
+    return cs.outlineVariant.withValues(alpha: 0.22);
+  }
+  return tone == AppGlassTone.control
+      ? cs.onSurface.withValues(alpha: 0.08)
+      : cs.outlineVariant.withValues(alpha: 0.32);
+}
+
 class AppGlassSurface extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -213,9 +257,6 @@ class AppGlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     if (!Platform.isMacOS) {
       return _FallbackGlassSurface(
         borderRadius: borderRadius,
@@ -246,7 +287,7 @@ class AppGlassSurface extends StatelessWidget {
       );
     }
 
-    final settings = _settingsFor(tone, isDark);
+    final settings = appGlassSettingsFor(context, tone);
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: AdaptiveGlass(
@@ -263,41 +304,13 @@ class AppGlassSurface extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(borderRadius),
             border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: isDark ? 0.22 : 0.32),
+              color: appGlassBorderColor(context, tone),
               width: 0.5,
             ),
           ),
           child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
         ),
       ),
-    );
-  }
-
-  LiquidGlassSettings _settingsFor(AppGlassTone tone, bool isDark) {
-    final tint = switch (tone) {
-      AppGlassTone.surface =>
-        isDark ? const Color(0x2AFFFFFF) : const Color(0x42FFFFFF),
-      AppGlassTone.panel =>
-        isDark ? const Color(0x32FFFFFF) : const Color(0x48FFFFFF),
-      AppGlassTone.control =>
-        isDark ? const Color(0x3AFFFFFF) : const Color(0x58FFFFFF),
-    };
-    return LiquidGlassSettings(
-      blur: switch (tone) {
-        AppGlassTone.surface => 14,
-        AppGlassTone.panel => 18,
-        AppGlassTone.control => 10,
-      },
-      thickness: switch (tone) {
-        AppGlassTone.surface => 8,
-        AppGlassTone.panel => 12,
-        AppGlassTone.control => 7,
-      },
-      glassColor: tint,
-      saturation: 1.18,
-      refractiveIndex: 0.42,
-      lightIntensity: isDark ? 0.62 : 0.74,
-      ambientStrength: isDark ? 0.36 : 0.48,
     );
   }
 }
@@ -319,13 +332,15 @@ class _NativeBackdropGlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseTint = Color.lerp(
-      cs.surfaceContainerHighest,
-      cs.scrim,
-      isDark ? 0.18 : 0.10,
-    )!;
-    final topTint = Color.lerp(baseTint, cs.onSurface, isDark ? 0.10 : 0.05)!;
-    final bottomTint = Color.lerp(baseTint, cs.scrim, isDark ? 0.22 : 0.14)!;
+    final baseTint = isDark
+        ? Color.lerp(cs.surfaceContainerHighest, cs.scrim, 0.18)!
+        : const Color(0xFFD2DCF0);
+    final topTint = isDark
+        ? Color.lerp(baseTint, cs.onSurface, 0.10)!
+        : const Color(0xFFF7FAFF);
+    final bottomTint = isDark
+        ? Color.lerp(baseTint, cs.scrim, 0.22)!
+        : const Color(0xFFE7EDF7);
     const rimColor = Colors.white;
 
     return Padding(
@@ -353,8 +368,8 @@ class _NativeBackdropGlassSurface extends StatelessWidget {
                     end: Alignment.bottomRight,
                     colors: [
                       topTint.withValues(alpha: isDark ? 0.30 : 0.24),
-                      baseTint.withValues(alpha: isDark ? 0.24 : 0.18),
-                      bottomTint.withValues(alpha: isDark ? 0.28 : 0.22),
+                      baseTint.withValues(alpha: isDark ? 0.24 : 0.20),
+                      bottomTint.withValues(alpha: isDark ? 0.28 : 0.21),
                     ],
                     stops: const [0.0, 0.54, 1.0],
                   ),
@@ -399,15 +414,15 @@ class _NativeBackdropShadowPainter extends CustomPainter {
     _drawShadow(
       canvas,
       path,
-      color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
-      blurRadius: 18,
-      offset: const Offset(0, 6),
+      color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
+      blurRadius: isDark ? 18 : 8,
+      offset: Offset(0, isDark ? 6 : 2),
     );
     _drawShadow(
       canvas,
       path,
-      color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.04),
-      blurRadius: 3,
+      color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.035),
+      blurRadius: isDark ? 3 : 2,
       offset: const Offset(0, 1),
     );
   }

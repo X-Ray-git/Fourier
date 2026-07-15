@@ -7,6 +7,10 @@ class MainFlutterWindow: NSWindow {
 
   private enum Metrics {
     static let windowRadius: CGFloat = 24
+    static let sidebarWidth: CGFloat = 290
+    static let sidebarMargin: CGFloat = 8
+    static let sidebarRadius: CGFloat = 18
+    static let sidebarBackdropBleed: CGFloat = 1
     static let trafficLightCenterX: CGFloat = 24
     static let trafficLightCenterYFromTop: CGFloat = 24
     static let trafficLightDiameter: CGFloat = 14
@@ -25,25 +29,48 @@ class MainFlutterWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.styleMask.insert(.fullSizeContentView)
 
-    let visualEffectView = NSVisualEffectView(frame: flutterViewController.view.bounds)
-    visualEffectView.autoresizingMask = [.width, .height]
-    visualEffectView.blendingMode = .behindWindow
-    visualEffectView.material = .sidebar
-    visualEffectView.state = .active
-    visualEffectView.wantsLayer = true
-    visualEffectView.layer?.cornerRadius = Metrics.windowRadius
-    visualEffectView.layer?.masksToBounds = true
+    let sidebarBackdrop = makeSidebarBackdrop(in: flutterViewController.view.bounds)
 
     flutterViewController.view.wantsLayer = true
     flutterViewController.view.layer?.backgroundColor = NSColor.clear.cgColor
     if let contentView = self.contentView {
-      contentView.addSubview(visualEffectView, positioned: .below, relativeTo: flutterViewController.view)
+      contentView.addSubview(sidebarBackdrop, positioned: .below, relativeTo: flutterViewController.view)
     }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
     scheduleTrafficLightPositioning()
+  }
+
+  private func makeSidebarBackdrop(in bounds: NSRect) -> NSView {
+    let margin = Metrics.sidebarMargin
+    let bleed = Metrics.sidebarBackdropBleed
+    let frame = NSRect(
+      x: margin - bleed,
+      y: margin - bleed,
+      width: Metrics.sidebarWidth - margin * 2 + bleed * 2,
+      height: max(0, bounds.height - margin * 2 + bleed * 2)
+    )
+
+    if #available(macOS 26.0, *) {
+      let glassView = NSGlassEffectView(frame: frame)
+      glassView.autoresizingMask = [.height]
+      glassView.style = .regular
+      glassView.cornerRadius = Metrics.sidebarRadius + bleed
+      glassView.tintColor = nil
+      return glassView
+    }
+
+    let visualEffectView = NSVisualEffectView(frame: frame)
+    visualEffectView.autoresizingMask = [.height]
+    visualEffectView.blendingMode = .behindWindow
+    visualEffectView.material = .sidebar
+    visualEffectView.state = .active
+    visualEffectView.wantsLayer = true
+    visualEffectView.layer?.cornerRadius = Metrics.sidebarRadius + bleed
+    visualEffectView.layer?.masksToBounds = true
+    return visualEffectView
   }
 
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {

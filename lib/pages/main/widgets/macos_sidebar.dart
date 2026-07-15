@@ -137,12 +137,17 @@ class MacOSSidebar extends StatelessWidget {
                                 category.feeds.any(
                                   (feed) => feed.feedId == selectedFeedId,
                                 );
-                            final forceExpanded =
-                                subController.searchQuery.value.isNotEmpty ||
-                                containsSelectedFeed;
+                            final isSearchActive =
+                                subController.searchQuery.value.isNotEmpty;
+                            final isRevealedBySelection =
+                                currentIndex == 0 && containsSelectedFeed;
+                            final isTemporarilyRevealed =
+                                isSearchActive || isRevealedBySelection;
+                            final isManuallyExpanded = subController.isExpanded(
+                              categoryKey,
+                            );
                             final isExpanded =
-                                forceExpanded ||
-                                subController.isExpanded(categoryKey);
+                                isTemporarilyRevealed || isManuallyExpanded;
                             return _CategoryGroup(
                               category: category,
                               isExpanded: isExpanded,
@@ -151,12 +156,19 @@ class MacOSSidebar extends StatelessWidget {
                                 category.name,
                                 category.feeds,
                               ),
-                              onToggle: () {
-                                subController.setExpanded(
-                                  categoryKey,
-                                  !isExpanded,
-                                );
-                              },
+                              onToggle: isTemporarilyRevealed
+                                  ? null
+                                  : () {
+                                      subController.setExpanded(
+                                        categoryKey,
+                                        !isManuallyExpanded,
+                                      );
+                                    },
+                              toggleTooltip: isRevealedBySelection
+                                  ? '当前订阅源位于此分组'
+                                  : isSearchActive
+                                  ? '搜索期间保持展开'
+                                  : null,
                               onTap: () {
                                 timelineController.setTimelineScope(
                                   category: category.name,
@@ -546,7 +558,8 @@ class _CategoryGroup extends StatelessWidget {
   final bool isExpanded;
   final bool isSelected;
   final int badgeCount;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
+  final String? toggleTooltip;
   final VoidCallback onTap;
   final Widget Function(FeedModel feed) feedBuilder;
 
@@ -556,6 +569,7 @@ class _CategoryGroup extends StatelessWidget {
     required this.isSelected,
     required this.badgeCount,
     required this.onToggle,
+    this.toggleTooltip,
     required this.onTap,
     required this.feedBuilder,
   });
@@ -572,6 +586,7 @@ class _CategoryGroup extends StatelessWidget {
           badgeCount: badgeCount,
           onTap: onTap,
           onToggle: onToggle,
+          toggleTooltip: toggleTooltip,
         ),
         ClipRect(
           child: AnimatedSize(
@@ -599,7 +614,8 @@ class _CategoryItem extends StatelessWidget {
   final bool isSelected;
   final int badgeCount;
   final VoidCallback onTap;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
+  final String? toggleTooltip;
 
   const _CategoryItem({
     required this.label,
@@ -610,6 +626,7 @@ class _CategoryItem extends StatelessWidget {
     required this.badgeCount,
     required this.onTap,
     required this.onToggle,
+    this.toggleTooltip,
   });
 
   @override
@@ -630,7 +647,7 @@ class _CategoryItem extends StatelessWidget {
             child: Row(
               children: [
                 AppGlassTooltip(
-                  message: isExpanded ? '折叠' : '展开',
+                  message: toggleTooltip ?? (isExpanded ? '折叠' : '展开'),
                   child: IconButton(
                     icon: AnimatedRotation(
                       turns: isExpanded ? 0.25 : 0,

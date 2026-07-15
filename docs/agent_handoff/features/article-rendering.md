@@ -15,6 +15,13 @@
 - 渲染器刻意拆分 HTML 规范化、chunk 解析、widget 渲染。修复应尽量放在问题所属阶段。
 - `ArticleController` 初始化右上角已读/未读按钮时，必须使用 `LocalArticleDbService.readOverrideOf(article.entryId) ?? article.isRead`。不要只读 `GStorage.readStatus`，因为最近阅读页传入的文章本身已经是已读，而同步成功后本地覆盖状态可能不存在。
 
+超链接：
+
+- macOS 正文链接保留主题色、手型光标、点击打开和底部 URL 预览，但 hover 时不再动态增加下划线。
+- 底部 URL 预览继续由文章页共享的 `_hoveredUrl` 驱动；它是 `Stack` 中的局部覆盖层，不改变正文布局。
+- `HtmlChunkCard` 不得监听共享 `_hoveredUrl` 并把 URL 变化作为 HTML widget 缓存失效条件。旧实现会在鼠标进入/离开任意链接时通知所有 chunk，导致全篇 `flutter_html` 重新解析和文本布局，滚动经过链接时产生瞬时卡顿。
+- 如果未来重新设计 hover 视觉反馈，必须保证不重新解析全篇或整个复杂 HTML chunk；手型光标和 URL 预览是当前稳定的交互反馈基线。
+
 图片：
 
 - 使用 `ArticleImageService` 处理代理/请求头。

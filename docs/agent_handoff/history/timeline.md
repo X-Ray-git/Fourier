@@ -8011,7 +8011,7 @@ open "build/macos/Build/Products/Debug/Auto Folo.app"
 
 背景：
 
-- 本轮工作发生在独立 worktree：`/Users/x.rw/.codex/worktrees/42b8/auto-folo`，分支名为 `codex/auto-folo-1`。
+- 本轮工作发生在独立 worktree：`$HOME/.codex/worktrees/42b8/auto-folo`，分支名为 `codex/auto-folo-1`。
 - 用户最初反馈：macOS 打开应用后自动首次同步时，右上角同步按钮显示“同步中”，但图标没有旋转。
 - 随后用户要求：
   - 文章详情页 macOS 翻译 / 摘要按钮取消液态玻璃，回到普通胶囊按钮。

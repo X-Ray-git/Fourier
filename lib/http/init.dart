@@ -38,12 +38,7 @@ class Request {
     if (!kIsWeb) {
       dio.httpClientAdapter = IOHttpClientAdapter(
         createHttpClient: () {
-          final client = HttpClient()
-            ..idleTimeout = const Duration(seconds: 15);
-          if (kDebugMode) {
-            client.badCertificateCallback = (cert, host, port) => true;
-          }
-          return client;
+          return HttpClient()..idleTimeout = const Duration(seconds: 15);
         },
       );
     }

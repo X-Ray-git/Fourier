@@ -26,4 +26,5 @@ Debug 日志：
 安全：
 
 - 外部链接应经过 URL 校验 helper。
+- Debug 和 Release 都必须使用系统 HTTPS 证书校验。不要设置无条件返回 `true` 的 `badCertificateCallback`；抓包代理应通过系统信任证书配置，不应让应用全局接受无效证书。
 - 不要在提交的代码里记录凭据或原始响应体。

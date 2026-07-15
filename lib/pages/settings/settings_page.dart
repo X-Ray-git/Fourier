@@ -468,6 +468,17 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  List<Widget> _buildMacShortcutItems(BuildContext context) => [
+    _buildShortcutItem(context, 'Cmd + ,', '打开设置'),
+    _buildShortcutItem(context, 'Cmd + Z', '撤销最近一次已读'),
+    _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
+    _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
+    _buildShortcutItem(context, '← / →', '切换上一篇 / 下一篇文章'),
+    _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
+    _buildShortcutItem(context, 'M', '切换文章已读 / 未读状态'),
+    _buildShortcutItem(context, 'C', '复制原文全文为 Markdown'),
+  ];
+
   void _scrollToMacSection(GlobalKey key) {
     final targetContext = key.currentContext;
     if (targetContext == null) return;
@@ -865,19 +876,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         title: '快捷键',
                         subtitle: 'macOS 端常用键盘操作。',
                         child: Column(
-                          children: [
-                            _buildShortcutItem(context, 'Cmd + ,', '打开设置'),
-                            _buildShortcutItem(context, 'Cmd + Z', '撤销最近一次已读'),
-                            _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
-                            _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
-                            _buildShortcutItem(
-                              context,
-                              '← / →',
-                              '切换上一篇 / 下一篇文章',
-                            ),
-                            _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
-                            _buildShortcutItem(context, 'M', '切换文章已读 / 未读状态'),
-                          ],
+                          children: _buildMacShortcutItems(context),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -1586,17 +1585,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Card(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  children: [
-                    _buildShortcutItem(context, 'Cmd + ,', '打开设置'),
-                    _buildShortcutItem(context, 'Cmd + Z', '撤销最近一次已读'),
-                    _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
-                    _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
-                    _buildShortcutItem(context, '← / →', '切换上一篇 / 下一篇文章'),
-                    _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
-                    _buildShortcutItem(context, 'M', '切换文章已读 / 未读状态'),
-                  ],
-                ),
+                child: Column(children: _buildMacShortcutItems(context)),
               ),
             ),
             const SizedBox(height: 24),

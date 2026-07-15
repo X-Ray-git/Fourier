@@ -16,16 +16,19 @@ import '../../../common/widgets/app_context_menu.dart';
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/interactiveviewer_gallery/interactive_viewer_boundary.dart';
 import '../../../services/article_image_service.dart';
+import '../../../services/article_image_cache_service.dart';
 import '../../../utils/image_clipboard.dart';
 
 /// PiliPlus 架构图片查看器 — 基于 vendored InteractiveViewerBoundary
 /// 实现单指下拉退出 + 双指缩放的零冲突手势交互。
 class ImageGalleryPage extends StatefulWidget {
+  final String articleId;
   final List<String> imageUrls;
   final int initialIndex;
 
   const ImageGalleryPage({
     super.key,
+    required this.articleId,
     required this.imageUrls,
     this.initialIndex = 0,
   });
@@ -413,6 +416,12 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                   final dpr = MediaQuery.of(context).devicePixelRatio;
                   final cacheWidth = (MediaQuery.of(context).size.width * dpr)
                       .round();
+                  final diskCacheWidth = cacheWidth * 2;
+                  ArticleImageCacheService.registerImage(
+                    widget.articleId,
+                    url,
+                    maxWidth: diskCacheWidth,
+                  );
 
                   return GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -431,12 +440,15 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                         tag: url,
                         child: SizedBox.expand(
                           child: CachedNetworkImage(
-                            cacheKey: 'v2_$url',
+                            cacheKey: ArticleImageCacheService.displayCacheKey(
+                              widget.articleId,
+                              url,
+                            ),
                             imageUrl: url,
                             fit: BoxFit.contain,
                             httpHeaders: ArticleImageService.httpHeaders,
                             memCacheWidth: cacheWidth,
-                            maxWidthDiskCache: cacheWidth * 2,
+                            maxWidthDiskCache: diskCacheWidth,
                             fadeInDuration: const Duration(milliseconds: 250),
                             fadeOutDuration: const Duration(milliseconds: 80),
                             placeholder: (context, url) => const SizedBox(

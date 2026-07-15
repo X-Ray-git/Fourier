@@ -13,6 +13,7 @@ import '../../models/article.dart';
 import '../../models/feed.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/account_service.dart';
+import '../../services/article_image_cache_service.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/feed_silent_settings_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -190,6 +191,9 @@ class TimelineController extends GetxController {
     _loadFromLocalDatabase();
 
     loadingState.value = Success(articles.toList());
+    unawaited(
+      ArticleImageCacheService.refresh(LocalArticleDbService.readAllArticles()),
+    );
     // 全量同步完成后，强制通知订阅列表做全量重新计数
     if (Get.isRegistered<SubscriptionsController>()) {
       Get.find<SubscriptionsController>().refreshUnreadCounts();

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import '../models/article.dart';
 import '../utils/storage.dart';
+import 'article_image_cache_service.dart';
 
 /// 本地文章库（已读/未读统一持久化）
 abstract final class LocalArticleDbService {
@@ -126,6 +129,7 @@ abstract final class LocalArticleDbService {
   static void recordReadHistory(String entryId) {
     if (entryId.trim().isEmpty) return;
     GStorage.readHistory.put(entryId, DateTime.now().millisecondsSinceEpoch);
+    ArticleImageCacheService.onReadHistoryChanged(entryId, isRead: true);
   }
 
   static void setReadState(
@@ -137,6 +141,7 @@ abstract final class LocalArticleDbService {
       if (recordHistory) recordReadHistory(entryId);
     } else {
       GStorage.readHistory.delete(entryId);
+      ArticleImageCacheService.onReadHistoryChanged(entryId, isRead: false);
     }
 
     final raw = GStorage.articleDb.get(entryId);
@@ -164,6 +169,9 @@ abstract final class LocalArticleDbService {
     );
     GStorage.articleDb.put(entryId, updated.toJson());
     invalidateCache();
+    if (!isRead) {
+      unawaited(ArticleImageCacheService.prefetchUnreadArticle(updated));
+    }
   }
 
   static void clearFilterState(String entryId) {

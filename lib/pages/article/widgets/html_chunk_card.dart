@@ -21,6 +21,7 @@ import '../../../utils/html_contrast_utils.dart';
 import '../../../utils/image_clipboard.dart';
 import '../../../utils/macos_zoom_in_cursor.dart';
 import '../../../services/article_image_service.dart';
+import '../../../services/article_image_cache_service.dart';
 import 'inline_video_player.dart';
 import 'youtube_embed_player.dart';
 
@@ -102,6 +103,7 @@ double _stableImageHeight(
 /// 彻底解决由于列表回收引发 flutter_html 重复解析导致的滑动掉帧问题。
 class HtmlChunkCard extends StatefulWidget {
   final HtmlChunk chunk;
+  final String articleId;
   final double maxWidth;
   final void Function(String imageUrl)? onImageTap;
   final bool keepAlive;
@@ -111,6 +113,7 @@ class HtmlChunkCard extends StatefulWidget {
   const HtmlChunkCard({
     super.key,
     required this.chunk,
+    required this.articleId,
     required this.maxWidth,
     this.onImageTap,
     this.keepAlive = true,
@@ -320,6 +323,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     final imageUrl = widget.chunk.normalizedImageUrl;
     if (imageUrl == null) return const SizedBox.shrink();
     return _ArticleInlineImage(
+      articleId: widget.articleId,
       imageUrl: imageUrl,
       maxWidth: widget.maxWidth,
       imageWidth: widget.chunk.imageWidth,
@@ -793,17 +797,26 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           style: attrs['style'],
         );
         final cacheWidth = math.max(1, (renderWidth * dpr).round());
+        final diskCacheWidth = cacheWidth * 2;
+        ArticleImageCacheService.registerImage(
+          widget.articleId,
+          imageUrl,
+          maxWidth: diskCacheWidth,
+        );
 
         final imageWidget = ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: CachedNetworkImage(
             imageUrl: imageUrl,
-            cacheKey: 'v2_$imageUrl',
+            cacheKey: ArticleImageCacheService.displayCacheKey(
+              widget.articleId,
+              imageUrl,
+            ),
             httpHeaders: ArticleImageService.httpHeaders,
             fit: BoxFit.contain,
             width: renderWidth,
             memCacheWidth: cacheWidth,
-            maxWidthDiskCache: cacheWidth * 2,
+            maxWidthDiskCache: diskCacheWidth,
             fadeInDuration: const Duration(milliseconds: 80),
             fadeOutDuration: const Duration(milliseconds: 80),
             placeholder: (context, url) => SizedBox(
@@ -858,6 +871,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
 
 // 2. 修复：混入 AutomaticKeepAliveClientMixin 以保持状态存活
 class _ArticleInlineImage extends StatefulWidget {
+  final String articleId;
   final String imageUrl;
   final double maxWidth;
   final double? imageWidth;
@@ -867,6 +881,7 @@ class _ArticleInlineImage extends StatefulWidget {
   final void Function(String imageUrl)? onTap;
 
   const _ArticleInlineImage({
+    required this.articleId,
     required this.imageUrl,
     required this.maxWidth,
     this.imageWidth,
@@ -911,17 +926,26 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
       widget.imageUrl,
       _retryCount,
     );
+    final diskCacheWidth = cacheWidth * 2;
+    ArticleImageCacheService.registerImage(
+      widget.articleId,
+      imageUrl,
+      maxWidth: diskCacheWidth,
+    );
 
     Widget image = Hero(
       tag: widget.imageUrl,
       child: CachedNetworkImage(
         imageUrl: imageUrl,
-        cacheKey: 'v2_$imageUrl',
+        cacheKey: ArticleImageCacheService.displayCacheKey(
+          widget.articleId,
+          imageUrl,
+        ),
         httpHeaders: ArticleImageService.httpHeaders,
         fit: BoxFit.contain,
         width: displayWidth,
         memCacheWidth: cacheWidth,
-        maxWidthDiskCache: cacheWidth * 2,
+        maxWidthDiskCache: diskCacheWidth,
         fadeInDuration: const Duration(milliseconds: 250),
         fadeOutDuration: const Duration(milliseconds: 80),
         placeholder: (context, url) => SizedBox(

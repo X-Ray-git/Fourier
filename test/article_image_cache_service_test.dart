@@ -1,0 +1,57 @@
+import 'package:autofolo/services/article_image_cache_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  group('ArticleImageCacheService', () {
+    test('builds an article-ordered plan with a per-article limit', () {
+      final firstImages = List.generate(
+        10,
+        (index) => '<img src="https://example.com/first-$index.jpg">',
+      ).join();
+      final plan = ArticleImageCacheService.buildPrefetchPlan([
+        {'articleId': 'first', 'content': firstImages},
+        {
+          'articleId': 'second',
+          'content': '<img src="https://example.com/second.jpg">',
+        },
+      ]);
+
+      expect(plan, hasLength(9));
+      expect(plan.take(8).map((item) => item['articleId']).toSet(), {'first'});
+      expect(plan.last, {
+        'articleId': 'second',
+        'imageUrl': 'https://example.com/second.jpg',
+      });
+    });
+
+    test('skips obvious animated images during background prefetch', () {
+      final plan = ArticleImageCacheService.buildPrefetchPlan([
+        {
+          'articleId': 'entry',
+          'content': '''
+            <img src="https://example.com/animated.gif">
+            <img src="https://example.com/animated.apng">
+            <img src="https://example.com/image?id=1&format=gif">
+            <img src="https://example.com/static.webp">
+          ''',
+        },
+      ]);
+
+      expect(plan, [
+        {'articleId': 'entry', 'imageUrl': 'https://example.com/static.webp'},
+      ]);
+    });
+
+    test('isolates cache keys by article and derives resized keys', () {
+      const url = 'https://example.com/image.jpg';
+      final first = ArticleImageCacheService.cacheKey('first', url);
+      final second = ArticleImageCacheService.cacheKey('second', url);
+
+      expect(first, isNot(second));
+      expect(
+        ArticleImageCacheService.resizedCacheKey(first, width: 1440),
+        'resized_w1440_$first',
+      );
+    });
+  });
+}

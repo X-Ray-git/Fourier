@@ -18,6 +18,8 @@
 图片：
 
 - 使用 `ArticleImageService` 处理代理/请求头。
+- macOS 正文图片使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；Android 暂时保持原缓存路径。
+- macOS 刷新完成后预取全部本地未读文章的正文静态图片：按文章顺序、每篇最多 8 张、总调度并发 16；当前文章前 4 张提升到队首。不要加入 hover 触发，也不要把预取改成批量 `precacheImage()` 常驻内存。
 - 宽度尽量尊重文章内容最大宽度和源图片尺寸。
 - macOS hover 不再缩小图片，也不绘制边框。
 - 可点击图片在 macOS 通过 `MacOSZoomInCursor` 使用 zoom-in 光标。
@@ -89,7 +91,7 @@ HTML entity 解码：
 
 复制原文：
 
-- macOS 文章详情右上角有“复制原文全文”按钮，位置在已读/未读按钮附近。
+- macOS 文章详情右上角有“复制原文全文”按钮，位置在已读/未读按钮附近；无修饰键 `C` 与按钮调用同一复制逻辑。`Command-C` 仍交给系统处理正文选区复制，不得被全局快捷键吞掉。
 - 复制对象是正文区当前已经加载并解析出的原文 `controller.chunks`，不是译文、摘要、目录或 UI 文案。
 - 点击复制不应触发网络请求，也不应临时拉取 readability/full content；如果正文尚未加载完成，只提示暂无可复制正文。
 - 输出格式为 Markdown。开头包含标题、来源、作者、发布时间、原文链接；正文保留基础结构：标题、段落、链接、图片链接、代码块、引用、列表和表格。

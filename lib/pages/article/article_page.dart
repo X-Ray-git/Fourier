@@ -20,6 +20,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/macos_window_drag_guard.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
+import '../../services/article_image_cache_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/translation_service.dart';
@@ -110,6 +111,7 @@ class ArticleController extends GetxController {
 
       normalizedContent = result.normalizedContent;
       imageUrls = result.imageUrls;
+      ArticleImageCacheService.prioritizeArticle(entryId, imageUrls);
       chunks.value = result.chunks;
 
       if (hasTranslation) {
@@ -430,6 +432,7 @@ class ArticleController extends GetxController {
     Navigator.of(context).push(
       HeroDialogRoute(
         builder: (context) => ImageGalleryPage(
+          articleId: article.entryId,
           imageUrls: imageUrls,
           initialIndex: imageUrls
               .indexOf(imageUrl)
@@ -602,6 +605,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _scrollController.addListener(_scheduleActiveTocUpdate);
     _focusNode = FocusNode();
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
+    ArticleImageCacheService.markArticleActive(widget.article.entryId);
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     }
@@ -630,6 +634,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _hoveredUrl.dispose();
     _activeTocId.dispose();
     _focusNode.dispose();
+    ArticleImageCacheService.markArticleInactive(widget.article.entryId);
     if (Get.isRegistered<ArticleController>(tag: _tag)) {
       Get.delete<ArticleController>(tag: _tag);
     }
@@ -713,6 +718,13 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       if (wasUnread && widget.onNext != null) {
         widget.onNext!();
       }
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.keyC) {
+      if (_hasShortcutModifierPressed()) return false;
+      if (event is KeyRepeatEvent) return true;
+      _copyOriginalArticleMarkdown();
       return true;
     }
 
@@ -1188,6 +1200,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                                 '${showTrans ? "trans" : "orig"}_$idx',
                               ),
                               chunk: chunk,
+                              articleId: controller.article.entryId,
                               maxWidth: maxWidth,
                               hoveredUrl: _hoveredUrl,
                               contentAnchorKey:
@@ -1271,7 +1284,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                       children: [
                         AppGlassIconButton(
                           icon: Icons.content_copy_rounded,
-                          tooltip: '复制原文全文',
+                          tooltip: '复制原文全文 (C)',
                           useOwnLayer: false,
                           onPressed: _copyOriginalArticleMarkdown,
                         ),
@@ -1456,7 +1469,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 if (event is KeyDownEvent || event is KeyRepeatEvent) {
                   final key = event.logicalKey;
                   if (key == LogicalKeyboardKey.escape ||
-                      key == LogicalKeyboardKey.keyM) {
+                      key == LogicalKeyboardKey.keyM ||
+                      (key == LogicalKeyboardKey.keyC &&
+                          !_hasShortcutModifierPressed())) {
                     return KeyEventResult.handled;
                   }
                   if (key == LogicalKeyboardKey.arrowLeft ||
@@ -1495,6 +1510,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
               if (event.logicalKey == LogicalKeyboardKey.keyM) {
                 _toggleReadState();
+                return KeyEventResult.handled;
+              }
+
+              if (event.logicalKey == LogicalKeyboardKey.keyC &&
+                  !_hasShortcutModifierPressed()) {
+                _copyOriginalArticleMarkdown();
                 return KeyEventResult.handled;
               }
               return KeyEventResult.ignored;

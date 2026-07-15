@@ -42,6 +42,7 @@
 - 批量模式变化避免大型 AnimatedList diff。
 - 批量筛选/排序/同步变化递增 `TimelineController.timelineListResetVersion`，让列表重建而不是 diff。
 - 重复小控件使用轻量静态样式。
+- macOS 正文图片预取只写磁盘缓存，不批量预解码到 Flutter 内存图片缓存。HTML 图片 URL 规划在后台 isolate 完成；缓存删除串行执行并在文件之间让出事件循环，避免刷新或五分钟回收形成集中 I/O 峰值。
 
 ## 高风险优化点
 

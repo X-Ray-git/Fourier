@@ -105,7 +105,7 @@ jobs:
 
   macos:
     name: macOS App
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: validate-version
 
     steps:

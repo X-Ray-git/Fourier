@@ -340,7 +340,7 @@
 
 背景：侧边栏原先依赖铺满整个透明窗口的 `NSVisualEffectView(.sidebar, .behindWindow)`，Flutter 面板再叠加模糊、冷白 tint、边缘高光和阴影。深色模式尚可，但浅色模式即使窗口位于白色背景上仍偏灰、偏深；继续提高白色覆盖只是在系统材质上模拟另一层材质，也让原生与 Flutter 明暗状态更容易分叉。
 
-决策：macOS 26 改用只覆盖侧边栏面板的 `NSGlassEffectView(style: .regular)`，不设置 `tintColor`，不叠白色和二次模糊。macOS 10.15～15 使用相同局部几何的旧 `NSVisualEffectView` 回退。应用强制浅色/深色时同步 AppKit appearance 和玻璃 renderer 的 platform brightness。
+决策：macOS 26 改用只覆盖侧边栏面板的 `NSGlassEffectView(style: .regular)`，不设置 `tintColor`，不叠白色和二次模糊。macOS 10.15～15 使用相同局部几何的旧 `NSVisualEffectView` 回退。应用强制浅色/深色时同步 AppKit appearance 和玻璃 renderer 的 platform brightness。侧边栏宽度、margin、圆角以 Flutter 的 `MacOSLayoutMetrics` 为唯一真值，通过 channel 同步给 Runner；Swift 只保留启动兜底值。CI 固定使用带 Xcode 26 SDK 的 `macos-26` ARM64 runner。
 
 边界：原生 API 不提供模糊半径和 border 参数。用户明确选择保持系统模糊；边界由 Flutter 最终连续曲率轮廓补 `0.5px` 环境描边，浅色黑 `12%`、深色白 `12%`，浅色另有轻微外侧阴影。为堵住 AppKit 圆角与 Flutter 连续曲率抗锯齿之间的漏底，原生 backdrop 在遮罩后外扩 `1px`。
 

@@ -12,6 +12,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common/constants/constants.dart';
+import 'common/constants/macos_layout_metrics.dart';
 import 'common/liquid_glass/liquid_glass.dart';
 import 'common/widgets/loading_widget.dart';
 import 'common/widgets/no_overscroll_indicator_behavior.dart';
@@ -398,6 +399,13 @@ class _MacOSAppearanceSyncState extends State<_MacOSAppearanceSync> {
   void initState() {
     super.initState();
     _syncAppearance();
+    unawaited(
+      MacOSWindowControls.setSidebarGlassGeometry(
+        width: MacOSLayoutMetrics.sidebarExpandedWidth,
+        margin: MacOSLayoutMetrics.sidebarPanelMarginValue,
+        radius: MacOSLayoutMetrics.sidebarPanelRadius,
+      ),
+    );
   }
 
   @override

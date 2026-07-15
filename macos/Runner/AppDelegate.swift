@@ -115,6 +115,19 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         NSApp.appearance = appearance
         self?.mainFlutterWindow?.appearance = appearance
         result(nil)
+      } else if call.method == "setSidebarGlassGeometry",
+                let args = call.arguments as? [String: Any],
+                let width = args["width"] as? NSNumber,
+                let margin = args["margin"] as? NSNumber,
+                let radius = args["radius"] as? NSNumber {
+        (self?.mainFlutterWindow as? MainFlutterWindow)?.setSidebarGlassGeometry(
+          width: CGFloat(truncating: width),
+          margin: CGFloat(truncating: margin),
+          radius: CGFloat(truncating: radius)
+        )
+        result(nil)
+      } else if call.method == "setSidebarGlassGeometry" {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected width, margin, and radius", details: nil))
       } else {
         result(FlutterMethodNotImplemented)
       }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../common/constants/constants.dart';
+import '../../common/constants/macos_layout_metrics.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
@@ -352,7 +353,9 @@ class _SettingsPageState extends State<SettingsPage> {
     const closeButtonSize = 34.0;
     const closeButtonInset = dialogRadius - closeButtonSize / 2;
     final overlayTint = Theme.of(context).colorScheme.surface;
-    final sidebarWidth = Get.isRegistered<MainController>() ? 290.0 : 0.0;
+    final sidebarWidth = Get.isRegistered<MainController>()
+        ? MacOSLayoutMetrics.sidebarExpandedWidth
+        : 0.0;
     showGeneralDialog<void>(
       context: context,
       useRootNavigator: true,

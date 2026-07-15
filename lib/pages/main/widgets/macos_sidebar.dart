@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../../common/constants/macos_layout_metrics.dart';
 import '../../../common/widgets/app_glass.dart';
 import '../../../common/widgets/continuous_rectangle.dart';
 import '../../../http/init.dart';
@@ -12,9 +13,7 @@ import '../../../services/feed_translation_settings_service.dart';
 import '../../subscriptions/subscriptions_controller.dart';
 import '../../timeline/timeline_controller.dart';
 
-const _macOSSidebarPanelRadius = 18.0;
-const EdgeInsets _macOSSidebarPanelMargin = EdgeInsets.fromLTRB(8, 8, 8, 8);
-const macOSSidebarExpandedWidth = 290.0;
+const macOSSidebarExpandedWidth = MacOSLayoutMetrics.sidebarExpandedWidth;
 
 class MacOSSidebar extends StatelessWidget {
   final int currentIndex;
@@ -344,8 +343,8 @@ class _MacOSSidebarSlot extends StatelessWidget {
       child: CustomPaint(
         painter: _MacOSSidebarSlotPainter(
           backgroundColor: cs.surface,
-          panelMargin: _macOSSidebarPanelMargin,
-          panelRadius: _macOSSidebarPanelRadius,
+          panelMargin: MacOSLayoutMetrics.sidebarPanelMargin,
+          panelRadius: MacOSLayoutMetrics.sidebarPanelRadius,
           isDark: isDark,
         ),
         child: child,
@@ -433,14 +432,14 @@ class _MacOSGlassPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: _macOSSidebarPanelMargin,
+      padding: MacOSLayoutMetrics.sidebarPanelMargin,
       child: CustomPaint(
         foregroundPainter: _MacOSSidebarBorderPainter(
-          radius: _macOSSidebarPanelRadius,
+          radius: MacOSLayoutMetrics.sidebarPanelRadius,
           isDark: isDark,
         ),
         child: ContinuousRectangleClip(
-          radius: _macOSSidebarPanelRadius,
+          radius: MacOSLayoutMetrics.sidebarPanelRadius,
           child: child,
         ),
       ),

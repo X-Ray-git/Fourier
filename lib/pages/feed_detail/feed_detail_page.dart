@@ -1010,7 +1010,6 @@ class _MacFeedHeader extends StatelessWidget {
                   icon: isEnabled ? Icons.article : Icons.article_outlined,
                   tooltip: isEnabled ? '自动拉取全文已开启' : '自动拉取全文',
                   selected: isEnabled,
-                  selectedFillOpacity: 0.07,
                   useOwnLayer: false,
                   onPressed: () async {
                     await FeedReadabilitySettingsService.toggleAutoReadability(
@@ -1027,7 +1026,6 @@ class _MacFeedHeader extends StatelessWidget {
                   icon: isEnabled ? Icons.translate : Icons.translate_outlined,
                   tooltip: isEnabled ? '自动翻译已开启' : '自动翻译',
                   selected: isEnabled,
-                  selectedFillOpacity: 0.07,
                   useOwnLayer: false,
                   onPressed: () async {
                     await FeedTranslationSettingsService.toggleAutoTranslate(
@@ -1046,7 +1044,6 @@ class _MacFeedHeader extends StatelessWidget {
                       : Icons.notifications_off_outlined,
                   tooltip: isEnabled ? '已开启静默' : '设为静默',
                   selected: isEnabled,
-                  selectedFillOpacity: 0.07,
                   useOwnLayer: false,
                   onPressed: () async {
                     await FeedSilentSettingsService.toggleSilent(

@@ -56,14 +56,15 @@ macOS 原生侧边栏玻璃：
 - `AppGlassRoundControlChrome` 是固定 34px 圆形工具按钮的共享外壳。文章右上角普通按钮、时间线排序按钮和同步按钮应尽量复用它，而不是各自手写 `AppGlassSurface`。
 - `AppGlassCompactSwitch` 是紧凑二态 switch 的共享控件。主时间线和订阅源详情的 `未读/全部` 不应再分别维护两套实现。
 - `AppGlassCompactSwitch` 和设置页 segmented 的滑块已改成真正的 `AppGlassSurface` control 材质，而不是手绘渐变模拟。用户验证它比静态模拟更接近右侧圆形玻璃按钮，功能和动画没有明显掉帧。
-- 紧凑 switch/segmented 的选中态不要做成明显橙色按钮。当前规则是：滑块保持中性玻璃，只叠极弱主色 tint；选中文字使用主色表达当前状态。
+- `未读/全部` 紧凑 switch 的选中态不要做成橙色按钮。滑块保持纯中性玻璃，不叠主色 tint；文字使用 `onSurface`，深色模式接近白色、浅色模式为深色。设置页 segmented 保留自己的语义色规则。
 - 紧凑 switch/segmented 外层可以保留玻璃轨道。`未读/全部` switch 当前需要清晰但纤细的 rim，不要用全局修改 `AppGlassSurface` 的方式调整；设置页 segmented 仍可按自身密度使用更克制的边界。
 - `未读/全部` switch 后续视觉实验把轨道收窄到 `58`、滑块保持 `42`，外层 padding 归零；最外层 rim 使用 `1px` 和局部 opacity multiplier `1.0`。这里的目标是让外框贴合控件并保持清晰，不要套用早期 `62px + 3px padding + 0.35 rim` 的参数，也不要把该局部宽度全局应用到设置页 segmented。
-- `AppGlassCompactSwitch` 未被滑块覆盖的空余轨道需要可辨认，但不能抢过滑块。用户两轮视觉反馈后，`compactControlTrackFill()` 当前深色模式使用白色 `6%`、浅色模式使用黑色 `5%`；这次只增强固定轨道，不改变移动滑块、主色文字、外框、hover 或动画。
+- `AppGlassCompactSwitch` 未被滑块覆盖的空余轨道需要可辨认，但不能抢过滑块。当前 `compactControlTrackFill()` 在深色模式使用白色 `5%`、浅色模式使用黑色 `5%`；外框、hover 和动画保持既有规则。
 - 紧凑 switch/segmented 的滑块有弹性 overshoot。内部 `Stack` 必须允许 `Clip.none`，让滑块越界时绘制在外层轨道之上；不要让外框裁切或遮挡滑块。
-- 圆形工具按钮角色规则：普通命令使用中性玻璃背景和中性 hover/press；未读文章的“标为已读”属于主动作，可以保留橙色图标和很浅橙色背景；排序长文/短文、同步中这类“状态提示”只让图标变橙，背景保持中性。
+- 圆形/header 工具按钮统一使用中性玻璃背景和中性 hover/press。选中、主动作或状态提示均只让图标变橙，背景不得叠橙色；这条规则同时适用于浅色和深色模式。红色危险操作、绿色保留操作等语义按钮不属于这一规则。
+- 深色模式下圆形工具按钮和 `未读/全部` 滑块使用按钮专属玻璃设置，control tint alpha 为普通 control 的 `0.86`；不要通过全局降低 `AppGlassTone.control` 实现，否则 tooltip、菜单和面板会被误伤。
 - 目录按钮仍使用 morph 玻璃实现，但关闭态材质已调到更接近普通圆形 control；不要重新调回明显更深的独立玻璃按钮。
 - 目录关闭静止态现在直接复用 `AppGlassIconButton/AppGlassRoundControlChrome`；只有展开和收回期间使用 morph layer，收回越过零点后才交回普通按钮。这样目录、复制、排序、刷新在关闭态使用同一材质路径，同时保留既有完整形变动画。
 - 浅色模式下，应用设置与原生 AppKit appearance 必须同步；同时用当前主题覆盖玻璃 renderer 读取的 `MediaQuery.platformBrightness`，避免软件强制浅色而系统仍为深色时出现原生侧边栏、目录和普通控件各读一套明暗状态。
-- 浅色选中控件使用稳定的冷白基底加极弱主色 tint，而不是半透明黑底；普通 control 使用参考实现同类的外侧主阴影与接触阴影。文章复制/已读按钮不再关闭 own layer，否则它们在浅色背景下会比排序/刷新缺少边界层次。
+- 浅色和深色的选中圆形按钮都沿用普通按钮的中性玻璃基底，不再增加主色 tint。普通 control 仍使用参考实现同类的外侧主阴影与接触阴影；文章复制/已读按钮不关闭 own layer，否则它们在浅色背景下会比排序/刷新缺少边界层次。
 - 真正的贴图/预绘制优化应放在角色规则稳定之后。优先候选是固定尺寸圆形按钮、固定高度 pill、badge；不要先对大面板或密集内容区做贴图化。

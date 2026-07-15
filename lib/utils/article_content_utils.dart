@@ -8,18 +8,24 @@ import 'youtube_embed_utils.dart';
 
 abstract final class ArticleContentUtils {
   static const int _cacheMax = 200;
-  static final LinkedHashMap<String, String> _cache = LinkedHashMap();
+  static const HtmlEscape _elementTextEscape = HtmlEscape(
+    HtmlEscapeMode.element,
+  );
+  static final LinkedHashMap<String, _NormalizedHtmlCacheEntry> _cache =
+      LinkedHashMap();
 
   /// 带缓存的 HTML 规范化，避免同一篇被翻译/摘要各解析一次
   static String normalizeHtmlForEntry(String entryId, String rawHtml) {
     final cached = _cache[entryId];
-    if (cached != null) return cached;
+    if (cached != null && cached.rawHtml == rawHtml) {
+      return cached.normalizedHtml;
+    }
 
-    if (_cache.length >= _cacheMax) {
+    if (cached == null && _cache.length >= _cacheMax) {
       _cache.remove(_cache.keys.first);
     }
     final normalized = normalizeHtml(rawHtml);
-    _cache[entryId] = normalized;
+    _cache[entryId] = _NormalizedHtmlCacheEntry(rawHtml, normalized);
     return normalized;
   }
 
@@ -120,8 +126,8 @@ abstract final class ArticleContentUtils {
     for (final node in fragment.nodes) {
       if (node is dom.Element) {
         buffer.write(node.outerHtml);
-      } else {
-        buffer.write(node.text);
+      } else if (node is dom.Text) {
+        buffer.write(_elementTextEscape.convert(node.data));
       }
     }
     return buffer.toString();
@@ -297,25 +303,38 @@ abstract final class ArticleContentUtils {
     }
   }
 
-  static final _hiddenStyleRe = RegExp(r'opacity\s*:\s*0\b');
-
   /// 剔除隐藏元素：style="display:none" / visibility:hidden / opacity:0
   static void _removeHiddenElements(dom.DocumentFragment fragment) {
     final toRemove = <dom.Element>[];
     for (final el in fragment.querySelectorAll('*')) {
-      final style = (el.attributes['style'] ?? '').toLowerCase();
+      final style = el.attributes['style'] ?? '';
       if (style.isEmpty) continue;
-      if (style.contains('display:none') ||
-          style.contains('display: none') ||
-          style.contains('visibility:hidden') ||
-          style.contains('visibility: hidden') ||
-          _hiddenStyleRe.hasMatch(style)) {
+      if (_isHiddenByInlineStyle(style)) {
         toRemove.add(el);
       }
     }
     for (final el in toRemove) {
       el.remove();
     }
+  }
+
+  static bool _isHiddenByInlineStyle(String style) {
+    for (final declaration in style.split(';')) {
+      final separator = declaration.indexOf(':');
+      if (separator <= 0) continue;
+
+      final property = declaration.substring(0, separator).trim().toLowerCase();
+      var value = declaration.substring(separator + 1).trim().toLowerCase();
+      value = value.replaceFirst(RegExp(r'\s*!important\s*$'), '').trim();
+
+      if (property == 'display' && value == 'none') return true;
+      if (property == 'visibility' && value == 'hidden') return true;
+      if (property != 'opacity') continue;
+
+      final opacity = double.tryParse(value);
+      if (opacity != null && opacity == 0) return true;
+    }
+    return false;
   }
 
   /// 提取核心正文算法（类似 Readability）
@@ -451,4 +470,11 @@ abstract final class ArticleContentUtils {
       }
     }
   }
+}
+
+final class _NormalizedHtmlCacheEntry {
+  final String rawHtml;
+  final String normalizedHtml;
+
+  const _NormalizedHtmlCacheEntry(this.rawHtml, this.normalizedHtml);
 }

@@ -356,7 +356,10 @@ abstract final class HtmlChunkParser {
           posterSrc: poster.isEmpty ? null : poster,
           imageWidth: w,
           imageHeight: h,
-          attributes: {if (tag != 'iframe') 'mediaTag': tag},
+          attributes: {
+            'mediaTag': tag,
+            if (src.isEmpty) 'mediaUnavailableReason': 'missingSource',
+          },
         ),
       );
       return;

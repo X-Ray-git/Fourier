@@ -58,8 +58,9 @@ YouTube：
 
 已确认但暂不修复的源内容边界：
 
-- OpenAI News 的 `Improving health intelligence in ChatGPT`：Folo 条目只有短摘要，没有 media、attachments、video 或 iframe。全文 readability 会从 OpenAI 动态页面留下一个无 `src`/`source` 的 `<audio preload="none">`；它原本属于依赖网页 JavaScript 后续注入资源的“朗读文章”控件，不是视频。当前 parser 会把空 audio 当媒体占位，这是错误空框的来源。未来若处理，应跳过没有任何有效资源的 audio/video，不要尝试猜测 OpenAI 的动态音频地址。
+- OpenAI News 的 `Improving health intelligence in ChatGPT`：Folo 条目只有短摘要，没有 media、attachments、video 或 iframe。全文 readability 会从 OpenAI 动态页面留下一个无 `src`/`source` 的 `<audio preload="none">`；它原本属于依赖网页 JavaScript 后续注入资源的“朗读文章”控件，不是视频。不要尝试猜测 OpenAI 的动态音频地址，也不要静默删除该节点；当前把它显示为明确的“音频不可用”状态。
 - MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“仅 YouTube iframe”白名单。
+- 无有效 `src/source` 的 audio、video、iframe 不得静默删除，也不得继续伪装成可播放的空播放器。当前保留媒体 chunk，并明确显示“源内容未提供可用的媒体地址”；文章有原始链接时提供“打开原文”。这既暴露源内容/解析问题，又避免误导用户。
 
 表格：
 
@@ -68,6 +69,8 @@ YouTube：
 - 表格修复应保守。一些 feed 会输出畸形 table-like 内容；避免可能破坏正确表格的宽泛启发式规则。
 - `ArticleContentUtils` 不能再用“没有 `<th>`”直接判定布局表格。真实数据表常用第一行 `<td>` 充当表头；当前按结构保留至少两行两列、列数稳定、无嵌套且以文本为主的网格，单行/单列、嵌套、媒体主导或结构混乱的表格仍可扁平化。
 - 更彻底但暂缓的架构方向：拆分“忠实阅读渲染规范化”和“翻译/摘要等 LLM 输入清洗”两条管线。前者尽量保留源 HTML 语义，后者可以更积极地扁平化 Newsletter 布局、压缩噪声。实施前需要盘点 `normalizeHtmlForEntry` 缓存、翻译、摘要、readability 和复制正文的调用边界，并为两套输出建立独立缓存键；不要在没有完成调用链审计时直接复制两套规则。
+- HTML 规范化只应删除数值确实为 `0` 的 inline `opacity`；`0.8`、`0.46` 等半透明内容仍是可见正文。顶层文本和布局表格拆平后移到顶层的文本必须重新 HTML 转义，不能让 `&lt;b&gt;` 一类字面内容变成真实标签。
+- 翻译/摘要共用的规范化缓存不能只凭 `entryId` 命中，还必须确认传入的原始正文一致；同一文章补全文或更新正文后必须重新规范化。
 - 坏源 HTML 可能出现空代码块。可以隐藏真正空的代码块，但不要重写有意义代码。
 
 底部间距：

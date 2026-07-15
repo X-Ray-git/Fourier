@@ -104,6 +104,7 @@ double _stableImageHeight(
 class HtmlChunkCard extends StatefulWidget {
   final HtmlChunk chunk;
   final String articleId;
+  final String articleUrl;
   final double maxWidth;
   final void Function(String imageUrl)? onImageTap;
   final bool keepAlive;
@@ -114,6 +115,7 @@ class HtmlChunkCard extends StatefulWidget {
     super.key,
     required this.chunk,
     required this.articleId,
+    this.articleUrl = '',
     required this.maxWidth,
     this.onImageTap,
     this.keepAlive = true,
@@ -536,6 +538,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   Widget _buildMediaPlaceholder(BuildContext context, ColorScheme cs) {
     final isVideo = widget.chunk.attributes['mediaTag'] == 'video';
     final videoUrl = widget.chunk.imageSrc;
+    if (widget.chunk.attributes['mediaUnavailableReason'] == 'missingSource' ||
+        videoUrl == null ||
+        videoUrl.isEmpty) {
+      return _buildUnavailableMedia(context, cs);
+    }
     final posterUrl = widget.chunk.posterSrc != null
         ? ArticleImageService.toProxiedUrl(widget.chunk.posterSrc)
         : null;
@@ -547,7 +554,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         : 16 / 9;
 
     // 视频 → 内联播放器
-    if (isVideo && videoUrl != null && videoUrl.isNotEmpty) {
+    if (isVideo) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: InlineVideoPlayer(videoUrl: videoUrl, posterUrl: posterUrl),
@@ -564,6 +571,69 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
 
     // iframe / 其他 → 静态占位 + 浏览器打开
     return _buildIframePlaceholder(context, cs, aspectRatio);
+  }
+
+  Widget _buildUnavailableMedia(BuildContext context, ColorScheme cs) {
+    final mediaTag = widget.chunk.attributes['mediaTag'];
+    final (icon, title) = switch (mediaTag) {
+      'audio' => (Icons.audio_file_outlined, '音频不可用'),
+      'video' => (Icons.videocam_off_outlined, '视频不可用'),
+      _ => (Icons.web_asset_off_outlined, '嵌入内容不可用'),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.7),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 22, color: cs.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '源内容未提供可用的媒体地址',
+                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (widget.articleUrl.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            TextButton.icon(
+              onPressed: () => _openExternalUrl(widget.articleUrl),
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('打开原文'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Widget _buildIframePlaceholder(

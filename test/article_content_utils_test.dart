@@ -54,6 +54,58 @@ void main() {
     expect(RegExp(r'<a[^>]*>\s*<a').hasMatch(normalized), isFalse);
   });
 
+  test('normalizeHtml removes only truly hidden opacity values', () {
+    const raw = '''
+<p style="opacity: 0.8">半透明但可见</p>
+<p style="opacity: 0">完全透明</p>
+<p style="opacity: 0.0 !important">仍然完全透明</p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(raw);
+
+    expect(normalized, contains('半透明但可见'));
+    expect(normalized, isNot(contains('完全透明')));
+    expect(normalized, isNot(contains('仍然完全透明')));
+  });
+
+  test('normalizeHtml keeps escaped top-level markup as text', () {
+    const raw = '&lt;b&gt;literal&lt;/b&gt;';
+
+    final normalized = ArticleContentUtils.normalizeHtml(raw);
+
+    expect(normalized, '&lt;b&gt;literal&lt;/b&gt;');
+  });
+
+  test('flattened layout tables do not turn escaped text into markup', () {
+    const raw = '''
+<table role="presentation">
+  <tr><td>&lt;b&gt;literal&lt;/b&gt;</td></tr>
+</table>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(raw);
+
+    expect(normalized, '&lt;b&gt;literal&lt;/b&gt;');
+    expect(html_parser.parseFragment(normalized).querySelector('b'), isNull);
+  });
+
+  test('normalizeHtmlForEntry invalidates cache when raw content changes', () {
+    const entryId = 'cache-content-change';
+
+    final first = ArticleContentUtils.normalizeHtmlForEntry(
+      entryId,
+      '<p>first</p>',
+    );
+    final second = ArticleContentUtils.normalizeHtmlForEntry(
+      entryId,
+      '<p>second</p>',
+    );
+
+    expect(first, '<p>first</p>');
+    expect(second, '<p>second</p>');
+    ArticleContentUtils.clearCacheForEntry(entryId);
+  });
+
   test('normalizeHtml preserves stable data tables without th elements', () {
     const raw = '''
 <table>

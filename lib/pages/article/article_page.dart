@@ -1201,6 +1201,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                               ),
                               chunk: chunk,
                               articleId: controller.article.entryId,
+                              articleUrl: controller.article.url,
                               maxWidth: maxWidth,
                               hoveredUrl: _hoveredUrl,
                               contentAnchorKey:

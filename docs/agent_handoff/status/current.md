@@ -56,6 +56,7 @@
 - macOS 26 侧边栏已从“全窗口 `NSVisualEffectView` + Flutter 白色/模糊覆盖”迁移为局部 `NSGlassEffectView(.regular)`。用户确认纯原生版本整体观感很好；浅色/深色跟随应用 appearance，同一原生组件不分叉维护。旧系统保留局部 `NSVisualEffectView` 回退。
 - 侧边栏原生 backdrop 向 Flutter 连续曲率开口后方外扩 `1px`，堵住系统圆角与 Flutter 抗锯齿不一致造成的漏底细缝。最终轮廓为 `0.5px` 环境描边（浅色黑 `12%`、深色白 `12%`），浅色另加轻微外侧阴影；用户明确不增加原生玻璃之外的二次模糊。
 - 浅色玻璃控件已补齐明暗同步和材质一致性：原生 AppKit appearance、Flutter theme 和 renderer platform brightness 同步；浅色选中控件使用稳定冷白基底；文章目录关闭态复用普通圆形玻璃按钮，只有形变期间使用 morph layer；复制/已读按钮恢复 own layer 边界层次。
+- macOS 正文链接 hover 的瞬时卡顿已修复并经用户验证。根因是所有 `HtmlChunkCard` 监听共享 `_hoveredUrl`，任意链接进入/离开都会让全篇 HTML 缓存失效并重新解析。当前取消动态下划线和 chunk 监听，只保留主题色、手型光标、点击及底部 URL 预览。
 
 本次待用户继续验证：
 

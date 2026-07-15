@@ -135,14 +135,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   // 同一篇文章内 chunk 内容不变、主题不变 → 缓存 hit，build 耗时从 ms 级降到 ns 级。
   Widget? _cachedWidget;
   Brightness? _cachedBrightness;
-  String? _cachedHoveredUrl;
-  String? _currentBuildHoveredUrl;
 
   HtmlExtension? _getLinkExtension(BuildContext context) {
     if (widget.hoveredUrl == null) return null;
     return _InteractiveLinkExtension(
       hoveredUrlNotifier: widget.hoveredUrl,
-      currentHoveredUrl: _currentBuildHoveredUrl,
       colorScheme: Theme.of(context).colorScheme,
     );
   }
@@ -150,29 +147,15 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
-    if (widget.hoveredUrl == null) {
-      return _buildCardContent(context, null);
-    }
-
-    return ValueListenableBuilder<String?>(
-      valueListenable: widget.hoveredUrl!,
-      builder: (context, hoveredUrl, child) {
-        return _buildCardContent(context, hoveredUrl);
-      },
-    );
+    return _buildCardContent(context);
   }
 
-  Widget _buildCardContent(BuildContext context, String? currentHoveredUrl) {
+  Widget _buildCardContent(BuildContext context) {
     final brightness = Theme.of(context).brightness;
 
-    if (_cachedWidget == null ||
-        _cachedBrightness != brightness ||
-        _cachedHoveredUrl != currentHoveredUrl) {
-      _currentBuildHoveredUrl = currentHoveredUrl;
+    if (_cachedWidget == null || _cachedBrightness != brightness) {
       _cachedWidget = _buildContent(context);
       _cachedBrightness = brightness;
-      _cachedHoveredUrl = currentHoveredUrl;
     }
 
     if (_cachedWidget == null) return const SizedBox.shrink();
@@ -1169,12 +1152,10 @@ class _ArticleTableCell {
 /// 添加鼠标悬停手势 (SystemMouseCursors.click) 和链接 URL 预览回调。
 class _InteractiveLinkExtension extends HtmlExtension {
   final ValueNotifier<String?>? hoveredUrlNotifier;
-  final String? currentHoveredUrl;
   final ColorScheme colorScheme;
 
   _InteractiveLinkExtension({
     this.hoveredUrlNotifier,
-    this.currentHoveredUrl,
     required this.colorScheme,
   });
 
@@ -1192,7 +1173,6 @@ class _InteractiveLinkExtension extends HtmlExtension {
     List<StyledElement> children,
   ) {
     final url = context.attributes['href'];
-    final isHovered = currentHoveredUrl != null && url == currentHoveredUrl;
 
     return InteractiveElement(
       name: context.elementName,
@@ -1200,9 +1180,7 @@ class _InteractiveLinkExtension extends HtmlExtension {
       href: url,
       style: Style(
         color: colorScheme.primary,
-        textDecoration: isHovered
-            ? TextDecoration.underline
-            : TextDecoration.none,
+        textDecoration: TextDecoration.none,
         textDecorationColor: colorScheme.primary,
       ),
       node: context.node,

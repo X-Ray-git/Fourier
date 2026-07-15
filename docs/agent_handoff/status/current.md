@@ -46,6 +46,7 @@
 - macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。
 - 两条动画链保留默认关闭的诊断埋点。仅在 Debug 并显式传 `--dart-define=AUTO_FOLO_ANIMATION_PROBE=true` 时启用；Release 和普通 Debug 不注册帧耗时回调，也不挂载动画监听器。
 - macOS 静默订阅源分组不再因“被选中”而自动展开。点击分组行只进入静默时间线，只有独立展开按钮会改变子列表展开状态。
+- macOS 普通订阅源分类已分离手动展开与当前订阅源触发的临时展开：查看具体订阅源时父分类锁定展开，切到最近阅读等其他页面后解除锁定并恢复用户原来的展开状态；用户已验证该交互符合预期。
 - macOS 透明 header + soft scroll edge 实验已按用户长期视觉反馈撤销。主时间线、垃圾拦截、最近阅读和订阅源详情改用共享 `MacHeaderPane`：固定 `surface` header，内容和 scrollbar 从其下方开始，中间栏 header 仍无底部分隔线。
 - macOS 文章 header 同样恢复固定 `surface`，且继续不使用整块 `BackdropFilter`，避免采样相邻按钮高光。header 底部始终显示与主时间线栏间竖线一致的 `1px outlineVariant / alpha 0.30` 分隔线，橙色阅读进度覆盖在其上。
 - 垃圾拦截同步按钮与主时间线共用 `AppGlassSyncButton`，右侧 inset 也统一为 `10px`。

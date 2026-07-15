@@ -137,12 +137,17 @@ class MacOSSidebar extends StatelessWidget {
                                 category.feeds.any(
                                   (feed) => feed.feedId == selectedFeedId,
                                 );
-                            final forceExpanded =
-                                subController.searchQuery.value.isNotEmpty ||
-                                containsSelectedFeed;
+                            final isSearchActive =
+                                subController.searchQuery.value.isNotEmpty;
+                            final isRevealedBySelection =
+                                currentIndex == 0 && containsSelectedFeed;
+                            final isTemporarilyRevealed =
+                                isSearchActive || isRevealedBySelection;
+                            final isManuallyExpanded = subController.isExpanded(
+                              categoryKey,
+                            );
                             final isExpanded =
-                                forceExpanded ||
-                                subController.isExpanded(categoryKey);
+                                isTemporarilyRevealed || isManuallyExpanded;
                             return _CategoryGroup(
                               category: category,
                               isExpanded: isExpanded,
@@ -151,12 +156,19 @@ class MacOSSidebar extends StatelessWidget {
                                 category.name,
                                 category.feeds,
                               ),
-                              onToggle: () {
-                                subController.setExpanded(
-                                  categoryKey,
-                                  !isExpanded,
-                                );
-                              },
+                              onToggle: isTemporarilyRevealed
+                                  ? null
+                                  : () {
+                                      subController.setExpanded(
+                                        categoryKey,
+                                        !isManuallyExpanded,
+                                      );
+                                    },
+                              toggleTooltip: isRevealedBySelection
+                                  ? '当前订阅源位于此分组'
+                                  : isSearchActive
+                                  ? '搜索期间保持展开'
+                                  : null,
                               onTap: () {
                                 timelineController.setTimelineScope(
                                   category: category.name,
@@ -546,7 +558,8 @@ class _CategoryGroup extends StatelessWidget {
   final bool isExpanded;
   final bool isSelected;
   final int badgeCount;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
+  final String? toggleTooltip;
   final VoidCallback onTap;
   final Widget Function(FeedModel feed) feedBuilder;
 
@@ -556,6 +569,7 @@ class _CategoryGroup extends StatelessWidget {
     required this.isSelected,
     required this.badgeCount,
     required this.onToggle,
+    this.toggleTooltip,
     required this.onTap,
     required this.feedBuilder,
   });
@@ -572,6 +586,7 @@ class _CategoryGroup extends StatelessWidget {
           badgeCount: badgeCount,
           onTap: onTap,
           onToggle: onToggle,
+          toggleTooltip: toggleTooltip,
         ),
         ClipRect(
           child: AnimatedSize(
@@ -599,7 +614,8 @@ class _CategoryItem extends StatelessWidget {
   final bool isSelected;
   final int badgeCount;
   final VoidCallback onTap;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
+  final String? toggleTooltip;
 
   const _CategoryItem({
     required this.label,
@@ -610,6 +626,7 @@ class _CategoryItem extends StatelessWidget {
     required this.badgeCount,
     required this.onTap,
     required this.onToggle,
+    this.toggleTooltip,
   });
 
   @override
@@ -622,54 +639,72 @@ class _CategoryItem extends StatelessWidget {
             ? cs.primaryContainer.withValues(alpha: 0.62)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.only(left: 2, right: 10),
-            child: Row(
-              children: [
-                AppGlassTooltip(
-                  message: isExpanded ? '折叠' : '展开',
-                  child: IconButton(
-                    icon: AnimatedRotation(
-                      turns: isExpanded ? 0.25 : 0,
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeOutCubic,
-                      child: const Icon(Icons.chevron_right_rounded),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 2),
+          child: Row(
+            children: [
+              AppGlassTooltip(
+                message: toggleTooltip ?? (isExpanded ? '折叠' : '展开'),
+                child: IconButton(
+                  icon: AnimatedRotation(
+                    turns: isExpanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOutCubic,
+                    child: const Icon(Icons.chevron_right_rounded),
+                  ),
+                  iconSize: 18,
+                  tooltip: '',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: onToggle,
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(8),
+                  ),
+                  child: SizedBox(
+                    height: 32,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isExpanded ? expandedIcon : collapsedIcon,
+                            size: 16,
+                            color: isSelected
+                                ? cs.primary
+                                : cs.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          _UnreadBadge(count: badgeCount, selected: isSelected),
+                        ],
+                      ),
                     ),
-                    iconSize: 18,
-                    tooltip: '',
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 28,
-                      height: 32,
-                    ),
-                    padding: EdgeInsets.zero,
-                    onPressed: onToggle,
                   ),
                 ),
-                Icon(
-                  isExpanded ? expandedIcon : collapsedIcon,
-                  size: 16,
-                  color: isSelected ? cs.primary : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: isSelected ? cs.primary : cs.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                _UnreadBadge(count: badgeCount, selected: isSelected),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

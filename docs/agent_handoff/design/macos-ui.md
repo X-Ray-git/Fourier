@@ -8,6 +8,10 @@
 - macOS 侧边栏当前只保留展开态。旧折叠 rail 入口已经废弃并清理，不要再新增折叠侧边栏专属按钮或状态分支。
 - macOS 主几何层第一阶段圆角已收敛：窗口/Flutter 外框 `24`，红黄绿圆心 `24`，侧边栏面板 `18`，`AppGlassSurface` 默认 `16`，`AppGlassPanel` 默认 `18`，突出面板 `20`。这些值应联动维护，不要单独改其中一个。
 - 侧边栏槽位外围和右侧时间线共用 `colorScheme.surface`。macOS 主布局使用分层 `Stack`：底层保留 `290px` 透明侧边栏槽位并布局右侧内容，侧边栏玻璃面板最后绘制且允许越界，让外部阴影自然衰减到时间线左缘。不要改回按顺序绘制的单层 `Row`，否则右侧 `ColoredBox` 会盖住越界阴影，在槽位边界形成断层和“独立底板”错觉。
+- macOS 26 侧边栏面板是 Runner 中的原生 `NSGlassEffectView(.regular)`，仅覆盖 `290px` 槽位内扣 `8px` 后的面板，不再在整个窗口下方铺原生 sidebar 材质。Flutter `_MacOSGlassPane` 只负责连续曲率裁剪、内容和轻量边界，不得重新叠白色 tint 或整块二次模糊。旧 macOS 使用同尺寸 `NSVisualEffectView(.sidebar, .behindWindow)` 回退。
+- 侧边栏宽度、margin 和圆角的真值统一放在 `MacOSLayoutMetrics`。Flutter 启动后通过 `MacOSWindowControls.setSidebarGlassGeometry()` 同步给 Runner；Swift 中的 `290/8/18` 只是在 channel 生效前避免首帧错位的兜底值。调整几何时修改 Dart 常量，不要分别改 Flutter 和 Swift。
+- 原生 backdrop 比 Flutter 最终开口向外多 `1px`，用于覆盖 AppKit 系统圆角与 Flutter 连续曲率抗锯齿不完全重合产生的漏底细缝；不要误删为“尺寸不一致”。最终可见半径仍是 `18`。
+- 侧边栏浅色轮廓使用 `0.5px / 12% black`，深色使用 `0.5px / 12% white`；只有浅色增加低强度外侧阴影。原生 `NSGlassEffectView` 没有可调 border 参数，这层线由 Flutter 按最终连续曲率绘制。
 - 当前侧边栏阴影以连续融合为目标，不要求肉眼明确看见。用户已验证断层消失、外围底板消失，且玻璃透视、布局和点击行为没有回归；不要为了强调阴影而主动加深或加宽。
 - Header 分隔线应克制；中间时间线 header 不再使用大面积玻璃。
 - macOS 中间栏 header 的底部分隔线已取消。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截；列表层级主要依赖卡片轻填充、间距和右侧分栏结构。

@@ -18,4 +18,22 @@ class MacOSWindowControls {
     if (!Platform.isMacOS) return;
     await _channel.invokeMethod<void>('setMovable', movable);
   }
+
+  static Future<void> setAppearance(String mode) async {
+    if (!Platform.isMacOS) return;
+    await _channel.invokeMethod<void>('setAppearance', mode);
+  }
+
+  static Future<void> setSidebarGlassGeometry({
+    required double width,
+    required double margin,
+    required double radius,
+  }) async {
+    if (!Platform.isMacOS) return;
+    await _channel.invokeMethod<void>('setSidebarGlassGeometry', {
+      'width': width,
+      'margin': margin,
+      'radius': radius,
+    });
+  }
 }

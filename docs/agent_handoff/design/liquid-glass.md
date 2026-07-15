@@ -15,10 +15,19 @@
 已知限制：
 
 - Flutter shader 代码不能直接采样应用窗口后方的真实像素。
-- NSVisualEffectView/系统 compositor 负责真实的窗口后方模糊。
+- AppKit/系统 compositor 负责真实的窗口后方玻璃。macOS 26 侧边栏使用 `NSGlassEffectView`；旧系统才回退到 `NSVisualEffectView`。
 - 尝试从真实外部背景提取鲜艳边框色的方案已经放弃；当前可行方案是白色/高光样式或内部玻璃组件。
 - 中间模糊可以是真实系统材质，但 Flutter 绘制的边框仍不能可靠采样同一批窗口后方像素。
 - 如果未来需要真实窗口后方取色边框，需要 native/AppKit 参与，并应作为专门 renderer 实验处理。
+
+macOS 原生侧边栏玻璃：
+
+- 早期 Runner 在整个透明窗口下方铺设 `.sidebar + .behindWindow` 的 `NSVisualEffectView`，Flutter 侧边栏再叠加模糊和低透明冷白色。强制浅色模式时，这套组合仍容易受系统灰色 sidebar 材质和窗口后方内容影响，表现为侧边栏偏深、文字反而显淡。
+- 当前 macOS 26 使用只覆盖侧边栏面板的 `NSGlassEffectView(style: .regular)`，不设置 `tintColor`，Flutter 不再为侧边栏叠加白色或二次模糊。浅色和深色共用同一原生组件，由同步后的 `.aqua/.darkAqua` 外观驱动。macOS 10.15～15 保留 `.sidebar + .behindWindow` 的 `NSVisualEffectView` 回退。
+- `NSGlassEffectView` 公开可调项主要是 `style`（`regular/clear`）、`tintColor`、`cornerRadius` 和原生几何；它没有模糊半径、折射、饱和度、高光、阴影或边框强度参数。侧边栏应保持 `.regular`；`.clear` 更适合媒体背景并常需额外 dimming，不适合当前导航侧边栏。
+- 侧边栏 Flutter 开口使用连续曲率，而 AppKit 玻璃使用系统轮廓。为避免两套抗锯齿边缘不完全重合而露出未处理背景，原生 backdrop 在 Flutter 遮罩后方向四周扩展 `1px`；最终可见轮廓仍由 Flutter 的 `8px` margin、`18px` 连续曲率裁剪决定。
+- 原生组件没有可调 border。当前 Flutter 在最终轮廓上补 `0.5px` 环境描边：浅色为黑色 `12%`，深色为白色 `12%`；浅色另有克制的外侧主阴影和接触阴影，深色不额外加阴影。描边只用于白色/深色背景下的边界识别，不应重新演变为厚重模拟玻璃。
+- 不要为了“略微增加模糊”给侧边栏重新叠 `BackdropFilter`。用户了解原生 API 不支持调模糊半径后，明确选择保持系统模糊。
 
 性能：
 
@@ -54,4 +63,7 @@
 - 紧凑 switch/segmented 的滑块有弹性 overshoot。内部 `Stack` 必须允许 `Clip.none`，让滑块越界时绘制在外层轨道之上；不要让外框裁切或遮挡滑块。
 - 圆形工具按钮角色规则：普通命令使用中性玻璃背景和中性 hover/press；未读文章的“标为已读”属于主动作，可以保留橙色图标和很浅橙色背景；排序长文/短文、同步中这类“状态提示”只让图标变橙，背景保持中性。
 - 目录按钮仍使用 morph 玻璃实现，但关闭态材质已调到更接近普通圆形 control；不要重新调回明显更深的独立玻璃按钮。
+- 目录关闭静止态现在直接复用 `AppGlassIconButton/AppGlassRoundControlChrome`；只有展开和收回期间使用 morph layer，收回越过零点后才交回普通按钮。这样目录、复制、排序、刷新在关闭态使用同一材质路径，同时保留既有完整形变动画。
+- 浅色模式下，应用设置与原生 AppKit appearance 必须同步；同时用当前主题覆盖玻璃 renderer 读取的 `MediaQuery.platformBrightness`，避免软件强制浅色而系统仍为深色时出现原生侧边栏、目录和普通控件各读一套明暗状态。
+- 浅色选中控件使用稳定的冷白基底加极弱主色 tint，而不是半透明黑底；普通 control 使用参考实现同类的外侧主阴影与接触阴影。文章复制/已读按钮不再关闭 own layer，否则它们在浅色背景下会比排序/刷新缺少边界层次。
 - 真正的贴图/预绘制优化应放在角色规则稳定之后。优先候选是固定尺寸圆形按钮、固定高度 pill、badge；不要先对大面板或密集内容区做贴图化。

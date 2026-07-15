@@ -335,3 +335,13 @@
 决策：隐藏系统标准按钮，使用一个 AppKit `TrafficLightContainer` 和三个 `TrafficLightButton: NSControl` 绘制可见按钮。每颗按钮独立维护精确 `14 x 14px` tracking/click 区域，容器只同步三颗符号状态，因此按钮间空隙不会触发 hover。窗口 key 状态负责彩色/灰色切换，按压拖出后松开不执行。点击时不自行复制窗口语义，而是通过 `NSApp.sendAction` 转发给对应隐藏系统按钮现有的 target/action。
 
 后果：位置、hover 和点击范围不再受 AppKit 私有 tracking area 影响；绿色按钮仍沿用当前系统按钮配置的行为。全屏视频只隐藏自绘容器。除非整体回到系统默认标题栏布局，否则不要再次直接移动系统标准按钮，也不要恢复本轮仅用于排查的 `TrafficLightProbe`。
+
+## macOS 26 侧边栏使用局部原生 Liquid Glass
+
+背景：侧边栏原先依赖铺满整个透明窗口的 `NSVisualEffectView(.sidebar, .behindWindow)`，Flutter 面板再叠加模糊、冷白 tint、边缘高光和阴影。深色模式尚可，但浅色模式即使窗口位于白色背景上仍偏灰、偏深；继续提高白色覆盖只是在系统材质上模拟另一层材质，也让原生与 Flutter 明暗状态更容易分叉。
+
+决策：macOS 26 改用只覆盖侧边栏面板的 `NSGlassEffectView(style: .regular)`，不设置 `tintColor`，不叠白色和二次模糊。macOS 10.15～15 使用相同局部几何的旧 `NSVisualEffectView` 回退。应用强制浅色/深色时同步 AppKit appearance 和玻璃 renderer 的 platform brightness。侧边栏宽度、margin、圆角以 Flutter 的 `MacOSLayoutMetrics` 为唯一真值，通过 channel 同步给 Runner；Swift 只保留启动兜底值。CI 固定使用带 Xcode 26 SDK 的 `macos-26` ARM64 runner。
+
+边界：原生 API 不提供模糊半径和 border 参数。用户明确选择保持系统模糊；边界由 Flutter 最终连续曲率轮廓补 `0.5px` 环境描边，浅色黑 `12%`、深色白 `12%`，浅色另有轻微外侧阴影。为堵住 AppKit 圆角与 Flutter 连续曲率抗锯齿之间的漏底，原生 backdrop 在遮罩后外扩 `1px`。
+
+后果：侧边栏真实材质由系统负责并自动适配深浅模式，Flutter 只负责内容、最终轮廓和可读性补偿。用户已确认纯原生版本整体观感很好；不要重新引入大面积白色覆盖，也不要用 `.clear` 替换 `.regular`，除非未来明确改成媒体背景并重新处理可读性。

@@ -4,9 +4,17 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   private var trafficLightsHidden = false
   private var trafficLightContainer: TrafficLightContainer?
+  private var sidebarBackdrop: NSView?
+  private var sidebarWidth = Metrics.defaultSidebarWidth
+  private var sidebarMargin = Metrics.defaultSidebarMargin
+  private var sidebarRadius = Metrics.defaultSidebarRadius
 
   private enum Metrics {
     static let windowRadius: CGFloat = 24
+    static let defaultSidebarWidth: CGFloat = 290
+    static let defaultSidebarMargin: CGFloat = 8
+    static let defaultSidebarRadius: CGFloat = 18
+    static let sidebarBackdropBleed: CGFloat = 1
     static let trafficLightCenterX: CGFloat = 24
     static let trafficLightCenterYFromTop: CGFloat = 24
     static let trafficLightDiameter: CGFloat = 14
@@ -25,25 +33,49 @@ class MainFlutterWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.styleMask.insert(.fullSizeContentView)
 
-    let visualEffectView = NSVisualEffectView(frame: flutterViewController.view.bounds)
-    visualEffectView.autoresizingMask = [.width, .height]
-    visualEffectView.blendingMode = .behindWindow
-    visualEffectView.material = .sidebar
-    visualEffectView.state = .active
-    visualEffectView.wantsLayer = true
-    visualEffectView.layer?.cornerRadius = Metrics.windowRadius
-    visualEffectView.layer?.masksToBounds = true
+    let sidebarBackdrop = makeSidebarBackdrop(in: flutterViewController.view.bounds)
+    self.sidebarBackdrop = sidebarBackdrop
 
     flutterViewController.view.wantsLayer = true
     flutterViewController.view.layer?.backgroundColor = NSColor.clear.cgColor
     if let contentView = self.contentView {
-      contentView.addSubview(visualEffectView, positioned: .below, relativeTo: flutterViewController.view)
+      contentView.addSubview(sidebarBackdrop, positioned: .below, relativeTo: flutterViewController.view)
     }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
     scheduleTrafficLightPositioning()
+  }
+
+  private func makeSidebarBackdrop(in bounds: NSRect) -> NSView {
+    let margin = sidebarMargin
+    let bleed = Metrics.sidebarBackdropBleed
+    let frame = NSRect(
+      x: margin - bleed,
+      y: margin - bleed,
+      width: sidebarWidth - margin * 2 + bleed * 2,
+      height: max(0, bounds.height - margin * 2 + bleed * 2)
+    )
+
+    if #available(macOS 26.0, *) {
+      let glassView = NSGlassEffectView(frame: frame)
+      glassView.autoresizingMask = [.height]
+      glassView.style = .regular
+      glassView.cornerRadius = sidebarRadius + bleed
+      glassView.tintColor = nil
+      return glassView
+    }
+
+    let visualEffectView = NSVisualEffectView(frame: frame)
+    visualEffectView.autoresizingMask = [.height]
+    visualEffectView.blendingMode = .behindWindow
+    visualEffectView.material = .sidebar
+    visualEffectView.state = .active
+    visualEffectView.wantsLayer = true
+    visualEffectView.layer?.cornerRadius = sidebarRadius + bleed
+    visualEffectView.layer?.masksToBounds = true
+    return visualEffectView
   }
 
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
@@ -53,7 +85,40 @@ class MainFlutterWindow: NSWindow {
 
   override func setFrame(_ frameRect: NSRect, display flag: Bool) {
     super.setFrame(frameRect, display: flag)
+    updateSidebarBackdropGeometry()
     scheduleTrafficLightPositioning()
+  }
+
+  func setSidebarGlassGeometry(width: CGFloat, margin: CGFloat, radius: CGFloat) {
+    guard width.isFinite,
+          margin.isFinite,
+          radius.isFinite,
+          width > 0,
+          margin >= 0,
+          radius >= 0,
+          width > margin * 2 else {
+      return
+    }
+    sidebarWidth = width
+    sidebarMargin = margin
+    sidebarRadius = radius
+    updateSidebarBackdropGeometry()
+  }
+
+  private func updateSidebarBackdropGeometry() {
+    guard let sidebarBackdrop, let contentView else { return }
+    let bleed = Metrics.sidebarBackdropBleed
+    sidebarBackdrop.frame = NSRect(
+      x: sidebarMargin - bleed,
+      y: sidebarMargin - bleed,
+      width: sidebarWidth - sidebarMargin * 2 + bleed * 2,
+      height: max(0, contentView.bounds.height - sidebarMargin * 2 + bleed * 2)
+    )
+    if #available(macOS 26.0, *), let glassView = sidebarBackdrop as? NSGlassEffectView {
+      glassView.cornerRadius = sidebarRadius + bleed
+    } else {
+      sidebarBackdrop.layer?.cornerRadius = sidebarRadius + bleed
+    }
   }
 
   override func becomeKey() {

@@ -5,12 +5,13 @@ macOS 是近期 UI 工作的主要验证目标。
 当前 UI：
 
 - 分栏：左侧应用侧边栏，中间时间线列表，右侧文章详情。
-- macOS 窗口使用透明/full-size content view 和原生 visual effect 背景。
+- macOS 窗口使用透明/full-size content view。macOS 26 的侧边栏局部使用原生 `NSGlassEffectView(.regular)`；旧系统回退到局部 `NSVisualEffectView(.sidebar, .behindWindow)`。
 - 红黄绿按钮使用 AppKit `NSControl` 自绘容器，位置和命中范围匹配自定义窗口/侧边栏几何；系统标准按钮保持隐藏，自绘按钮通过它们现有的 target/action 转发关闭、最小化和绿色按钮行为。
 - 全屏视频是唯一会临时隐藏红黄绿按钮的页面：视频会延伸到 full-size content view 的标题栏区域，保留按钮会遮挡画面。退出视频页面必须恢复按钮；普通文章、图片预览和其他页面仍遵循标准按钮定位。
 - YouTube 使用 WKWebView 自带播放器；其全屏是网页元素触发的 macOS 系统全屏，不经过普通视频的 `FullscreenVideoPage`。Runner 只对对应 WKWebView 开启 `isElementFullscreenEnabled`，不要把这一配置误当成整个应用窗口的全屏开关。
 - 红色关闭应隐藏窗口，而不是退出应用。
 - 侧边栏是悬浮圆角面板；它的间距和外侧圆角关系会影响其他 macOS 边缘间距决策。
+- 软件内选择浅色/深色时，Flutter 主题、玻璃 renderer 读取的 `MediaQuery.platformBrightness`、`NSApp.appearance` 和主窗口 appearance 必须同步；否则系统模式与应用模式不同时，原生玻璃会使用错误明暗外观。
 
 启动窗口策略：
 

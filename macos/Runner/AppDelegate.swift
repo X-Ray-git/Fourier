@@ -99,6 +99,35 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         result(nil)
       } else if call.method == "setMovable" {
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected a Boolean", details: nil))
+      } else if call.method == "setAppearance", let mode = call.arguments as? String {
+        let appearance: NSAppearance?
+        switch mode {
+        case "light":
+          appearance = NSAppearance(named: .aqua)
+        case "dark":
+          appearance = NSAppearance(named: .darkAqua)
+        case "system":
+          appearance = nil
+        default:
+          result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected system, light, or dark", details: nil))
+          return
+        }
+        NSApp.appearance = appearance
+        self?.mainFlutterWindow?.appearance = appearance
+        result(nil)
+      } else if call.method == "setSidebarGlassGeometry",
+                let args = call.arguments as? [String: Any],
+                let width = args["width"] as? NSNumber,
+                let margin = args["margin"] as? NSNumber,
+                let radius = args["radius"] as? NSNumber {
+        (self?.mainFlutterWindow as? MainFlutterWindow)?.setSidebarGlassGeometry(
+          width: CGFloat(truncating: width),
+          margin: CGFloat(truncating: margin),
+          radius: CGFloat(truncating: radius)
+        )
+        result(nil)
+      } else if call.method == "setSidebarGlassGeometry" {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected width, margin, and radius", details: nil))
       } else {
         result(FlutterMethodNotImplemented)
       }

@@ -159,10 +159,17 @@ abstract final class AutoReadabilityWorker {
         }
       }
 
-      // 处理完正文后（无论是否成功抓取长文），流转到下游 AI 过滤、翻译和摘要 Worker
+      // 过滤保持原有行为；翻译和摘要只接收仍为未读的文章。这里读取
+      // 最新持久化状态，避免上游队列中的旧未读快照在标记已读后重新入队。
       AutoFilterWorker.enqueue(processedArticle);
-      AutoTranslationWorker.enqueueIfEnabled(processedArticle);
-      AutoSummaryWorker.enqueueIfNeeded(processedArticle);
+      final latest = GStorage.articleDb.get(article.entryId);
+      final isCurrentlyRead = latest is Map
+          ? latest['isRead'] == true
+          : processedArticle.isRead;
+      if (!isCurrentlyRead) {
+        AutoTranslationWorker.enqueueIfEnabled(processedArticle);
+        AutoSummaryWorker.enqueueIfNeeded(processedArticle);
+      }
     } finally {
       _queuedIds.remove(article.entryId);
     }

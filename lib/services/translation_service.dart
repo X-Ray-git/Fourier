@@ -204,6 +204,17 @@ abstract final class TranslationService {
     // pending 不落盘 — 瞬态，重启后无需恢复
   }
 
+  /// 清除尚未开始的自动翻译留下的瞬态 pending 状态。
+  static void clearPending(String entryId) {
+    ensureHydrated();
+    final record = _records[entryId];
+    if (record == null || !record.isPending) return;
+    _records[entryId] = TranslationRecord(
+      status: TranslationStatus.idle,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
   static String displayTitleFor(ArticleModel article) {
     final record = recordOf(article.entryId);
     final translated = record?.translatedTitle?.trim();

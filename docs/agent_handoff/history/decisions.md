@@ -325,3 +325,13 @@
 决策：macOS 使用一套共享 cache manager 和文章级缓存命名空间，而不是每篇文章独立创建 manager。全部本地未读文章按时间线顺序进入图片任务队列，每篇最多 8 张，总并发 16；当前文章前 4 张拥有弹性优先级，空闲槽位可由后台借用。不使用 hover 预测，不批量预解码到内存。`readHistory` 作为最近阅读/标记时间：保持已读 5 分钟且文章不再显示后，串行删除该文章登记的原图与尺寸变体；运行中 timer 及时处理，刷新补扫遗漏。
 
 后果：同一 URL 跨文章允许重复缓存，换取整篇可靠清理。旧 `v2_` 历史缓存不在本轮迁移或清理；验证稳定后再单独设计明确的旧缓存清理入口。未来封面必须使用独立缓存角色，不能复用正文清理键。
+
+## macOS 红黄绿使用自绘控件并转发系统 action
+
+背景：为了让红色按钮圆心与窗口、侧边栏左上圆角圆心重合，系统 `standardWindowButton` 曾被手工移动到圆心 `(24, 24)`。实际按钮点击 frame 会跟着移动，但 AppKit 在 `NSTitlebarView` 和 `NSThemeFrame` 中维护的私有整组 hover tracking 仍停在默认位置，相差约 `8px`，表现为从不同方向进入时符号提前出现或消失。
+
+排查结论：不能通过公共 API 稳定同步这套私有状态。手工重建同尺寸 `NSTrackingArea` 后，坐标虽然正确，首次启动却没有 hover，只有全屏往返触发 AppKit 重建后才恢复；移动共同的 `NSTitlebarView` 会发生坐标累积并让按钮脱离正常 hit-test 层级，最终点击失效。
+
+决策：隐藏系统标准按钮，使用一个 AppKit `TrafficLightContainer` 和三个 `TrafficLightButton: NSControl` 绘制可见按钮。每颗按钮独立维护精确 `14 x 14px` tracking/click 区域，容器只同步三颗符号状态，因此按钮间空隙不会触发 hover。窗口 key 状态负责彩色/灰色切换，按压拖出后松开不执行。点击时不自行复制窗口语义，而是通过 `NSApp.sendAction` 转发给对应隐藏系统按钮现有的 target/action。
+
+后果：位置、hover 和点击范围不再受 AppKit 私有 tracking area 影响；绿色按钮仍沿用当前系统按钮配置的行为。全屏视频只隐藏自绘容器。除非整体回到系统默认标题栏布局，否则不要再次直接移动系统标准按钮，也不要恢复本轮仅用于排查的 `TrafficLightProbe`。

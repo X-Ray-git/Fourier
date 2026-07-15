@@ -1294,7 +1294,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                               : Icons.check_circle_outline,
                           tooltip: isRead ? '恢复未读' : '标为已读 (M)',
                           selected: !isRead,
-                          selectedFillOpacity: 0.07,
                           onPressed: isUpdating
                               ? null
                               : () {

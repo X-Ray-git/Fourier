@@ -29,7 +29,7 @@ macOS UI：
 - 设置顶部 chrome 已简化：不再保留大块冗余标题/说明/版本号区域。
 - 设置底部/右侧 padding 应尽量保持和 macOS frame/侧边栏一致的边缘节奏。
 - Segmented 控件应使用当前 hover/cursor 行为，中性控件避免橙色 hover。
-- macOS 设置页 segmented 与时间线 `未读/全部` switch 共用同一类紧凑玻璃语言：外层轨道低存在感、选中滑块使用中性 `AppGlassSurface` control 材质、只保留极弱主色 tint 和主色文字。不要把设置页 segmented 重新改成明显橙色块或旧式普通分段控件。
+- macOS 设置页 segmented 与时间线 `未读/全部` switch 仍属于同一类紧凑玻璃语言，但不要求颜色参数完全相同。设置 segmented 保留自身极弱主色 tint 和主色文字；`未读/全部` 已改为纯中性滑块和 `onSurface` 文字。不要为追求机械统一而把其中一侧覆盖到另一侧。
 - macOS 自定义下拉菜单使用 `_MacGlassSelectField`。下拉 overlay 不能完全透明：菜单面板需要局部静态底色遮住背后内容，且底色圆角必须和外框圆角对齐。
 - 下拉 overlay 的可读性修复是局部处理，不应通过全局提高 `AppGlassSurface` 不透明度解决，否则会影响其他已经验证过的玻璃控件。
 

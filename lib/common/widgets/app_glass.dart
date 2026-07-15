@@ -170,7 +170,7 @@ class AppGlassControlPalette {
 
   Color compactControlTrackFill() {
     return (_isDark ? Colors.white : Colors.black).withValues(
-      alpha: _isDark ? 0.06 : 0.05,
+      alpha: _isDark ? 0.05 : 0.05,
     );
   }
 
@@ -214,6 +214,16 @@ LiquidGlassSettings appGlassSettingsFor(
   );
 }
 
+LiquidGlassSettings appGlassButtonSettingsFor(BuildContext context) {
+  final settings = appGlassSettingsFor(context, AppGlassTone.control);
+  if (Theme.of(context).brightness != Brightness.dark) return settings;
+  return settings.copyWith(
+    glassColor: settings.glassColor.withValues(
+      alpha: settings.glassColor.a * 0.86,
+    ),
+  );
+}
+
 Color appGlassBorderColor(BuildContext context, AppGlassTone tone) {
   final cs = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -238,6 +248,7 @@ class AppGlassSurface extends StatelessWidget {
   final bool staticMaterial;
   final double staticBorderOpacity;
   final double staticBorderWidth;
+  final LiquidGlassSettings? settingsOverride;
 
   const AppGlassSurface({
     super.key,
@@ -253,6 +264,7 @@ class AppGlassSurface extends StatelessWidget {
     this.staticMaterial = false,
     this.staticBorderOpacity = 1.0,
     this.staticBorderWidth = 0.75,
+    this.settingsOverride,
   });
 
   @override
@@ -287,7 +299,7 @@ class AppGlassSurface extends StatelessWidget {
       );
     }
 
-    final settings = appGlassSettingsFor(context, tone);
+    final settings = settingsOverride ?? appGlassSettingsFor(context, tone);
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: AdaptiveGlass(
@@ -569,7 +581,7 @@ class AppGlassTooltip extends StatefulWidget {
 }
 
 class _AppGlassTooltipState extends State<AppGlassTooltip> {
-  final LayerLink _link = LayerLink();
+  final GlobalKey _targetKey = GlobalKey();
   Timer? _timer;
   OverlayEntry? _entry;
 
@@ -592,55 +604,47 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
     if (overlay == null) return;
     final theme = Theme.of(context);
     final textScale = MediaQuery.textScalerOf(context);
-    final placement = _tooltipPlacement(widget.placement);
     _entry = OverlayEntry(
-      builder: (context) => Theme(
-        data: theme,
-        child: MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: textScale),
-          child: Positioned.fill(
-            child: IgnorePointer(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CompositedTransformFollower(
-                    link: _link,
-                    showWhenUnlinked: false,
-                    targetAnchor: placement.targetAnchor,
-                    followerAnchor: placement.followerAnchor,
-                    offset: placement.offset,
-                    child: _AppGlassTooltipBubble(
-                      message: widget.message,
-                      scaleAlignment: placement.scaleAlignment,
-                    ),
+      builder: (context) {
+        final targetBox =
+            _targetKey.currentContext?.findRenderObject() as RenderBox?;
+        final overlayBox = overlay.context.findRenderObject() as RenderBox?;
+        if (targetBox == null ||
+            overlayBox == null ||
+            !targetBox.attached ||
+            !overlayBox.attached) {
+          return const SizedBox.shrink();
+        }
+        final targetGlobal = targetBox.localToGlobal(Offset.zero);
+        final overlayGlobal = overlayBox.localToGlobal(Offset.zero);
+        final targetRect = (targetGlobal - overlayGlobal) & targetBox.size;
+        final scaleAlignment = switch (widget.placement) {
+          AppGlassTooltipPlacement.bottom => Alignment.topCenter,
+          AppGlassTooltipPlacement.right => Alignment.centerLeft,
+        };
+        return Theme(
+          data: theme,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScale),
+            child: Positioned.fill(
+              child: IgnorePointer(
+                child: CustomSingleChildLayout(
+                  delegate: _AppGlassTooltipLayoutDelegate(
+                    targetRect: targetRect,
+                    placement: widget.placement,
                   ),
-                ],
+                  child: _AppGlassTooltipBubble(
+                    message: widget.message,
+                    scaleAlignment: scaleAlignment,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
     overlay.insert(_entry!);
-  }
-
-  _AppGlassTooltipPlacementData _tooltipPlacement(
-    AppGlassTooltipPlacement placement,
-  ) {
-    return switch (placement) {
-      AppGlassTooltipPlacement.bottom => const _AppGlassTooltipPlacementData(
-        targetAnchor: Alignment.bottomCenter,
-        followerAnchor: Alignment.topCenter,
-        offset: Offset(0, 9),
-        scaleAlignment: Alignment.topCenter,
-      ),
-      AppGlassTooltipPlacement.right => const _AppGlassTooltipPlacementData(
-        targetAnchor: Alignment.centerRight,
-        followerAnchor: Alignment.centerLeft,
-        offset: Offset(9, 0),
-        scaleAlignment: Alignment.centerLeft,
-      ),
-    };
   }
 
   void _hideTooltip() {
@@ -662,26 +666,82 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
     return Semantics(
       tooltip: widget.message,
       child: MouseRegion(
+        key: _targetKey,
         onEnter: (_) => _scheduleTooltip(),
         onExit: (_) => _hideTooltip(),
-        child: CompositedTransformTarget(link: _link, child: widget.child),
+        child: widget.child,
       ),
     );
   }
 }
 
-class _AppGlassTooltipPlacementData {
-  final Alignment targetAnchor;
-  final Alignment followerAnchor;
-  final Offset offset;
-  final Alignment scaleAlignment;
+class _AppGlassTooltipLayoutDelegate extends SingleChildLayoutDelegate {
+  static const _gap = 9.0;
+  static const _edgeMargin = 8.0;
 
-  const _AppGlassTooltipPlacementData({
-    required this.targetAnchor,
-    required this.followerAnchor,
-    required this.offset,
-    required this.scaleAlignment,
+  final Rect targetRect;
+  final AppGlassTooltipPlacement placement;
+
+  const _AppGlassTooltipLayoutDelegate({
+    required this.targetRect,
+    required this.placement,
   });
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    return BoxConstraints.loose(
+      Size(
+        math.max(0, constraints.maxWidth - _edgeMargin * 2),
+        math.max(0, constraints.maxHeight - _edgeMargin * 2),
+      ),
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final maxX = math.max(
+      _edgeMargin,
+      size.width - childSize.width - _edgeMargin,
+    );
+    final maxY = math.max(
+      _edgeMargin,
+      size.height - childSize.height - _edgeMargin,
+    );
+
+    double x;
+    double y;
+    switch (placement) {
+      case AppGlassTooltipPlacement.bottom:
+        x = targetRect.center.dx - childSize.width / 2;
+        final below = targetRect.bottom + _gap;
+        final above = targetRect.top - _gap - childSize.height;
+        y =
+            below + childSize.height <= size.height - _edgeMargin ||
+                above < _edgeMargin
+            ? below
+            : above;
+      case AppGlassTooltipPlacement.right:
+        final right = targetRect.right + _gap;
+        final left = targetRect.left - _gap - childSize.width;
+        x =
+            right + childSize.width <= size.width - _edgeMargin ||
+                left < _edgeMargin
+            ? right
+            : left;
+        y = targetRect.center.dy - childSize.height / 2;
+    }
+
+    return Offset(
+      x.clamp(_edgeMargin, maxX).toDouble(),
+      y.clamp(_edgeMargin, maxY).toDouble(),
+    );
+  }
+
+  @override
+  bool shouldRelayout(covariant _AppGlassTooltipLayoutDelegate oldDelegate) {
+    return targetRect != oldDelegate.targetRect ||
+        placement != oldDelegate.placement;
+  }
 }
 
 class _AppGlassTooltipBubble extends StatelessWidget {
@@ -744,7 +804,6 @@ class AppGlassIconButton extends StatefulWidget {
   final String tooltip;
   final VoidCallback? onPressed;
   final bool selected;
-  final double selectedFillOpacity;
   final bool useOwnLayer;
 
   const AppGlassIconButton({
@@ -753,7 +812,6 @@ class AppGlassIconButton extends StatefulWidget {
     required this.tooltip,
     this.onPressed,
     this.selected = false,
-    this.selectedFillOpacity = 0.16,
     this.useOwnLayer = true,
   });
 
@@ -764,10 +822,8 @@ class AppGlassIconButton extends StatefulWidget {
 class AppGlassRoundControlChrome extends StatelessWidget {
   final Widget child;
   final bool enabled;
-  final bool selected;
   final bool hovered;
   final bool pressed;
-  final double selectedFillOpacity;
   final bool useOwnLayer;
   final double size;
 
@@ -777,8 +833,6 @@ class AppGlassRoundControlChrome extends StatelessWidget {
     required this.enabled,
     required this.hovered,
     required this.pressed,
-    this.selected = false,
-    this.selectedFillOpacity = 0.16,
     this.useOwnLayer = true,
     this.size = 34,
   });
@@ -786,13 +840,11 @@ class AppGlassRoundControlChrome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controls = appGlassControlPalette(context);
-    final fill = selected
-        ? controls.activeFill(accentAlpha: selectedFillOpacity)
-        : controls.subtleNeutralOverlay(
-            hovered: enabled && hovered,
-            pressed: enabled && pressed,
-            hoverAlpha: 0.06,
-          );
+    final fill = controls.subtleNeutralOverlay(
+      hovered: enabled && hovered,
+      pressed: enabled && pressed,
+      hoverAlpha: 0.06,
+    );
 
     return MacOSWindowDragGuard(
       child: AppGlassSurface(
@@ -801,6 +853,7 @@ class AppGlassRoundControlChrome extends StatelessWidget {
         tone: AppGlassTone.control,
         interactive: enabled,
         useOwnLayer: useOwnLayer,
+        settingsOverride: appGlassButtonSettingsFor(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutCubic,
@@ -917,12 +970,15 @@ class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
                             tone: AppGlassTone.control,
                             useOwnLayer: false,
                             interactive: true,
+                            settingsOverride: appGlassButtonSettingsFor(
+                              context,
+                            ),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(
                                   AppGlassRadii.pill,
                                 ),
-                                color: controls.activeFill(accentAlpha: 0.018),
+                                color: Colors.transparent,
                               ),
                               child: Center(
                                 child: AnimatedSwitcher(
@@ -949,7 +1005,7 @@ class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w800,
-                                      color: cs.primary,
+                                      color: cs.onSurface,
                                     ),
                                   ),
                                 ),
@@ -1001,10 +1057,8 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
             curve: Curves.easeOutCubic,
             child: AppGlassRoundControlChrome(
               enabled: enabled,
-              selected: widget.selected,
               hovered: _hovered,
               pressed: _pressed,
-              selectedFillOpacity: widget.selectedFillOpacity,
               useOwnLayer: widget.useOwnLayer,
               child: Icon(
                 widget.icon,

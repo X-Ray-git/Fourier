@@ -33,13 +33,14 @@
 - macOS 圆角收敛第一阶段已完成：原生窗口圆角、Flutter 外框、红黄绿圆心、侧边栏面板、大玻璃默认半径、设置/任务中心大面板和分屏文章右下角安全裁剪已联动调整。图片、代码块、小标签、`999` 胶囊和 Android 端刻意未纳入本轮。
 - 玻璃控件颜色状态第一阶段已集中到 `AppGlassControlPalette`：通用玻璃按钮、文章目录项、文章摘要/翻译 pill、时间线排序项、主时间线/订阅源详情二态开关、设置页部分控件已改为通过 palette 取 hover/pressed/active/border/disabled 色。用户验证第一阶段体感基本和改动前一致，这是预期。
 - 设置页 macOS 下拉菜单 overlay 已补局部静态底色，并让底色圆角和外框圆角对齐，解决透明背景导致选项和背后内容混在一起的问题。
-- 玻璃按钮角色统一第二阶段已完成并由用户验证：`AppGlassRoundControlChrome` 统一圆形工具按钮外壳；排序/同步按钮背景保持中性，非默认排序和同步中只让图标变橙；刷新空闲态图标回到更接近白色的中性前景；目录按钮关闭态材质调浅，和复制按钮不再明显割裂。未读文章“标为已读”按钮继续保留橙色图标和浅橙背景，作为主动作语义。
+- 玻璃按钮角色统一第二阶段已完成并由用户验证：`AppGlassRoundControlChrome` 统一圆形工具按钮外壳；选中、主动作和状态提示都只让图标变橙，背景与普通白色图标按钮保持相同的中性玻璃。深色模式按钮专属 control tint 在普通 control 基础上乘 `0.86`，浅色模式只应用中性背景规则。tooltip、菜单、面板以及红/绿语义操作按钮不受影响。
 - `未读/全部` 紧凑二态 switch 的 2.1 结构收敛已完成并由用户验证：主时间线与订阅源详情页现在共用 `AppGlassCompactSwitch`，点击、滑块动画、hover/press、筛选结果和性能体感保持一致。
-- `未读/全部` switch 与设置页 segmented 的 2.2 视觉收敛已完成并由用户验证：选中滑块改为中性 `AppGlassSurface` control 材质，橙色只作为极弱 tint 和文字状态色；外层静态 rim 通过 `staticBorderOpacity` 局部降弱，用户确认效果不错且没有明显掉帧。
+- `未读/全部` switch 与设置页 segmented 的 2.2 视觉收敛已完成并由用户验证。后续视觉收敛只调整 `未读/全部`：滑块使用不含主色 tint 的中性 `AppGlassSurface`，文字改为 `onSurface`，深色空余轨道为白色 `5%`；设置页 segmented 和其他语义控件不随之改变。
 - macOS 分栏文章列表协调器第一阶段已完成：新增 `MacSplitArticleListCoordinator`，垃圾拦截的 `M`、保留和移除在业务状态变化前登记后继项，退出动画期间保持旧详情，真实 `onRemoveEnd` 后才切换并 reveal 下一篇。用户初步验证体验良好；主时间线和最近阅读仍待分阶段迁移。
 - 垃圾拦截审核交互已收敛：macOS 卡片改为仅触控板双指横滑（右滑保留、左滑移除），鼠标拖动不触发；`K/M` 和右键菜单作为后备入口。横滑背景使用圆角路径差集，只显示在卡片真实让出的区域，用户已确认视觉符合预期；快速 `Command-Z` 会等待旧退出动画结束后再恢复同一文章。
 - Android 垃圾拦截继续使用 `Dismissible`，但卡片外边距移到滑动组件外部，解决圆角卡片与保留/移除背景之间的空带。`ArticleCard` 的可选 `outerPadding` 默认不改变其他页面。
 - macOS 顶部玻璃工具按钮、紧凑 switch 和目录 morph 按钮已接入 `MacOSWindowDragGuard`：指针按住这些控件时临时关闭 AppKit 窗口拖动，避免轻微位移把按钮点击误判为移动窗口；空白 header 区域仍可拖动窗口。
+- macOS `AppGlassTooltip` 已加入共享窗口碰撞布局：气泡按真实尺寸限制在四周 `8px` 内，并在底部/右侧空间不足时自动翻转。文章右上角长 tooltip 和其他靠边 tooltip 不再伸出窗口被裁切；两类边界回归测试已覆盖，用户视觉验证通过。
 - macOS `未读/全部` 紧凑 switch 已按用户视觉实验收窄为 `58px` 轨道、`42px` 滑块，去掉外层内缩 padding；最外层静态 rim 当前为 `1px`、局部 opacity multiplier `1.0`。时间线 header 间距为 switch→排序 `8px`、排序→同步 `8px`、同步→右边界 `10px`。
 - macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界为 `2px`；正文基础左右 padding 为 `11px`。中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
 - macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。

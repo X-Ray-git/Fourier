@@ -478,7 +478,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
     _buildShortcutItem(context, '← / →', '切换上一篇 / 下一篇文章'),
     _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
-    _buildShortcutItem(context, 'M', '切换文章已读 / 未读状态'),
+    _buildShortcutItem(context, 'M', '时间线切换已读；垃圾拦截移除'),
+    _buildShortcutItem(context, 'K', '垃圾拦截保留文章'),
     _buildShortcutItem(context, 'C', '复制原文全文为 Markdown'),
   ];
 

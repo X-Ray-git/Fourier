@@ -579,14 +579,17 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   static const double _macToolbarButtonSize = 34;
   static const double _macToolbarButtonGap = 8;
   static const double _macToolbarButtonRightInset = 10;
+  static const double _articleTitleTopOffset = 20;
 
   late final String _tag;
   late final ArticleController controller;
   late final ScrollController _scrollController;
   late final FocusNode _focusNode;
+  final GlobalKey _articleTitleKey = GlobalKey();
 
   // 1. 改为使用 ValueNotifier 以实现局部刷新
   final ValueNotifier<double> _scrollProgress = ValueNotifier(0.0);
+  final ValueNotifier<double> _headerCollapseProgress = ValueNotifier(0.0);
   final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null);
   final ValueNotifier<String?> _activeTocId = ValueNotifier<String?>(null);
   bool _allowBodyBuild = Platform.isMacOS;
@@ -602,7 +605,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _tag = widget.article.entryId;
     controller = Get.put(ArticleController(widget.article), tag: _tag);
     _scrollController = ScrollController();
-    _scrollController.addListener(_scheduleActiveTocUpdate);
+    _scrollController.addListener(_handleArticleScroll);
     _focusNode = FocusNode();
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
     ArticleImageCacheService.markArticleActive(widget.article.entryId);
@@ -631,6 +634,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
     _scrollController.dispose();
     _scrollProgress.dispose();
+    _headerCollapseProgress.dispose();
     _hoveredUrl.dispose();
     _activeTocId.dispose();
     _focusNode.dispose();
@@ -770,6 +774,30 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
     if (_scrollProgress.value != nextProgress) {
       _scrollProgress.value = nextProgress;
+    }
+  }
+
+  void _handleArticleScroll() {
+    _scheduleActiveTocUpdate();
+    if (!Platform.isMacOS || !widget.isSplitView) return;
+
+    final offset = _scrollController.hasClients
+        ? _scrollController.offset
+        : 0.0;
+    final titleRenderObject = _articleTitleKey.currentContext
+        ?.findRenderObject();
+    final titleHeight = titleRenderObject is RenderBox
+        ? titleRenderObject.size.height
+        : 30.0;
+    final transitionStart = _articleTitleTopOffset + titleHeight * 0.82;
+    final transitionEnd = _articleTitleTopOffset + titleHeight + 14;
+    final nextProgress =
+        ((offset - transitionStart) / (transitionEnd - transitionStart)).clamp(
+          0.0,
+          1.0,
+        );
+    if (_headerCollapseProgress.value != nextProgress) {
+      _headerCollapseProgress.value = nextProgress;
     }
   }
 
@@ -1035,6 +1063,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                                 children: [
                                   Text(
                                     controller.article.title,
+                                    key: _articleTitleKey,
                                     style: const TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
@@ -1255,18 +1284,66 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       );
     }
 
+    final usesCollapsibleMacHeader = Platform.isMacOS && widget.isSplitView;
+    final headerRule = Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+        ValueListenableBuilder<double>(
+          valueListenable: _scrollProgress,
+          builder: (context, progress, child) {
+            return FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progress.clamp(0.0, 1.0),
+              child: ColoredBox(color: colorScheme.primary),
+            );
+          },
+        ),
+      ],
+    );
+
     Widget scaffold = Scaffold(
       appBar: AppBar(
-        title: Text(
-          widget.pageLabel ?? '文章详情',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 2.0,
-            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-          ),
-        ),
-        centerTitle: true,
+        title: usesCollapsibleMacHeader
+            ? ValueListenableBuilder<double>(
+                valueListenable: _headerCollapseProgress,
+                builder: (context, progress, child) {
+                  final eased = Curves.easeOutCubic.transform(progress);
+                  return Opacity(
+                    opacity: eased,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - eased) * 6),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    right: _macToolbarButtonSize + _macToolbarButtonGap,
+                  ),
+                  child: Text(
+                    controller.article.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              )
+            : Text(
+                widget.pageLabel ?? '文章详情',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 2.0,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                ),
+              ),
+        centerTitle: !usesCollapsibleMacHeader,
+        titleSpacing: usesCollapsibleMacHeader ? 11 : null,
         backgroundColor: colorScheme.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -1322,24 +1399,18 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           child: SizedBox(
             width: double.infinity,
             height: 1.0,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ColoredBox(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-                ),
-                ValueListenableBuilder<double>(
-                  valueListenable: _scrollProgress,
-                  builder: (context, progress, child) {
-                    return FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: progress.clamp(0.0, 1.0),
-                      child: ColoredBox(color: colorScheme.primary),
-                    );
-                  },
-                ),
-              ],
-            ),
+            child: usesCollapsibleMacHeader
+                ? ValueListenableBuilder<double>(
+                    valueListenable: _headerCollapseProgress,
+                    child: headerRule,
+                    builder: (context, progress, child) {
+                      return Opacity(
+                        opacity: Curves.easeOutCubic.transform(progress),
+                        child: child,
+                      );
+                    },
+                  )
+                : headerRule,
           ),
         ),
       ),

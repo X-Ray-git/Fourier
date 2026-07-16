@@ -15,9 +15,9 @@
 - 当前侧边栏阴影以连续融合为目标，不要求肉眼明确看见。用户已验证断层消失、外围底板消失，且玻璃透视、布局和点击行为没有回归；不要为了强调阴影而主动加深或加宽。
 - Header 分隔线应克制；中间时间线 header 不再使用大面积玻璃。
 - macOS 中间栏 header 的底部分隔线已取消。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截；列表层级主要依赖卡片轻填充、间距和右侧分栏结构。
-- macOS 中间栏和文章详情使用固定 `surface` header，滚动内容从 header 下方开始，不再进入 header，也不再使用顶部渐隐。此前参考 `.scrollEdgeEffectStyle(.soft)` 的透明 header 实验已因长期观感不理想而撤销。
+- macOS 中间栏和文章详情使用固定 `surface` header，滚动内容从 header 下方开始，不再进入 header，也不再使用顶部渐隐。此前参考 `.scrollEdgeEffectStyle(.soft)` 的透明 header 实验已因长期观感不理想而撤销。文章详情仅在正文大标题接近滚出后，将同一标题以滚动驱动的淡入/轻微位移放入固定 header；这不是透明叠层，也不改变滚动几何。
 - header 不使用整块 `BackdropFilter`；文章 header 曾因此采样到相邻时间线按钮的高光。玻璃仍只属于 header 内的交互控件。
-- 中间栏 header 不显示底部分隔线。文章 header 是例外：底部始终保留 `1px`、`outlineVariant`、alpha `0.30` 的细线，橙色阅读进度在其上按比例覆盖。
+- 中间栏 header 不显示底部分隔线。文章 header 是例外：当正文大标题折叠进 header 后，底部显示 `1px`、`outlineVariant`、alpha `0.30` 的细线，橙色阅读进度在其上按比例覆盖；文章位于顶部时两者均隐藏。
 
 控件：
 

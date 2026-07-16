@@ -339,8 +339,8 @@ abstract final class HtmlChunkParser {
     // iframe / video / audio → 降级为占位卡片
     if (tag == 'iframe' || tag == 'video' || tag == 'audio') {
       var src = _extractSrc(element);
-      // <video> with <source> children: extract src from first <source>
-      if (src.isEmpty && tag == 'video') {
+      // <video>/<audio> may provide the resource through a child <source>.
+      if (src.isEmpty && (tag == 'video' || tag == 'audio')) {
         final source = element.querySelector('source[src]');
         if (source != null) {
           src = (source.attributes['src'] ?? '').trim();
@@ -356,7 +356,10 @@ abstract final class HtmlChunkParser {
           posterSrc: poster.isEmpty ? null : poster,
           imageWidth: w,
           imageHeight: h,
-          attributes: {if (tag != 'iframe') 'mediaTag': tag},
+          attributes: {
+            'mediaTag': tag,
+            if (src.isEmpty) 'mediaUnavailableReason': 'missingSource',
+          },
         ),
       );
       return;

@@ -35,6 +35,7 @@ dependencies:
   flutter_cache_manager: ^3.4.1
 
   # HTML 渲染
+  crypto: ^3.0.7
   flutter_html: ^3.0.0-beta.2
   flutter_html_table: ^3.0.0-beta.2
   html: ^0.15.4

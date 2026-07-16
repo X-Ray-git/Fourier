@@ -815,8 +815,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     final offset = _scrollController.hasClients
         ? _scrollController.offset
         : 0.0;
-    final transitionStart =
-        _articleTitleTopOffset + _articleTitleHeight * 0.82;
+    final transitionStart = _articleTitleTopOffset + _articleTitleHeight * 0.82;
     final transitionEnd = _articleTitleTopOffset + _articleTitleHeight + 14;
     final nextProgress =
         ((offset - transitionStart) / (transitionEnd - transitionStart)).clamp(
@@ -1257,6 +1256,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                               ),
                               chunk: chunk,
                               articleId: controller.article.entryId,
+                              articleUrl: controller.article.url,
                               maxWidth: maxWidth,
                               hoveredUrl: _hoveredUrl,
                               contentAnchorKey:

@@ -1388,6 +1388,7 @@ class MacGlassScrollArea extends StatelessWidget {
 
 class AppGlassTextField extends StatelessWidget {
   final TextEditingController? controller;
+  final FocusNode? focusNode;
   final String? initialValue;
   final String label;
   final String? hint;
@@ -1399,12 +1400,14 @@ class AppGlassTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onFieldSubmitted;
   final TextStyle? style;
   final bool monospace;
 
   const AppGlassTextField({
     super.key,
     this.controller,
+    this.focusNode,
     this.initialValue,
     required this.label,
     this.hint,
@@ -1416,6 +1419,7 @@ class AppGlassTextField extends StatelessWidget {
     this.keyboardType,
     this.inputFormatters,
     this.onChanged,
+    this.onFieldSubmitted,
     this.style,
     this.monospace = false,
   }) : assert(controller == null || initialValue == null);
@@ -1465,6 +1469,7 @@ class AppGlassTextField extends StatelessWidget {
                   Expanded(
                     child: TextFormField(
                       controller: controller,
+                      focusNode: focusNode,
                       initialValue: initialValue,
                       obscureText: obscureText,
                       maxLines: obscureText ? 1 : maxLines,
@@ -1473,6 +1478,7 @@ class AppGlassTextField extends StatelessWidget {
                       keyboardType: keyboardType,
                       inputFormatters: inputFormatters,
                       onChanged: onChanged,
+                      onFieldSubmitted: onFieldSubmitted,
                       style: textStyle,
                       cursorColor: cs.primary,
                       decoration: InputDecoration(

@@ -105,7 +105,6 @@ class UndoService {
     );
 
     ReadSyncService.removeMany([article.entryId]);
-    GStorage.readStatus.delete(article.entryId);
 
     if (!ok) {
       clearForEntry(article.entryId);

@@ -19,6 +19,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/article_card_chrome.dart';
+import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 
 import '../../http/init.dart';
@@ -36,27 +37,35 @@ import '../widgets/article_card.dart';
 import 'timeline_controller.dart';
 import '../../utils/scroll_utils.dart';
 
-class _TimelineDoubleTapProbe {
+class _TimelineAnimationProbe {
   static const bool _requested = bool.fromEnvironment(
     'AUTO_FOLO_ANIMATION_PROBE',
   );
   static final Stopwatch _clock = Stopwatch()..start();
   static String? _activeEntryId;
+  static String? _activeSource;
   static int _startedAtUs = 0;
   static bool _timingsInstalled = false;
 
   static bool get enabled => _requested && kDebugMode && Platform.isMacOS;
 
-  static void begin(String entryId, Map<String, Object?> fields) {
+  static void begin(
+    String entryId, {
+    required String source,
+    required String event,
+    Map<String, Object?> fields = const {},
+  }) {
     if (!enabled) return;
     _installTimingsProbe();
     _activeEntryId = entryId;
+    _activeSource = source;
     _startedAtUs = _clock.elapsedMicroseconds;
-    log(entryId, 'double-tap.detected', fields);
+    log(entryId, event, fields);
     Future<void>.delayed(const Duration(seconds: 2), () {
       if (_activeEntryId != entryId) return;
       log(entryId, 'session.timeout');
       _activeEntryId = null;
+      _activeSource = null;
     });
   }
 
@@ -71,8 +80,8 @@ class _TimelineDoubleTapProbe {
         .map((entry) => '${entry.key}=${entry.value}')
         .join(' ');
     debugPrintSynchronously(
-      '[TimelineDoubleTapProbe +${elapsedMs.toStringAsFixed(1)}ms '
-      'id=${_shortId(entryId)}] '
+      '[TimelineAnimationProbe +${elapsedMs.toStringAsFixed(1)}ms '
+      'id=${shortId(entryId)} source=$_activeSource] '
       '$event${details.isEmpty ? '' : ' $details'}',
       wrapWidth: 2000,
     );
@@ -82,6 +91,7 @@ class _TimelineDoubleTapProbe {
     if (!enabled || _activeEntryId != entryId) return;
     log(entryId, 'session.finished');
     _activeEntryId = null;
+    _activeSource = null;
   }
 
   static void _installTimingsProbe() {
@@ -103,7 +113,8 @@ class _TimelineDoubleTapProbe {
     });
   }
 
-  static String _shortId(String entryId) {
+  static String shortId(String? entryId) {
+    if (entryId == null) return 'none';
     if (entryId.length <= 8) return entryId;
     return entryId.substring(entryId.length - 8);
   }
@@ -136,17 +147,25 @@ class _TimelinePageState extends State<TimelinePage> {
   DateTime? _lastTapTime;
   String? _lastArticleTapEntryId;
   DateTime? _lastArticleTapAt;
-  final Map<String, GlobalKey> _itemKeys = {};
-  final Map<String, GlobalKey> _removingItemKeys = {};
+  late final MacSplitArticleListCoordinator _listCoordinator;
   final Map<String, ArticleModel> _pendingOriginalOpenAfterRemoval = {};
   double _estimatedMacTimelineItemExtent = _defaultMacTimelineItemExtent;
   bool _isHandlingMacReadShortcut = false;
   Worker? _undoRestoreWorker;
 
+  Map<String, GlobalKey> get _itemKeys => _listCoordinator.itemKeys;
+
   @override
   void initState() {
     super.initState();
     controller = Get.put(TimelineController());
+    _listCoordinator = MacSplitArticleListCoordinator(
+      articles: () => controller.articles.toList(),
+      selectedArticle: () => controller.selectedArticle.value,
+      setSelectedArticle: (article) =>
+          controller.selectedArticle.value = article,
+      revealArticle: _scrollToArticle,
+    );
     controller.bindScrollToTopHandler(_scrollToTop);
     _undoRestoreWorker = ever(
       UndoService.restoredAction,
@@ -158,6 +177,7 @@ class _TimelinePageState extends State<TimelinePage> {
   @override
   void dispose() {
     controller.bindScrollToTopHandler(null);
+    _listCoordinator.dispose();
     _undoRestoreWorker?.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -193,6 +213,8 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   void _selectRelativeArticle(int delta, {bool scrollTo = true}) {
+    if (Platform.isMacOS && _listCoordinator.isRemovingSelectedArticle) return;
+
     final list = controller.articles;
     if (list.isEmpty) return;
 
@@ -250,15 +272,6 @@ class _TimelinePageState extends State<TimelinePage> {
       controller.selectedArticle.value = list.first;
       if (scrollTo) _scrollToArticle(list.first.entryId);
     }
-  }
-
-  ArticleModel? _successorAfterRemoving(String entryId) {
-    final list = controller.articles;
-    final index = list.indexWhere((article) => article.entryId == entryId);
-    if (index < 0 || list.length <= 1) return null;
-
-    final nextIndex = index < list.length - 1 ? index + 1 : index - 1;
-    return list[nextIndex];
   }
 
   void _scrollToArticle(String entryId) {
@@ -370,13 +383,7 @@ class _TimelinePageState extends State<TimelinePage> {
     if (!mounted || event == null || !_isActiveMacTimeline) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_isActiveMacTimeline) return;
-      final index = controller.articles.indexWhere(
-        (a) => a.entryId == event.article.entryId,
-      );
-      if (index < 0) return;
-      final article = controller.articles[index];
-      controller.selectedArticle.value = article;
-      _scrollToArticle(article.entryId);
+      _listCoordinator.restoreSelection(event.article.entryId);
     });
   }
 
@@ -396,6 +403,29 @@ class _TimelinePageState extends State<TimelinePage> {
     }
   }
 
+  Map<String, Object?> _timelineProbeFields({ArticleModel? article}) {
+    final attachedPositions = _scrollController.positions.length;
+    return {
+      'count': controller.articles.length,
+      'index': article == null
+          ? -1
+          : controller.articles.indexWhere(
+              (candidate) => candidate.entryId == article.entryId,
+            ),
+      'selected': _TimelineAnimationProbe.shortId(
+        controller.selectedArticle.value?.entryId,
+      ),
+      'mode': controller.selectedMode.value.name,
+      'listVersion': controller.timelineListResetVersion,
+      'scrollPositions': attachedPositions,
+      'offset': attachedPositions == 1
+          ? _scrollController.offset.toStringAsFixed(1)
+          : attachedPositions == 0
+          ? 'detached'
+          : 'multiple',
+    };
+  }
+
   void _handleMacArticleTap(ArticleModel article) {
     final now = DateTime.now();
     final isDoubleTap =
@@ -411,20 +441,28 @@ class _TimelinePageState extends State<TimelinePage> {
       final expectsRemoval =
           !article.isRead &&
           controller.selectedMode.value == TimelineViewMode.unread;
-      _TimelineDoubleTapProbe.begin(article.entryId, {
-        'count': controller.articles.length,
-        'index': controller.articles.indexWhere(
-          (candidate) => candidate.entryId == article.entryId,
-        ),
-        'mode': controller.selectedMode.value.name,
-        'listVersion': controller.timelineListResetVersion,
-      });
+      _TimelineAnimationProbe.begin(
+        article.entryId,
+        source: 'doubleTap',
+        event: 'action.detected',
+        fields: _timelineProbeFields(article: article),
+      );
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
-      _selectRelativeArticle(1, scrollTo: false);
-      _TimelineDoubleTapProbe.log(article.entryId, 'selection.advanced', {
-        'selected': controller.selectedArticle.value?.entryId,
-      });
+      if (expectsRemoval) {
+        if (!_listCoordinator.beginRemoval(article.entryId)) {
+          _TimelineAnimationProbe.log(article.entryId, 'coordinator.rejected');
+          _TimelineAnimationProbe.finish(article.entryId);
+          return;
+        }
+      } else {
+        _selectRelativeArticle(1, scrollTo: false);
+      }
+      _TimelineAnimationProbe.log(
+        article.entryId,
+        expectsRemoval ? 'selection.held-for-removal' : 'selection.advanced',
+        _timelineProbeFields(article: article),
+      );
 
       // Run persistence after the current frame has fully ended. A post-frame
       // callback still belongs to that frame and can consume the first part of
@@ -432,7 +470,11 @@ class _TimelinePageState extends State<TimelinePage> {
       unawaited(
         SchedulerBinding.instance.endOfFrame.then((_) {
           if (!mounted) return;
-          _TimelineDoubleTapProbe.log(article.entryId, 'frame-boundary');
+          _TimelineAnimationProbe.log(
+            article.entryId,
+            'frame-boundary',
+            _timelineProbeFields(article: article),
+          );
           if (!article.isRead) {
             final before = controller.articles.length;
             final future = UndoService.markAsRead(
@@ -440,7 +482,7 @@ class _TimelinePageState extends State<TimelinePage> {
               showSuccess: false,
               deferTimelineVisualUpdate: true,
             );
-            _TimelineDoubleTapProbe.log(
+            _TimelineAnimationProbe.log(
               article.entryId,
               'mark-read.dispatched',
               {
@@ -452,7 +494,7 @@ class _TimelinePageState extends State<TimelinePage> {
             unawaited(future);
             unawaited(
               SchedulerBinding.instance.endOfFrame.then((_) {
-                _TimelineDoubleTapProbe.log(
+                _TimelineAnimationProbe.log(
                   article.entryId,
                   'visual-update.frame-boundary',
                   {
@@ -463,12 +505,12 @@ class _TimelinePageState extends State<TimelinePage> {
               }),
             );
           } else {
-            _TimelineDoubleTapProbe.log(article.entryId, 'mark-read.skipped');
+            _TimelineAnimationProbe.log(article.entryId, 'mark-read.skipped');
           }
 
           if (expectsRemoval) {
             _pendingOriginalOpenAfterRemoval[article.entryId] = article;
-            _TimelineDoubleTapProbe.log(
+            _TimelineAnimationProbe.log(
               article.entryId,
               'browser.deferred-until-remove-end',
             );
@@ -492,24 +534,26 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   void _handleTimelineRemoveStart(ArticleModel article) {
-    _TimelineDoubleTapProbe.log(article.entryId, 'remove.start', {
-      'count': controller.articles.length,
-      'listVersion': controller.timelineListResetVersion,
-    });
-    final key = _itemKeys.remove(article.entryId);
-    if (key != null) {
-      _removingItemKeys[article.entryId] = key;
-    }
+    _TimelineAnimationProbe.log(
+      article.entryId,
+      'remove.start',
+      _timelineProbeFields(article: article),
+    );
+    _listCoordinator.onRemoveStart(article);
   }
 
   void _handleTimelineRemoveEnd(ArticleModel article) {
-    _removingItemKeys.remove(article.entryId);
-    _TimelineDoubleTapProbe.log(article.entryId, 'remove.end');
+    _listCoordinator.onRemoveEnd(article);
+    _TimelineAnimationProbe.log(
+      article.entryId,
+      'remove.end',
+      _timelineProbeFields(article: article),
+    );
     final pendingOpen = _pendingOriginalOpenAfterRemoval.remove(
       article.entryId,
     );
     if (pendingOpen != null) {
-      _TimelineDoubleTapProbe.log(
+      _TimelineAnimationProbe.log(
         article.entryId,
         'browser.scheduled-after-remove-end',
       );
@@ -519,7 +563,7 @@ class _TimelinePageState extends State<TimelinePage> {
         }),
       );
     }
-    _TimelineDoubleTapProbe.finish(article.entryId);
+    _TimelineAnimationProbe.finish(article.entryId);
   }
 
   void _handleMacReadShortcut() {
@@ -535,6 +579,13 @@ class _TimelinePageState extends State<TimelinePage> {
         ? controller.allArticles[currentIndex]
         : currentSelected;
 
+    _TimelineAnimationProbe.begin(
+      current.entryId,
+      source: current.isRead ? 'keyM.restoreUnread' : 'keyM.markRead',
+      event: 'action.detected',
+      fields: _timelineProbeFields(article: current),
+    );
+
     _isHandlingMacReadShortcut = true;
     Future<void>.delayed(const Duration(milliseconds: 220), () {
       if (!mounted) return;
@@ -549,19 +600,69 @@ class _TimelinePageState extends State<TimelinePage> {
       } else {
         controller.markAsUnreadLocal(current.entryId);
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _TimelineAnimationProbe.log(
+          current.entryId,
+          'restore-unread.next-frame',
+          _timelineProbeFields(article: current),
+        );
+      });
+      Future<void>.delayed(const Duration(milliseconds: 650), () {
+        _TimelineAnimationProbe.finish(current.entryId);
+      });
       return;
     }
 
-    final successor = _successorAfterRemoving(current.entryId);
-    controller.selectedArticle.value = successor;
+    final expectsRemoval =
+        controller.selectedMode.value == TimelineViewMode.unread;
+    if (expectsRemoval) {
+      if (!_listCoordinator.beginRemoval(current.entryId)) {
+        _TimelineAnimationProbe.log(current.entryId, 'coordinator.rejected');
+        _TimelineAnimationProbe.finish(current.entryId);
+        return;
+      }
+    } else {
+      _selectRelativeArticle(1, scrollTo: false);
+    }
+    _TimelineAnimationProbe.log(
+      current.entryId,
+      expectsRemoval ? 'selection.held-for-removal' : 'selection.advanced',
+      _timelineProbeFields(article: current),
+    );
 
     UndoService.recordRead(current);
-    controller.markAsReadLocal(current.entryId);
+    controller.markAsReadLocal(
+      current.entryId,
+      deferVisualUpdateToFrameBoundary: expectsRemoval,
+    );
+    _TimelineAnimationProbe.log(
+      current.entryId,
+      'mark-read.dispatched',
+      _timelineProbeFields(article: current),
+    );
     ReadSyncService.enqueue(
       current.entryId,
       isInbox: current.category == 'inbox',
     );
     unawaited(ReadSyncService.syncPendingReads());
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _TimelineAnimationProbe.log(
+        current.entryId,
+        'action.next-frame',
+        _timelineProbeFields(article: current),
+      );
+    });
+    Future<void>.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _TimelineAnimationProbe.log(
+        current.entryId,
+        'action.after-250ms',
+        _timelineProbeFields(article: current),
+      );
+    });
   }
 
   Widget _buildFilterBar(int count) {
@@ -749,8 +850,9 @@ class _TimelinePageState extends State<TimelinePage> {
                 Positioned.fill(
                   child: ImplicitlyAnimatedList<ArticleModel>(
                     key: ValueKey(
-                      '${controller.selectedMode.value}:${controller.timelineScopeKey}:${controller.timelineListResetVersion}',
+                      '${controller.selectedMode.value}:${controller.timelineScopeKey}',
                     ),
+                    batchUpdateVersion: controller.timelineListResetVersion,
                     physics: _refreshPhysics,
                     controller: _scrollController,
                     padding: MacArticleListChrome.contentPadding(context),
@@ -877,10 +979,7 @@ class _TimelinePageState extends State<TimelinePage> {
     int index,
     Animation<double> animation,
   ) {
-    final articleKey =
-        _removingItemKeys[article.entryId] ??
-        _itemKeys[article.entryId] ??
-        ValueKey('removed-${article.entryId}');
+    final articleKey = _listCoordinator.removedItemKeyFor(article.entryId);
     final transition = SizeTransition(
       sizeFactor: animation,
       axisAlignment: -1,
@@ -895,7 +994,7 @@ class _TimelinePageState extends State<TimelinePage> {
         ),
       ),
     );
-    if (!_TimelineDoubleTapProbe.enabled) return transition;
+    if (!_TimelineAnimationProbe.enabled) return transition;
     return _TimelineRemovalAnimationProbe(
       entryId: article.entryId,
       animation: animation,
@@ -929,7 +1028,7 @@ class _TimelineRemovalAnimationProbeState
     super.initState();
     widget.animation.addListener(_handleAnimation);
     widget.animation.addStatusListener(_handleStatus);
-    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.builder-attached', {
+    _TimelineAnimationProbe.log(widget.entryId, 'remove.builder-attached', {
       'value': widget.animation.value.toStringAsFixed(3),
       'status': widget.animation.status.name,
     });
@@ -952,7 +1051,7 @@ class _TimelineRemovalAnimationProbeState
   void dispose() {
     widget.animation.removeListener(_handleAnimation);
     widget.animation.removeStatusListener(_handleStatus);
-    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.builder-disposed', {
+    _TimelineAnimationProbe.log(widget.entryId, 'remove.builder-disposed', {
       'value': widget.animation.value.toStringAsFixed(3),
       'status': widget.animation.status.name,
     });
@@ -960,7 +1059,7 @@ class _TimelineRemovalAnimationProbeState
   }
 
   void _handleStatus(AnimationStatus status) {
-    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.animation-status', {
+    _TimelineAnimationProbe.log(widget.entryId, 'remove.animation-status', {
       'status': status.name,
       'value': widget.animation.value.toStringAsFixed(3),
     });
@@ -977,7 +1076,7 @@ class _TimelineRemovalAnimationProbeState
     };
     if (_lastBucket == bucket) return;
     _lastBucket = bucket;
-    _TimelineDoubleTapProbe.log(widget.entryId, 'remove.animation-progress', {
+    _TimelineAnimationProbe.log(widget.entryId, 'remove.animation-progress', {
       'bucket': bucket,
       'value': value.toStringAsFixed(3),
       'status': widget.animation.status.name,

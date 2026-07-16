@@ -67,6 +67,40 @@ void main() {
     expect(find.text('b'), findsOneWidget);
     expect(find.text('c'), findsOneWidget);
   });
+
+  testWidgets('batch update reconciles immediately without replacing scroll', (
+    tester,
+  ) async {
+    final key = GlobalKey<_ListHarnessState>();
+    final started = <String>[];
+    final ended = <String>[];
+    final initialItems = List<String>.generate(30, (index) => 'item-$index');
+
+    await tester.pumpWidget(
+      _ListHarness(
+        key: key,
+        initialItems: initialItems,
+        onRemoveStart: started.add,
+        onRemoveEnd: ended.add,
+      ),
+    );
+
+    key.currentState!.jumpTo(240);
+    await tester.pump();
+    expect(key.currentState!.scrollOffset, 240);
+
+    final nextItems = List<String>.from(initialItems)
+      ..remove('item-25')
+      ..add('item-30');
+    key.currentState!.setItems(nextItems, batch: true);
+    await tester.pump();
+    await tester.pump(const Duration(microseconds: 1));
+
+    expect(started, const ['item-25']);
+    expect(ended, const ['item-25']);
+    expect(find.text('item-25'), findsNothing);
+    expect(key.currentState!.scrollOffset, 240);
+  });
 }
 
 class _ListHarness extends StatefulWidget {
@@ -87,9 +121,24 @@ class _ListHarness extends StatefulWidget {
 
 class _ListHarnessState extends State<_ListHarness> {
   late List<String> _items = List<String>.from(widget.initialItems);
+  final ScrollController _scrollController = ScrollController();
+  int _batchUpdateVersion = 0;
 
-  void setItems(List<String> items) {
-    setState(() => _items = List<String>.from(items));
+  double get scrollOffset => _scrollController.offset;
+
+  void jumpTo(double offset) => _scrollController.jumpTo(offset);
+
+  void setItems(List<String> items, {bool batch = false}) {
+    setState(() {
+      _items = List<String>.from(items);
+      if (batch) _batchUpdateVersion++;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -101,6 +150,8 @@ class _ListHarnessState extends State<_ListHarness> {
         child: ImplicitlyAnimatedList<String>(
           items: _items,
           itemKey: (item) => item,
+          batchUpdateVersion: _batchUpdateVersion,
+          controller: _scrollController,
           removeDuration: const Duration(milliseconds: 180),
           onRemoveStart: widget.onRemoveStart,
           onRemoveEnd: widget.onRemoveEnd,

@@ -24,6 +24,7 @@ class ImplicitlyAnimatedList<T> extends StatefulWidget {
   final Curve removeCurve;
   final AnimatedItemLifecycle<T>? onRemoveStart;
   final AnimatedItemLifecycle<T>? onRemoveEnd;
+  final int batchUpdateVersion;
   final EdgeInsetsGeometry? padding;
   final ScrollPhysics? physics;
   final ScrollController? controller;
@@ -42,6 +43,7 @@ class ImplicitlyAnimatedList<T> extends StatefulWidget {
     this.removeCurve = Curves.easeInCubic,
     this.onRemoveStart,
     this.onRemoveEnd,
+    this.batchUpdateVersion = 0,
     this.padding,
     this.physics,
     this.controller,
@@ -66,10 +68,12 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
   @override
   void didUpdateWidget(ImplicitlyAnimatedList<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncItems();
+    _syncItems(
+      animateChanges: oldWidget.batchUpdateVersion == widget.batchUpdateVersion,
+    );
   }
 
-  void _syncItems() {
+  void _syncItems({required bool animateChanges}) {
     final listState = _listKey.currentState;
     final nextItems = widget.items;
     if (listState == null) {
@@ -77,6 +81,12 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
       return;
     }
 
+    final removeDuration = animateChanges
+        ? widget.removeDuration
+        : Duration.zero;
+    final insertDuration = animateChanges
+        ? widget.insertDuration
+        : Duration.zero;
     final nextKeys = nextItems.map(widget.itemKey).toSet();
     for (var index = _items.length - 1; index >= 0; index--) {
       final item = _items[index];
@@ -91,9 +101,9 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
             index,
             CurvedAnimation(parent: animation, curve: widget.removeCurve),
           ),
-          duration: widget.removeDuration,
+          duration: removeDuration,
         );
-        _scheduleRemoveEnd(removedItem);
+        _scheduleRemoveEnd(removedItem, removeDuration);
       }
     }
 
@@ -116,15 +126,15 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
       }
 
       _items.insert(index, nextItem);
-      listState.insertItem(index, duration: widget.insertDuration);
+      listState.insertItem(index, duration: insertDuration);
     }
   }
 
-  void _scheduleRemoveEnd(T item) {
+  void _scheduleRemoveEnd(T item, Duration duration) {
     final onRemoveEnd = widget.onRemoveEnd;
     if (onRemoveEnd == null) return;
 
-    Future<void>.delayed(widget.removeDuration, () {
+    Future<void>.delayed(duration, () {
       if (!mounted) return;
       onRemoveEnd(item);
     });

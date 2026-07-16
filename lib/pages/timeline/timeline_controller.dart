@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
@@ -31,6 +32,10 @@ enum TimelineSortMode { newest, longest, shortest }
 
 /// 时间线控制器 — 本地文章库（未读/全部/已读）
 class TimelineController extends GetxController {
+  static const bool _animationProbeRequested = bool.fromEnvironment(
+    'AUTO_FOLO_ANIMATION_PROBE',
+  );
+
   final loadingState = Rx<LoadingState<List<ArticleModel>>>(const Loading());
   final articles = <ArticleModel>[].obs;
   final allArticles = <ArticleModel>[].obs;
@@ -51,6 +56,8 @@ class TimelineController extends GetxController {
   int _timelineListResetVersion = 0;
   String _timelineScopeKey = 'normal::';
   final Map<String, Object> _deferredReadVisualUpdates = {};
+  final Set<String> _probeLocallyReadIds = {};
+  final Set<String> _probeReportedReappearedIds = {};
 
   final Map<String, FeedModel> _feedMap = {};
   bool _feedsLoaded = false;
@@ -137,7 +144,7 @@ class TimelineController extends GetxController {
     _hasMore = false;
 
     unawaited(ReadSyncService.syncPendingReads());
-    _loadFromLocalDatabase();
+    _loadFromLocalDatabase(resetReason: 'loadData.localCache');
     if (allArticles.isEmpty) {
       loadingState.value = const Loading();
     }
@@ -188,7 +195,7 @@ class TimelineController extends GetxController {
       socialOk: socialOk,
       inboxOk: inboxOk,
     );
-    _loadFromLocalDatabase();
+    _loadFromLocalDatabase(resetReason: 'loadData.unreadSnapshot');
 
     loadingState.value = Success(articles.toList());
     unawaited(
@@ -235,25 +242,31 @@ class TimelineController extends GetxController {
       }
 
       final localOverride = LocalArticleDbService.readOverrideOf(local.entryId);
-      if (localOverride == false) {
-        // 用户曾标为「未读」，但文章在别处已被读完 → 清除过期覆盖
+      if (localOverride != null) {
+        if (localOverride) {
+          _logReadStateProbe(local.entryId, 'snapshot.confirms-local-read');
+          _probeLocallyReadIds.remove(local.entryId);
+          _probeReportedReappearedIds.remove(local.entryId);
+        }
+        // 服务端未读快照已不再包含该文，已读状态得到确认；
+        // 本地“恢复未读”覆盖也在此时失效。
         GStorage.readStatus.delete(local.entryId);
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
       LocalArticleDbService.setReadState(local.entryId, true);
     }
 
-    // 收集待同步队列 ID，保护用户刚执行的乐观更新不被 API 旧数据覆盖
-    final pendingIds = ReadSyncService.pendingReadItems
-        .map((item) => item.entryId)
-        .toSet();
-
-    // API 返回未读 → 清除本地旧已读标记，实现双向同步
-    // 跳过仍在待同步队列中的条目
-    for (final article in unreadData) {
-      final stale = GStorage.readStatus.get(article.entryId);
-      if (stale == true && !pendingIds.contains(article.entryId)) {
-        GStorage.readStatus.delete(article.entryId);
+    // 未读请求可能早于 mark-read 请求发出，返回的仍是旧快照。
+    // 本地已读覆盖必须保留到某次成功快照明确不再包含该文章。
+    if (_animationProbeRequested && kDebugMode && Platform.isMacOS) {
+      for (final article in unreadData) {
+        if (_probeLocallyReadIds.contains(article.entryId) &&
+            GStorage.readStatus.get(article.entryId) != true) {
+          _logReadStateProbe(
+            article.entryId,
+            'snapshot.missing-local-read-override',
+          );
+        }
       }
     }
 
@@ -316,7 +329,7 @@ class TimelineController extends GetxController {
         windowedReadData,
         defaultReadState: true,
       );
-      _loadFromLocalDatabase();
+      _loadFromLocalDatabase(resetReason: 'recentRead.backfill');
 
       final earliest = windowedReadData
           .map(_timeScore)
@@ -361,7 +374,7 @@ class TimelineController extends GetxController {
       if (data.isNotEmpty) {
         _cursor = data.last.publishedAt;
         LocalArticleDbService.upsertMany(_mergeLocalReadState(data));
-        _loadFromLocalDatabase();
+        _loadFromLocalDatabase(resetReason: 'pagination.loadMore');
       }
       _hasMore = data.length >= 50;
     }
@@ -372,7 +385,7 @@ class TimelineController extends GetxController {
   void setViewMode(TimelineViewMode mode) {
     if (selectedMode.value == mode) return;
     UndoService.clear();
-    resetTimelineListAnimation();
+    resetTimelineListAnimation(reason: 'viewMode.change');
     selectedMode.value = mode;
     _applyFilter();
     loadingState.value = Success(articles.toList());
@@ -380,7 +393,7 @@ class TimelineController extends GetxController {
 
   void setSortMode(TimelineSortMode mode) {
     if (selectedSortMode.value == mode) return;
-    resetTimelineListAnimation();
+    resetTimelineListAnimation(reason: 'sortMode.change');
     selectedSortMode.value = mode;
     _applyFilter();
     loadingState.value = Success(articles.toList());
@@ -399,6 +412,11 @@ class TimelineController extends GetxController {
       true,
       recordHistory: recordHistory,
     );
+    if (_animationProbeRequested && kDebugMode && Platform.isMacOS) {
+      _probeLocallyReadIds.add(entryId);
+      _probeReportedReappearedIds.remove(entryId);
+      _logReadStateProbe(entryId, 'local.mark-read');
+    }
 
     void updateVisualState() {
       _updateReadStateInMemory(entryId, true);
@@ -423,6 +441,8 @@ class TimelineController extends GetxController {
 
   void markAsUnreadLocal(String entryId) {
     if (entryId.trim().isEmpty) return;
+    _probeLocallyReadIds.remove(entryId);
+    _probeReportedReappearedIds.remove(entryId);
     _deferredReadVisualUpdates.remove(entryId);
     GStorage.readStatus.delete(entryId);
     LocalArticleDbService.setReadState(entryId, false);
@@ -447,7 +467,7 @@ class TimelineController extends GetxController {
       return;
     }
 
-    resetTimelineListAnimation();
+    resetTimelineListAnimation(reason: 'scope.change');
     _isBatchingScopeChange = true;
     try {
       isSilentSelected.value = silent;
@@ -459,8 +479,16 @@ class TimelineController extends GetxController {
     _handleScopeChanged();
   }
 
-  void resetTimelineListAnimation() {
+  void resetTimelineListAnimation({required String reason}) {
     _timelineListResetVersion++;
+    if (_animationProbeRequested && kDebugMode && Platform.isMacOS) {
+      debugPrintSynchronously(
+        '[TimelineListResetProbe] version=$_timelineListResetVersion '
+        'reason=$reason count=${articles.length} '
+        'mode=${selectedMode.value.name} scope=$_timelineScopeKey',
+        wrapWidth: 2000,
+      );
+    }
   }
 
   void _handleScopeFieldChanged() {
@@ -548,10 +576,10 @@ class TimelineController extends GetxController {
     await _scrollToTopHandler?.call();
   }
 
-  void _loadFromLocalDatabase() {
+  void _loadFromLocalDatabase({required String resetReason}) {
     final local = LocalArticleDbService.readAllArticles();
     allArticles.value = _mergeLocalReadState(local);
-    resetTimelineListAnimation();
+    resetTimelineListAnimation(reason: resetReason);
     _applyFilter();
     _updateFilterCount();
     if (allArticles.isNotEmpty ||
@@ -587,6 +615,32 @@ class TimelineController extends GetxController {
     };
     filtered.sort(_compareArticlesForCurrentSort);
     articles.value = filtered;
+    if (_animationProbeRequested &&
+        kDebugMode &&
+        Platform.isMacOS &&
+        mode == TimelineViewMode.unread) {
+      for (final article in filtered) {
+        if (!_probeLocallyReadIds.contains(article.entryId) || article.isRead) {
+          continue;
+        }
+        if (_probeReportedReappearedIds.add(article.entryId)) {
+          _logReadStateProbe(article.entryId, 'unread-list.reappeared');
+        }
+      }
+    }
+  }
+
+  void _logReadStateProbe(String entryId, String event) {
+    if (!_animationProbeRequested || !kDebugMode || !Platform.isMacOS) return;
+    final shortId = entryId.length <= 8
+        ? entryId
+        : entryId.substring(entryId.length - 8);
+    debugPrintSynchronously(
+      '[TimelineReadStateProbe] id=$shortId event=$event '
+      'pending=${ReadSyncService.pendingReadItems.any((item) => item.entryId == entryId)} '
+      'override=${GStorage.readStatus.get(entryId)}',
+      wrapWidth: 2000,
+    );
   }
 
   int _compareArticlesForCurrentSort(ArticleModel a, ArticleModel b) {
@@ -622,6 +676,10 @@ class TimelineController extends GetxController {
     final idx = allArticles.indexWhere((a) => a.entryId == entryId);
     if (idx < 0) return;
 
+    final previousTimelineOrder = articles
+        .map((article) => article.entryId)
+        .toList(growable: false);
+
     final raw = GStorage.articleDb.get(entryId);
     if (raw is! Map) return;
 
@@ -653,34 +711,16 @@ class TimelineController extends GetxController {
       filteredAt: updatedFromDb.filteredAt,
     );
 
-    final shouldResetList = _hasNonReadTimelineChange(
-      allArticles[idx],
-      finalUpdated,
-    );
     allArticles[idx] = finalUpdated;
     allArticles.refresh();
-    if (shouldResetList) resetTimelineListAnimation();
     _applyFilter();
+    final currentTimelineOrder = articles
+        .map((article) => article.entryId)
+        .toList(growable: false);
+    if (!listEquals(previousTimelineOrder, currentTimelineOrder)) {
+      resetTimelineListAnimation(reason: 'article.structureChange');
+    }
     _updateFilterCount();
-  }
-
-  bool _hasNonReadTimelineChange(ArticleModel a, ArticleModel b) {
-    return a.entryId != b.entryId ||
-        a.feedId != b.feedId ||
-        a.feedTitle != b.feedTitle ||
-        a.feedImage != b.feedImage ||
-        a.title != b.title ||
-        a.url != b.url ||
-        a.content != b.content ||
-        a.publishedAt != b.publishedAt ||
-        a.category != b.category ||
-        a.subscriptionCategory != b.subscriptionCategory ||
-        a.author != b.author ||
-        a.imageUrl != b.imageUrl ||
-        a.isRejectedByAi != b.isRejectedByAi ||
-        a.filterReason != b.filterReason ||
-        a.filterReviewed != b.filterReviewed ||
-        a.filteredAt != b.filteredAt;
   }
 
   void _updateReadStateInMemory(String entryId, bool isRead) {

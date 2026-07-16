@@ -25,6 +25,7 @@
 - 本地文章库支撑时间线状态。
 - 已读/未读变化会更新本地状态并通知其他视图。
 - 时间线和最近阅读列表合并本地已读状态时，使用 `LocalArticleDbService.readOverrideOf(entryId)`，没有覆盖时保留 `ArticleModel.isRead`。该规则同时支持本地标为已读和恢复未读，不要退回到只处理 `readStatus == true` 的旧逻辑。
+- 本地标为已读后的 `readStatus == true` 是跨请求竞态保护，不能在 mark-read HTTP 成功时立即删除。未读请求可能比 mark-read 更早发出并返回旧快照；只在后续成功未读快照明确不再包含该文章时，才清除覆盖并以本地数据库中的已读状态继续。主时间线和订阅源详情必须遵循同一规则。
 - 垃圾拦截/审核这类列表如果语义要求稳定追加，新文章应稳定附加。
 
 macOS 分栏选择与移除协调：
@@ -32,7 +33,8 @@ macOS 分栏选择与移除协调：
 - `MacSplitArticleListCoordinator` 统一承载分栏文章列表中的稳定 item key、删除前后继项计算、删除期间选择保持、`onRemoveEnd` 后详情切换、相对导航和 reveal 回调。页面继续负责已读、审核、数据库和网络等业务动作，不要把这些业务塞进协调器。
 - 页面必须在任何数据库写入、`ArticleStateNotifier.tick()` 或列表删除之前调用 `beginRemoval(entryId)`。垃圾拦截曾在动画开始前由 `_pruneInvalidSelection()` 立即切换右侧详情，首次正文构建因此抢占移除动画帧；协调器通过 `reconcileSelection()` 在退出期间保留旧详情，直到真实 `onRemoveEnd`。
 - 垃圾拦截已接入协调器，`M`、保留、移除共用同一删除生命周期；移动端仍保持原业务路径。
-- 主时间线和最近阅读尚未接入。后续迁移时保留主时间线的虚拟列表粗定位实现；最近阅读恢复未读后的选择语义需要单独确认。不要为了共享而把三个页面强行做成同一个大 Widget。
+- 主时间线的 `M` 和双击也已接入协调器：未读卡片退出期间保留当前详情，真实 `onRemoveEnd` 后才切换并 reveal 后继文章。动画期间的 `Command-Z` 通过 `restoreSelection()` 取消待切换目标，避免恢复后的文章再次被选走。
+- 最近阅读尚未接入。后续迁移时需要先确认恢复未读后的选择语义。不要为了共享而把三个页面强行做成同一个大 Widget。
 
 排序：
 
@@ -46,8 +48,10 @@ macOS 分栏选择与移除协调：
 性能决策：
 
 - macOS 时间线列表使用 `ImplicitlyAnimatedList`，但只应把动画用于普通标记已读/恢复未读带来的局部插入/移除。
-- 批量变化必须直接重建列表，不应做大规模 diff 动画。批量变化包括：切换未读/全部等模式、切换订阅源/分类/静默范围、切换排序、本地库批量回填、同步/加载更多、单篇非已读字段变化。
-- `TimelineController.timelineListResetVersion` 是这个边界的核心：批量变化递增它，并进入 `ImplicitlyAnimatedList` 的 key；`markAsReadLocal` / `markAsUnreadLocal` 不递增它，所以读状态动画保留。
+- 批量变化必须无动画同步，不应做大规模 diff 动画。批量变化包括：切换未读/全部等模式、切换订阅源/分类/静默范围、切换排序、本地库批量回填、同步/加载更多，以及单篇元数据确实改变列表成员或排序的情况。
+- `TimelineController.timelineListResetVersion` 是这个边界的核心：批量变化递增它，并作为 `ImplicitlyAnimatedList.batchUpdateVersion` 传入。组件在同一个 `AnimatedList` 和 `ScrollController` 上以零时长协调项目，不再把 version 放进 key 重建整列，因此不会仅因刷新或元数据通知把滚动位置重置为顶部。
+- 列表外层 key 只包含 selected mode 和 scope key；模式/范围切换仍可建立新的列表语义。`markAsReadLocal` / `markAsUnreadLocal` 不递增 batch version，所以普通读状态局部动画保留。
+- 单篇数据库通知先比较过滤后的 entry id 顺序。标题、正文、摘要等非结构元数据更新不触发 batch version；只有列表成员或顺序确实改变时才做零时长同步。不要恢复成“任何非已读字段变化都重建整列”的旧判断。
 - `TimelineController.setTimelineScope()` 负责批量更新 `isSilentSelected`、`selectedFeedId`、`selectedCategory`，避免侧边栏一次点击触发多次 `_applyFilter()`。
 - 不要重新在侧边栏或文章页里直接连续设置 `selectedFeedId.value` / `selectedCategory.value` / `isSilentSelected.value`；这会恢复“多次过滤 + 多次重建”的卡顿。
 - 普通标记已读时，单项移除动画仍保留。
@@ -84,11 +88,11 @@ macOS 分栏选择与移除协调：
 - 如果目标卡片因为列表虚拟化尚未构建，先根据当前已构建卡片和估算 item 高度 `jumpTo` 到附近，再做短距离 `ensureVisible` 校正。
 - 不要用长距离 `animateTo` 粗定位；它会和右侧文章切换同时竞争 UI isolate，用户曾观察到明显掉帧。
 
-双击标为已读的动画时序：
+标为已读的动画时序：
 
-- 主时间线双击会先选择后继文章，再处理当前文章的已读状态和打开原文。
+- 主时间线在未读模式下处理 `M` 或双击时，先登记后继文章，但保持当前详情；卡片真实完成退出后再切换详情并把后继卡片留在可见区域。非移除模式继续使用普通相对选择。
 - 本地数据库写入是同步重工作；不能在 `addPostFrameCallback` 中同时做持久化和列表变更。post-frame callback 仍属于当前帧，实测会让 180ms 动画只剩约 30–55ms 可见时间。
-- `UndoService.markAsRead(... deferTimelineVisualUpdate: true)` 只供这条 macOS 双击路径使用。`TimelineController.markAsReadLocal` 先持久化，再等待新的 `endOfFrame` 才更新内存列表；其他调用方默认行为不变。
+- `UndoService.markAsRead(... deferTimelineVisualUpdate: true)` 供 macOS 双击路径使用；主时间线 `M` 在未读模式下也直接要求 `TimelineController.markAsReadLocal(... deferVisualUpdateToFrameBoundary: true)`。控制器先持久化，再等待新的 `endOfFrame` 才更新内存列表；其他调用方默认行为不变。
 - 延后的视觉更新带一次性 token；在它执行前恢复未读会取消 token，避免极快 `Command-Z` 被迟到的“标为已读”界面更新覆盖。
 - 如果当前是未读模式并会删除卡片，原文浏览器必须等列表 `onRemoveEnd` 后再跨一帧打开。固定 `200ms` 延迟曾在动画中途抢走前台，视觉上看起来像没有动画。
-- 不要把这个特殊时序全局套到文章页按钮、Android 或普通 `M` 快捷键；默认参数刻意保持原行为。
+- 不要把这个特殊时序全局套到文章页按钮或 Android；默认参数刻意保持原行为。

@@ -399,28 +399,17 @@ class FeedDetailController extends GetxController {
       }
 
       final localOverride = LocalArticleDbService.readOverrideOf(local.entryId);
-      if (localOverride == false) {
-        // 用户曾标为「未读」，但文章在别处已被读完 → 清除过期覆盖
+      if (localOverride != null) {
+        // 服务端未读快照已不再包含该文，已读状态得到确认；
+        // 本地“恢复未读”覆盖也在此时失效。
         GStorage.readStatus.delete(local.entryId);
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
       LocalArticleDbService.setReadState(local.entryId, true);
     }
 
-    // 收集待同步队列 ID，保护用户刚执行的乐观更新不被 API 旧数据覆盖
-    final pendingIds = ReadSyncService.pendingReadItems
-        .map((item) => item.entryId)
-        .toSet();
-
-    // API 返回未读 → 清除本地旧已读标记
-    // 跳过仍在待同步队列中的条目
-    for (final article in unreadData) {
-      final stale = GStorage.readStatus.get(article.entryId);
-      if (stale == true && !pendingIds.contains(article.entryId)) {
-        GStorage.readStatus.delete(article.entryId);
-      }
-    }
-
+    // 未读请求可能早于 mark-read 请求发出，返回的仍是旧快照。
+    // 本地已读覆盖必须保留到某次成功快照明确不再包含该文章。
     LocalArticleDbService.upsertMany(unreadData, defaultReadState: false);
     AutoReadabilityWorker.enqueueMany(unreadData);
   }

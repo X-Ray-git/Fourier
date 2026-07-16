@@ -21,8 +21,8 @@
 - 文章正文目前保留 `Column`。Sliver 虚拟化可能提高原始性能，但会影响选择、目录锚点、图片生命周期、滚动定位和现有阅读行为。
 - 不要给每个小型重复元素都应用真实玻璃。重复时间线标签、设置行、任务行优先使用轻量描边或静态样式。
 - macOS 中间时间线 header 不使用完整玻璃背景，也不显示底部分隔线。
-- 未读/全部模式切换、订阅源/分类筛选、排序、同步回填、加载更多等批量时间线变化不应为几千个列表项逐个播放动画。macOS 列表 key 包含 `timelineListResetVersion`，让批量变化整体重建；普通单篇标已读/恢复未读动画保留。
-- 从具体订阅源回到完整时间线曾出现明显卡顿。原因是侧边栏连续修改多个响应式筛选字段，触发多次 `_applyFilter()`，且 `ImplicitlyAnimatedList` 试图把“小列表 -> 大列表”做大量插入动画。当前通过 `setTimelineScope()` 合并状态更新，并用 reset version 禁用这类批量 diff 动画。
+- 未读/全部模式切换、订阅源/分类筛选、排序、同步回填、加载更多等批量时间线变化不应为几千个列表项逐个播放动画。`timelineListResetVersion` 作为 `ImplicitlyAnimatedList.batchUpdateVersion`，在现有列表实例中执行零时长协调；普通单篇标已读/恢复未读动画保留。
+- 从具体订阅源回到完整时间线曾出现明显卡顿。原因是侧边栏连续修改多个响应式筛选字段，触发多次 `_applyFilter()`，且 `ImplicitlyAnimatedList` 试图把“小列表 -> 大列表”做大量插入动画。当前通过 `setTimelineScope()` 合并状态更新，并用 batch version 禁用这类批量 diff 动画，同时保留 `ScrollController`，避免无关更新回到顶部。
 - macOS 正文链接 hover 不再通过共享 `_hoveredUrl` 让所有 `HtmlChunkCard` 重建。动态下划线已取消，手型光标、链接点击和底部 URL 预览保留；用户验证滚动经过链接时的瞬时卡顿消失。
 
 ## 滚动惯性
@@ -41,7 +41,7 @@
 - 缓存解析后的 chunk 元数据和阅读高度估算。
 - 降低 debug 日志量。
 - 批量模式变化避免大型 AnimatedList diff。
-- 批量筛选/排序/同步变化递增 `TimelineController.timelineListResetVersion`，让列表重建而不是 diff。
+- 批量筛选/排序/同步变化递增 `TimelineController.timelineListResetVersion`，让同一列表实例零时长协调而不是播放 diff 动画；不要再把 version 塞入 key 触发整列重建。
 - 重复小控件使用轻量静态样式。
 - macOS 正文图片预取只写磁盘缓存，不批量预解码到 Flutter 内存图片缓存。HTML 图片 URL 规划在后台 isolate 完成；缓存删除串行执行并在文件之间让出事件循环，避免刷新或五分钟回收形成集中 I/O 峰值。
 

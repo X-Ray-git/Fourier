@@ -38,7 +38,9 @@ flutter run -d macos --no-pub \
 
 ```bash
 grep ReviewAnimProbe /tmp/auto-folo-animation.log
-grep TimelineDoubleTapProbe /tmp/auto-folo-animation.log
+grep TimelineAnimationProbe /tmp/auto-folo-animation.log
+grep TimelineListResetProbe /tmp/auto-folo-animation.log
+grep TimelineReadStateProbe /tmp/auto-folo-animation.log
 ```
 
-埋点只输出文章 id 的末 8 位、动作来源、列表数量、动画阶段和慢帧耗时，不输出标题、正文、凭据或完整文章 id。不要为了普通运行长期打开该开关；同步 `debugPrintSynchronously` 本身可能轻微干扰 Debug 性能测量。
+`TimelineAnimationProbe` 同时覆盖主时间线的 `M`、双击、退场动画进度和滚动 offset；`TimelineListResetProbe` 记录零时长批量同步的明确原因，用于确认单篇读状态是否被错误归入批量路径；`TimelineReadStateProbe` 区分已读状态被未读快照降级与列表组件的纯视觉残影。埋点只输出文章 id 的末 8 位、动作来源、列表数量、动画阶段和慢帧耗时，不输出标题、正文、凭据或完整文章 id。不要为了普通运行长期打开该开关；同步 `debugPrintSynchronously` 本身可能轻微干扰 Debug 性能测量。

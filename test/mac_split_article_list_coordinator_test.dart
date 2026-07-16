@@ -72,6 +72,19 @@ void main() {
     expect(selected?.entryId, 'a');
     expect(revealed, ['a']);
   });
+
+  test('undo during removal prevents the pending successor from winning', () {
+    final restored = articles[1];
+    expect(coordinator.beginRemoval('b'), isTrue);
+    articles = [articles[0], articles[2]];
+
+    articles.insert(1, restored);
+    expect(coordinator.restoreSelection('b'), isTrue);
+    coordinator.onRemoveEnd(_article('b'));
+
+    expect(selected?.entryId, 'b');
+    expect(revealed, ['b']);
+  });
 }
 
 ArticleModel _article(String entryId) {

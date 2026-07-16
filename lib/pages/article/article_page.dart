@@ -236,9 +236,8 @@ class ArticleController extends GetxController {
       maxRetries: 5,
     );
 
-    // 同步结束（无论成败），清理本次乐观更新留下的临时状态。
+    // 同步结束后移出待同步队列；本地已读覆盖保留到未读快照确认。
     ReadSyncService.removeMany([article.entryId]);
-    GStorage.readStatus.delete(article.entryId);
 
     if (!ok) {
       // 5 次失败 → 恢复本地未读，与服务器保持一致

@@ -125,19 +125,34 @@
 - 不要在角色规则未稳定前批量做贴图化，否则会把临时视觉状态固化成资产。
 - 不要为了统一而把密集重复控件改回重型玻璃；性能约束仍然优先。
 
-## 批量时间线变化重建，读状态变化保留动画
+## 批量时间线变化保留列表实例，读状态变化保留动画
 
 背景：切换未读/全部、从具体订阅源回到全部文章、排序、同步回填等操作会产生大量插入/删除/重排序 diff，并阻塞 UI isolate。用户明确希望列表动画只在“标为已读/恢复未读”时应用，其余批量变化不要动画，以节省性能。
 
-决策：macOS 时间线列表 key 包含 selected mode、scope key 和 `TimelineController.timelineListResetVersion`。批量变化递增 reset version，使 `ImplicitlyAnimatedList` 整体重建；`markAsReadLocal` / `markAsUnreadLocal` 不递增 reset version，保留单篇移除/恢复动画。
+决策：macOS 时间线列表 key 只包含 selected mode 和 scope key。批量变化递增 `TimelineController.timelineListResetVersion`，并作为 `ImplicitlyAnimatedList.batchUpdateVersion` 传入；组件在原有 `AnimatedList` / `ScrollController` 上以零时长同步项目。`markAsReadLocal` / `markAsUnreadLocal` 不递增该 version，保留单篇移除/恢复动画。单篇数据库通知只有在过滤后的 entry id 成员或顺序真的变化时才递增 version，普通正文/摘要等元数据更新不触发。
 
-后果：批量变化避免全局动画卡顿，同时普通单卡片标已读/恢复未读动画保留。
+后果：批量变化避免全局动画卡顿，普通单卡片标已读/恢复未读动画保留；列表不再因为无关元数据通知被替换，因此滚动位置不会被重置到顶部。
 
 不要回退：
 
 - 不要让排序、筛选范围切换、同步回填、加载更多重新触发大规模列表 diff 动画。
+- 不要为了禁用批量动画把 reset version 放回列表 key；这曾直接造成 `M` 后回到顶部，并绕过单卡片退场动画。
 - 不要在侧边栏直接连续设置 `isSilentSelected`、`selectedFeedId`、`selectedCategory`；应使用 `setTimelineScope()` 合并为一次过滤。
 - 不要为了禁用批量动画而移除已读/未读的局部动画，除非用户重新明确要求。
+
+## 本地已读覆盖保留到未读快照确认
+
+背景：mark-read 请求和未读列表请求可能并发。即使 mark-read 已成功，先发出的未读请求仍可能返回包含该文章的旧快照。旧实现会在待同步队列清空后立即删除本地 `readStatus == true`，随后用旧快照把文章重新写成未读。
+
+决策：mark-read HTTP 成功只移出待同步队列，不删除本地已读覆盖。未读快照仍包含文章时继续用覆盖保护本地已读；只有某次对应数据源成功返回且明确不再包含该文章时，才认为服务端状态已经收敛，清除覆盖并把本地缓存保持为已读。主时间线和订阅源详情使用相同规则。
+
+后果：刷新与已读同步并发时，文章不会因为旧快照重新出现在未读列表；恢复未读的 `false` 覆盖也会在服务端快照确认文章已读后清除。
+
+不要回退：
+
+- 不要在 `ArticleController.markAsRead()` 或 `UndoService.markAsRead()` 的 HTTP 成功分支立即删除 true 覆盖。
+- 不要因为当前 pending 队列为空，就把未读快照中仍出现的文章直接降级为未读；pending 可能刚被并发同步清空。
+- 不要永久保留已被服务端“未读快照缺席”确认过的覆盖，否则其他客户端后续恢复未读无法同步回来。
 
 ## 时间线排序保持本地化
 

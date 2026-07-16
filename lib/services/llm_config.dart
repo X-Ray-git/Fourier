@@ -18,6 +18,24 @@ class LlmConfig {
     this.concurrency = 16,
   });
 
+  LlmConfig copyWith({
+    String? model,
+    bool? thinking,
+    String? reasoningEffort,
+    double? temperature,
+    int? maxTokens,
+    int? concurrency,
+  }) {
+    return LlmConfig(
+      model: model ?? this.model,
+      thinking: thinking ?? this.thinking,
+      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      temperature: temperature ?? this.temperature,
+      maxTokens: maxTokens ?? this.maxTokens,
+      concurrency: concurrency ?? this.concurrency,
+    );
+  }
+
   static const _translatePrefix = 'llm_translate_';
   static const _summaryPrefix = 'llm_summary_';
 
@@ -54,22 +72,18 @@ class LlmConfig {
 
   static LlmConfig loadFilter() => _load(_filterPrefix, filterDefault);
   static Future<void> saveFilter(LlmConfig c) => _save(_filterPrefix, c);
-  static void resetFilter() => _clear(_filterPrefix);
+  static Future<void> resetFilter() => _clear(_filterPrefix);
 
   // ─── 读写 ───
 
-  static LlmConfig loadTranslate() => _load(
-        _translatePrefix,
-        translateDefault,
-      );
+  static LlmConfig loadTranslate() => _load(_translatePrefix, translateDefault);
   static LlmConfig loadSummary() => _load(_summaryPrefix, summaryDefault);
 
-  static Future<void> saveTranslate(LlmConfig c) =>
-      _save(_translatePrefix, c);
+  static Future<void> saveTranslate(LlmConfig c) => _save(_translatePrefix, c);
   static Future<void> saveSummary(LlmConfig c) => _save(_summaryPrefix, c);
 
-  static void resetTranslate() => _clear(_translatePrefix);
-  static void resetSummary() => _clear(_summaryPrefix);
+  static Future<void> resetTranslate() => _clear(_translatePrefix);
+  static Future<void> resetSummary() => _clear(_summaryPrefix);
 
   // ─── 构建 API 请求体 ───
 
@@ -92,20 +106,21 @@ class LlmConfig {
     return LlmConfig(
       model:
           (GStorage.setting.get('${prefix}model') as String?) ?? defaults.model,
-      thinking: (GStorage.setting.get('${prefix}thinking') as bool?) ??
+      thinking:
+          (GStorage.setting.get('${prefix}thinking') as bool?) ??
           defaults.thinking,
       reasoningEffort:
           (GStorage.setting.get('${prefix}reasoning_effort') as String?) ??
-              defaults.reasoningEffort,
+          defaults.reasoningEffort,
       temperature:
           (GStorage.setting.get('${prefix}temperature') as double?) ??
-              defaults.temperature,
+          defaults.temperature,
       maxTokens:
           (GStorage.setting.get('${prefix}max_tokens') as int?) ??
-              defaults.maxTokens,
+          defaults.maxTokens,
       concurrency:
           (GStorage.setting.get('${prefix}concurrency') as int?) ??
-              defaults.concurrency,
+          defaults.concurrency,
     );
   }
 
@@ -120,12 +135,14 @@ class LlmConfig {
     });
   }
 
-  static void _clear(String prefix) {
-    GStorage.setting.delete('${prefix}model');
-    GStorage.setting.delete('${prefix}thinking');
-    GStorage.setting.delete('${prefix}reasoning_effort');
-    GStorage.setting.delete('${prefix}temperature');
-    GStorage.setting.delete('${prefix}max_tokens');
-    GStorage.setting.delete('${prefix}concurrency');
+  static Future<void> _clear(String prefix) async {
+    await GStorage.setting.deleteAll([
+      '${prefix}model',
+      '${prefix}thinking',
+      '${prefix}reasoning_effort',
+      '${prefix}temperature',
+      '${prefix}max_tokens',
+      '${prefix}concurrency',
+    ]);
   }
 }

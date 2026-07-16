@@ -592,6 +592,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   final ValueNotifier<double> _headerCollapseProgress = ValueNotifier(0.0);
   final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null);
   final ValueNotifier<String?> _activeTocId = ValueNotifier<String?>(null);
+  double _articleTitleHeight = 30.0;
+  bool _articleTitleMeasurementScheduled = false;
   bool _allowBodyBuild = Platform.isMacOS;
   bool _isTocOpen = false;
   bool _activeTocUpdateScheduled = false;
@@ -624,6 +626,29 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       if (mounted) {
         _focusNode.requestFocus();
       }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleArticleTitleMeasurement();
+  }
+
+  void _scheduleArticleTitleMeasurement() {
+    if (_articleTitleMeasurementScheduled ||
+        !Platform.isMacOS ||
+        !widget.isSplitView) {
+      return;
+    }
+    _articleTitleMeasurementScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _articleTitleMeasurementScheduled = false;
+      if (!mounted) return;
+      final renderObject = _articleTitleKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) return;
+      _articleTitleHeight = renderObject.size.height;
+      _updateHeaderCollapseProgress();
     });
   }
 
@@ -781,16 +806,18 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _scheduleActiveTocUpdate();
     if (!Platform.isMacOS || !widget.isSplitView) return;
 
+    _updateHeaderCollapseProgress();
+  }
+
+  void _updateHeaderCollapseProgress() {
+    if (!Platform.isMacOS || !widget.isSplitView) return;
+
     final offset = _scrollController.hasClients
         ? _scrollController.offset
         : 0.0;
-    final titleRenderObject = _articleTitleKey.currentContext
-        ?.findRenderObject();
-    final titleHeight = titleRenderObject is RenderBox
-        ? titleRenderObject.size.height
-        : 30.0;
-    final transitionStart = _articleTitleTopOffset + titleHeight * 0.82;
-    final transitionEnd = _articleTitleTopOffset + titleHeight + 14;
+    final transitionStart =
+        _articleTitleTopOffset + _articleTitleHeight * 0.82;
+    final transitionEnd = _articleTitleTopOffset + _articleTitleHeight + 14;
     final nextProgress =
         ((offset - transitionStart) / (transitionEnd - transitionStart)).clamp(
           0.0,

@@ -283,7 +283,7 @@
   <div class="hero-content">
     <div class="hero-badge"><div class="live"></div>基于 Folo API · DeepSeek 驱动</div>
     <h1>让 AI 替你<br><span class="gradient-text">筛选信息洪流</span></h1>
-    <p>Auto Folo 不是又一个 RSS 阅读器。它在文章到达你眼前之前，就用 LLM 理解每一篇的内容，自动过滤噪音、翻译外文、提炼摘要。你只看到真正重要的。</p>
+    <p>Auto Folo 将 Folo 时间线、长文阅读和可配置的 AI 工作流放进同一个客户端：后台翻译与摘要帮助快速浏览，垃圾拦截判定进入独立审核页，最终保留或移除仍由你决定。</p>
     <p style="font-size:13px;opacity:.72">非官方个人二次开发客户端，不隶属于 Folo、RSSNext 或其运营方。</p>
     <div class="hero-actions">
       <a href="#start" class="btn btn-primary">快速开始</a>
@@ -302,32 +302,42 @@
     <div class="feature-card reveal">
       <div class="feature-icon" style="background:rgba(245,158,11,0.1);color:var(--accent)">🎯</div>
       <h3>AI 智能过滤</h3>
-      <p>基于 Auto Folo 的精细化 Prompt 引擎，DeepSeek 逐篇判定文章是否值得阅读。纯视觉、具身智能、币圈杂讯自动屏蔽，白名单频道和偏好作者始终保留。</p>
+      <p>使用可编辑 Prompt 让 DeepSeek 逐篇给出保留/拒绝建议。被判定为垃圾的文章进入独立审核页，不会绕过用户直接删除。</p>
     </div>
     <div class="feature-card reveal">
       <div class="feature-icon" style="background:rgba(139,92,246,0.1);color:var(--purple)">🌐</div>
       <h3>自动翻译</h3>
-      <p>按订阅源粒度配置自动翻译。支持 DeepSeek v4-flash / v4-pro，思考模式可选，temperature、并发数均可调。翻译结果与原文无缝切换。</p>
+      <p>按订阅源配置自动翻译，保留 HTML 结构并支持原文/译文切换。模型、思考模式、temperature、输出上限和并发数均可独立调整。</p>
     </div>
     <div class="feature-card reveal">
       <div class="feature-icon" style="background:rgba(59,130,246,0.1);color:var(--blue)">📝</div>
       <h3>AI 摘要生成</h3>
-      <p>所有未读文章自动生成一句话摘要，快速判断是否值得点开。v4-pro + 思考模式提供高质量提炼。</p>
+      <p>为仍未读的文章生成紧凑摘要，帮助快速判断是否值得点开。文章变为已读后，尚未开始的自动翻译和摘要任务会退出等待队列。</p>
     </div>
     <div class="feature-card reveal">
       <div class="feature-icon" style="background:rgba(16,185,129,0.1);color:var(--green)">🖼️</div>
-      <h3>智能图片代理</h3>
-      <p>集成 Folo <code>img.folo.is</code> 图片代理，自动为微博、Pixiv、Instagram 等需要特定 Referer 的 CDN 补全请求头。画廊支持双击放大、捏合缩放、滑动关闭。</p>
+      <h3>长文与图片阅读</h3>
+      <p>HTML 按块渲染，支持文章目录、表格、代码块和 Markdown 复制。图片画廊支持缩放与关闭手势，macOS 可后台预取未读文章中的静态图片。</p>
     </div>
     <div class="feature-card reveal">
       <div class="feature-icon" style="background:rgba(239,68,68,0.1);color:var(--red)">🎬</div>
       <h3>视频内联播放</h3>
-      <p>Twitter 视频自动提取 poster 缩略图，点击内联播放。进度条可拖拽定位，支持暂停/播放切换，流畅不跳转外部浏览器。</p>
+      <p>正文可播放直接视频资源与 YouTube 嵌入内容。直接视频支持加载反馈、进度拖拽、键盘控制和全屏播放；不支持的嵌入仍保留安全回退。</p>
     </div>
     <div class="feature-card reveal">
       <div class="feature-icon" style="background:rgba(59,130,246,0.1);color:var(--blue)">📊</div>
-      <h3>三级订阅源管理</h3>
-      <p>View → 分类 → 订阅源 树形结构，点击箭头展开折叠，点击文字查看该层级全部文章。实时未读计数徽标，搜索即时过滤。</p>
+      <h3>订阅源管理</h3>
+      <p>Articles / Social Media / Inbox 按分类和订阅源组织，支持展开、搜索与范围筛选。静默订阅源作为独立分组保留，不干扰普通时间线。</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon" style="background:rgba(139,92,246,0.1);color:var(--purple)">⌨️</div>
+      <h3>macOS 桌面交互</h3>
+      <p>原生分栏与局部 Liquid Glass 适配桌面阅读，配合右键菜单、键盘快捷键、触控板审核和系统窗口行为，避免把移动端页面简单放大。</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon" style="background:rgba(16,185,129,0.1);color:var(--green)">⚙️</div>
+      <h3>设置与任务状态</h3>
+      <p>选择类设置即时生效，文本凭据显式保存；配置可导出为 JSON 并通过剪贴板迁移。任务中心集中展示待同步与失败任务。</p>
     </div>
   </div>
 </section>
@@ -336,7 +346,7 @@
   <div class="section-header">
     <span class="tag" style="background:rgba(139,92,246,0.1);color:var(--purple)">数据流水线</span>
     <h2>从 API 到你的屏幕</h2>
-    <p>六步处理链路，每一步都可以独立配置和控制并发度。全部 LLM 调用互不干扰，16 路并行最大吞吐。</p>
+    <p>文章拉取后进入本地状态、AI 与同步流程。翻译、摘要和过滤拥有独立配置，默认并发数均为 16，而不是共享一个固定上限。</p>
   </div>
   <div class="pipeline">
     <div class="pipeline-step reveal">
@@ -346,28 +356,28 @@
     </div>
     <div class="pipeline-step reveal">
       <div class="num">2</div>
-      <h4>过滤</h4>
-      <p>DeepSeek JSON Output 逐篇判定保留/拒绝，被拒进入审核队列</p>
+      <h4>本地合并</h4>
+      <p>写入文章库并合并已读覆盖、订阅源与历史状态</p>
     </div>
     <div class="pipeline-step reveal">
       <div class="num">3</div>
-      <h4>翻译</h4>
-      <p>按源自动翻译开关，仅翻译保留文章，节省 API 费用</p>
+      <h4>AI 判定</h4>
+      <p>DeepSeek 给出保留/拒绝建议，被拒文章进入审核队列</p>
     </div>
     <div class="pipeline-step reveal">
       <div class="num">4</div>
-      <h4>摘要</h4>
-      <p>全部未读文章生成一句话摘要，快速浏览核心内容</p>
+      <h4>翻译与摘要</h4>
+      <p>仍未读的文章按配置进入独立后台队列，已读后取消尚未开始的任务</p>
     </div>
     <div class="pipeline-step reveal">
       <div class="num">5</div>
       <h4>审核</h4>
-      <p>左右滑手势审核被拒文章，捞回或确认拒绝并自动标已读</p>
+      <p>横滑或操作菜单审核被拒文章，保留回时间线或移除并标为已读</p>
     </div>
     <div class="pipeline-step reveal">
       <div class="num">6</div>
       <h4>同步</h4>
-      <p>已读状态云端同步，失败自动重试 5 次，始终与服务器一致</p>
+      <p>已读状态分批同步到 Folo，失败最多尝试 3 次并保留待同步记录</p>
     </div>
   </div>
 </section>
@@ -376,7 +386,7 @@
   <div class="section-header">
     <span class="tag" style="background:rgba(59,130,246,0.1);color:var(--blue)">系统架构</span>
     <h2>Flutter × DeepSeek × Folo</h2>
-    <p>移动端 Flutter 渲染，DeepSeek 提供 AI 能力，Folo API 作为数据源，Hive 本地持久化。三个 LLM 服务独立配置。</p>
+    <p>Android 与 macOS 共用 Flutter 业务层，DeepSeek 提供可选 AI 能力，Folo 作为数据源，Hive 负责本地持久化。三个 LLM 服务独立配置。</p>
   </div>
   <div class="arch-diagram reveal">
     <div class="arch-row">
@@ -406,7 +416,7 @@
       <span class="arch-arrow">⇄</span>
       <div class="arch-box api">Folo API</div>
     </div>
-    <p style="text-align:center;margin-top:20px;color:var(--text2);font-size:12px">所有 LLM 调用并行 16 路 · 三组独立 LlmConfig（翻译/摘要/过滤）· Hive 本地持久化上限 5,000 篇</p>
+    <p style="text-align:center;margin-top:20px;color:var(--text2);font-size:12px">三组独立 LlmConfig（翻译/摘要/过滤）· 默认各 16 并发 · Hive 本地文章上限 5,000 篇</p>
   </div>
 </section>
 
@@ -414,7 +424,7 @@
   <div class="section-header">
     <span class="tag" style="background:rgba(16,185,129,0.1);color:var(--green)">开始使用</span>
     <h2>三步启动</h2>
-    <p>Android 设备即可运行，需要 Folo 账号 Token 和 DeepSeek API Key。</p>
+    <p>支持 Android 与 Apple Silicon macOS。阅读需要 Folo 凭据；只有启用翻译、摘要或垃圾拦截时才需要 DeepSeek API Key。</p>
   </div>
   <div class="stats-grid reveal">
     <div class="stat-card">
@@ -422,12 +432,12 @@
       <div class="label">运行环境</div>
     </div>
     <div class="stat-card">
-      <div class="value">3 模型</div>
+      <div class="value">3 组</div>
       <div class="label">LLM 独立配置</div>
     </div>
     <div class="stat-card">
       <div class="value">16 并发</div>
-      <div class="label">LLM 最大吞吐</div>
+      <div class="label">各 LLM 默认值</div>
     </div>
     <div class="stat-card">
       <div class="value">5,000</div>
@@ -437,17 +447,21 @@
   <div style="max-width:700px;margin:48px auto 0;" class="reveal">
     <div class="code-block">
       <pre><span class="comment"># 1. 克隆项目</span>
-git clone <span class="string">https://github.com/your/autofolo-mobile</span>
-cd autofolo-mobile
+git clone <span class="string">https://github.com/X-Ray-git/auto-folo.git</span>
+cd auto-folo
 
 <span class="comment"># 2. 安装依赖</span>
 flutter pub get
 
-<span class="comment"># 3. 编译运行</span>
-flutter build apk --release
-flutter install
+<span class="comment"># 3. 运行 macOS 或 Android</span>
+flutter run -d macos
+flutter devices
+flutter run -d &lt;device-id&gt;
 
-<span class="comment"># 然后在设置页填入 Folo Token 和 DeepSeek API Key</span></pre>
+<span class="comment"># 或构建 Android 安装包</span>
+flutter build apk --release
+
+<span class="comment"># 然后在设置页填入 Folo 凭据；启用 AI 时再填写 DeepSeek API Key</span></pre>
     </div>
   </div>
 </section>
@@ -456,37 +470,38 @@ flutter install
   <div class="section-header">
     <span class="tag" style="background:rgba(59,130,246,0.1);color:var(--blue)">状态机</span>
     <h2>文章生命周期</h2>
-    <p>每篇文章在系统内的状态流转。</p>
+    <p>拉取、后台处理、人工审核与已读同步相互协作，但垃圾判定不会直接替用户删除文章。</p>
   </div>
   <div class="arch-diagram reveal" style="max-width:800px">
     <div class="arch-row">
       <div class="arch-box api">API 拉取</div>
       <span class="arch-arrow">→</span>
-      <div class="arch-box app">pending</div>
+      <div class="arch-box app">本地未读</div>
       <span class="arch-arrow">→</span>
-      <div class="arch-box llm">AI Filter</div>
+      <div class="arch-box llm">后台处理</div>
     </div>
-    
+
+    <div class="arch-arrow down">↓</div>
+    <div class="parallel-group">
+      <div class="arch-box llm">Readability</div>
+      <div class="arch-box llm">AI Filter</div>
+      <div class="arch-box llm">Translate</div>
+      <div class="arch-box llm">Summary</div>
+    </div>
+
     <div class="split-path">
       <div class="path-col">
         <div class="arch-arrow down"><span>↙ (判定保留)</span></div>
-        <div class="arch-box db">kept</div>
-        <div class="arch-arrow down">↓</div>
-        <div class="arch-row" style="gap:12px;">
-          <div class="arch-box app">Translate</div>
-          <div class="arch-box app">Summary</div>
-        </div>
+        <div class="arch-box db">普通时间线</div>
         <div class="arch-arrow down">↓</div>
         <div class="arch-box app" style="width:100%;text-align:center;">用户阅读</div>
       </div>
       
       <div class="path-col">
         <div class="arch-arrow down"><span>(判定拒绝) ↘</span></div>
-        <div class="arch-box red">ai_rejected</div>
+        <div class="arch-box red">垃圾拦截审核</div>
         <div class="arch-arrow down">↓</div>
-        <div class="arch-box red" style="width:100%;text-align:center;">进入审核页</div>
-        <div class="arch-arrow down">↓</div>
-        <div class="arch-box app" style="width:100%;text-align:center;font-size:12px;">左滑确认拒绝 (标已读)<br>右滑捞回 (转为 kept)</div>
+        <div class="arch-box app" style="width:100%;text-align:center;font-size:12px;">左滑移除并标已读<br>右滑保留回时间线</div>
       </div>
     </div>
 
@@ -495,7 +510,7 @@ flutter install
       <div class="arch-box api">已读状态云端同步</div>
     </div>
     
-    <p style="text-align:center;margin-top:24px;color:var(--text2);font-size:12px">双向同步逻辑：API未读→本地未读；本地已读→API已读 (失败自动重试×5)</p>
+    <p style="text-align:center;margin-top:24px;color:var(--text2);font-size:12px">文章变为已读时，未开始的自动翻译/摘要任务退出等待队列；已读同步失败最多尝试 3 次</p>
   </div>
 </section>
 
@@ -524,7 +539,7 @@ flutter install
     <div class="pipeline-step reveal">
       <div class="num">4</div>
       <h4>POST reads</h4>
-      <p>标已读云端同步<br>失败重试×3<br>ReadSyncService队列</p>
+      <p>标已读云端同步<br>每批最多尝试 3 次<br>ReadSyncService 队列</p>
     </div>
     <div class="pipeline-step reveal">
       <div class="num">5</div>
@@ -538,25 +553,26 @@ flutter install
   <div class="section-header">
     <span class="tag" style="background:rgba(16,185,129,0.1);color:var(--green)">本地存储</span>
     <h2>Hive 数据模型</h2>
-    <p>6 个 Box，上限 5,000 篇文章，同步写入。</p>
+    <p>7 个 Hive Box；本地文章库最多保留 5,000 篇，并优先保留未读内容。</p>
   </div>
   <div class="code-block reveal" style="max-width:750px">
-    <pre>ArticleModel (18 fields)
+    <pre>ArticleModel
   entryId / feedId / feedTitle / feedImage / title / url / content
   publishedAt / isRead / category / subscriptionCategory / author
-  imageUrl / isRejectedByAi / filterReason / filterReviewed
+  imageUrl / isRejectedByAi / filterReason / filterReviewed / filteredAt
 
 Box: articleDb    — 文章持久化 (limit 5,000)
 Box: readStatus   — 已读状态标记 (双向同步源)
 Box: setting      — LLM配置 / Token / Filter Prompt
 Box: localCache   — 订阅源缓存 (TTL 30min, key: v2)
 Box: translations — 翻译记录
-Box: summaries    — 摘要记录</pre>
+Box: summaries    — 摘要记录
+Box: readHistory  — 最近阅读与图片缓存清理时间</pre>
   </div>
 </section>
 
 <footer>
-  <p>Built with Flutter &amp; DeepSeek · 遵循 <a href="https://github.com/RSSNext/Folo">Folo</a> API 规范 · 数据不经过第三方服务器</p>
+  <p>Built with Flutter &amp; DeepSeek · 使用 <a href="https://github.com/RSSNext/Folo">Folo</a> 服务 · 非官方个人二次开发客户端</p>
 </footer>
 
 <script>

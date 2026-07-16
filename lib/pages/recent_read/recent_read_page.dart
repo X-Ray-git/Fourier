@@ -115,6 +115,17 @@ class _RecentReadPageState extends State<RecentReadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: Platform.isMacOS
+          ? null
+          : AppBar(
+              title: const Text(
+                '最近阅读',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              ),
+              centerTitle: true,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+            ),
       body: Obx(() {
         final state = controller.loadingState.value;
 
@@ -212,11 +223,8 @@ class _RecentReadPageState extends State<RecentReadPage> {
           : ListView.builder(
               controller: _scrollController,
               padding: EdgeInsets.only(
-                top: Platform.isMacOS ? 0 : MediaQuery.paddingOf(context).top,
-                bottom:
-                    8 +
-                    (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
-                    MediaQuery.of(context).padding.bottom,
+                top: 0,
+                bottom: 8 + MediaQuery.of(context).padding.bottom,
               ),
               itemCount: controller.articles.length,
               itemBuilder: (context, index) {

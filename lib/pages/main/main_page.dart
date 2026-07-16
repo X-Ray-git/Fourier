@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/continuous_rectangle.dart';
+import '../../common/widgets/app_glass.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../utils/move_to_background.dart';
@@ -133,13 +134,12 @@ class _MainPageState extends State<MainPage> {
               return const SizedBox.shrink();
             }
             final mode = _timelineController.selectedMode.value;
-            final _ = _timelineController.allArticles.length;
             return Padding(
               padding: const EdgeInsets.only(left: 12.0),
-              child: Center(
-                child: _TimelineModeButton(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _MobileTimelineModeSwitch(
                   mode: mode,
-                  controller: _timelineController,
                   onSelected: _timelineController.setViewMode,
                 ),
               ),
@@ -178,50 +178,10 @@ class _MainPageState extends State<MainPage> {
             children: _mobilePages,
           ),
         ),
-        bottomNavigationBar: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                    width: 0.5,
-                  ),
-                ),
-              ),
-              child: Obx(
-                () => NavigationBar(
-                  elevation: 0,
-                  backgroundColor: colorScheme.surface.withValues(alpha: 0.50),
-                  overlayColor: WidgetStateProperty.all(Colors.transparent),
-                  indicatorColor: colorScheme.primary.withValues(alpha: 0.80),
-                  indicatorShape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                  selectedIndex: controller.currentIndex.value,
-                  onDestinationSelected: controller.changeIndex,
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.article_outlined),
-                      selectedIcon: Icon(Icons.article),
-                      label: '时间线',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.rss_feed_outlined),
-                      selectedIcon: Icon(Icons.rss_feed),
-                      label: '订阅源',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: '设置',
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        bottomNavigationBar: Obx(
+          () => _MobileFloatingNavigation(
+            selectedIndex: controller.currentIndex.value,
+            onSelected: controller.changeIndex,
           ),
         ),
       ),
@@ -259,136 +219,53 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-class _TimelineModeButton extends StatelessWidget {
+class _MobileTimelineModeSwitch extends StatefulWidget {
   final TimelineViewMode mode;
-  final TimelineController controller;
   final ValueChanged<TimelineViewMode> onSelected;
 
-  const _TimelineModeButton({
+  const _MobileTimelineModeSwitch({
     required this.mode,
-    required this.controller,
     required this.onSelected,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      child: Builder(
-        builder: (buttonContext) => InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            final button = buttonContext.findRenderObject() as RenderBox;
-            final overlay =
-                Navigator.of(context).overlay!.context.findRenderObject()
-                    as RenderBox;
-            final position = RelativeRect.fromRect(
-              Rect.fromPoints(
-                button.localToGlobal(
-                  Offset(0, button.size.height + 8),
-                  ancestor: overlay,
-                ),
-                button.localToGlobal(
-                  button.size.bottomRight(Offset.zero) + const Offset(0, 8),
-                  ancestor: overlay,
-                ),
-              ),
-              Offset.zero & overlay.size,
-            );
-            showMenu<TimelineViewMode>(
-              context: context,
-              position: position,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              color: colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.95,
-              ),
-              elevation: 4,
-              items: [
-                PopupMenuItem(
-                  value: TimelineViewMode.unread,
-                  child: Text('未读 ${controller.unreadCount}'),
-                ),
-                PopupMenuItem(
-                  value: TimelineViewMode.all,
-                  child: Text('全部 ${controller.allCount}'),
-                ),
-                PopupMenuItem(
-                  value: TimelineViewMode.read,
-                  child: Text('已读 ${controller.readCount}'),
-                ),
-              ],
-            ).then((value) {
-              if (value != null) onSelected(value);
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: mode == TimelineViewMode.unread
-                  ? colorScheme.primary.withValues(alpha: 0.15)
-                  : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: mode == TimelineViewMode.unread
-                    ? colorScheme.primary.withValues(alpha: 0.3)
-                    : colorScheme.outlineVariant.withValues(alpha: 0.5),
-                width: 0.5,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _modeIcon(mode),
-                  size: 16,
-                  color: mode == TimelineViewMode.unread
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${_modeLabel(mode)} ${_modeCount(controller, mode)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: mode == TimelineViewMode.unread
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _modeIcon(TimelineViewMode mode) => switch (mode) {
-    TimelineViewMode.unread => Icons.mark_email_unread_rounded,
-    TimelineViewMode.all => Icons.inbox_rounded,
-    TimelineViewMode.read => Icons.done_all_rounded,
-  };
-
-  String _modeLabel(TimelineViewMode mode) => switch (mode) {
-    TimelineViewMode.unread => '未读',
-    TimelineViewMode.all => '全部',
-    TimelineViewMode.read => '已读',
-  };
-
-  int _modeCount(TimelineController controller, TimelineViewMode mode) =>
-      switch (mode) {
-        TimelineViewMode.unread => controller.unreadCount,
-        TimelineViewMode.all => controller.allCount,
-        TimelineViewMode.read => controller.readCount,
-      };
+  State<_MobileTimelineModeSwitch> createState() =>
+      _MobileTimelineModeSwitchState();
 }
 
-/// 优雅的淡入淡出堆叠组件，保留页面状态。
+class _MobileTimelineModeSwitchState extends State<_MobileTimelineModeSwitch> {
+  TimelineViewMode? _visualMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = _visualMode ?? widget.mode;
+    final selectedIndex = mode == TimelineViewMode.unread ? 0 : 1;
+    return AppGlassCompactSwitch(
+      selectedIndex: selectedIndex,
+      labels: const ['未读', '全部'],
+      trackWidth: 55,
+      trackHeight: 29,
+      thumbWidth: 40,
+      tapTargetHeight: 48,
+      borderOpacity: 0.55,
+      borderWidth: 0.6,
+      onChanged: (index) {
+        final next = index == 0
+            ? TimelineViewMode.unread
+            : TimelineViewMode.all;
+        if (next == widget.mode) return;
+        setState(() => _visualMode = next);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          widget.onSelected(next);
+          setState(() => _visualMode = null);
+        });
+      },
+    );
+  }
+}
+
+/// 淡入淡出切换三个主页，同时保留各页面状态。
 class _FadeIndexedStack extends StatelessWidget {
   final int index;
   final List<Widget> children;
@@ -404,7 +281,7 @@ class _FadeIndexedStack extends StatelessWidget {
         return IgnorePointer(
           ignoring: !active,
           child: AnimatedOpacity(
-            opacity: active ? 1.0 : 0.0,
+            opacity: active ? 1 : 0,
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeInOutCubic,
             child: TickerMode(enabled: active, child: children[i]),
@@ -412,5 +289,137 @@ class _FadeIndexedStack extends StatelessWidget {
         );
       }),
     );
+  }
+}
+
+class _MobileFloatingNavigation extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  const _MobileFloatingNavigation({
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  static const _items =
+      <({IconData icon, IconData selectedIcon, String label})>[
+        (
+          icon: Icons.article_outlined,
+          selectedIcon: Icons.article_rounded,
+          label: '时间线',
+        ),
+        (
+          icon: Icons.rss_feed_outlined,
+          selectedIcon: Icons.rss_feed_rounded,
+          label: '订阅源',
+        ),
+        (
+          icon: Icons.settings_outlined,
+          selectedIcon: Icons.settings_rounded,
+          label: '设置',
+        ),
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: SizedBox(
+        height: 48,
+        child: CustomPaint(
+          painter: _MobileNavigationShadowPainter(isDark: isDark),
+          child: AppGlassSurface(
+            borderRadius: 24,
+            padding: EdgeInsets.zero,
+            tone: AppGlassTone.panel,
+            nativeBackdrop: true,
+            child: Row(
+              children: List.generate(_items.length, (index) {
+                final item = _items[index];
+                final selected = selectedIndex == index;
+                return Expanded(
+                  child: Semantics(
+                    selected: selected,
+                    button: true,
+                    label: item.label,
+                    child: Tooltip(
+                      message: item.label,
+                      child: InkWell(
+                        onTap: () => onSelected(index),
+                        customBorder: const StadiumBorder(),
+                        child: Center(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic,
+                            width: 52,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: selected
+                                  ? cs.primary.withValues(alpha: 0.80)
+                                  : Colors.transparent,
+                            ),
+                            child: AnimatedScale(
+                              scale: selected ? 1 : 0.96,
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutBack,
+                              child: Icon(
+                                selected ? item.selectedIcon : item.icon,
+                                size: 24,
+                                color: selected
+                                    ? cs.onPrimary
+                                    : cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileNavigationShadowPainter extends CustomPainter {
+  final bool isDark;
+
+  const _MobileNavigationShadowPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = continuousRectanglePath(Offset.zero & size, 24);
+    final outside = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect((Offset.zero & size).inflate(32))
+      ..addPath(path, Offset.zero);
+    canvas.save();
+    canvas.clipPath(outside);
+    canvas.drawPath(
+      path.shift(const Offset(0, 4)),
+      Paint()
+        ..color = Colors.black.withValues(alpha: isDark ? 0.46 : 0.16)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+    );
+    canvas.drawPath(
+      path.shift(const Offset(0, 1)),
+      Paint()
+        ..color = Colors.black.withValues(alpha: isDark ? 0.28 : 0.08)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _MobileNavigationShadowPainter oldDelegate) {
+    return isDark != oldDelegate.isDark;
   }
 }

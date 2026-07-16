@@ -118,6 +118,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   ),
                 ),
               ),
+              if (controller.searchQuery.value.isEmpty)
+                const SliverToBoxAdapter(child: _RecentReadEntry()),
               switch (state) {
                 Loading() => const SliverFillRemaining(
                   child: _SubscriptionsSkeleton(),
@@ -168,6 +170,44 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         ),
       );
     });
+  }
+}
+
+class _RecentReadEntry extends StatelessWidget {
+  const _RecentReadEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Material(
+        color: (isDark ? Colors.white : Colors.black).withValues(
+          alpha: isDark ? 0.035 : 0.022,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Get.toNamed(Routes.recentRead),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              children: [
+                Icon(Icons.history_rounded, size: 21),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '最近阅读',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, size: 21),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

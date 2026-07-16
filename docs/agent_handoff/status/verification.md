@@ -7,6 +7,27 @@
 
 其余曾列在 `status/current.md` 的 macOS 视觉、列表动画、横滑、tooltip、复制、卡片和侧边栏检查均已在后续使用或提交前验证中通过，不再作为开放验证项重复维护。
 
+## 2026-07-16 Android 设计迁移阶段验证
+
+用户已在真机 Debug/Release 路径完成视觉检查：
+
+- 主时间线与订阅源详情 `未读/全部` 筛选、滑块边界和 `12px` 卡片对齐正确。
+- 最近阅读入口、文章圆形已读按钮、目录面板和订阅源设置面板可用。
+- 底部悬浮导航选中反馈、三页淡入淡出和仅向外扩散的阴影符合预期。
+- Inbox 展开不再出现 Debug 红色 GetX 错误或 Release 灰色色块。
+- 底部面板统一 `32px` 圆角后未发现屏幕边缘溢出。
+
+仍需在后续阶段验证：Android 设置页、后台任务中心和其余次级页面迁移；最终物理屏幕圆角同心关系。
+
+推荐 Android 检查：
+
+```bash
+dart analyze lib test
+flutter test --no-pub
+flutter build apk --debug --no-pub
+flutter run -d <device-id> --no-pub
+```
+
 ## 常规检查
 
 推荐检查：

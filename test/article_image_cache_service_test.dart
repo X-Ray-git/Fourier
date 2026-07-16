@@ -42,6 +42,26 @@ void main() {
       ]);
     });
 
+    test('limits Android-style background plans by article count', () {
+      final articles = List.generate(
+        60,
+        (index) => {
+          'articleId': 'entry-$index',
+          'content': '<img src="https://example.com/$index.jpg">',
+        },
+      );
+
+      final plan = ArticleImageCacheService.buildPrefetchPlan(
+        articles,
+        maxImages: ArticleImageCacheService.androidImagesPerArticle,
+        maxArticles: ArticleImageCacheService.androidBackgroundArticleLimit,
+      );
+
+      expect(plan, hasLength(50));
+      expect(plan.first['articleId'], 'entry-0');
+      expect(plan.last['articleId'], 'entry-49');
+    });
+
     test('isolates cache keys by article and derives resized keys', () {
       const url = 'https://example.com/image.jpg';
       final first = ArticleImageCacheService.cacheKey('first', url);

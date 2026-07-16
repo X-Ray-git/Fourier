@@ -25,8 +25,9 @@
 图片：
 
 - 使用 `ArticleImageService` 处理代理/请求头。
-- macOS 正文图片使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；Android 暂时保持原缓存路径。
-- macOS 刷新完成后预取全部本地未读文章的正文静态图片：按文章顺序、每篇最多 8 张、总调度并发 16；当前文章前 4 张提升到队首。不要加入 hover 触发，也不要把预取改成批量 `precacheImage()` 常驻内存。
+- macOS 与 Android 正文图片都使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；历史 `v2_` 缓存暂不迁移。
+- macOS 刷新完成后预取全部本地未读文章的正文静态图片：按文章顺序、每篇最多 8 张、总调度并发 16；当前文章前 4 张提升到队首。
+- Android 使用保守参数：刷新时预取前 50 篇本地未读文章、每篇最多 4 张、总调度并发 4；当前文章前 2 张提升到队首。当前不区分 Wi-Fi 与移动网络。不要加入 hover 触发，也不要把预取改成批量 `precacheImage()` 常驻内存。
 - 宽度尽量尊重文章内容最大宽度和源图片尺寸。
 - macOS hover 不再缩小图片，也不绘制边框。
 - 可点击图片在 macOS 通过 `MacOSZoomInCursor` 使用 zoom-in 光标。

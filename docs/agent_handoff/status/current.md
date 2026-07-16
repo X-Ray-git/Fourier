@@ -56,7 +56,7 @@
 - 自动翻译/摘要等待队列已接入统一的已读状态入口：文章变成已读时移除尚未开始的任务，并清除自动翻译瞬态 `pending`；上游正文处理在流转前复查最新已读状态，避免旧快照重新入队。已开始请求、手动操作和垃圾拦截判定不受影响。
 - HTML 清洗修复了半透明内容被误删、顶层转义文本变成标签以及同一文章正文更新命中旧缓存的问题。规范化缓存以正文 SHA-256 指纹校验变化，不额外长期保存第二份原始 HTML。没有有效地址的 iframe、video 或 audio 保留为明确的不可用提示，并提供经过 HTTP/HTTPS 校验的原文入口；video 与 audio 都支持从子级 `<source src>` 提取资源。
 - Debug 与 Release 网络请求现在统一使用系统 HTTPS 证书信任链，不再通过 `badCertificateCallback` 无条件接受无效证书；自定义 `HttpClient` 的 `15s` idle timeout 保持不变。需要抓包时应安装并信任代理证书，而不是在应用内关闭校验。
-- 设置页保存语义已统一并经用户运行确认：离散选择直接保存，LLM 卡片不再保留整卡保存按钮；Temperature、并发数、正文宽度、滚动速度和已读窗口等单值数字输入按 Enter/失焦静默保存，不再排列保存按钮。Folo 三项凭据与 DeepSeek API Key 已合并到“服务认证”，共用右下角“测试连接 + 保存认证”：测试使用当前输入但不保存，分别调用 Folo `/subscriptions` 与 DeepSeek `/models`；DeepSeek 留空时显示“未配置，已跳过”，不影响 Folo 测试结果。保存要求 Folo 三项完整，DeepSeek 留空表示清除磁盘值和翻译/摘要服务的运行时 Key。Prompt 继续明确保存。macOS 外观 segmented 独占完整一行，重置默认立即落盘，快速离散切换按最后一次选择串行写入。
+- 设置页保存语义已统一并经用户运行确认：离散选择直接保存，LLM 卡片不再保留整卡保存按钮；Temperature、并发数、正文宽度、滚动速度和已读窗口等单值数字输入按 Enter/失焦静默保存，不再排列保存按钮。Folo Session Token 与 DeepSeek API Key 已合并到“服务认证”，共用右下角“测试连接 + 保存认证”：测试使用当前输入但不保存，分别调用 Folo `/subscriptions` 与 DeepSeek `/models`；DeepSeek 留空时显示“未配置，已跳过”，不影响 Folo 测试结果。Folo 只要求 Session Token，DeepSeek 留空表示清除磁盘值和翻译/摘要服务的运行时 Key；旧备份中的 Client ID 和 Session ID 可被兼容导入但会忽略、清理且不再导出。Prompt 继续明确保存。macOS 外观 segmented 独占完整一行，重置默认立即落盘，快速离散切换按最后一次选择串行写入。
 - macOS 红黄绿按钮已从“不受支持地移动系统标准按钮”切回可控的 AppKit 自绘 `NSControl` 容器。用户已验证 hover 和点击符合预期：任一圆形按钮触发三颗同步显示符号，按钮间空隙不触发，命中范围和视觉一致；动作仍转发给隐藏系统按钮的 target/action。
 - macOS 26 侧边栏已从“全窗口 `NSVisualEffectView` + Flutter 白色/模糊覆盖”迁移为局部 `NSGlassEffectView(.regular)`。用户确认纯原生版本整体观感很好；浅色/深色跟随应用 appearance，同一原生组件不分叉维护。旧系统保留局部 `NSVisualEffectView` 回退。
 - 侧边栏原生 backdrop 向 Flutter 连续曲率开口后方外扩 `1px`，堵住系统圆角与 Flutter 抗锯齿不一致造成的漏底细缝。最终轮廓为 `0.5px` 环境描边（浅色黑 `12%`、深色白 `12%`），浅色另加轻微外侧阴影；用户明确不增加原生玻璃之外的二次模糊。

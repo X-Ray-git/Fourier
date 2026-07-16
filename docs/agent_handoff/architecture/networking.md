@@ -3,7 +3,10 @@
 Folo API：
 
 - Base URL：`https://api.folo.is`
-- 认证使用 cookie 加 `X-Client-Id` 和 `X-Session-Id`。
+- 认证只使用 `__Secure-better-auth.session_token` cookie。2026-07-16
+  以订阅源、文章、收件箱和空写操作做过对照实验：省略或伪造
+  `X-Client-Id`、`X-Session-Id` 均不影响结果，无 token 或伪造 token
+  则返回 `401`，因此请求不再发送这两个无效 header。
 - `lib/http/init.dart` 中的 `Request` 设置通用请求头并安装认证 interceptor。
 
 DeepSeek API：

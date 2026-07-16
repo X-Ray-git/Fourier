@@ -43,8 +43,6 @@ abstract final class SettingsBackupService {
 
   static const _fixedKeys = {
     StorageKeys.sessionToken,
-    StorageKeys.clientId,
-    StorageKeys.sessionId,
     StorageKeys.readSyncWindowDays,
     StorageKeys.appearanceMode,
     StorageKeys.badgeStrategy,
@@ -59,8 +57,6 @@ abstract final class SettingsBackupService {
 
   static const _stringKeys = {
     StorageKeys.sessionToken,
-    StorageKeys.clientId,
-    StorageKeys.sessionId,
     StorageKeys.appearanceMode,
     StorageKeys.badgeStrategy,
     _deepseekApiKey,
@@ -133,7 +129,8 @@ abstract final class SettingsBackupService {
     final settings = <String, dynamic>{};
     for (final entry in rawSettings.entries) {
       final key = entry.key;
-      if (key is! String || !_isManagedKey(key)) continue;
+      if (key is! String || !_isImportableKey(key)) continue;
+      if (_isLegacyCredentialKey(key)) continue;
       settings[key] = _normalizeValue(key, entry.value);
     }
 
@@ -147,9 +144,7 @@ abstract final class SettingsBackupService {
         .where((key) => _startsWithAny(key, _feedPreferencePrefixes))
         .length;
     final hasFoloCredentials =
-        (settings[StorageKeys.sessionToken] as String?)?.isNotEmpty == true &&
-        (settings[StorageKeys.clientId] as String?)?.isNotEmpty == true &&
-        (settings[StorageKeys.sessionId] as String?)?.isNotEmpty == true;
+        (settings[StorageKeys.sessionToken] as String?)?.isNotEmpty == true;
     final hasDeepseekApiKey =
         (settings[_deepseekApiKey] as String?)?.isNotEmpty == true;
 
@@ -166,7 +161,8 @@ abstract final class SettingsBackupService {
   ) async {
     final keysToDelete = <String>[];
     for (final key in GStorage.setting.keys) {
-      if (key is String && _isManagedKey(key)) {
+      if (key is String &&
+          (_isManagedKey(key) || _isLegacyCredentialKey(key))) {
         keysToDelete.add(key);
       }
     }
@@ -193,6 +189,12 @@ abstract final class SettingsBackupService {
         _startsWithAny(key, _llmPrefixes) ||
         _startsWithAny(key, _feedPreferencePrefixes);
   }
+
+  static bool _isImportableKey(String key) =>
+      _isManagedKey(key) || _isLegacyCredentialKey(key);
+
+  static bool _isLegacyCredentialKey(String key) =>
+      key == StorageKeys.clientId || key == StorageKeys.sessionId;
 
   static bool _startsWithAny(String key, List<String> prefixes) {
     return prefixes.any(key.startsWith);

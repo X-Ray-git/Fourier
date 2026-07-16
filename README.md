@@ -41,7 +41,7 @@ flutter build macos --release
 ## 首次配置
 
 1. 打开应用 → 设置页
-2. 填写 **Folo API 凭据**（Session Token / Client ID / Session ID）— 从 Folo Web 应用的 Cookie 中获取
+2. 填写 **Folo Session Token**，从 Folo Web 应用的 Cookie 中获取
 3. 填写 **DeepSeek API Key**（翻译、摘要和垃圾拦截功能需要）
 
 ## 开发

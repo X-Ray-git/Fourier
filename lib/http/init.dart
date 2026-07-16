@@ -111,21 +111,11 @@ class _AuthInterceptor extends Interceptor {
     final token =
         GStorage.setting.get(StorageKeys.sessionToken, defaultValue: '')
             as String;
-    final clientId =
-        GStorage.setting.get(StorageKeys.clientId, defaultValue: '') as String;
-    final sessionId =
-        GStorage.setting.get(StorageKeys.sessionId, defaultValue: '') as String;
 
     if (token.isNotEmpty) {
       options.headers['Cookie'] =
           '__Secure-better-auth.session_token=$token; '
           'better-auth.last_used_login_method=google';
-    }
-    if (clientId.isNotEmpty) {
-      options.headers['X-Client-Id'] = clientId;
-    }
-    if (sessionId.isNotEmpty) {
-      options.headers['X-Session-Id'] = sessionId;
     }
 
     handler.next(options);

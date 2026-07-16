@@ -4,7 +4,7 @@
 
 重要设置：
 
-- 服务认证：Folo 的 session token/client id/session id，以及 DeepSeek API key。
+- 服务认证：Folo Session Token，以及 DeepSeek API Key。
 - LLM 模型/配置值。
 - Prompt 模板。
 - 已读同步窗口。
@@ -39,7 +39,8 @@ macOS UI：
 - 选择型控件应选择即保存，包括 dropdown、segmented、switch/checkbox 等。
 - 单值数字输入不应边输边写盘；按 Enter 或失去焦点时校验并静默保存，无效值或写入失败应提示并恢复上一次有效值。
 - 凭据、API Key 和 Prompt 等敏感、组合或大段文本输入保留明确保存按钮。
-- Folo 三项认证与 DeepSeek API Key 共用一次保存操作：先完成所有格式校验，再写入本地；Folo token/client/session 必须同时有效，DeepSeek Key 可以留空，留空保存表示清除已有 Key。
+- Folo Session Token 与 DeepSeek API Key 共用一次保存操作：先完成所有格式校验，再写入本地；Folo Token 必填，DeepSeek Key 可以留空，留空保存表示清除已有 Key。
+- 旧设置备份中的 `client_id`、`session_id` 继续允许导入但会被忽略并清理，保证旧 JSON 可迁移；新导出不再包含这两个字段。
 - “测试连接”读取输入框当前值但不保存：Folo 使用只读 `/subscriptions` 并校验业务 `code == 0`；DeepSeek 使用需 Bearer 认证的只读 `/models`，不发起推理、不产生推理 token。两项独立测试并分别反馈，单项失败不能阻止另一项完成；DeepSeek Key 留空时显示“未配置，已跳过”，不把可选配置计为失败。
 - LLM 参数卡片中，模型、思考模式、思考强度和 `max_tokens` 选择后立即保存；Temperature 和并发数按 Enter/失焦保存，编辑中的草稿不得阻塞或污染其他选项。重置默认立即落盘。
 - Prompt 保留卡片内保存/重置操作；不要重新引入设置页全局“保存全部”按钮。

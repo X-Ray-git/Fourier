@@ -38,8 +38,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late final AccountService _accountService;
 
   final _tokenController = TextEditingController();
-  final _clientIdController = TextEditingController();
-  final _sessionIdController = TextEditingController();
   final _deepseekApiKeyController = TextEditingController();
   final _readSyncWindowDaysController = TextEditingController();
   final _articleContentMaxWidthController = TextEditingController();
@@ -55,8 +53,6 @@ class _SettingsPageState extends State<SettingsPage> {
   final _macShortcutsKey = GlobalKey();
   final _macAboutKey = GlobalKey();
   bool _obscureToken = true;
-  bool _obscureClientId = true;
-  bool _obscureSessionId = true;
   bool _obscureDeepseekKey = true;
   bool _testingCredentials = false;
   late String _appearanceMode;
@@ -80,8 +76,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _loadPersistedSettings() {
     _tokenController.text = _accountService.sessionToken ?? '';
-    _clientIdController.text = _accountService.clientId ?? '';
-    _sessionIdController.text = _accountService.sessionId ?? '';
     _deepseekApiKeyController.text = TranslationService.getApiKey() ?? '';
     final readWindowDays = GStorage.setting.get(
       StorageKeys.readSyncWindowDays,
@@ -117,8 +111,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _tokenController.dispose();
-    _clientIdController.dispose();
-    _sessionIdController.dispose();
     _deepseekApiKeyController.dispose();
     _readSyncWindowDaysController.dispose();
     _articleContentMaxWidthController.dispose();
@@ -150,33 +142,21 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool _saveCredentials({bool showSuccess = true}) {
     final token = SecurityUtils.normalizeCredential(_tokenController.text);
-    final clientId = SecurityUtils.normalizeCredential(
-      _clientIdController.text,
-    );
-    final sessionId = SecurityUtils.normalizeCredential(
-      _sessionIdController.text,
-    );
     final deepseekKey = _deepseekApiKeyController.text.trim();
 
-    if (token.isEmpty || clientId.isEmpty || sessionId.isEmpty) {
-      AppFeedback.warning('认证未保存', '请填写全部三项');
+    if (token.isEmpty) {
+      AppFeedback.warning('认证未保存', '请填写 Session Token');
       return false;
     }
 
     if (!SecurityUtils.isSafeCookieValue(token) ||
-        !SecurityUtils.isSafeHeaderValue(clientId) ||
-        !SecurityUtils.isSafeHeaderValue(sessionId) ||
         (deepseekKey.isNotEmpty &&
             !SecurityUtils.isSafeHeaderValue(deepseekKey))) {
       AppFeedback.error('认证未保存', '输入格式不合法，请检查是否包含换行或特殊分隔符');
       return false;
     }
 
-    _accountService.saveTokens(
-      sessionToken: token,
-      clientId: clientId,
-      sessionId: sessionId,
-    );
+    _accountService.saveSessionToken(token);
     if (deepseekKey.isNotEmpty) {
       TranslationService.setApiKey(deepseekKey);
       SummaryService.setApiKey(deepseekKey);
@@ -200,23 +180,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _testCredentials() async {
     if (_testingCredentials) return;
     final token = SecurityUtils.normalizeCredential(_tokenController.text);
-    final clientId = SecurityUtils.normalizeCredential(
-      _clientIdController.text,
-    );
-    final sessionId = SecurityUtils.normalizeCredential(
-      _sessionIdController.text,
-    );
     final deepseekKey = _deepseekApiKeyController.text.trim();
 
     setState(() => _testingCredentials = true);
     late final List<_ConnectionTestResult> results;
     try {
       results = await Future.wait([
-        _testFoloConnection(
-          token: token,
-          clientId: clientId,
-          sessionId: sessionId,
-        ),
+        _testFoloConnection(token),
         _testDeepSeekConnection(deepseekKey),
       ]);
     } finally {
@@ -234,17 +204,11 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<_ConnectionTestResult> _testFoloConnection({
-    required String token,
-    required String clientId,
-    required String sessionId,
-  }) async {
-    if (token.isEmpty || clientId.isEmpty || sessionId.isEmpty) {
-      return const _ConnectionTestResult(false, '凭据不完整');
+  Future<_ConnectionTestResult> _testFoloConnection(String token) async {
+    if (token.isEmpty) {
+      return const _ConnectionTestResult(false, 'Session Token 未填写');
     }
-    if (!SecurityUtils.isSafeCookieValue(token) ||
-        !SecurityUtils.isSafeHeaderValue(clientId) ||
-        !SecurityUtils.isSafeHeaderValue(sessionId)) {
+    if (!SecurityUtils.isSafeCookieValue(token)) {
       return const _ConnectionTestResult(false, '凭据格式不合法');
     }
 
@@ -260,8 +224,6 @@ class _SettingsPageState extends State<SettingsPage> {
           'Cookie':
               '__Secure-better-auth.session_token=$token; '
               'better-auth.last_used_login_method=google',
-          'X-Client-Id': clientId,
-          'X-Session-Id': sessionId,
         },
       ),
     );
@@ -454,8 +416,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _clear() {
     _tokenController.clear();
-    _clientIdController.clear();
-    _sessionIdController.clear();
     _deepseekApiKeyController.clear();
     _accountService.clearTokens();
     TranslationService.setApiKey('');
@@ -772,43 +732,6 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                               obscureText: _obscureToken,
                               textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: 12),
-                            _MacSettingsGrid(
-                              children: [
-                                AppGlassTextField(
-                                  controller: _clientIdController,
-                                  label: 'Client ID',
-                                  hint: 'YlxGJddT...',
-                                  suffixIcon: _visibilityToggleButton(
-                                    obscured: _obscureClientId,
-                                    onPressed: () {
-                                      setState(
-                                        () => _obscureClientId =
-                                            !_obscureClientId,
-                                      );
-                                    },
-                                  ),
-                                  obscureText: _obscureClientId,
-                                  textInputAction: TextInputAction.next,
-                                ),
-                                AppGlassTextField(
-                                  controller: _sessionIdController,
-                                  label: 'Session ID',
-                                  hint: 'TepZonTA...',
-                                  suffixIcon: _visibilityToggleButton(
-                                    obscured: _obscureSessionId,
-                                    onPressed: () {
-                                      setState(
-                                        () => _obscureSessionId =
-                                            !_obscureSessionId,
-                                      );
-                                    },
-                                  ),
-                                  obscureText: _obscureSessionId,
-                                  textInputAction: TextInputAction.next,
-                                ),
-                              ],
                             ),
                             const SizedBox(height: 12),
                             AppGlassTextField(
@@ -1330,7 +1253,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '配置 Folo 登录凭据与 DeepSeek API Key',
+            '配置 Folo Session Token 与 DeepSeek API Key',
             style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
@@ -1354,49 +1277,6 @@ class _SettingsPageState extends State<SettingsPage> {
             obscureText: _obscureToken,
             textInputAction: TextInputAction.next,
           ),
-          const SizedBox(height: 12),
-
-          TextField(
-            controller: _clientIdController,
-            decoration: InputDecoration(
-              labelText: 'Client ID',
-              hintText: 'YlxGJddT...',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                tooltip: _obscureClientId ? '显示' : '隐藏',
-                onPressed: () {
-                  setState(() => _obscureClientId = !_obscureClientId);
-                },
-                icon: Icon(
-                  _obscureClientId ? Icons.visibility : Icons.visibility_off,
-                ),
-              ),
-            ),
-            obscureText: _obscureClientId,
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 12),
-
-          TextField(
-            controller: _sessionIdController,
-            decoration: InputDecoration(
-              labelText: 'Session ID',
-              hintText: 'TepZonTA...',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                tooltip: _obscureSessionId ? '显示' : '隐藏',
-                onPressed: () {
-                  setState(() => _obscureSessionId = !_obscureSessionId);
-                },
-                icon: Icon(
-                  _obscureSessionId ? Icons.visibility : Icons.visibility_off,
-                ),
-              ),
-            ),
-            obscureText: _obscureSessionId,
-            textInputAction: TextInputAction.next,
-          ),
-
           const SizedBox(height: 12),
 
           TextField(

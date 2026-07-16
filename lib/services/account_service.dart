@@ -21,22 +21,15 @@ class AccountService extends GetxController {
     final token =
         GStorage.setting.get(StorageKeys.sessionToken, defaultValue: '')
             as String;
-    final clientId =
-        GStorage.setting.get(StorageKeys.clientId, defaultValue: '') as String;
-    final sessionId =
-        GStorage.setting.get(StorageKeys.sessionId, defaultValue: '') as String;
-    isLoggedIn.value =
-        token.isNotEmpty && clientId.isNotEmpty && sessionId.isNotEmpty;
+    GStorage.setting.delete(StorageKeys.clientId);
+    GStorage.setting.delete(StorageKeys.sessionId);
+    isLoggedIn.value = token.isNotEmpty;
   }
 
-  void saveTokens({
-    required String sessionToken,
-    required String clientId,
-    required String sessionId,
-  }) {
+  void saveSessionToken(String sessionToken) {
     GStorage.setting.put(StorageKeys.sessionToken, sessionToken);
-    GStorage.setting.put(StorageKeys.clientId, clientId);
-    GStorage.setting.put(StorageKeys.sessionId, sessionId);
+    GStorage.setting.delete(StorageKeys.clientId);
+    GStorage.setting.delete(StorageKeys.sessionId);
     isLoggedIn.value = true;
   }
 
@@ -49,7 +42,4 @@ class AccountService extends GetxController {
 
   String? get sessionToken =>
       GStorage.setting.get(StorageKeys.sessionToken) as String?;
-  String? get clientId => GStorage.setting.get(StorageKeys.clientId) as String?;
-  String? get sessionId =>
-      GStorage.setting.get(StorageKeys.sessionId) as String?;
 }

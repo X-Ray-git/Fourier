@@ -7,7 +7,7 @@
 1. 先读 [docs/agent_handoff/README.md](docs/agent_handoff/README.md)。
 2. 再读 [docs/agent_handoff/status/current.md](docs/agent_handoff/status/current.md)。
 3. 根据当前任务阅读对应专题页。
-4. 只有需要完整时间线证据时，再查 [docs/agent_handoff/history/timeline.md](docs/agent_handoff/history/timeline.md)。
+4. 需要历史证据时，先查 [历史主题归档](docs/agent_handoff/history/archive/README.md)；按旧章节编号追溯时使用 [历史时间索引](docs/agent_handoff/history/chronology.md)。
 
 当前硬性规则：
 
@@ -27,11 +27,3 @@
 - [翻译与摘要](docs/agent_handoff/features/translation-summary.md)
 - [Liquid Glass 设计](docs/agent_handoff/design/liquid-glass.md)
 - [决策日志](docs/agent_handoff/history/decisions.md)
-
----
-*🤖 Automated Release Footprint:*
-*执行指令: `./scripts/release.sh 1.1.27 -m "- feat: support inline YouTube playback and macOS system fullscreen\n- fix: improve local video loading, aspect ratio, controls and keyboard behavior\n- style: refine macOS timeline, article cards, scrollbars and compact glass controls\n- fix: improve article metadata rendering, timeline interactions and macOS startup stability" --push`*
-
----
-*🤖 Automated Release Footprint:*
-*执行指令: `./scripts/release.sh 1.1.28 -m "- feat: add swipe review actions and coordinated list transitions\n- fix: stabilize macOS control interactions and timeline read animations\n- style: refine compact timeline controls and article scrollbar spacing" --push`*

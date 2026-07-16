@@ -1,49 +1,49 @@
-# 历史索引
+# 历史主题地图
 
-当专题页信息不够，需要回到 `history/timeline.md` 查原始时间线背景时，使用本页。
+当专题页信息不足、需要追溯旧实现或讨论背景时，按主题进入归档。旧章节和当前专题冲突时，以专题页、状态页和决策日志为准。
 
-如果旧章节和专题页冲突，不要把旧章节当作当前事实。专题页和决策日志才是维护中的当前视图。
+按旧编号或原始出现顺序查找，请使用 [历史时间索引](chronology.md)。
 
-## 早期产品基础
+## 产品与数据流
 
-- 第 1-15 节：原始应用加固、本地文章库、图片加载、翻译、social/inbox 拉取、通知角标、早期性能工作。
-- 第 16-29 节：订阅源分组、文章来源跳转、toast 清理、HTML renderer 性能、自动翻译、左右滑动和已读同步细节。
-- 第 30-45 节：已知缺陷、HTML pipeline 修复、视频支持、AI 过滤、LLM 并发、图片画廊、状态通知、UI 美化。
+- [项目基础与产品演进](archive/foundation-and-product.md)
+- [订阅源、缓存与同步](archive/subscriptions-and-sync.md)
+- 当前维护页：[架构概览](../architecture/overview.md)、[订阅源](../features/subscriptions.md)、[存储与缓存](../architecture/storage-and-cache.md)
 
-## 阅读、渲染与性能
+## AI 与内容处理
 
-- 第 56、58、62、64-73 节：大文章分块翻译、表格扁平化、正文懒加载回滚、文章渲染性能、进度条平滑、延迟 build/cache 策略、转场动画。
-- 第 141、153、156、158 节：文章宽度可配置、表格/代码块保守修复、滚动期小优化、macOS 正文/设置滚动性能回归。
-- 当前维护页：`features/article-rendering.md`、`features/performance.md`、`features/timeline.md`。
+- [翻译、摘要与 AI 过滤](archive/ai-translation-and-filtering.md)
+- [文章内容与 HTML 渲染](archive/article-content-and-html.md)
+- 当前维护页：[翻译与摘要](../features/translation-summary.md)、[垃圾拦截/审核](../features/filter-review.md)、[文章渲染](../features/article-rendering.md)
 
-## macOS 桌面端适配
+## 媒体与性能
 
-- 第 75-79 节：第一次 macOS 分栏适配、快捷键、同步反馈、未读计数。
-- 第 88-124 节：导航、快捷键归属、M/Cmd+R/Cmd+Z 行为、图片/链接交互、审核页焦点、scrollbar/progress 不稳定。
-- 第 145-152 节：目录、Android 过渡、Liquid Glass 分支、设置/任务中心、浮动控件、header 对齐。
-- 第 154-165 节：中间 header 取消玻璃、滚动惯性设置、同步旋转、性能回退、release note 防线、外观模式、系统红黄绿、时间线排序。
-- 当前维护页：`platforms/macos.md`、`design/liquid-glass.md`、`design/macos-ui.md`、`features/keyboard-shortcuts.md`。
+- [图片、视频与媒体交互](archive/images-video-and-media.md)
+- [性能、滚动与进度](archive/performance-and-scrolling.md)
+- 当前维护页：[文章渲染](../features/article-rendering.md)、[性能](../features/performance.md)
 
-## 发布、版本与仓库操作
+## 时间线与桌面交互
 
-- 第 49-50 节：早期 beta release 和仓库管理规范。
-- 第 80-84 节：Android + macOS 内部发布流程、签名冲突、Android 灰屏发布。
-- 第 91-92 节：worktree 审计和版本自动化。
-- 第 109-110、159-160 节：release notes、annotated tag、字面量 `\n` fail-fast 行为。
-- 当前维护页：`operations/release-build.md`、`operations/git-worktrees.md`、`history/decisions.md`。
+- [时间线与导航](archive/timeline-and-navigation.md)
+- [列表动画与撤销](archive/list-animation-and-undo.md)
+- [macOS 桌面框架与快捷键](archive/macos-shell-and-shortcuts.md)
+- 当前维护页：[时间线](../features/timeline.md)、[macOS](../platforms/macos.md)、[快捷键](../features/keyboard-shortcuts.md)
 
-## 身份、隐私与迁移
+## 设计与设置
 
-- 第 127、142-144 节：README/图标清理、设置剪贴板备份、包命名空间迁移、迁移验证。
-- 当前维护页：`product/privacy.md`、`product/terminology.md`、`history/migrations.md`、`platforms/android.md`。
+- [macOS Liquid Glass 重构](archive/macos-liquid-glass.md)
+- [设置、身份与迁移](archive/settings-identity-and-migration.md)
+- 当前维护页：[Liquid Glass](../design/liquid-glass.md)、[macOS UI](../design/macos-ui.md)、[设置](../features/settings.md)、[迁移](migrations.md)
 
-## 功能区域
+## Android 与发布
 
-- 时间线与过滤：第 8、20、38-44、46-48、68、90、138、164-165 节。
-- 翻译与摘要：第 10、21、27-28、54、56、129、145、163 节。
-- 垃圾拦截/审核：第 33、48、51、100、103、105、108、117、123 节。
-- 设置与后台任务：第 34、74、94、142、149-150、155、162 节。
+- [Android 专项历史](archive/android.md)
+- [发布、Git、Worktree 与 CI](archive/release-git-and-ci.md)
+- [发布足迹](releases.md)
+- 当前维护页：[Android](../platforms/android.md)、[发布与构建](../operations/release-build.md)、[Git worktree](../operations/git-worktrees.md)
 
 ## 维护规则
 
-未来修改如果依赖某个旧章节，请把长期有效结论复制到对应专题页或 `history/decisions.md`。让 `timeline.md` 作为证据来源，而不是主要操作手册。
+- 历史归档不追加当前事实；新结论写入对应专题页或 [决策日志](decisions.md)。
+- 引用旧章节时使用 `chronology.md` 中的稳定链接，不写只有“第 N 节”而没有链接的引用。
+- 一个旧章节只保存在一个主归档页，跨主题关系通过链接表达，不复制原文。

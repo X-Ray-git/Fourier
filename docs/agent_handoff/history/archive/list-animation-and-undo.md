@@ -1,0 +1,769 @@
+# 历史归档：列表动画与撤销
+
+> 本页保存从旧 `history/timeline.md` 迁移来的原始历史证据。内容可能描述已经废弃的实现；当前事实以专题页和 `history/decisions.md` 为准。
+
+<a id="legacy-093"></a>
+
+## 93. macOS 双击原文自动标已读与单步撤销（2026-06-06）
+
+### 93.1 背景与交互判断
+用户确认需要在 macOS 端双击文章卡片打开原文时自动将文章标记为已读。这里的产品判断是：单击只是进入右侧分栏预览，不应强行标已读；双击打开外部浏览器代表更明确的阅读/消费意图，可以自动标已读。
+
+同时，误双击或误按 `M` 会让文章从“未读”列表里消失，用户再去“全部”里找回并恢复未读成本很高。因此本轮引入一个深度为 1 的全局撤销：`Cmd-Z`（macOS）/ `Ctrl-Z`（其他平台配置层面保留）撤销最近一次“未读 -> 已读”转换。
+
+### 93.2 合入前审计发现的问题
+`super-galaxy-rolls-08h21` 分支原始实现有价值，但不能原样合入：
+- 双击时只有在对应 `ArticleController` 已注册时才会 `markAsRead()`，而双击打开原文并不保证右侧详情 controller 一定存在，因此自动标已读不可靠。
+- `ArticleController.markAsRead()` 一进入就记录 undo；如果后续网络同步失败并恢复未读，会留下不真实的可撤销记录。
+- `UndoService.undoLastRead()` 在复用 `ArticleController.markAsUnread()` 时没有 `await`，会过早显示“已撤销成功”。
+- 文档章节没有沿用 `AGENT_HANDOFF.md` 的编号格式。
+
+### 93.3 最终实现
+本轮保留功能方向，但修正实现边界：
+1. 新增 `lib/services/undo_service.dart`：
+   - 管理最近一次已读动作 `_lastReadArticle`。
+   - 提供 `markAsRead(article, showSuccess: false)`，用于双击外部打开时后台标已读。
+   - 如果 `ArticleController` 已存在，则复用 controller 的 `markAsRead()`，保证右侧详情页按钮状态同步；否则直接更新本地 DB / `TimelineController` / `ReadSyncService` 并调用 Folo API。
+   - 网络失败时恢复未读并清理对应 undo 记录。
+2. `ArticleController.markAsRead()`：
+   - 改为在本地已读状态真正生效后记录 undo。
+   - 如果同步失败并恢复未读，调用 `UndoService.clearForEntry()` 清掉错误撤销记录。
+   - 增加 `showSuccess` 参数，允许双击自动标已读时静默同步。
+3. `TimelinePage`、`FeedDetailPage`、`RecentReadPage`：
+   - 双击仍先打开原文。
+   - 若文章未读，则 `unawaited(UndoService.markAsRead(article, showSuccess: false))` 后台标已读。
+4. `main.dart`：
+   - 在 `GetMaterialApp.builder` 中通过 `Shortcuts` / `Actions` 注册全局撤销。
+   - 执行撤销前检查当前焦点 widget；如果焦点在 `EditableText`，直接返回，避免抢占搜索框、设置页输入框、Prompt 编辑框里的文本撤销。
+5. `TimelineController`：
+   - 切换 view mode、feed、category 时清空 undo，避免跨上下文撤销造成隐藏列表的状态跳变。
+
+### 93.4 后续注意
+撤销仍是单步设计，不要扩展成多步栈，除非后续确实需要更复杂的历史管理。当前目标是降低误双击和误标已读的恢复成本，而不是实现完整编辑器式 undo 系统。
+
+<a id="legacy-113"></a>
+
+## 113. macOS 时间线卡片双击动画掉帧修复（2026-06-08）
+
+### 113.1 缺陷描述
+在 macOS 端应用中，点击时间线文章卡片时，左侧卡片会触发水波纹反馈动画（`InkWell` ripple），同时右侧分栏会响应加载文章详情。当用户快速双击卡片以图快速打开外部浏览器并标记已读时，系统出现严重的视觉断裂和掉帧感。
+
+### 113.2 根因分析
+1. **单双击设计权衡**：为了避免原生 `onDoubleTap` 带来的 300ms 强制判断延迟，代码中去除了该回调，转而在 `_handleMacArticleTap` 中通过计算两次点击的时间差（`< 300ms`）手动判定双击。
+2. **第一击并发压力**：无论是单击还是双击，第一击都会同步触发 `controller.selectedArticle.value = article`，随即启动极其繁重的 `ArticlePageView` HTML 结构解析（包括 `Isolate.run` 以及返回后立即在主线程执行的前 5 个 `HtmlChunkCard` 的重度构建）。
+3. **视觉冲突与线程拥堵**：双击行为发生在第一击之后的 150-300ms 之间，这正好与 `ArticlePageView` 首帧解析渲染的回调相撞。此时，第二击又并发触发了 `launchUrl`（唤起外部浏览器）和 `UndoService.markAsRead`。而 `markAsRead` 会修改状态，导致包含该卡片的列表项从界面上迅速移除（销毁 `ArticleCard` widget），直接截断了刚刚开启的水波纹动画，造成强烈的撕裂和卡顿感。
+
+### 113.3 解决思路与实现
+核心原则是：**在保留双击响应速度（零人工 Delay）的前提下，实现重型操作的渲染错峰。**
+修改 `lib/pages/timeline/timeline_page.dart`：在第 112 节已确定的“先选中下一篇”基础上，将双击后触发的浏览器启动及已读处理放入 `WidgetsBinding.instance.addPostFrameCallback` 中。让 Flutter 把当前正处于启动水波纹和准备布局变更阶段的那一帧顺畅渲染完（完成上屏），然后立即接管并执行其余沉重任务。
+```dart
+    if (isDoubleTap) {
+      _lastArticleTapEntryId = null;
+      _lastArticleTapAt = null;
+      _selectRelativeArticle(1);
+
+      // Let the current frame paint the double-tap ripple before heavy work.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openOriginalArticle(article);
+
+        if (!article.isRead) {
+          unawaited(UndoService.markAsRead(article, showSuccess: false));
+        }
+      });
+    }
+```
+通过这种极其细粒度的帧调度，既消除了单点多工引发的卡顿假象，也避免了因强加人为延时带来的迟滞感。
+
+<a id="legacy-115"></a>
+
+## 115. 撤销聚焦与 macOS 卡片进入/退出动画重做（2026-06-08）
+
+第 114 节中暂缓合并的两个需求本轮已重做并合入，保留需求但没有原样采用原 worktree 代码。
+
+### 115.1 撤销后聚焦恢复文章
+原 `fix-macos-undo-focus-navigation` 分支把撤销后的选中与滚动硬绑到 `TimelineController`，这会让 `FilterReviewPage` 等拥有私有选中态的页面无法正确恢复焦点。最终实现改为：
+1. `UndoService.undoLastAction()` 返回 `Future<ArticleModel?>`，并在本地乐观恢复成功时发出 `UndoRestoreEvent`。
+2. `UndoService` 只广播“哪篇文章被恢复、来自哪种撤销动作”，不直接操作任何页面滚动或选中态。
+3. `TimelinePage` 仅在 macOS 且当前主分栏 index 为 0 时响应事件：如果恢复文章存在于当前可见列表，就设置 `selectedArticle` 并滚动到对应卡片。
+4. `FilterReviewPage` 仅在 macOS 且当前主分栏 index 为 1 时响应事件：必要时重新读取审核列表，然后选中并滚动到恢复文章。
+
+这样撤销行为不会让后台页面偷偷抢状态，也避免把页面私有 UI 状态塞进全局 service。
+
+### 115.2 macOS 卡片进入/退出动画
+原 `cosmic-cosmos-darts-14h23` 分支新增的 `ImplicitlyAnimatedList` 方向可取，但它的 builder 仍让调用方用外部列表 index 重新取 article。`AnimatedList` 在删除/插入动画期间内部列表与外部列表会短暂不同步，这会造成错位或越界。
+
+最终实现新增 `lib/common/widgets/implicitly_animated_list.dart`：
+1. 组件内部维护 `_items`，并用 `itemKey` 对比插入、删除与简单移动。
+2. `itemBuilder` 和 `removedItemBuilder` 都直接接收内部真实 `item`，删除动画使用删除瞬间捕获的旧 article。
+3. 主时间线与垃圾拦截页的 macOS 列表接入该组件，移动端列表保持原实现。
+4. macOS 下即使列表从 1 篇变为 0 篇，也继续保留动画列表，空态作为覆盖层显示，避免最后一张卡片退出动画被空态切换打断。
+
+验证结果：
+- `/opt/homebrew/bin/dart format lib/services/undo_service.dart lib/pages/timeline/timeline_page.dart lib/pages/timeline/filter_review_page.dart lib/common/widgets/implicitly_animated_list.dart`：通过。
+- `/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test`：通过。
+- `/opt/homebrew/bin/flutter test --no-pub`：通过。
+
+<a id="legacy-116"></a>
+
+## 116. Cmd+Z 撤销已读状态不立即恢复的竞态条件修复（2026-06-08）
+
+### 116.1 问题报告
+
+用户在 macOS 时间线页面的「未读」视图下，标记一篇文章为已读（文章从列表中消失），随后按下 `Cmd+Z` 撤销：
+
+- **症状 1（有时不恢复）**：文章没有立即重新出现在未读列表中，必须手动点击同步按钮刷新才能重新加载回来。
+- **症状 2（恢复后不聚焦）**：即使恢复了，右侧文章面板也不会自动聚焦到该文章。
+- **概率性**：有时正常，有时异常——取决于用户按 `Cmd+Z` 的时机。
+
+### 116.2 根因分析
+
+问题出在一个竞态条件（race condition），涉及三个组件的时间线交互：
+
+**正常时间线（T0→T3）：**
+
+```
+T0: 用户标记已读
+    → UndoService.markAsRead()
+    → markAsReadLocal: GStorage.readStatus.put(entryId, true) ← 写入乐观已读覆盖
+    → 异步 _retrySync 开始（最多 12 秒，5 次重试×800ms）
+
+T1: _retrySync 成功完成
+    → GStorage.readStatus.delete(entryId) ← 清理乐观覆盖
+
+T2: 用户按 Cmd+Z
+    → UndoService.undoLastAction()
+    → markAsUnreadLocal: DB 写 false, allArticles 更新, articles 过滤重建 ✓
+    → ArticleStateNotifier.tick(entryId) ← 触发 _syncSingleArticleFromDb
+    → _syncSingleArticleFromDb: GStorage.readStatus.get(entryId) → null
+    → mergedRead = null == true ? true : false → false ✓ 一切正常
+```
+
+**异常时间线（竞态触发）：**
+
+```
+T0: 用户标记已读
+    → markAsReadLocal: GStorage.readStatus.put(entryId, true)
+
+T1 (只过了 2 秒): 用户按 Cmd+Z（_retrySync 尚未完成！）
+    → UndoService.undoLastAction()
+    → markAsUnreadLocal: DB 写 false, allArticles 正确更新为 isRead=false ✓
+    → ArticleStateNotifier.tick(entryId) ← 触发 _syncSingleArticleFromDb
+    → _syncSingleArticleFromDb: GStorage.readStatus.get(entryId) → true (仍然残留！)
+    → localOverride == true → mergedRead = true ⚡ 覆盖回已读！
+    → _applyFilter() 再次把文章从 articles 列表移除 ⚡
+```
+
+**关键代码**（`timeline_controller.dart` 旧版，修复前）：
+
+```dart
+// markAsReadLocal (line 353-363):
+void markAsReadLocal(String entryId, {bool recordHistory = true}) {
+    GStorage.readStatus.put(entryId, true);  // 写入乐观覆盖
+    LocalArticleDbService.setReadState(entryId, true, ...);
+    _updateReadStateInMemory(entryId, true);
+    ArticleStateNotifier.tick(entryId);
+}
+
+// markAsUnreadLocal (line 365-371): — 没有清理 readStatus！
+void markAsUnreadLocal(String entryId) {
+    // 不再写入 readStatus=false；只更新本地缓存，信任服务端为最终权威
+    LocalArticleDbService.setReadState(entryId, false);
+    _updateReadStateInMemory(entryId, false);
+    ArticleStateNotifier.tick(entryId);
+    // ⚡ GStorage.readStatus 仍然是 true！
+}
+
+// _syncSingleArticleFromDb (line 464-503):
+void _syncSingleArticleFromDb(String entryId) {
+    ...
+    final localOverride = GStorage.readStatus.get(entryId);  // 读到残留的 true
+    final mergedRead = localOverride == true ? true : updatedFromDb.isRead;
+    // 即使 DB 是 false，mergedRead 被覆盖为 true！
+    allArticles[idx] = finalUpdated;  // 用错误的 isRead=true 覆盖了正确的值
+    allArticles.refresh();
+    _applyFilter();  // 文章从 articles 中被移除
+    ...
+}
+```
+
+**为什么 ReadStatus 会残留？**
+
+当 `UndoService.markAsRead()` 调用 `markAsReadLocal` 时，它在 `GStorage.readStatus` 中写入了 `true`。然后它启动一个异步的 `_retrySync`。如果网络正常，约 2-12 秒后同步完成时 `GStorage.readStatus.delete()` 会清理它。如果用户在此窗口内按下 `Cmd+Z`，`markAsUnreadLocal` 没有清理 `readStatus`——因为第 63 节的重构有意不再写入 `readStatus=false`（"信任服务端为最终权威"），导致这个 `true` 值残留。
+
+由于 `markAsUnreadLocal` 调用了 `ArticleStateNotifier.tick(entryId)`，而 `TimelineController` 在 `onInit` 中注册了 `ever(ArticleStateNotifier.version, ...)` 监听器，后者调用 `_syncSingleArticleFromDb`。此方法将 `readStatus` 视为权威覆盖层（`localOverride == true → mergedRead = true`），并立即将正确的 `isRead=false` 覆盖回 `isRead=true`，然后调用 `_applyFilter()` 将文章从未读列表中移除。
+
+**为什么"_handleUndoRestoreEvent"有时没有聚焦？**
+
+`_handleUndoRestoreEvent`（位于 `timeline_page.dart`）通过 `WidgetsBinding.instance.addPostFrameCallback` 在下一帧扫描 `controller.articles` 以定位恢复的文章。如果 `_syncSingleArticleFromDb` 的覆盖在当前帧已经将文章从列表中移除，则 `indexWhere` 返回 `-1`，处理函数静默返回——文章不会被选中，也不会滚动到。
+
+**为什么有时恢复正常？**
+
+如果用户在按 `Cmd+Z` 之前等待足够长（等待原始 `_retrySync` 完成），`GStorage.readStatus` 会被清理。此时 `_syncSingleArticleFromDb` 读到 `null`，使用 DB 中的 `isRead=false`——因此一切正常。这与用户观察到的"有时候正常，有时候不正常"完全吻合。
+
+### 116.3 设计讨论
+
+讨论了几种修复方案：
+
+| 方案 | 描述 | 采纳 |
+|------|------|------|
+| 方案一 | 在 `markAsUnreadLocal` 中加 `GStorage.readStatus.delete(entryId)` | ✅ |
+| 方案二 | 在 `_syncSingleArticleFromDb` 中让 readStatus 仅作为"已读覆盖"，不作为双向权重 | ❌ 改变语义 |
+| 方案三 | 在 `undoLastAction` 中调用 markAsUnreadLocal 前显式清理 readStatus | ❌ 治标不治本 |
+
+**选择方案一的原因**：当本地标记为未读时，清除已有的已读乐观覆盖在语义上是正确的——不再需要保护锁了。这个修复覆盖了调用 `markAsUnreadLocal` 的所有路径（`UndoService.undoLastAction`、`ArticleController.markAsUnread`），且不改变 `_syncSingleArticleFromDb` 中 readStatus 合并的行为逻辑。
+
+### 116.4 修复实现
+
+**文件**：`lib/pages/timeline/timeline_controller.dart`
+
+**改动**：在 `markAsUnreadLocal` 开头添加 `GStorage.readStatus.delete(entryId)`，移除旧的"不再写入 readStatus=false"注释：
+
+```dart
+void markAsUnreadLocal(String entryId) {
+    if (entryId.trim().isEmpty) return;
+    GStorage.readStatus.delete(entryId);  // 新增：清除乐观已读覆盖
+    LocalArticleDbService.setReadState(entryId, false);
+    _updateReadStateInMemory(entryId, false);
+    ArticleStateNotifier.tick(entryId);
+}
+```
+
+### 116.5 行为变化对比
+
+| 场景 | 修复前 | 修复后 |
+|------|--------|--------|
+| 等待同步完成后 Cmd+Z 撤销 | ✅ 正常（readStatus 已清理） | ✅ 正常（无变化） |
+| 快速 Cmd+Z（同步尚未完成） | ❌ 文章被 _syncSingleArticleFromDb 重新标记为已读 | ✅ 正常恢复，readStatus 在 markAsUnreadLocal 中清理 |
+| 切换到已读视图确认 | ❌ 文章显示为已读（错误） | ✅ 文章正确显示为未读 |
+| 聚焦/滚动到恢复文章 | ❌ 文章在 articles 中找不到，静默跳过 | ✅ 正确找到、选中并滚动 |
+
+### 116.6 涉及文件
+
+- `lib/pages/timeline/timeline_controller.dart` — `markAsUnreadLocal` 添加 `GStorage.readStatus.delete(entryId)`。
+
+未修改但相关的文件（供后续参考）：
+
+- `lib/services/undo_service.dart` — `undoLastAction()` 调用链。
+- `lib/services/article_state_notifier.dart` — `tick()` 触发 `_syncSingleArticleFromDb`。
+- `lib/pages/timeline/timeline_page.dart` — `_handleUndoRestoreEvent` 现在可正确找到并聚焦已恢复文章。
+- `lib/pages/article/article_page.dart` — `ArticleController.markAsUnread()` 也调用 `markAsUnreadLocal`，该路径同样受益。
+
+### 116.7 后续注意事项
+
+- `readStatus` 的语义在第 63 节核心重构中已明确：仅作为用户操作时的乐观覆盖层（`true` only），同步完成后立即释放。本修复与此设计一致——标记为未读时清理乐观覆盖在语义上正确。
+- 如果未来添加新的"批量标记未读"路径，请确保也调用 `GStorage.readStatus.delete()`，或者更安全的方式是让该路径也走 `markAsUnreadLocal` 方法。
+- `markAsUnreadLocal` 中的 `ArticleStateNotifier.tick()` 仍会触发 `_syncSingleArticleFromDb`，由于 `readStatus` 已清理，合并逻辑现在正确地从 DB 读取 `isRead=false`。
+
+---
+
+<a id="legacy-118"></a>
+
+## 118. macOS M 键快捷键偶尔失效修复（2026-06-08）
+
+### 118.1 用户问题报告
+
+用户反馈：在 macOS 时间线页面上，**双击**文章卡片总能稳定触发退场动画（标记已读 + 自动跳到下一篇），但**按 M 键**却偶尔不触发任何效果。问题同样存在日志 "垃圾拦截"（审核）页面的 M 键（拒绝）和 K 键（保留）场景。
+
+用户要求排查范围：
+| | 时间线页面 (tab 0) | 审核页面 (tab 1) |
+|---|---|---|
+| 双击 | ✅ 总是有效 | ❌ 未实现双击 dismiss |
+| M 键快捷键 | ⚠️ 偶尔失效 | ⚠️ 偶尔失效 |
+| UI 按钮 | ✅ 有效 | ✅ 有效 (保留/移除按钮) |
+
+### 118.2 完整代码审查与根因排查
+
+经过对 `article_page.dart`、`timeline_page.dart`、`filter_review_page.dart`、`implicitly_animated_list.dart`、`main_page.dart` 全部相关文件的逐一审查，识别出两个并发的根因和两个次要因素。
+
+#### 根因 1（主要）：`_hasShortcutModifierPressed()` 全局捕获 M 键
+
+位置：`lib/pages/article/article_page.dart:682`（修复前）
+
+```dart
+bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (_hasShortcutModifierPressed()) return false; // ← HERE
+    ...
+}
+```
+
+`_hasShortcutModifierPressed()` 检查 `HardwareKeyboard.instance.isMetaPressed`（macOS 上的 Command 键）。如果用户在此之前使用过任何修饰键组合（最常见的是 Cmd+Z 撤销），macOS 的底层键盘驱动可能在修饰键物理抬起后仍有几个毫秒继续报告 `isMetaPressed == true`。在此期间按 M 键 → handler 在入口处直接返回 `false`，整条链路被切断。
+
+这解释了"偶尔失效"的非确定特征 —— 取决于用户在上一次 Cmd+Z 之后是否给系统足够的时间刷新修饰键状态。
+
+#### 根因 2（放大器）：Focus widget 无条件吞掉事件
+
+位置：`lib/pages/article/article_page.dart:1234-1248`（修复前）
+
+当 `_usesGlobalShortcuts` 为 `true` 时（即 macOS 分栏视图），`ArticlePageView` 外层包裹的 `Focus` widget 在 `onKeyEvent` 中对 M 键**无条件**返回 `KeyEventResult.handled`：
+
+```dart
+if (key == LogicalKeyboardKey.escape ||
+    key == LogicalKeyboardKey.arrowLeft ||
+    key == LogicalKeyboardKey.arrowRight ||
+    key == LogicalKeyboardKey.arrowUp ||
+    key == LogicalKeyboardKey.arrowDown ||
+    key == LogicalKeyboardKey.keyM) {
+  return KeyEventResult.handled; // ← 不检查修饰键，吞掉
+}
+```
+
+它的设计意图是防止快捷键事件从 `HardwareKeyboard` handler 向上冒泡——当 handler 已处理事件后应当吞掉。但当根因 1 导致 handler **未处理**事件（`return false`）时，Focus widget 仍然吞掉了事件。结果：M 键被两个层先后丢弃，用户看不到任何效果，属于**完全静默失败**。
+
+#### 根因 3（次要）：`isUpdatingReadState` 阻塞快速连续操作
+
+位置：`article_page.dart:748`（修复后行号）
+
+```dart
+if (controller.isUpdatingReadState.value) return true;
+```
+
+当上一篇文章的 `markAsRead` 网络同步尚未完成（最多 5 次重试，每次间隔 800ms）时，后续 M 键被吞掉，仅返回 `true` 而没有任何操作。由于用户切换文章后，旧的 `ArticleController` 会被 dispose、新的 `ArticleController` 被创建，此问题在实际使用中发生的概率较低，因此本轮不做修改。
+
+#### 根因 4（架构层面）：`IndexedStack` 令多个 `ArticlePageView` 同时存活
+
+`main_page.dart:101` 使用 `IndexedStack`，导致 timeline tab（index 0）和 review tab（index 1）内的 `ArticlePageView` 同时注册 `HardwareKeyboard.instance.addHandler`。两者都依赖 `isActive()` 和 `isSelectedArticle()` 闭包做早期退出判断，在 page 切换边界的边缘窗口内可能发生竞争，增加"偶尔失效"的概率。由于 `IndexedStack` 是本应用的核心布局决策，本轮未修改此架构。
+
+### 118.3 为什么双击总是有效
+
+双击流程（`timeline_page.dart:212 _handleMacArticleTap`）完全不走 `HardwareKeyboard` 栈：
+- 它是 Flutter `GestureDetector.onTap` 的 mouse/trackpad 事件
+- 不触发 `_hasShortcutModifierPressed()` 检查
+- 不涉及 Focus 的 `onKeyEvent`
+
+两者路径完全正交，因此双击始终稳定生效。
+
+### 118.4 修复方案
+
+在 `lib/pages/article/article_page.dart` 中修改了两处：
+
+#### 修改 1：`_handleHardwareKeyEvent` —— 定向修饰键检查
+
+**删除**入口处的全局 `if (_hasShortcutModifierPressed()) return false;`，改为**仅对四个方向键**各自独立执行修饰键检查。M 键和 Escape 键不再受修饰键状态影响。
+
+方向键需要保留修饰键检查，因为 macOS 上 Cmd+Up/Down/Left/Right 具有全局或内置含义（首行/末行滚动、行首/行尾），与箭头键我们的语义冲突。M 键不存在此冲突：Cmd+M 由窗口管理器（最小化）拦截，根本不会到达应用层；独立的 M 键始终是用户的主动意图。
+
+#### 修改 2：Focus widget `onKeyEvent` —— 与 handler 逻辑对齐
+
+在 `_usesGlobalShortcuts` 分支中，将键列表拆分为两组：
+1. **Escape + M**：无修饰键检查，始终返回 `KeyEventResult.handled`
+2. **四个方向键**：调用 `_hasShortcutModifierPressed()`，修饰键按下时返回 `ignored`（允许冒泡给系统），否则返回 `handled`
+
+这使得 Focus widget 与 `_handleHardwareKeyEvent` 的行为精确一致，不再出现 handler 跳过 + Focus 吞噬形成静默丢失的情况。
+
+### 118.5 变更范围
+
+仅修改 1 个文件：`lib/pages/article/article_page.dart`，共 +12/-4 行。
+
+### 118.6 受影响的手势路径总结
+
+| 触发方式 | 页面 | 行为 | 受影响？ |
+|----------|------|------|----------|
+| 双击卡片 | 时间线 | 标记已读 + 跳到下一篇 | ❌ 不受影响（非键盘路径） |
+| M 键 | 时间线 | 标记已读 + 跳到下一篇 | ✅ 本次修复 |
+| M 键 | 审核页 | 调用 `_reject(selected)` | ✅ 本次修复 |
+| K 键 | 审核页 | 调用 `_keep(selected)` | ❌ 不受影响（K 键原本未进入 `_hasShortcutModifierPressed` 检查范围） |
+| UI 按钮 (AppBar 勾号) | 时间线 | 标记已读 + 跳到下一篇 | ❌ 不受影响（onPressed 回调） |
+| UI 按钮 (保留/移除) | 审核页 | 执行 keep/reject | ❌ 不受影响（onPressed 回调） |
+
+### 118.7 未修改的已知问题
+
+1. **`isUpdatingReadState` 阻塞**（§118.2 根因 3）：在极快速的连续 M 键操作时仍可能被静默吞掉，但切换文章后 controller 被 dispose 重建，实际出现概率极低。当前 `return true` 保留，避免事件继续冒泡导致意想不到的副作用。
+
+2. **`IndexedStack` 多 page 并存**（§118.2 根因 4）：多个 `ArticlePageView` 同时注册 `HardwareKeyboard` handler 的架构问题未修改，其边缘竞争概率本身就很低，且 `isActive()` + `isSelectedArticle()` 双重守卫已经足够健壮。
+
+3. **K 键在 `_handleHardwareKeyEvent` 中的路径**：K 键仅由 `FilterReviewPage` 的 `_handleHardwareKeyEvent`（第 101 行）直接处理，绕过 `ArticlePageView` 的 handler。如果将来有人将 K 键逻辑迁移到 `ArticlePageView` 内，需要在 Focus widget 中同步增加对应的键列表项。
+
+---
+
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.14 -m "- 统一 macOS 文章处理按钮、快捷键与双击跳转逻辑\n- 重做撤销后聚焦恢复，当前可见页面负责选中并滚动到恢复文章\n- 重做 macOS 时间线与垃圾拦截列表的卡片进入/退出动画，避免动画期间文章错位或越界" --push`*
+
+<a id="legacy-126"></a>
+
+## 126. v1.1.15 beta 验证失败后的滚动与垃圾拦截推进修复（2026-06-08）
+
+### 126.1 用户反馈
+
+用户下载并验证 `v1.1.15` 后反馈两个问题仍然存在：
+
+1. macOS 右侧文章详情滚动条仍会间断性跳跃；同时顶部橙色阅读进度条在 macOS 和 Android 上都会剧烈抖动。
+2. macOS 垃圾拦截页点击“移除”后仍无法跳转到下一篇，并且右侧文章详情失去焦点，随后按左右方向键会出现 Flutter `SelectionArea` 的文本选择光标。
+
+### 126.2 滚动条与进度条根因
+
+第 124 节把正文统一改为 `SliverList.builder`，删除了渐进构建、模式切换和实时测量，但这个方案仍不够：
+
+1. `SliverList.builder` 对变量高度 item 仍会随着 item 首次进入视口而持续修正 `maxScrollExtent`。macOS 叠加式滚动条的拇指大小和位置直接依赖 `maxScrollExtent`，所以仍会跳。
+2. 顶部阅读进度条直接使用 `metrics.pixels / metrics.maxScrollExtent`。当 `maxScrollExtent` 因 SliverList 估算修正或图片加载改变高度时，进度值会跟着跳。
+3. 进度条外层使用 `TweenAnimationBuilder(begin: 0.0, end: progress, duration: 50ms)`，滚动过程中每次 value 更新都会创建新的 tween，进一步放大视觉抖动。
+4. 无明确宽高的图片加载完成后会从 placeholder 高度切换到图片 intrinsic 高度，也会再次改变页面总高度。
+
+### 126.3 滚动修复
+
+本轮改动：
+
+1. `article_page.dart`：正文渲染从 `SliverList.builder` 改回 `SliverToBoxAdapter + Column`。虽然牺牲一点长文首屏构建性能，但可以一次性完成主体布局，避免 SliverList 按需估算导致 `maxScrollExtent` 在滚动中变化。
+2. `article_page.dart`：顶部进度条删除 `TweenAnimationBuilder`，直接用 `LinearProgressIndicator(value: progress)` 显示当前值，避免动画 tween 在高频滚动通知中不断重启。
+3. `html_chunk_card.dart`：文章独立图片 `_ArticleInlineImage` 对无真实尺寸的图片也固定 `displayHeight`，placeholder 和最终图片使用同一高度。
+4. `html_chunk_card.dart`：HTML 内嵌图片扩展也统一给无尺寸图片设置 `renderWidth/renderHeight`，placeholder、errorWidget 和最终图片保持相同盒子尺寸。
+
+注意：这次更偏向稳定阅读体验，而不是继续追求虚拟化。后续如果用户反馈超长文章首屏变慢，再考虑“先完整预估固定 item 高度”或“分批预排版后再显示”的方案，但不要再回到会动态修正 `maxScrollExtent` 的变量高度 SliverList。
+
+### 126.4 垃圾拦截页推进失败根因
+
+`FilterReviewPage._reject()` 旧逻辑在调用 `TimelineController.markAsReadLocal()` 后才计算 `isSelected/currentIndex`。但 `markAsReadLocal()` 会同步调用 `ArticleStateNotifier.tick(entryId)`，触发审核页自己的 `_syncArticleFromDb(entryId)`，导致当前文章先从 `_articles` 移除、`_pruneInvalidSelection()` 再把 `_selectedArticle` 清空。等 `_reject()` 回来继续执行时，`isSelected` 已经变成 false，后续“选择下一篇”的分支不会执行。
+
+`_keep()` 也有同类问题：它在一开始就调用 `ArticleStateNotifier.tick()` / `AutoFilterWorker.unReject()`，状态通知可能抢在本函数后半段之前修改列表和选中态。
+
+### 126.5 垃圾拦截页修复
+
+本轮改动：
+
+1. `_keep()` / `_reject()` 在任何数据库写入、read state 更新、`ArticleStateNotifier.tick()` 之前，先根据当前 `_articles` 和 `_selectedArticle` 计算 `shouldAdvance` 与 `nextArticle`。
+2. 状态修改完成后统一调用 `_removeReviewedArticle(entryId)` 移除当前项并清理 `_itemKeys`。
+3. 如果原本处理的是当前选中文章，最后强制 `_selectReviewedSuccessor(nextArticle)`，从当前 `_articles` 中重新取同 entryId 的对象并滚动到它。
+4. `_pruneInvalidSelection()` 不再简单清空；当当前选中项已经不在列表但列表仍有内容时，补选第一篇，避免右侧详情变空白。
+5. `_scrollToArticle()` 从固定 220ms 延迟改成最多 8 次、每 50ms 的短轮询，等 AnimatedList 删除动画后目标 `GlobalKey.currentContext` 真正可用再滚动。
+6. `_keep()` 删除了最前面的重复 `ArticleStateNotifier.tick()`，保留 `AutoFilterWorker.unReject()` 内部的状态通知。
+
+### 126.6 验证
+
+本地已通过：
+
+```bash
+git diff --check
+/opt/homebrew/bin/flutter analyze --no-fatal-infos lib test
+/opt/homebrew/bin/flutter test --no-pub
+```
+
+本机 macOS native build 仍受本机未安装 CocoaPods 限制，最终需通过 GitHub Actions release 包验证。
+---
+
+*🤖 Automated Release Footprint:*
+
+*执行指令: `./scripts/release.sh 1.1.16 -m "- fix: stabilize article detail scrollbar and reading progress rendering\n- fix: keep filter review selection advancing after remove/keep actions\n- beta: rebuild Android and macOS packages for focused regression validation" --push`*
+
+<a id="legacy-131"></a>
+
+## 131. 卡片交互特效统一 (2026-06-10)
+
+### 131.1 需求背景
+
+用户发现 macOS 端两个页面的卡片动画不一致：
+
+| 页面 | 使用组件 | 按压缩放 | 点击高光 | hover 效果 |
+|------|---------|:---:|:---:|:---:|
+| **时间线** | `ArticleCard` | ✅ | ✅ | ❌ |
+| **垃圾拦截** (macOS) | `_MacReviewRow` | ❌ | ❌ | ❌ |
+| **垃圾拦截** (移动端) | `ArticleCard` + `Dismissible` | ✅ | ✅ | ❌ |
+
+用户的核心诉求：
+1. 垃圾拦截页的 macOS 卡片应有和时间线一致的按压特效
+2. 两个卡片的动画效果应该尽可能共享代码，但垃圾拦截保留自己的布局
+3. 增加 hover 效果（首次），参考现有的点击玻璃高光做轻量版
+4. 列表插入/移除动画改为非线性（接近物理直觉）
+5. 发现键盘 ←/→ 导航选中效果体验不佳，最终移除
+
+### 131.2 讨论过程
+
+#### 131.2.1 动画不统一的原因
+
+`ArticleCard` (`lib/pages/widgets/article_card.dart`) 内置了一套本地状态驱动的按压反馈：
+- `_isPressed` / `_pressPosition` 状态 + `TweenAnimationBuilder` 缩放 (1.0↔0.985)
+- `_GlassHighlight` 径向渐变高光在按压位置
+
+`_MacReviewRow` (`lib/pages/timeline/filter_review_page.dart:792`) 是独立实现的 `Material` + `InkWell` 组件，完全没有这些效果。移动端垃圾拦截用的是 `ArticleCard` + `Dismissible`，所以移动端没问题，只有 macOS 端不一致。
+
+#### 131.2.2 设计方案
+
+**抽取共享组件 `CardPressEffect`**：所有按压/hover/高光逻辑集中管理，`ArticleCard` 和 `_MacReviewRow` 都通过它获得统一特效。各自保留不同的内部布局。
+
+**非线性列表动画**：`ImplicitlyAnimatedList` 底层 `AnimatedList` 默认走 `Curves.linear`。建议新增 `insertCurve` / `removeCurve` 参数：
+- 插入：`easeOutCubic` — 快速入场→减速停止
+- 移除：`easeInCubic` — 缓慢启动→加速离开
+
+**hover 高光**：参考现有 `_GlassHighlight`，用相同径向渐变机制，但用更低 alpha（最终定为 0.05）跟随光标位置。
+
+**键盘选中脉冲**：最初实现了 `←`/`→` 切换文章时触发短暂按压脉冲，但用户实测后觉得效果不理想，最终移除。
+
+#### 131.2.3 滚动跳动 BUG
+
+非线性动画上线后，用户反馈垃圾拦截页点"保留"/"移除"时，列表偶发"一步到位闪到目标位置"。
+
+**根因分析**：`_scrollToArticleWhenReady()` 在 attempt 0 立刻找到 key 并调用 `ScrollUtils.ensureVisible()`（触发 250ms 滚动动画），但此时 `AnimatedList.removeItem()` (180ms) 的删除动画尚在进行中。两个动画（滚动位置 + 列表布局）并发运行 → 滚动目标错位 → 视觉上"跳动"。
+
+**修复**：在 `_scrollToArticleWhenReady` 的 attempt 0 强制等待 220ms（> 180ms 删除时长 + easeInCubic 缓冲），确保 AnimatedList 动画完全结束后才开始滚动。后续 attempt 1-4 才做正常查 key → scroll。
+
+### 131.3 实现细节
+
+#### 131.3.1 新建 `CardPressEffect` (`lib/common/widgets/card_press_effect.dart`)
+
+统一的交互反馈包装器：
+
+```
+CardPressEffect
+├── MouseRegion (跟踪 _hoverPosition, 控制 _isHovering)
+├── GestureDetector (onTapDown/Up/Cancel → 控制 _isPressed)
+├── TweenAnimationBuilder (_isPressed → scale 1.0↔0.985)
+│   └── Transform.scale
+│       └── Stack
+│           ├── child (卡片内容本体)
+│           └── ClipRRect(borderRadius)  ← 高光裁剪到卡片圆角
+│               └── CustomPaint(_GlassHighlightPainter)
+│                   hover: RadialGradient at cursor, alpha 0.05
+│                   press: RadialGradient at tap,   alpha 0.06
+```
+
+核心参数：
+- `onTap` / `onLongPress` / `onSecondaryTapDown` — 透传手势
+- `enableHover` / `enablePress` — 开关 hover/按压效果
+- `borderRadius` — 高光裁剪圆角（匹配卡片）
+
+状态管理：
+- `_isHovering` / `_hoverPosition` — hover 跟踪
+- `_isPressed` / `_pressPosition` — 按压跟踪
+- `_showEffect` = `_isPressed && enablePress` — 按压生效
+- `_showHover` = `_isHovering && !_showEffect && enableHover` — hover 只在非按压时显示
+
+动画时长：
+- 按入：80ms `Curves.easeOut`
+- 松开：350ms `Curves.easeOutCubic`
+
+#### 131.3.2 重构 `ArticleCard` (`lib/pages/widgets/article_card.dart`)
+
+**移除**：
+- `_isPressed`, `_pressPosition` 状态
+- `_onTapDown`, `_onTapUp`, `_onTapCancel` 方法
+- `TweenAnimationBuilder` + `GestureDetector` 外层包装
+- `_GlassHighlight`, `_GlassHighlightPainter` 类（迁移到 CardPressEffect）
+- `brightness` 变量（不再需要）
+- `_selectionPulse` / `didUpdateWidget`（用户最终决定去掉）
+
+**改为**：
+- `Stack` → 直接 `Container`（CardPressEffect 处理高光覆盖层）
+- 外面包裹 `CardPressEffect`，透传 `onTap` / `onLongPress` / `onSecondaryTapDown`
+
+#### 131.3.3 重构 `_MacReviewRow` (`lib/pages/timeline/filter_review_page.dart`)
+
+`_MacReviewRow.build()` 从：
+```dart
+Material → InkWell(onTap) → Padding → Row(...)
+```
+改为：
+```dart
+CardPressEffect(onTap, borderRadius:8) → Material → Padding → Row(...)
+```
+- 去掉 `InkWell`，交互由 `CardPressEffect` 接管
+- 右侧 `IconButton`（保留/移除）保持自己的 UI 交互
+
+#### 131.3.4 修改 `ImplicitlyAnimatedList` (`lib/common/widgets/implicitly_animated_list.dart`)
+
+新增参数（向后兼容）：
+- `insertCurve`：默认 `Curves.easeOutCubic`
+- `removeCurve`：默认 `Curves.easeInCubic`
+
+曲线应用点：
+- `build()` 的 `AnimatedList.itemBuilder`：`CurvedAnimation(parent: animation, curve: insertCurve)` 包裹后传给外层 `itemBuilder`
+- `_syncItems()` 的 `listState.removeItem`：同上用 `removeCurve` 包裹
+
+页面侧（`timeline_page.dart`, `filter_review_page.dart`）**零改动**，自动获得非线性曲线。
+
+#### 131.3.5 修复滚动跳动 (`_scrollToArticleWhenReady`)
+
+```dart
+void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
+    if (attempt == 0) {
+      // 等待 AnimatedList 删除动画完成 (180ms + 缓冲)
+      Future.delayed(const Duration(milliseconds: 220), () {
+        _scrollToArticleWhenReady(entryId, attempt: 1);
+      });
+      return;
+    }
+    // attempt 1+：正常查 key → scroll
+    ...
+}
+```
+
+### 131.4 涉及的 UI 效果矩阵
+
+| 效果 | 时间线 | 垃圾拦截(macOS) | 垃圾拦截(移动) | 最近阅读 | 订阅源详情 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| 按压缩放 0.985 | ✅ | ✅ (新) | ✅ | ✅ | ✅ |
+| 点击玻璃高光 | ✅ | ✅ (新) | ✅ | ✅ | ✅ |
+| Hover 跟踪高光 | ✅ (新) | ✅ (新) | — | ✅ (新) | ✅ (新) |
+| 插入 easeOutCubic | ✅ (新) | ✅ (新) | — | — | — |
+| 移除 easeInCubic | ✅ (新) | ✅ (新) | — | — | — |
+
+### 131.5 修改文件清单
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `lib/common/widgets/card_press_effect.dart` | **新建** | 通用卡片按压/hover/高光共享组件 |
+| `lib/common/widgets/implicitly_animated_list.dart` | 修改 | +`insertCurve`/`removeCurve` 参数，默认 `easeOutCubic`/`easeInCubic` |
+| `lib/pages/widgets/article_card.dart` | 重构 | 移除内联按压逻辑，套 `CardPressEffect`；删除 `_GlassHighlight` |
+| `lib/pages/timeline/filter_review_page.dart` | 重构 | `_MacReviewRow` 去掉 `InkWell` → 套 `CardPressEffect`；修复 `_scrollToArticleWhenReady` 跳动 |
+
+### 131.6 关键设计决策
+
+1. **hover 高光颜色**：用和 press 相同的黑白玻璃色（而非 primary），alpha 降到 0.05。避免与 `isSelected` 的 `primaryContainer` 背景色混淆。
+2. **选中脉冲效果**：最初实现了键盘 `←`/`→` 切换文章时触发按压脉冲动画，但用户实测后觉得不好，**最终移除**。`CardPressEffect` 中清理了 `selectionPulse` 参数和 `_isPulsing`/`_triggerPulse` 等全部脉冲相关代码。
+3. **_MacReviewRow 右侧按钮**：保留/移除 `IconButton` 保持自己独立的 Material hover，不受卡片级 `CardPressEffect` 影响。
+4. **滚动跳动修复策略**：没有移除 `ScrollUtils.ensureVisible`（它已有 `addPostFrameCallback` 保护），而是让它在 attempt 0 强制等待 220ms。这样后续 attempt 1-4 的查 key 逻辑和原来行为一致，只是首次调用有保护性延迟。
+
+### 131.7 后续优化建议
+
+1. 如果 hover alpha 0.05 仍然不够明显，可调到 0.06–0.08。当前 press=0.06/hover=0.05。
+2. timeline page 的 `_scrollToArticle()` 使用 `addPostFrameCallback` 一次调用，若后续也出现跳动，可参考 filter review 页面加保护延迟。
+3. 移动端 `Dismissible` 左滑/右滑时，`ArticleCard` 的按压缩放理论上也会触发；如果觉得干扰手势，可给移动端 `CardPressEffect` 传 `enablePress: false`。
+
+<a id="legacy-136"></a>
+
+## 136. 修复 macOS 卡片进出场动画闪现问题 (2026-06-10)
+
+### 136.1 需求与问题描述
+用户反馈：**在 macOS 端，卡片的进出场动画（特别是双击或被标记已读等操作导致的列表项移除动画）有时会完全失效，直接“闪现”消失或突兀变动。**
+
+### 136.2 问题定位与分析
+经过排查 `timeline_page.dart` 和 `ImplicitlyAnimatedList` 及底层滚动逻辑，导致动画“闪现”的根本原因有两个，且两者可能叠加出现：
+1. **组件状态丢失导致渲染闪现（影响所有移除操作）**：在移除动画 `_buildRemovedTimelineItem` 中，代码原本为被移除的 `ArticleCard` 分配了一个全新的 `ValueKey`。这导致 Flutter 将旧卡片（带有 `GlobalKey`）销毁并瞬间重建新卡片，内部所有瞬时状态（如双击残留的 Ripple 水波纹、Hover 状态、CachedNetworkImage 加载状态）全部丢失并重置到默认状态，造成退出动画开始瞬间的突兀闪烁。
+2. **滚动补偿与移除动画的物理冲突（特指双击场景）**：在 `_handleMacArticleTap` 的双击处理逻辑中，程序会通过 `_selectRelativeArticle(1)` 选中下一篇文章，并触发 `ScrollUtils.ensureVisible` 强制列表向下滚动 250ms 以对齐下一篇文章。与此同时，当前文章被标记已读触发移除动画，下方文章自然向上滑动收缩。两股相反的物理运动同时发生，导致视口剧烈跳动，使得正在执行缩小动画的卡片瞬间飞出可视区域，视觉上呈现出“毫无动画直接消失”。
+
+### 136.3 修复实现
+1. **复用 `GlobalKey` 以维持退出动画状态**：在 `_buildRemovedTimelineItem` 中，如果 `_itemKeys` 存在对应的 `GlobalKey`，则在退出动画中直接复用它：`final articleKey = _itemKeys[article.entryId] ?? ValueKey('removed-${article.entryId}');`。这实现了 Element 树的平滑转移挂载（Reparenting），完美保留了卡片的内部渲染状态。
+2. **双击移除时阻断列表跳动滚动**：为 `_selectRelativeArticle` 增加可选参数 `bool scrollTo = true`。在双击逻辑处理时，由于已知当前文章会被移除，下一篇文章会自然滑入视口，因此静默选中下一篇文章而不触发强制滚动：`_selectRelativeArticle(1, scrollTo: false);`。这彻底消除了两股相反物理运动产生的冲突。
+
+### 136.4 补丁：解决掉帧与“M”快捷键带来的冲突
+在初步修复后，进一步发现由于“M”快捷键与双击事件内部的其他同步或平台调用阻塞，偶尔仍会导致动画掉帧或遗漏。
+1. **阻断双击调起浏览器造成的平台线程阻塞**：双击逻辑中调用了 `url_launcher` 打开外部浏览器。这是一个会导致底层平台（Platform Channel）上下文切换的重负载操作，会直接阻塞主线程，导致正在进行的 180ms 移除动画严重掉帧或被完全跨越。**修复方法**：将 `_openOriginalArticle(article)` 包装在 `Future.delayed(200ms)` 中，将其执行推迟到卡片移除动画完全结束之后，确保动画丝滑。
+2. **修复“M”快捷键导致的滚动冲突**：原版中，“M”快捷键被触发时，会调用默认的 `onNext` 方法，而默认的 `onNext`（用于右方向键）执行的是携带 `scrollTo: true` 的滚动选中下一篇逻辑。这导致按下“M”时又一次复现了“移除收缩 vs 向下强制滚动”的物理冲突。**修复方法**：在 `timeline_page.dart` 初始化 `ArticlePageView` 时主动覆盖 `onMKeyPressed`，针对“标记已读”的情景单独执行静默下移 `_selectRelativeArticle(1, scrollTo: false)`，并调用底层 Controller 完成已读操作。
+
+### 136.5 补丁 2：解决连续快速操作时的“闭包变量捕获”导致状态错乱与闪跳
+在修复上述问题后，发现当用户“连续快速按 M 键”或进行其他快速操作，且由于卡片列表缩减自动加载更多文章时，动画效果依然会出现“瞬间消失”或“像PPT一样闪跳”的极端掉帧现象。
+**原理解析与修复**：
+这是由于 `ArticlePageView` 中的 `onMKeyPressed` 回调在构造时，**捕获了当前帧的 `selected` 文章变量**。由于响应式状态（`Obx`）更新 UI 需要经过帧调度（Frame scheduling），当用户手速极快（例如按住 M 键或快速连按），同一帧内 `M` 键被连续触发多次。
+- 第 1 次按下：标记 A 为已读（触发移除动画），代码选中了 B。
+- 第 2 次按下（极快）：此时 UI 还未来得及渲染 B 的右侧详情页，因此 M 键触发的依然是旧闭包！闭包内的 `selected` 依然是 A。代码发现 A 此时已经是“已读”状态，于是执行了 `ac.markAsUnread()`，将 A 又重新放回了列表！
+- 这种极速的移除 -> 恢复 -> 移除的死循环，导致同一个卡片的出入场动画在极短时间内互相覆盖叠加，甚至让 AnimatedList 队列过载，视觉上表现为“疯狂鬼畜闪烁”或“直接消失”。
+**修复方法**：在这两个页面的 `onMKeyPressed` 闭包内，放弃使用外部传入的 `selected` 变量，改为**动态实时从 Controller 状态中获取当前的 `selectedArticle.value`**，从而彻底斩断了多点触控与快速连击带来的 Race Condition。
+
+### 136.6 修改文件清单
+1. `lib/pages/timeline/timeline_page.dart`：
+   - 增加 `_selectRelativeArticle` 的 `scrollTo` 参数。
+   - 在 `isDoubleTap` 判断分支内传入 `scrollTo: false`，并延迟执行 `_openOriginalArticle`。
+   - 在 `_buildRemovedTimelineItem` 中复用 `GlobalKey`。
+   - 为 `ArticlePageView` 注入自定义的 `onMKeyPressed` 处理逻辑。
+2. `lib/pages/timeline/filter_review_page.dart`：
+   - 在 `_buildRemovedReviewRow` 中同步应用了 `GlobalKey` 复用逻辑，解决了审核页面卡片移除时的状态丢失闪烁问题。
+
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.18 -m "- feat: 添加翻译与摘要的失败自动重试机制及设置项\n- style: 优化文章内联链接鼠标悬停反馈为纯净底线样式\n- refactor: 统一所有文章列表卡片的交互特效与物理反馈，修复动画冲突跳动" --push`*
+
+<a id="legacy-139"></a>
+
+## 139. macOS 卡片进出场动画随机闪现的状态机修复（2026-06-10）
+
+### 139.1 背景
+
+用户反馈 macOS 端卡片进出场动画仍会随机失效，表现为双击或其他操作时卡片没有退场动画、直接闪现消失。此前已经有多轮提交修复过双击时的滚动冲突、M 键闭包捕获、GlobalKey 重挂载和按钮图层吞噬事件，但问题仍偶发存在。
+
+本轮重新审查后确认：此前修复覆盖了若干触发路径，但没有修掉 `ImplicitlyAnimatedList` 这个列表动画状态机本身的缺陷，因此随机性仍会保留。
+
+### 139.2 新发现的根因
+
+1. `ImplicitlyAnimatedList._syncItems()` 对“已有项换位置”的处理是 `removeItem(..., duration: Duration.zero)` 加 `insertItem(..., duration: Duration.zero)`。这会跳过动画，视觉上就是闪现。位置变化可能来自刷新、筛选、静默订阅源切换、加载更多后的重排等，并不只来自双击。
+2. 垃圾拦截页 `_removeReviewedArticle()` 会提前 `_itemKeys.remove(entryId)`。等 `AnimatedList.removeItem()` 的 removed builder 真正构建退场行时，原 `GlobalKey` 已经丢失，只能退回 `ValueKey('removed-...')`，这会削弱之前“退场时复用 key 保留状态”的修复。
+3. 当最后一张卡片被移除时，空态 overlay 会立即出现在列表上层。即使退场动画还在进行，空态也可能盖住正在收缩/淡出的卡片，造成“最后一张直接消失”的错觉。
+
+### 139.3 修复实现
+
+`lib/common/widgets/implicitly_animated_list.dart`：
+
+- 新增 `AnimatedItemLifecycle<T>`、`onRemoveStart`、`onRemoveEnd`。
+- 删除已有项移动时的零时长 remove/insert。现在已有项重排只更新内部 `_items` 顺序，不再制造 `Duration.zero` 的删除和插入动画。
+- 真正被移除的项仍走 `removeDuration` 和 `removeCurve`。
+- 新增 `DelayedVisibility`，用于让空态延迟显示，避免覆盖最后一张卡片的退场动画。
+
+`lib/pages/timeline/timeline_page.dart`：
+
+- 新增 `_removingItemKeys`。
+- 在 `onRemoveStart` 中把 live `_itemKeys` 转移到 `_removingItemKeys`，退场动画结束后再释放。
+- `_buildRemovedTimelineItem()` 优先使用 `_removingItemKeys` 中的 key。
+- macOS 时间线空态通过 `DelayedVisibility` 延迟 220ms 显示。
+
+`lib/pages/timeline/filter_review_page.dart`：
+
+- 新增 `_removingItemKeys`。
+- `_removeReviewedArticle()` 不再提前删除 `_itemKeys`。
+- 在 `onRemoveStart` 中统一转移 key，`onRemoveEnd` 中释放。
+- `_buildRemovedReviewRow()` 优先使用 `_removingItemKeys` 中的 key。
+- macOS 垃圾拦截空态通过 `DelayedVisibility` 延迟 220ms 显示。
+
+### 139.4 回归测试
+
+新增 `test/implicitly_animated_list_test.dart`：
+
+1. 删除项时，被删除 item 在退出动画期间仍可见，`onRemoveStart` 和 `onRemoveEnd` 顺序正确。
+2. 仅重排已有项时，不触发 remove 生命周期回调，防止未来重新引入零时长 remove/insert。
+
+### 139.5 已完成验证
+
+```bash
+dart analyze lib/common/widgets/implicitly_animated_list.dart lib/pages/timeline/timeline_page.dart lib/pages/timeline/filter_review_page.dart test/implicitly_animated_list_test.dart
+flutter test --no-pub test/implicitly_animated_list_test.dart
+flutter test --no-pub
+dart analyze lib test
+```
+
+结果均通过。`flutter test` 在沙箱内首次会被 Flutter SDK cache 写入限制拦截，授权后重跑通过。
+
+### 139.6 后续人工验证重点
+
+1. macOS 时间线双击文章：左侧卡片应稳定淡出/收缩，不应直接消失。
+2. macOS 时间线连续按 M：不应出现卡片恢复/移除互相覆盖导致的闪跳。
+3. macOS 垃圾拦截页点击保留/移除，以及按 M/K：最后一张卡片退场时不应被空态直接盖掉。
+4. 切换筛选、静默订阅源入口、刷新后列表重排：已有卡片不应因为位置变化出现零时长闪现。
+
+<a id="legacy-140"></a>
+
+## 140. macOS 时间线 M 键退场动画瞬间结束专项修复（2026-06-10）
+
+### 140.1 用户反馈
+
+用户验证第 139 节修复后反馈：软件已能正常启动，但 macOS 时间线按 `M` 时，卡片退场动画仍会偶发“一瞬间就结束”。双击路径暂未继续验证，本轮只聚焦 `M` 键。
+
+### 140.2 新定位
+
+第 139 节修复的是通用列表动画状态机，但 `M` 键本身仍有两处额外风险：
+
+1. `ArticlePageView._handleHardwareKeyEvent()` 同时接受 `KeyDownEvent` 和 `KeyRepeatEvent`。按住 `M` 或系统产生 repeat 时，会在 180ms 左右的退场动画窗口内连续处理多篇文章，导致多个列表移除动画叠在一起，视觉上像第一张卡片瞬间消失。
+2. 时间线分栏里的 `onMKeyPressed` 通过右侧详情页的 `ArticleController.markAsRead()` 来驱动左侧列表移除。该流程会先切换选中项、重建/销毁右侧 `ArticlePageView` 与旧 `ArticleController`，再由旧 controller 触发时间线列表状态变更。右侧生命周期和左侧列表移除交织在同一帧内，仍可能压缩退场动画的可见时间。
+
+### 140.3 修复实现
+
+`lib/pages/article/article_page.dart`：
+
+- `M` 键只响应真正的 `KeyDownEvent`，遇到 `KeyRepeatEvent` 直接返回 handled，不再重复触发标记已读。
+
+`lib/pages/timeline/timeline_page.dart`：
+
+- 新增 `_isHandlingMacReadShortcut`，用 220ms 冷却窗口防止连续 `M` 事件压进同一个退场动画周期。
+- 新增 `_successorAfterRemoving()`，在移除当前文章前先计算下一篇或上一篇继任文章。
+- 新增 `_handleMacReadShortcut()`，由时间线页面自己完成：
+  1. 读取当前选中文章；
+  2. 如果文章已读，则继续使用当前右侧 `ArticleController.markAsUnread()` 路径恢复未读；
+  3. 如果文章未读，先静默选中继任文章；
+  4. 记录撤销；
+  5. 调用 `TimelineController.markAsReadLocal()` 触发左侧列表移除；
+  6. 写入 `ReadSyncService` 已读同步队列并后台同步。
+
+这样 `M` 键的左侧退场动画不再依赖即将被销毁的右侧详情 controller，事件重复也被限制在动画窗口外。
+
+### 140.4 后续验证重点
+
+1. macOS 时间线单按 `M`：当前卡片应稳定淡出/收缩，右侧切到继任文章。
+2. 连续按 `M`：应按 220ms 节奏逐篇处理，不应一瞬间吞掉多张卡片。
+3. 按住 `M`：系统 repeat 不应在一次退场动画内重复处理。
+4. 已读视图或全部视图中对已读文章按 `M`：恢复未读行为仍应可用。

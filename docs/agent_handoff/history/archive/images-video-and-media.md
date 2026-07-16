@@ -1,0 +1,516 @@
+# 历史归档：图片、视频与媒体交互
+
+> 本页保存从旧 `history/timeline.md` 迁移来的原始历史证据。内容可能描述已经废弃的实现；当前事实以专题页和 `history/decisions.md` 为准。
+
+<a id="legacy-024"></a>
+
+## 24. 文章图片过大与无法全屏修复（2026-05-18）
+
+### 24.1 问题
+
+1. 文章正文图片恢复为 `flutter_html` 默认渲染后，尺寸约束丢失，出现超大图片。
+2. 先前可点击图片进入全屏预览的交互被回退，正文图片无法点开。
+
+### 24.2 修复
+
+1. 在 `ArticlePage` 的 `Html` 渲染中恢复 `ImageExtension` 自定义图片渲染：
+   - 使用 `_ArticleInlineImage` 控件统一渲染正文图片；
+   - 增加最大高度约束（`maxHeight: 320`）和圆角容器，避免超大撑开布局。
+2. 恢复图片点击能力：
+   - 正文图片点击触发 `controller.openImagePreview(imageUrl)`；
+   - 跳转到 `ImageGalleryPage` 全屏查看，支持缩放与多图切换。
+3. 保留图片加载稳态策略：
+   - 使用 `CachedNetworkImage` + 统一请求头（`ArticleImageService.httpHeaders`）；
+   - 失败态支持点击重试（retry stamp）。
+
+### 24.3 影响文件
+
+- `lib/pages/article/article_page.dart`
+
+<a id="legacy-032"></a>
+
+## 32. 视频播放支持（2026-05-19）
+
+### 32.1 问题
+
+Social 条目（Twitter）中的 `<video>` 标签无法播放，显示静态占位符。两类格式：
+- 直接 `src`：`<video src="..." poster="..." width="..." height="...">`
+- `<source>` 子元素：`<video poster="..."><source src="..."></video>`
+
+### 32.2 Folo 官方方案
+
+Folo 桌面端用 HTML5 `<video>` 标签直接播放 mp4，移动端用 `expo-video` 包。不依赖第三方视频平台 SDK。
+
+### 32.3 实施
+
+1. **Parser** (`html_chunk_parser.dart`)
+   - `<video>` 含 `<source>` 子元素时从中提取 `src`
+   - 提取 `poster` 属性存入 `HtmlChunk.posterSrc` 字段
+   - `HtmlChunk` 新增 `posterSrc` 字段
+
+2. **Renderer** (`html_chunk_card.dart`)
+   - `_buildMediaPlaceholder` 改为 `Stack` 布局：
+     - 底层：`CachedNetworkImage` 加载 poster 缩略图（经过 Folo 图片代理）
+     - 中层：半透明黑色遮罩
+     - 顶层：圆形播放按钮（`Icons.play_arrow_rounded`）
+   - 点击 → `url_launcher` 打开 mp4 URL（系统播放器处理）
+
+### 32.4 影响文件
+
+- `lib/utils/html_chunk_parser.dart` — `HtmlChunk` + `posterSrc`，`_processElement` 视频分支
+- `lib/pages/article/widgets/html_chunk_card.dart` — `_buildMediaPlaceholder` 重写
+
+### 32.5 预实验数据
+
+| 样本 | src | poster | dims |
+|------|-----|--------|------|
+| `social_video_12` (direct src) | ✅ | ✅ | 1500×844 |
+| `social_video_14` (direct src) | ✅ | ✅ | 1920×1080 |
+| `social_video_18` (`<source>`) | ✅ | ❌ | null×null |
+
+### 32.6 验证结果
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| 新智元 86 图文章 | 33 张图片 | 80 张图片 (+142%) |
+| newsletter 17 图 | 13 张图片 | 16 张图片 (+23%) |
+| 新智元空标题 | 14 处间隙 | 0 处 |
+| 解析性能 | ~15ms | ~15ms（持平） |
+| dart analyze | 0 issues | 0 issues |
+
+<a id="legacy-035"></a>
+
+## 35. 图片画廊修复（2026-05-20）
+
+- **双击放大**：GestureDetector 从 InteractiveViewer 外层移到里层，避免手势冲突；缩放公式修正为 translate→scale→translate
+- **捏合缩放**：InteractiveViewer 移到最外层，不再被 GestureDetector 阻止
+- **图片全灰**：移除 AnimatedContainer + Opacity 包裹，直接使用 Scaffold
+- **右下角"点按查看"**：删除
+- **图片预加载**：文章打开时隐藏 1px Stack 同时发出所有图片请求
+- **画廊分母错误**：审核页跳转文章时 sequence 改送审核列表自身，不再查全库
+
+<a id="legacy-040"></a>
+
+## 40. 图片修复补充（2026-05-20）
+
+- `i.qbitai.com` 图片需 `Referer: https://www.qbitai.com/` → 加代理规则走 `img.folo.is`
+- 图片画廊双击缩放加 `Matrix4Tween` + `AnimationController` (300ms easeOut)
+- `normalizedContent` / `imageUrls` 从 `late final` 改为普通字段，支持 inbox 异步补内容
+
+<a id="legacy-095"></a>
+
+## 95. macOS 全屏图片 Esc 键退出优化 (2026-06-06)
+
+### 95.1 需求背景与问题
+用户反馈：在 macOS 环境下阅读文章时，如果点击正文中的图片进入了沉浸式全屏浏览模式，此时按下 `Esc` 键，期望的行为是仅退出全屏图片，回到文章详情。但实际表现为不仅退出了图片全屏，连带着整篇文章也被关闭了。
+
+### 95.2 问题产生原因
+在 `lib/pages/article/article_page.dart` 中，为了支持 macOS 分栏模式（`isSplitView == true`）下文章视图的全局快捷键操作（如方向键滚动、快捷标记已读等），`ArticlePageView` 注册了一个全局硬件键盘监听器 `HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent)`。
+该监听器由于是全局的，它在接收到 `Esc` 按键时，不论当前应用最顶层的 UI 是不是文章视图，都会强行拦截该按键并调用 `_closeArticle()`。因此，当图片通过 `HeroDialogRoute` 被压入新路由全屏展示时，按下 `Esc` 依然触发了底层的 `_closeArticle()`。
+
+### 95.3 修复方案与权衡
+由于这是由于底层的全局监听器“越权”拦截导致的问题，修复思路在于让 `ArticlePageView` 能够感知自身的路由层级。
+
+我们在 `_handleHardwareKeyEvent` 的顶部追加了层级校验：
+```dart
+if (!mounted) return false;
+final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+if (!isCurrentRoute) {
+  return false;
+}
+```
+**逻辑说明**：
+当图片全屏打开时，Flutter 会向 `Navigator` 压入一个新的 `ModalRoute`。此时底层的 `ArticlePageView` 的 `ModalRoute.of(context)?.isCurrent` 会变为 `false`。通过这层检查，全局监听器在此状态下将放弃对键盘事件的消费（返回 `false`），将 `Esc` 键交还给顶层的图片查看器处理（Flutter 原生的 `PageRoute` 默认支持通过 Esc pop 自身），从而完美实现了仅关闭图片全屏的正确交互逻辑。
+
+**为什么必须加 `!mounted` 校验**：
+这是一个必要的防御性编程细节。在极短的生命周期交替瞬间（例如快速关闭分栏页面并同时按下键盘），`context` 可能因组件被系统卸载（unmounted）而失效，此时强行读取 `ModalRoute.of(context)` 会导致框架异常。加上此校验能确保应用绝对稳定。
+
+### 95.4 给后续接手 Agent 的提醒
+由于该项目的桌面端体验深度依赖全局键盘快捷键监听，在未来如果要为文章视图增加其他的全局快捷键（比如快速分享 `Cmd+S` 等），请务必保留这个前置路由检查逻辑。凡是有弹层或子路由叠加在上方时，下层的快捷键行为理应让步，否则极易引发类似的操作冲突问题。
+
+<a id="legacy-096"></a>
+
+## 96. macOS 物理播放键与空格键视频控制 (2026-06-06)
+
+### 96.1 背景与需求
+在之前的版本中，macOS 端播放视频（包括内联视频和全屏视频）无法使用键盘控制。用户希望能够使用键盘的物理媒体播放键和空格键来控制视频的播放/暂停，具体要求为：
+1. **物理播放键**：采用全局监听模式。
+2. **空格键**：采用“组件焦点模式”，只有在用户点击或交互选中视频后，空格键才会控制视频播放，避免在主页滚动时按空格键误触视频播放。
+
+### 96.2 实现细节
+针对 `lib/pages/article/widgets/inline_video_player.dart` 和 `fullscreen_video_page.dart`，我们采取了如下轻量级 Flutter API 拦截方案：
+1. **全局物理键监听**：在 `initState` 中通过 `HardwareKeyboard.instance.addHandler` 注入全局按键监听。当捕获到 `LogicalKeyboardKey.mediaPlayPause` 时，如果视频正在播放，或者该视频当前拥有焦点，就触发 `_togglePlayPause()`。这防止了页面上多个暂停的视频源在按下物理键时同时开始播放。
+2. **焦点模式空格键控制**：在 UI 的交互响应层（`GestureDetector` 或 `Stack` 外部）包裹了 `Focus` 组件，并为其分配了独立的 `FocusNode`。在 `onKeyEvent` 中拦截 `LogicalKeyboardKey.space`。只有当用户用鼠标点击视频区（例如呼出控制栏或点击中央播放键）触发了 `_focusNode.requestFocus()` 后，按下空格键才会被该视频组件拦截并专用于控制播放，从而不会干扰外层列表正常的空格向下滚动行为。
+
+### 96.3 注意事项
+- 方案未引入任何第三方快捷键库或系统级媒体控制库，全部依赖于 Flutter 自带的 `Focus` 树和 `HardwareKeyboard`，确保了轻量级、低副作用。
+- 如果未来增加其他快捷键需求，请务必遵循“会与浏览器或列表滚动起冲突的按键（如空格、上下键）走焦点树捕获，不冲突的专用媒体按键走全局捕获”的原则。
+
+<a id="legacy-099"></a>
+
+## 99. 重构 macOS 视频播放器按键控制 (2026-06-06)
+
+### 99.1 需求与问题背景
+在第 96 节中，我们为了避免与列表的“空格键向下滚动”起冲突，将视频的空格键控制绑定在了 `FocusNode` 上。这导致了严重的体验问题：只有在视频严格拥有系统焦点（通常是点击视频弹出控制条的那 3 秒内）时，空格键才能控制播放。一旦焦点稍微流失（比如点击了文章空白处），空格键就立刻失效。
+经过与用户的讨论，用户明确表示**不需要“空格键向下滚动文章”的功能**。因此，我们决定打破原有的 `Focus` 焦点局限，采用全局拦截的方式重构播放器的按键响应逻辑。
+
+### 99.2 实现思路与多视频冲突处理
+既然放弃了局部焦点拦截，我们将空格键的监听提升到了全局的 `HardwareKeyboard.instance.addHandler` 中。但这引入了一个新问题：如果在同一篇文章中存在多个内联视频（`InlineVideoPlayer`），全局按下空格或媒体键时，应用如何知道该播放/暂停哪个视频？
+
+为此，我们引入了**最后活跃状态（Active Player）** 追踪机制：
+1. **状态追踪**：在 `_InlineVideoPlayerState` 中增加静态变量 `static _InlineVideoPlayerState? activePlayer;`。
+2. **状态绑定**：无论是视频初始化播放，还是用户点击了该视频的控制条/播放按钮，都会触发 `activePlayer = this;`。销毁时若自己是活跃对象则置为 `null`。
+3. **精准打击**：在触发全局键盘事件（空格键或 `LogicalKeyboardKey.mediaPlayPause`）时，所有视频实例都会接收到该事件，但**只有 `activePlayer == this` 的那个实例才会真正拦截并响应指令**，其余实例返回 `false`。
+
+全屏播放器 (`fullscreen_video_page.dart`) 因为必然独占屏幕，无需追踪状态，直接在全局拦截空格与媒体键即可。旧的 `Focus` `onKeyEvent` 拦截代码均被安全移除。
+
+### 99.3 关于 macOS 原生媒体控制的遗留讨论
+对于 macOS 原生的物理播放键（如 F8）无法在应用处于后台时生效的问题，我们与用户进行了详细分析：
+因为 Flutter `video_player` 插件本身并未在 macOS 层面接入 `MPRemoteCommandCenter`（即系统的“正在播放”控制中心），导致物理媒体键通常被系统级应用（如 Apple Music）拦截，不会分发给 Flutter。
+解决此问题的代价是需要引入额外的重量级原生桥接插件。鉴于本次已完美在前台彻底解决了按键识别问题，暂不引入系统级的媒体接管方案，后续视需求严重程度再做定夺。
+
+<a id="legacy-120"></a>
+
+## 120. macOS 图片右键复制功能 (2026-06-08)
+
+### 120.1 需求背景
+
+在 macOS 上对图片右键点击时没有任何反应，无法复制图片到剪贴板。用户希望在图片画廊和文章内联图片上都支持 macOS 右键菜单，交互方式与现有 macOS 右键模式（article_card 中的 `onSecondaryTapDown` + `showMenu`）完全一致。
+
+### 120.2 讨论与决策
+
+用户确认三项关键设计选择：
+1. **生效范围**：图片画廊和文章内联图片都支持右键菜单
+2. **复制行为**：复制图片数据（bitmap）到系统剪贴板，而非仅复制 URL（原有"复制链接"选项仍在）
+3. **移动端**：仅 macOS 右键，mobile 长按菜单保持不变
+
+### 120.3 技术方案
+
+#### 核心挑战：Flutter 不支持图片剪贴板
+Flutter 的 `Clipboard` 类只支持 `ClipboardData(text: ...)`，无法写入图片数据。最终方案采用 **MethodChannel + Swift NSPasteboard**（方案 A）：
+- Dart 侧通过 `MethodChannel('com.autofolo/image_clipboard')` 发送图片 bytes
+- macOS Swift 侧用 `NSPasteboard.general.clearContents()` + `NSPasteboard.general.writeObjects([NSImage])` 写入
+- 复用项目中已有的 MethodChannel 模式（参考 `AppBadger`、`MoveToBackground`）
+
+#### 三个改动点
+
+| 位置 | 改动 |
+|------|------|
+| **图片画廊** `image_gallery_page.dart` | `GestureDetector` 新增 `onSecondaryTapDown`（仅 macOS），弹出 `showMenu` 菜单（复制图片 / 分享 / 保存 / 复制链接） |
+| **内联图片** `html_chunk_card.dart` `_ArticleInlineImage` | 包裹 `GestureDetector.onSecondaryTapDown`（仅 macOS），共用 `showInlineImageContextMenu` 函数 |
+| **HTML 内嵌图片** `html_chunk_card.dart` `ImageExtension._imageExtension` | 已有 GestureDetector（onTap）增加 `onSecondaryTapDown`（仅 macOS），共用同一菜单函数 |
+
+#### 菜单函数共享
+新增顶层函数 `showInlineImageContextMenu()` — 展示 2 项菜单（复制图片 / 复制链接），下载图片后用 `ImageClipboard.copyImageToClipboard()` 写入系统剪贴板，同时给图片画廊和所有内联图片复用。
+
+### 120.4 修改文件清单
+
+#### 新增
+- `lib/utils/image_clipboard.dart` — MethodChannel 封装 + Dio 下载工具
+
+#### 修改
+- `lib/pages/article/widgets/image_gallery_page.dart` — macOS 右键菜单 + `_copyImage()` + `_showImageContextMenu()`
+- `lib/pages/article/widgets/html_chunk_card.dart` — `_ArticleInlineImage` 和 `ImageExtension` 添加右键菜单 + 顶层 `showInlineImageContextMenu()` 函数
+- `macos/Runner/AppDelegate.swift` — 新增 `com.autofolo/image_clipboard` MethodChannel 处理器
+
+### 120.5 交互模式
+
+| 平台 | 图片画廊 | 内联图片 |
+|------|---------|---------|
+| **macOS** | 右键 → `showMenu` 光标位置弹出（复制图片/分享/保存/复制链接） | 右键 → `showMenu` 光标位置弹出（复制图片/复制链接） |
+| **移动端** | 长按 → BottomSheet（不变） | 无菜单（不变） |
+
+### 120.6 验证结果
+
+```bash
+flutter analyze lib/utils/image_clipboard.dart lib/pages/article/widgets/image_gallery_page.dart lib/pages/article/widgets/html_chunk_card.dart
+# No issues found!
+```
+
+---
+
+<a id="legacy-133"></a>
+
+## 133. 修复极低高度分隔符图片被错误拉伸及过度占位问题 (2026-06-10)
+
+### 133.1 问题现象与背景
+1. **现象**：文章正文中，高度极低（常作为分隔符）的图片会被强行放大放入一个较不细长、高度更大的容器中，导致上下产生严重留白，影响排版观感。
+2. **历史背景**：第 128.4 节记载，为了避免在懒加载的 `SliverList` 中因为图片加载完成的瞬间尺寸变化引发 `maxScrollExtent` 不断修正（进而导致 macOS 滚动条跳动和进度条抖动），旧版代码在 `html_chunk_card.dart` 中实行了极其严格的高度锁定策略：
+   - 使用 `_boundedImageHeight` 对所有计算出的高度强行施加最低 `40.0px` 的约束。
+   - 在 `CachedNetworkImage` 中强制最终的实际图片与占位符一样，使用固定 `height`，彻底封死其根据实际 intrinsic size 自然缩放的可能。
+3. **架构变迁与思路纠偏**：
+   - 目前，文章正文渲染已不使用动态高度变动的懒加载 `SliverList`，而是使用 `SliverToBoxAdapter` 配合 `Column` 进行一次性全量首帧挂载。
+   - 这意味着，在完全加载完毕后，整个列表的高度是静态而准确的，不会发生随着滑动而持续跳动的恶性 Bug。
+   - 与用户核对后明确共识：**加载瞬间的单次高度重排（即所谓跳变）是可以接受的，只要完全加载后后续的滑动不再抖动即可**。因此，旧策略用破坏极端图片（如分隔符）排版比例的硬编码约束去防范一个在当前架构下已不构成持续性体验问题的加载瞬间跳动，属于过度防御。
+
+### 133.2 修复实施与效果
+1. **解除高度硬约束**：修改了 `_boundedImageHeight`，将 `40.0` 的最低高度限制降为 `0.0`。现在带有 HTML 宽高的超细长分隔符图片可以精准换算出真实的微小高度（如 5px、10px），并完美紧凑渲染，不留任何多余白边。因为这类图片带有宽高信息，占位符与最终加载的高度始终一致，全程零跳变。
+2. **释放固有自然高度**：移除了 `_ArticleInlineImage` 及 `_imageExtension` 中 `CachedNetworkImage` 外层的 `height: displayHeight` 强制绑定，并去除了 `imageBuilder` 内层对应包裹尺寸。
+3. **保障加载时合理占位**：为 `placeholder` 和 `errorWidget` 单独包覆了 `SizedBox(height: displayHeight)` 以应用预估或兜底高度。如此一来：
+   - 对于无任何尺寸指引的图片，初期按 fallback 保守高度（如 180~420px）先撑起版面。
+   - 图片加载完成后恢复自由尺寸，由内部 `Image` 自身固有的 `intrinsic size` 取代固定占位高度。这会在一瞬间发生一次合理的高度伸缩调整，换取了绝对正确的最终排版呈现。
+
+<a id="legacy-137"></a>
+
+## 137. 修复视频播放器总时长显示错误（进位异常）
+
+### 137.1 需求描述
+
+用户反馈，应用中视频播放时总时长（分母）显示经常异常。例如，一个原本只有几分钟的短视频，界面的总时长显示为一个多小时（如 `3:03:00`）。用户推测是格式化时进位计算出现了逻辑问题，要求排查并修复该问题。
+
+### 137.2 根本原因定位
+
+通过审查代码，发现该问题在 `lib/pages/article/widgets/fullscreen_video_page.dart` 和 `lib/pages/article/widgets/inline_video_player.dart` 中都有涉及。原本用于将 `Duration` 格式化为字符串的内部函数 `_formatDuration` 实现如下：
+
+```dart
+String _formatDuration(Duration d) {
+  final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final secs = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '${d.inMinutes}:$mins:$secs';
+}
+```
+
+**问题点**：
+- 第一部分的插值 `${d.inMinutes}` 本意应为“小时数”（对应 `d.inHours`），却错误地使用了 `d.inMinutes`（即视频的总分钟数）。
+- 第二部分 `mins` 使用了对 60 取余的分钟数，第三部分 `secs` 正常取余计算秒数。
+
+这就导致对于一个时长 3 分钟的视频（即 180 秒），`d.inMinutes` 为 3，`mins` 为 03（因为 `3 % 60 = 3`），拼接结果变为 `3:03:00`。在视觉上，这就将 3 分钟的视频错误展示成了 3 小时 3 分钟。
+
+### 137.3 修复实现
+
+针对该格式化逻辑，做出了彻底的修正与代码重构优化：
+
+1. **统一抽离公共扩展**：
+   在 `lib/utils` 目录下新增 `duration_extension.dart`，为 Dart 的 `Duration` 类增加 `toVideoFormatString()` 方法，消除两个播放器组件内的冗余代码。
+
+2. **动态显隐小时位数**：
+   对于长度不到 1 小时的视频，仅显示 `M:SS`（例如 `3:05`）。对于超过 1 小时的长视频，才进位显示 `H:MM:SS`（例如 `1:05:30`）。
+   代码逻辑：
+   ```dart
+   extension DurationVideoFormat on Duration {
+     String toVideoFormatString() {
+       final hours = inHours;
+       final mins = inMinutes.remainder(60).toString().padLeft(2, '0');
+       final secs = inSeconds.remainder(60).toString().padLeft(2, '0');
+
+       if (hours > 0) {
+         return '$hours:$mins:$secs';
+       } else {
+         final m = inMinutes.remainder(60).toString();
+         return '$m:$secs';
+       }
+     }
+   }
+   ```
+
+3. **重构播放器组件**：
+   删除了 `FullscreenVideoPage` 和 `InlineVideoPlayer` 中的私有方法 `_formatDuration`。
+   在使用时，直接调用扩展：`'${pos.toVideoFormatString()} / ${dur.toVideoFormatString()}'`。
+
+### 137.4 修改文件清单
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `lib/utils/duration_extension.dart` | **新建** | 增加 `Duration.toVideoFormatString()` 全局扩展方法 |
+| `lib/pages/article/widgets/fullscreen_video_page.dart` | 修改 | 删除冗余函数，引入并使用新的时间格式化扩展 |
+| `lib/pages/article/widgets/inline_video_player.dart` | 修改 | 删除冗余函数，引入并使用新的时间格式化扩展 |
+
+<a id="legacy-141"></a>
+
+## 141. macOS 文章正文与图片宽度可配置（2026-06-19）
+
+### 141.1 背景
+
+用户在外接显示器的大窗口下阅读文章时发现：右侧文章详情区域被撑得很宽，正文图片会等比例放大到接近占满屏幕；同时 macOS 端图片在非 hover 状态下也会显示一层专门的背景框，视觉上过重。
+
+讨论后确认：
+
+1. 图片不应无条件占满横向宽度。
+2. 如果 HTML 中有明确的 `width` 或 `style="width: ...px"`，应尊重图片自己的显示宽度，不主动放大到正文最大宽度。
+3. 如果图片没有明确宽度，则按正文最大宽度显示。
+4. 文字正文与图片应共用一个可配置的最大宽度，默认值先定为 `720px`，便于后续用户实测调整。
+5. macOS 非 hover 状态下不显示图片专门背景框；hover 时再给轻微边框/背景反馈。
+
+### 141.2 实现
+
+`lib/common/constants/constants.dart`：
+
+- 新增 `AppConstants.defaultArticleContentMaxWidth = 720`。
+- 新增 `StorageKeys.articleContentMaxWidth = 'article_content_max_width'`。
+
+`lib/pages/settings/settings_page.dart`：
+
+- 新增“阅读排版”设置区。
+- 新增“正文最大宽度（px）”输入框。
+- 允许范围：`480～1200`。
+- 保存到 `GStorage.setting[StorageKeys.articleContentMaxWidth]`。
+
+`lib/pages/article/article_page.dart`：
+
+- 新增 `_articleContentMaxWidth()`，macOS 从设置读取正文最大宽度并 clamp 到 `480～1200`。
+- Android 仍保持屏幕宽度策略，不受该设置影响。
+- 标题/元数据区域和正文 chunk 区域都包进同一个 `Center + ConstrainedBox(maxWidth: maxWidth)`，保证文字与图片使用同一阅读宽度。
+
+`lib/pages/article/widgets/html_chunk_card.dart`：
+
+- 新增 `_stylePixelWidth()` 和 `_resolvedImageWidth()`。
+- 图片显示宽度规则：
+  - 有显式图片宽度：`min(显式宽度, 正文最大宽度)`。
+  - 无显式图片宽度：使用正文最大宽度。
+  - 表情/内联小图保留小尺寸，不作为块级大图居中。
+- macOS 普通正文图片默认透明背景，只有 hover 时显示轻微背景与边框。
+- 圆角包裹最终图片显示区域，而不是整行宽度。
+
+### 141.3 验证
+
+已执行：
+
+```bash
+dart format lib/common/constants/constants.dart lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/pages/settings/settings_page.dart
+dart analyze lib/common/constants/constants.dart lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/pages/settings/settings_page.dart
+```
+
+结果：`No issues found!`
+
+### 141.4 后续计划
+
+用户随后提出需要规避与 Folo 官方混淆，但不打算隐藏本项目是基于 Folo/Folo API 的个人二次开发客户端，也暂不要求改应用名 `Auto Folo` 或图标。当前共识：
+
+1. 应优先整改 `com.folo.*` 这类官方域名式命名空间，例如 Android `applicationId`、macOS `PRODUCT_BUNDLE_IDENTIFIER` 和 copyright。
+2. 可以保留 `Auto Folo` 展示名和当前差异化图标，但 README/设置页应增加“非官方个人二次开发客户端，不隶属于 Folo/RSSNext”的说明。
+3. 改 Android `applicationId` 后，新包会作为第二个应用安装，不能覆盖旧包；旧设置不会自动共享。
+4. 改 macOS bundle id 后，新 app 会使用新的 sandbox 容器，旧设置也不会自动共享。
+5. 为迁移便利，下一步计划先做“导出配置到剪贴板 / 从剪贴板导入配置”。导出格式使用 JSON 字典，不加额外前缀。
+
+配置导入导出的范围共识：
+
+- 导出“偏好和密钥”，不导出“内容和历史”。
+- 应导出：Folo token/client/session、DeepSeek API key、LLM 参数、Prompt、自动重试、已读拉取窗口、正文最大宽度、角标策略、`feed_auto_translate_*`、`feed_silent_*`、`feed_auto_readability_*`。
+- 不导出：`readability_fetched_*`、`inbox_detail_fetched_*`、`localCache`、`readStatus`、`articleDb`、`translations`、`summaries`、`readHistory`。
+
+<a id="legacy-145"></a>
+
+## 145. 文章页目录、摘要/翻译操作与 Android 打开过渡优化（2026-06-26）
+
+### 145.1 本轮背景
+
+用户希望继续打磨文章阅读页，重点包括：
+
+- 摘要与翻译属于同类 LLM 操作，但按钮和菜单体验不够平行。
+- Android 端点开文章时，从右往左进入详情页的过程中会卡顿。
+- macOS 文章详情中已经有初版目录功能，后续希望参考 `reference/liquid_glass_widgets` 的交互思路继续改进，但当前阶段不引入或依赖该参考工程。
+
+重要边界：
+
+- 参考工程只作为设计和实现参考，不作为 package、submodule 或外部依赖引入。
+- 当前仓库 clone 到任意地方仍应独立可构建。
+- 真正 shader 级液态玻璃属于后续 UI 系统重构，不混入本轮小版本。
+
+### 145.2 摘要/翻译体验平行化
+
+涉及文件：
+
+- `lib/pages/article/article_page.dart`
+- `lib/pages/widgets/article_card.dart`
+- `lib/pages/settings/settings_page.dart`
+
+改动要点：
+
+- 文章详情顶部 toolbar 中，已有摘要时点击摘要按钮改为显示/隐藏摘要卡片，而不是重新生成摘要。
+- `ArticleController` 增加 `showSummary` 状态；载入已有摘要或摘要生成成功后默认显示。
+- 时间线文章卡片的移动端长按菜单与 macOS 右键菜单补齐摘要操作：
+  - 生成摘要
+  - 重新摘要
+  - 删除摘要
+- 翻译操作保持同类结构：
+  - 翻译文章
+  - 重新翻译
+  - 删除翻译
+- 手动翻译成功判断改为检查 `record.translatedContent`，避免服务端返回错误记录时仍提示成功。
+- LLM 设置保存提示从“新翻译将从下一次请求生效”改为“新配置将从下一次请求生效”，以同时覆盖翻译和摘要。
+
+### 145.3 Android 打开文章过渡优化
+
+涉及文件：
+
+- `lib/pages/article/article_page.dart`
+
+问题来源：
+
+- 早前为了稳定 macOS 滚动条和顶部阅读进度条，正文渲染从分批构建回到完整 `Column` 构建。
+- 这对 macOS 稳定性有利，但 Android 打开文章详情时会在 route 进入动画期间同时构建大量正文块，导致右向左进入动画出现卡顿。
+
+最终策略：
+
+- macOS 保持完整正文同步构建，避免重新引入滚动条/进度条跳动。
+- 非 macOS 平台进入文章页后延迟约 350ms 再挂载正文主体，让 route 转场先完成。
+- 延迟期间复用“正在排版内容...”加载态。
+
+注意：
+
+- 没有改回虚拟列表或分批列表，因为用户明确担心这会重新导致 Android/macOS 顶部进度条跳动。
+- 这是一个过渡期性能折中，后续如果要彻底优化长文，需要重新设计稳定高度估算或预布局策略。
+
+### 145.4 macOS 目录功能改进
+
+涉及文件：
+
+- `lib/pages/article/article_page.dart`
+- `lib/pages/article/widgets/html_chunk_card.dart`
+
+已实现：
+
+- 仅 macOS 显示悬浮目录按钮/面板。
+- 目录从当前展示的正文块提取标题：
+  - 原文模式使用 `controller.chunks`
+  - 翻译模式且有翻译块时使用 `controller.translatedChunks`
+- 标题文本使用 HTML fragment 解析后提取纯文本。
+- 目录项支持 hover 胶囊高亮、按下反馈、当前阅读位置常驻高亮。
+- 目录展开动画去掉 `AnimatedSwitcher`，改为固定右上角锚点的自包含 morph：
+  - 从 34px 按钮连续长成 304px 面板。
+  - 右上锚点固定，避免展开按钮闪到面板内部。
+  - 展开前半段只绘制玻璃表面，目录内容在后半段再淡入，降低瞬时构建开销。
+  - 动画过程中先使用较轻 blur，接近完成后恢复完整毛玻璃强度。
+- 点击目录项后，焦点回到文章页，继续保证 macOS 左右键、M 键等快捷键可用。
+
+定位修正：
+
+- 用户验证发现：点击目录项后，标题有时落在屏幕中上部而不是预期顶部附近，并且高亮会短暂落在上一个目录项。
+- 原因是旧锚点绑在整个标题卡片外层，而 `HtmlChunkCard` 对 heading 有 `top: 24` 的标题前留白；“卡片顶部”和“标题文字顶部”不是同一个视觉位置。
+- `HtmlChunkCard` 增加 `contentAnchorKey`，让目录锚点绑定到标题内容本身。
+- 点击跳转改为基于标题内容当前屏幕坐标与统一参考线的差值计算目标滚动偏移。
+- 当前目录高亮也使用同一条参考线，避免跳转后高亮和实际标题不同步。
+
+### 145.5 参考工程相关判断
+
+本轮阅读了 `reference/liquid_glass_widgets` 的相关实现，结论：
+
+- 参考工程确实有 shader/renderer 级 Liquid Glass：
+  - 自定义 fragment shaders
+  - `LiquidGlassLayer`
+  - `LiquidGlassBlendGroup`
+  - `GlassMorphController`
+  - `LiquidMorphPhysics`
+- `GlassMenu` 是“小组件液态展开成大组件”的标准参考实现，使用 ghost trigger、menu body、J-curve/spring、内容延迟出现等结构。
+- 本轮只借鉴交互结构，不引入 shader 管线。
+- 后续如果要做全局 macOS UI 液态玻璃重构，应单独开清晰边界的 UI 重构线，而不是混入当前阅读页小修。
+
+### 145.6 验证
+
+已运行并通过：
+
+- `dart analyze lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/pages/widgets/article_card.dart lib/pages/settings/settings_page.dart`
+- `flutter analyze --no-pub --no-fatal-infos lib test`
+
+用户已验证：
+
+- macOS 目录点击跳转位置已正确。
+
+发布建议：
+
+- 本轮适合作为 `v1.1.22` 小版本发布。
+- `pubspec.yaml` 应从 `1.1.21+23` 推进到 `1.1.22+24`。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.22 -m "- feat: add macOS article table of contents hover, active state, and anchored morph\n- fix: align table of contents jumps to heading text\n- feat: align summary and translation article actions\n- perf: defer Android article body build until after route transition" --push`*

@@ -7,7 +7,7 @@
 - 最近一批 worktree 功能已经用 merge commit 合入 `main`，保留了分支历史。
 - 除非用户明确要求，否则不要创建 release/tag。
 - `AGENT_HANDOFF.md` 现在只作为短入口。维护型交接知识库位于 `docs/agent_handoff/`。
-- `docs/agent_handoff/history/timeline.md` 是完整时间线归档，不是维护当前事实的首选位置。
+- 旧单文件时间线已拆入 `docs/agent_handoff/history/archive/`；`history/chronology.md` 提供全部旧章节索引，`history/timeline.md` 仅保留兼容入口。当前事实不得写入历史归档。
 
 当前产品形态：
 

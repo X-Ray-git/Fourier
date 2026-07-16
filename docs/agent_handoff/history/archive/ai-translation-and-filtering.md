@@ -1,0 +1,639 @@
+# 历史归档：翻译、摘要与 AI 过滤
+
+> 本页保存从旧 `history/timeline.md` 迁移来的原始历史证据。内容可能描述已经废弃的实现；当前事实以专题页和 `history/decisions.md` 为准。
+
+<a id="legacy-010"></a>
+
+## 10. 翻译功能实现（v1.1 新增）
+
+### 10.1 需求确认
+
+1. **触发方式**：文章卡片长按，弹出菜单选择"翻译文章"
+2. **翻译服务**：DeepSeek API（flash 模型，无思考模式）
+3. **格式处理**：全文发送，严格保留 HTML 标签与结构，仅翻译可见文本
+4. **目标语言**：简体中文（默认），留余地支持扩展
+5. **已翻译标记**：卡片上显示语言图标，详情页可切换原文/译文
+6. **可逆性**：支持删除翻译，重新请求翻译
+
+### 10.2 实现细节
+
+#### 新增文件
+
+1. **`lib/services/translation_service.dart`**
+   - 核心翻译 API 调用层
+   - 方法：
+     - `translateArticle(article, targetLang)` — 调用 DeepSeek 并缓存结果
+     - `recordOf(entryId)` / `statusOf(entryId)` — 读取翻译状态
+     - `displayTitleFor(article)` — 返回优先使用译名的标题
+     - `translatedContentFor(entryId)` — 读取已缓存译文
+     - `hasTranslation(entryId)` — 检查是否已完成翻译
+     - `deleteTranslation(entryId)` — 删除翻译缓存
+     - `setApiKey(key)` / `getApiKey()` — API key 管理
+   - 内部处理：
+     - HTML 清洁（移除 `<html>` 包装）
+     - 使用 Dio 库，JSON 输出模式请求 DeepSeek flash
+     - 翻译结果存储在 `GStorage.translations` box（Hive）
+     - 记录 `pending / done / error` 状态，供列表卡片和详情页同步显示
+
+#### 存储扩展
+
+1. **`lib/utils/storage.dart`**
+   - 新增 `translations` Box（Hive），压缩策略：30 条删除项触发压缩
+   - 存储结构：`{ 'status': 'done|pending|error', 'translatedTitle': ..., 'translatedContent': ..., 'errorMessage': ..., 'updatedAt': ms }`
+
+#### 数据模型与控制器
+
+1. **`lib/pages/article/article_page.dart` (ArticleController)**
+   - 新增属性：
+     - `isTranslated` — 是否已翻译（RxBool）
+     - `translationContent` — 翻译后的 HTML（RxString）
+     - `isTranslating` — 翻译进行中（RxBool）
+     - `showTranslation` — 是否显示译文（RxBool）
+   - 新增方法：
+     - `translateArticle()` — 触发翻译，包括加载状态管理和错误处理
+     - `toggleTranslationDisplay()` — 切换原文/译文显示
+   - 初始化时检查是否有已缓存翻译，并改为从 `TranslationService` 的记录中读取译文
+
+#### UI 增强
+
+1. **`lib/pages/article/article_page.dart` (ArticlePage)**
+   - AppBar 增加 PopupMenuButton（已翻译状态下显示）：
+     - 切换原文/译文
+     - 删除翻译选项
+   - 详情页新增翻译控制面板：
+     - 未翻译：显示"翻译文章"按钮 + 加载进度（可打断）
+     - 已翻译：显示切换条、翻译/原文标记、操作菜单
+   - 正文部分用 Obx 响应 `showTranslation` 变化，动态显示原/译内容
+
+2. **`lib/pages/widgets/article_card.dart`**
+   - 长按菜单直接调用 `TranslationService.translateArticle()`，不再依赖父组件回调
+   - 卡片标题优先使用译名；翻译请求中显示旋转加载图标，避免看完后忘记是否已请求
+   - 已完成翻译时显示语言图标
+   - 长按菜单（BottomSheet）：
+     - "翻译文章" / "重新翻译"（根据翻译状态切换）
+     - 已翻译时额外显示"删除翻译"
+   - 列表与详情页都通过 `RxMap` 订阅翻译状态，能即时重绘
+
+3. **`lib/pages/settings/settings_page.dart`**
+   - 新增"翻译服务设置"区块（在 Folo API 认证后）
+   - DeepSeek API Key 输入框 + 显示/隐藏切换
+   - 保存/清除按钮集成（与 Token 一起保存）
+   - Key 存储在 `GStorage.setting['deepseek_api_key']`
+
+### 10.3 工程集成要点
+
+1. **网络请求**
+   - Dio 实例化在 `TranslationService` 内部，避免全局依赖
+   - API 基础 URL：`https://api.deepseek.com`
+   - 模型：`deepseek-v4-flash`（官方推荐用 flash 而非 pro，成本低）
+
+2. **错误处理**
+   - API 返回 200 但无 choices → 返回 null，UI 显示"翻译失败"
+   - API key 未配置 → 抛异常，SnackBar 提示配置
+   - 网络超时/异常 → 捕获后显示具体错误信息
+
+3. **性能考虑**
+   - 翻译结果永久存储（Hive）
+   - 防止重复翻译：`hasTranslation()` 检查
+   - 列表卡片通过 `RxMap` 响应状态变化，避免轮询
+
+4. **已读状态回填**
+   - 首页时间线与订阅源详情页已改为：未读列表全量拉取，已读列表后台按时间窗口静默补抓。
+   - 本地会用未读快照做收敛，避免只同步第一页已读列表导致旧文章长期停留在未读视图中。
+   - 已读补抓窗口可在设置里调整，默认 2 天。
+
+5. **品牌统一**
+   - 应用名已统一为 `autofolo`
+   - 启动器图标源文件保存在 `assets/branding/autofolo.jpg`
+   - Android 启动器图标已更新为由该图片生成的 mipmap 资源
+
+6. **译文默认展示**
+   - 已翻译文章进入详情页时默认进入译文视图
+   - 标题会优先显示翻译后的标题，正文直接展示翻译后的 HTML
+
+4. **HTML 格式保证**
+   - TranslationService 接收的是已规范化的 HTML（ArticleContentUtils.normalizeHtml）
+   - API prompt 明确要求保留标签结构，仅翻译文本
+   - 响应后移除 `<html>` wrapper
+
+### 10.4 新增/修改文件清单
+
+#### 新增
+
+- `lib/services/translation_service.dart`
+
+#### 修改
+
+- `lib/utils/storage.dart` — 添加 `translations` box
+- `lib/pages/article/article_page.dart` — 添加翻译逻辑 + UI
+- `lib/pages/widgets/article_card.dart` — 长按菜单 + 翻译标记
+- `lib/pages/settings/settings_page.dart` — API key 配置输入
+
+### 10.5 测试覆盖
+
+- 基础单元测试已通过（无新增测试，因主要逻辑依赖外部 API）
+- 建议后续补：
+  - TranslationService.getTranslation 缓存命中/缺失场景
+  - HTML 格式对应检查（翻译前后标签结构一致性）
+
+### 10.6 下一步扩展建议
+
+1. **多语言支持**：参数化 `targetLang`，UI 添加语言选择下拉
+2. **并发翻译**：支持多文章同时翻译，显示进度列表
+3. **翻译历史**：保存翻译记录，支持重新编辑/分享
+4. **本地翻译**：集成离线翻译模型（如 ML Kit）作为备选
+
+<a id="legacy-021"></a>
+
+## 21. 自动翻译（文章拉取时自动处理）
+
+### 21.1 架构
+
+每个订阅源可配置是否自动翻译其新文章，配置存储在 `GStorage.setting` 中，以 `feed_auto_translate_{feedId}` 为 key。
+
+文章自动翻译采用**后台异步队列**模式，不阻塞 UI：
+
+1. 新文章入库时（`LocalArticleDbService.upsertMany()`），通过 `AutoTranslationWorker.enqueueIfEnabled()` 检查并排队
+2. 后台 Timer 以 500ms 间隔处理队列（每次处理 1 篇），调用 `TranslationService.translateArticle()`
+3. 翻译失败时静默处理，不显示错误提示
+
+### 21.2 核心代码
+
+**FeedTranslationSettingsService** (`lib/services/feed_translation_settings_service.dart`)：
+- `isAutoTranslateEnabled(feedId)` — 查询该 feed 是否启用自动翻译
+- `setAutoTranslate(feedId, enabled)` — 设置启用/禁用
+- `toggleAutoTranslate(feedId)` — 切换状态
+- `clearAllSettings()` — 清空所有设置
+
+**AutoTranslationWorker** (`lib/services/auto_translation_worker.dart`)：
+- `enqueueIfEnabled(article)` — 单篇入队（如果启用）
+- `enqueueIfEnabledMany(articles)` — 批量入队
+- `getQueueSize()` — 获取待处理数量
+- `cancelProcessing()` — 取消后台处理
+
+### 21.3 集成点
+
+1. **TimelineController** — `_applyUnreadSnapshot()` 入库后调用 `AutoTranslationWorker.enqueueIfEnabledMany(unreadData)`
+2. **FeedDetailController** — 同样在 `_applyUnreadSnapshot()` 中调用入队
+3. **FeedDetailPage** — appBar 新增 translate 图标按钮（仅当为单个 feed 过滤时显示），点击切换自动翻译状态
+
+### 21.4 UI 交互
+
+- **appBar 中的 translate 按钮**：
+  - 位置：FeedDetailPage appBar actions（仅在 `filterFeedId != null` 时显示）
+  - 外观：启用时填充色为主题色，禁用时为灰色
+  - Tooltip：提示当前状态
+  - 点击后立即更新 UI（依赖 Obx 响应式）
+
+- **后台处理**：
+  - 新文章入库 → 自动排队 → 后台异步翻译
+  - 无 UI 反馈（默认成功），仅在切换开关时有明确反馈
+
+### 21.5 存储与恢复
+
+- 设置存储在 `GStorage.setting` 中，应用重启后自动恢复
+- 每个 feed 的设置独立管理，互不影响
+- 未来若需要统一导出/导入设置，可在 SettingsPage 中增加备份能力
+
+### 21.6 已知限制与改进机会
+
+1. **翻译内容范围**：当前仅翻译 title 和 content（未验证是否需要翻译 summary）
+2. **队列持久化**：后台队列在内存中，应用关闭后丢弃；后续可考虑持久化队列
+3. **翻译优先级**：无优先级控制，按入队顺序 FIFO 处理；未来可按 feedId 分优先级
+4. **重试机制**：失败后不重试；可考虑添加指数退避重试策略
+
+---
+
+<a id="legacy-027"></a>
+
+## 27. 翻译中状态提示增强（2026-05-18）
+
+### 27.1 问题
+
+- 自动翻译 / 手动翻译处于 pending 时，原先只显示很小的旋转图标，卡片和详情页都不够显眼。
+
+### 27.2 修复
+
+1. 文章卡片的 pending 状态改成显眼徽标：`翻译中 + spinner`。
+2. 文章详情页在标题区下方增加持续可见的状态条，提示“翻译中，完成后会自动显示译文”。
+3. 保留按钮内的 pending 指示，形成双重提示。
+
+### 27.3 影响文件
+
+- `lib/pages/widgets/article_card.dart`
+- `lib/pages/article/article_page.dart`
+
+<a id="legacy-028"></a>
+
+## 28. 摘要长度调整（2026-05-18）
+
+### 28.1 调整内容
+
+- 文章摘要提示改为 **100~300 字之间**。
+- 自动摘要与手动摘要共用同一服务提示词，因此两处都会同时生效。
+
+### 28.2 影响文件
+
+- `lib/services/summary_service.dart`
+
+<a id="legacy-033"></a>
+
+## 33. AI 文章过滤系统（2026-05-20）
+
+### 33.1 功能概述
+
+基于 autofolo 的 `prompts.yaml` 过滤规则，用 DeepSeek JSON Output 对未读文章逐篇判定保留/拒绝。拒绝的文章进入审核页，用户可捞回或确认拒绝（自动标已读）。时间线卡片的拒文有橙色描边标记。
+
+### 33.2 影响文件
+
+- `lib/models/article.dart` — 新增 `isRejectedByAi`、`filterReason`、`filterReviewed`
+- `lib/services/article_filter_service.dart` — **新建**。调 DeepSeek 判定，内置裁简版 autofolo prompt
+- `lib/services/auto_filter_worker.dart` — **新建**。并行过滤队列，`queued/processing/done` 计数
+- `lib/services/llm_config.dart` — 新增 filter 配置（模型 v4-pro / T 0.1 / 并发 16）
+- `lib/pages/timeline/filter_review_page.dart` — **新建**。左右滑审核页，实时追加新结果
+- `lib/pages/timeline/timeline_page.dart` — 顶栏常驻过滤入口横幅
+- `lib/pages/settings/settings_page.dart` — 过滤 Prompt 编辑卡 + LLM 并发数配置
+- `lib/pages/widgets/article_card.dart` — AI 拒文橙色边框
+- `lib/pages/article/article_page.dart` — 标已读时清除过滤标记
+- `lib/router/app_pages.dart` — 新增 `/filter-review` 路由
+
+### 33.3 数据流
+
+```
+拉取未读 → enqueueMany → 16 并发 DeepSeek 判定
+  → 拒文写入 DB (isRejectedByAi=true)
+  → 审核页 Obx 监听 doneCount 自动追加
+  → 用户右滑保留(清除标记) / 左滑确认拒绝(标已读)
+  → filterReviewed 防重判
+```
+
+### 33.4 关键设计决策
+
+- `filterReviewed` 标记解决"捞回后再刷新又被拒绝"的问题
+- `upsertMany` 的 OR 合并逻辑与 `unReject` 直接写 DB 的冲突：unReject 绕过合并逻辑直接写 Hive
+- 审核页不支持下拉刷新，只通过 `doneCount` 监听实时追加
+
+<a id="legacy-034"></a>
+
+## 34. LLM 并发数配置（2026-05-20）
+
+- `LlmConfig` 新增 `concurrency` 字段，翻译/摘要/过滤各自独立
+- 三个 Worker 的并发数从硬编码改为 `LlmConfig.load().concurrency`
+- 设置页 LLM 卡新增「并发数」文本输入（1-1024）
+
+<a id="legacy-048"></a>
+
+## 48. 审核页重塑 — 实时状态药片（2026-05-23）
+
+审核页（FilterReviewPage）从"判定中" + "全部确认"的旧设计完全重构：
+
+- **AppBar 对齐主时间线**：居中标题"垃圾拦截"，0.5px 分割线，移除毛玻璃、判定徽标、"全部确认"按钮
+- **状态药片行**（AppBar 与列表之间）：
+  - `✋ N 篇待处理`：始终显示，0 篇时灰色，>0 篇时主色高亮
+  - `🤖 N 篇判定中`：仅 LLM Worker 活跃时显示，灰色底 + 微型 spinner
+- **实时性**：`humanCount` 由 `_articles.length` + `Obx` 驱动；`llmCount` 由 `AutoFilterWorker.queuedCount/processingCount`（RxInt）驱动；每篇卡片滑动后当场跳数
+- **空状态终结感**：全部处理完时图标变绿对勾 + "处理完毕"
+- **去除重复**：卡片自带拒文标签（§45），审核页不再额外显示判定原因
+- **架构**：`_StatusPills` 和 `_LlmPill` 提升为文件级私有组件
+
+### Vivo / OriginOS 桌面角标适配（待完成）
+
+Vivo 提供私有 ContentProvider API（`content://com.vivo.abe.provider.launcher.notification.num`）可直写角标。`MainActivity.kt` 已实现 `tryVivoBadge` + 通知兜底，但当前不生效。排查方向：查看 logcat 返回码、确认系统桌面角标开关、验证权限未被静默拦截。详见 vivo 开发者文档。
+
+<a id="legacy-051"></a>
+
+## 51. 审核界面直接预览 AI 摘要（2026-05-23）
+
+### 51.1 需求背景
+用户希望在垃圾拦截（审核界面）中能够直接看到文章的摘要，而不需要点击进入详情页，以提高审核效率。同时要求正式时间线保持清爽，不显示摘要，并且要求 UI 具有设计美感，不破坏原有的极简卡片布局。
+
+### 51.2 实现细节
+- **`lib/pages/widgets/article_card.dart`**：
+  - 新增 `showSummary` 控制参数（默认 `false`）。
+  - 在卡片标题和底部元数据之间，新增摘要展示区块 `_buildSummaryBlock`。
+  - 使用 `Obx` 响应式读取 `SummaryService.recordOf(entryId)`。
+  - **优雅降级**：如果 AI 摘要已生成则显示内容；如果未生成则展示占位符 “AI 尚未生成摘要...”。
+  - **视觉设计**：摘要前增加极小的引号图标（`Icons.format_quote_rounded`），使用浅色、半透明字体（`colorScheme.onSurfaceVariant.withValues(alpha: 0.8)`）和两行限制（`maxLines: 2`），形成类似“引述块”的设计，不喧宾夺主。
+- **`lib/pages/timeline/filter_review_page.dart`**：
+  - 在渲染被拦截的卡片时，显式传入 `showSummary: true` 开启摘要预览。
+- **`lib/pages/timeline/timeline_page.dart`**：
+  - 保持默认不传入该参数，维持正式时间线不显示摘要。
+
+<a id="legacy-054"></a>
+
+## 54. 译文/摘要内容传递修正（2026-05-23）
+
+- `TranslationService.translateArticle()` 和 `SummaryService.summarizeArticle()` 新增 `overrideContent` 参数
+- 文章页触发翻译/摘要时传入已标准化的 `normalizedContent`，确保 Readability 抓取后的长文被正确用于翻译和摘要
+
+<a id="legacy-056"></a>
+
+## 56. 大文章分块翻译 + 邮件表格扁平化（2026-05-23）
+
+### 56.1 正文规整优化
+- `ArticleContentUtils.normalizeHtml` 新增 `_flattenLayoutTables`：扁平化邮件 Newsletter 的 `<table>/<tr>/<td>` 布局壳，保留 `<th>` 数据表
+- 效果：98KB 邮件 → ~67KB 纯内容，削减 ~30% 的无意义标签
+
+### 56.2 分块翻译
+- 阈值：归一化后正文 > 35KB 触发分块
+- 切分：按 `<p>/<h1>/<li>/<blockquote>` 段落边界，每块 ≤12KB
+- 并行：`Future.wait` 同时发出所有块的 LLM 请求，不等排列
+- 拼接：第 1 块负责标题，所有块拼接 `translated_html`
+- 历史实现曾保留已翻译部分；用户后来明确要求“任一块失败则整篇丢弃并重试”，因此当前实现会整篇重试最多 5 次，不写入半截译文。
+- 2026-05-31 补充：分块翻译最终失败时，错误记录会带上最后一次失败的块号和具体原因，供任务中心失败明细直接展示。
+
+### 56.3 pending 瞬态不落盘
+- `pending` 只在内存 `_records` map 中标记，不再通过 `GStorage.translations.put()` / `GStorage.summaries.put()` 写入磁盘
+- 终态（`done` / `error`）正常落盘；`pending` 重启后自然消失，无需清理逻辑
+
+### 56.4 未捕获异常兜底
+- 翻译流程增加通用 `catch (e)` 处理器，防止非 Dio/Format/StateError 异常导致静默卡死
+
+<a id="legacy-100"></a>
+
+## 100. 撤销/恢复未读操作丢失 AI 拦截状态修复 (2026-06-06)
+
+### 100.1 需求与问题背景
+用户反馈：在 macOS 端（以及全端），如果一篇文章原本在“垃圾拦截”列表中，用户通过时间线或者文章详情页将其标记为已读（或者删掉）后，再使用 `Cmd+Z`（撤销）或 `M` 键将其恢复为未读时，该文章并没有自动回到拦截页面中，且在时间线中也丢失了其原本的红色高亮拦截标记。
+
+### 100.2 问题产生原因
+在原有的逻辑中，开发者为了让拦截文章在阅读后从拦截列表中消失，在 `ArticleController.markAsRead()` 和 `UndoService.markAsRead()` 方法中，专门加了一段清理逻辑：
+`if (article.isRejectedByAi) { LocalArticleDbService.clearFilterState(article.entryId); }`
+这段逻辑会强行擦除底层数据库中该文章的 `isRejectedByAi`、`filterReason` 等拦截关联字段，并通过事件总线将内存状态同步抹除。
+由于拦截相关数据的永久擦除，当用户后续执行“恢复未读”操作时，程序仅仅将 `isRead` 重新置为了 `false`，但因为缺少拦截标记，系统只能将其视为一篇普通的未读文章，从而导致其无法回到垃圾拦截分类中，也失去了 UI 的高亮。
+
+### 100.3 修复思路与讨论
+基于对“标记已读”这一动作真实语义的梳理：“标记已读”本质上仅仅代表用户“已处理完毕/忽略”该文章。即便处理完毕，该文章曾是一篇“被 AI 拦截的垃圾文章”这一历史事实不应被篡改。
+并且，在原有的垃圾拦截页面渲染逻辑中，早已明确限定了只显示 `isRejectedByAi && !isRead`（是垃圾且未读）的文章。因此，只要将文章标为已读，它自然就会从拦截页面隐去，主动去擦除 `isRejectedByAi` 是画蛇添足的冗余操作。
+
+我们采用了**保留原始状态**的最简修复方案（方案 A）：
+直接移除了 `ArticleController` 和 `UndoService` 中那两处调用 `clearFilterState` 的逻辑。
+
+### 100.4 副作用评估与平台一致性
+- **副作用影响**：修改后，一篇被判定为拦截的文章即便被标记为已读，其 `isRejectedByAi` 依然为 `true`。这会使得用户在切换到“全部”或“已读”时间线列表时，依然能看到该文章带有红色的拦截 UI 样式与拒绝理由。经过与用户讨论，用户明确表示“期望在已读列表中依然能通过 UI 样式一眼看出它曾经是被 AI 拦截的文章”，因此该表现完全符合业务预期。
+- **跨端一致性**：由于该状态擦除逻辑位于底层的 Dart 业务逻辑与服务层，本次修改将自动统一并解决 macOS、Android、iOS 和 Windows 端在该场景下行为丢失的 Bug。
+
+<a id="legacy-103"></a>
+
+## 103. 审核/垃圾拦截页面的即时已读同步修复 (2026-06-07)
+
+### 103.1 问题背景
+用户反馈在“审核/垃圾拦截”页面（FilterReviewPage）移除一篇文章时，该文章的已读状态并没有立即同步至服务端，而是必须等到下一次手动下拉刷新或者到任务中心点击同步按钮时才会同步。
+
+### 103.2 问题根源
+根据代码分析，当在审核页面移除/拒绝文章时，触发了 `_reject` 方法：
+该方法中处理已读状态时，仅调用了 `ReadSyncService.enqueue(article.entryId, isInbox: ...)` 将待同步的项加入到了本地缓存队列（`pending_read_items`）中。
+然而，与文章阅读详情页（`ArticleController.markAsRead`）会即时触发 `FeedHttp.markRead` 并在后台重试不同，`_reject` 中并没有紧接着调用触发同步网络请求的命令。导致这些已读状态滞留在本地，必须被动等待其它触发点调用 `ReadSyncService.syncPendingReads()` 才能完成同步。
+
+### 103.3 修复思路与讨论
+关于修复方案，与用户讨论了以下几个方向的利弊：
+1. **即时触发同步**：在入队后立即触发异步同步，用户操作反馈最及时，但在批量快速滑动时可能会短暂触发多次并发的网络请求（虽然底层有防并发锁）。
+2. **退出页面时同步**：监听页面生命周期，在离开该页面时统一触发同步。能合并请求，但如果用户久留页面不退出则迟迟无法同步。
+3. **定时后台轮询**：每隔一定时间自动消费队列。最稳妥但稍微偏重。
+
+最终采用了方案一（用户选定），这符合用户期待的最直觉反应。
+
+### 103.4 具体实施
+在 `lib/pages/timeline/filter_review_page.dart` 中，顶部补充引入了 `dart:async`。
+在 `_reject` 方法中，紧跟着 `ReadSyncService.enqueue`，新增调用了：
+`unawaited(ReadSyncService.syncPendingReads());`
+这样既保证了已读状态能被持久化到待同步队列防丢失，又能够在文章被移除时立即尝试将状态同步到云端。
+
+<a id="legacy-105"></a>
+
+## 105. 垃圾拦截页快捷键与全局撤销重构 (2026-06-07)
+
+### 105.1 需求背景与问题
+为了提升垃圾拦截页（`FilterReviewPage`）的批处理效率，用户提出需要支持类似主页的快捷键心流。在 macOS 分栏模式下，拦截页面需要高频执行“移除（确认为垃圾）”和“保留（撤销拦截）”操作，并且应当支持 `Ctrl+Z` 完美撤销这两种动作，以免手滑误操作。
+
+### 105.2 UndoService 重构
+原有的 `UndoService` 被设计为单一状态跟踪（仅追踪 `_lastReadArticle`），且只能撤销“标为已读”动作。
+我们对 `UndoService` 进行了全面重构：
+1. **状态抽象**：引入了 `UndoActionType` 枚举（`read`, `filterReject`, `filterKeep`），并将单例变量变更为 `_lastAction` 复合对象。
+2. **底层撤销逻辑分支**：
+   - 对于普通的 `read` 和拦截页的 `filterReject`，因为它们都在业务上执行了标为已读的动作，所以在撤销时除了恢复本地数据库状态外，还会向服务端发送 `FeedHttp.markUnread` 网络请求同步未读状态。
+   - 对于拦截页的 `filterKeep`，因为它从未同步到已读列表，撤销时仅需将原始拦截状态（`isRejectedByAi: true`，以及原始的拒绝理由）重新 UPSERT 回本地数据库并发出事件总线刷新，无需网络开销。
+
+### 105.3 拦截页快捷键注入
+在 `FilterReviewPage` 中：
+- `M` 键（移除/拒绝）：通过向嵌套的 `ArticlePageView` 传递 `onMKeyPressed` 闭包回调来实现拦截。调用底层的 `_reject`，向撤销栈压入 `filterReject` 动作，并触发自动下一篇。
+- `K` 键（保留/放回）：在 `FilterReviewPage` 的顶层 `initState` 中注册 `HardwareKeyboard` 监听。由于父组件拦截器早于底层的 `Focus` 树触发，它能精准捕获 `K` 键，调用 `_keep`，向撤销栈压入 `filterKeep`，并触发自动下一篇。
+
+### 105.4 留给后续 Agent 的防坑记录：关于状态擦除的取舍
+在处理“保留 (`_keep`)”操作时，底层调用了 `AutoFilterWorker.unReject` 和 `clearFilterState`。这会导致文章被**彻底物理擦除**其曾经被 AI 拦截过的痕迹（清空了 `isRejectedByAi` 和 `filterReason`）。
+如果用户在拦截页按 `K` 将其放回，再跑到主时间线按 `M` 将其标为已读，这条数据看起来就是一条普普通通的好文章，**无法再作为 AI 的 False Positive（误判样本）进行提取和训练**。
+在与用户讨论后，用户明确指示**不在乎保留误杀的痕迹**，且这更符合用户侧“已读后不可见异常UI”的预期。因此本次重构刻意维持了这一“擦除”逻辑未变。未来如果业务层需要做模型微调，请警惕此处的样本流失，届时需要重构这部分的数据库结构，不再擦除，而是改用 `humanVerdict: 'keep'` 类似的追加状态来实现。
+
+<a id="legacy-108"></a>
+
+## 108. 垃圾审核页与主时间线快捷键监听冲突修复 (2026-06-07)
+
+### 108.1 现象与问题诊断
+用户反馈：在“垃圾审核”（FilterReviewPage）界面中，按下 `m` 键没有任何效果，但是却发现“主时间线”（TimelinePage）中的文章数量在减少。
+
+经过代码排查，发现这是由于 macOS 分屏布局机制导致的**全局键盘监听冲突**：
+1. **组件堆叠与存活**：macOS 版主界面使用 `IndexedStack` 来管理各个侧边栏页面，这导致“主时间线”和“垃圾审核”页面的实例同时存在于组件树中（且 `ModalRoute.of(context)?.isCurrent` 皆为 true）。
+2. **全局事件捕获**：两个页面都内部嵌套了 `ArticlePageView` 组件，该组件在 `initState` 时向 `HardwareKeyboard.instance` 注册了全局按键监听 `_handleHardwareKeyEvent`。
+3. **校验逻辑错位**：`ArticlePageView` 内部有一段针对当前选中文章的“前置安全校验”：
+   ```dart
+   if (Get.isRegistered<TimelineController>()) {
+     final tc = Get.find<TimelineController>();
+     if (tc.selectedArticle.value?.entryId != widget.article.entryId) return false;
+   }
+   ```
+   - 在**垃圾审核**页面中，当前 `widget.article` 来自页面自带的独立状态，不匹配主时间线 `TimelineController` 选中的文章，导致校验失败，因此直接**忽略了 M 键事件**。
+   - 而隐藏在后台的**主时间线**视图收到了同一份全局键盘事件，且该校验顺利**通过**（因为它的 `widget.article` 正好匹配 `TimelineController`），最终悄悄在后台执行了标记已读及翻页，导致主时间线内文章被误操作减少。
+
+### 108.2 修复方案讨论与决策
+为了修复该泄漏，讨论了以下三种方向：
+- **方案A（传递激活标志）**：向 `ArticlePageView` 注入 `isActive` 回调，由外层根据当前路由/侧边栏索引决定是否拦截响应。
+- **方案B（单独页面拦截）**：仅在垃圾审核页顶层拦截 `M` 键并吞噬事件。缺点是无法防御其他按键（如方向键）向后台的泄露。
+- **方案C（原生 Focus 树）**：废除全局键盘，彻底改用 Flutter 的 `FocusNode` / `Shortcuts` 机制。缺点是 macOS 的分屏焦点管理十分脆弱，鼠标误点侧边栏往往会导致全局阅读快捷键全部失效，体验倒退极大。
+
+**最终决策**：选择了改良版的**方案A**。既保留了全局热键随时可用的稳健体验，又以极小的代价彻底掐断了所有不可见页面的多余事件响应。
+
+### 108.3 实现细节
+1. 在 `ArticlePageView` 的构造函数增加 `final bool Function()? isActive;`。
+2. 在 `_handleHardwareKeyEvent` 首部添加校验：`if (widget.isActive != null && !widget.isActive!()) return false;`。
+3. 在 `TimelinePage` 中传入：`isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 0`。
+4. 在 `FilterReviewPage` 中传入：`isActive: () => !Get.isRegistered<MainController>() || Get.find<MainController>().currentIndex.value == 1`。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.11 -m "- 修复行内代码块底部边距导致文本轻微向上浮动不对齐的问题\n- 修复 macOS 分屏模式下垃圾拦截页的快捷键事件泄漏导致主时间线文章被误标已读的严重缺陷" --push`*
+
+<a id="legacy-117"></a>
+
+## 117. 审核页 UI 按钮与快捷键行为不等效修复（2026-06-08）
+
+### 117.1 问题描述
+
+用户在 macOS 端的垃圾拦截页面（FilterReviewPage）发现：按 `k`（保留）或 `m`（移除）快捷键时，文章会自动跳转到下一篇；但点击 UI 上对应的「保留」或「移除」按钮时，不会自动跳转。
+
+### 117.2 根因分析
+
+核心差异在于**快捷键始终操作「当前选中文章」，而 UI 按钮操作的是「该行绑定的文章对象」**。
+
+#### 快捷键路径
+
+`k` 快捷键（`filter_review_page.dart:100-108`）：
+```dart
+if (event.logicalKey == LogicalKeyboardKey.keyK) {
+  final selected = _selectedArticle.value;  // 始终取当前选中文章
+  if (selected != null) {
+    _keep(selected);
+    return true;
+  }
+}
+```
+
+`m` 快捷键（通过 `ArticlePageView` 的 `onMKeyPressed` 回调）：
+```dart
+onMKeyPressed: () {
+  _reject(selected);  // selected 是 Obx 闭包中捕获的当前选中文章
+},
+```
+
+两条路径都操作 `_selectedArticle.value`，因此 `_keep`/`_reject` 内部的 `isSelected` 判断始终为 `true`，自动跳转下一篇。
+
+#### UI 按钮路径（修复前）
+
+`_buildAnimatedReviewRow` 中：
+```dart
+onKeep: () => _keep(article),   // article 是该行的文章对象
+onReject: () => _reject(article),
+```
+
+`_keep`/`_reject` 内部的关键逻辑：
+```dart
+final bool isSelected = _selectedArticle.value?.entryId == article.entryId;
+// ...
+if (isSelected) {  // 只有 isSelected=true 才跳下一篇
+  _selectedArticle.value = _articles[nextIndex];
+}
+```
+
+问题链条：
+1. `_MacReviewRow` 的 `IconButton` 被外层 `InkWell` 包裹
+2. Flutter 手势竞技场中，内层 `IconButton` 的 `InkWell` 赢得 tap 手势
+3. 外层 `InkWell.onTap`（即行选中逻辑 `_selectedArticle.value = article`）**不会被触发**
+4. 因此点击按钮时，`_selectedArticle` 可能并非当前行的文章
+5. `_keep`/`_reject` 中 `isSelected = false` → 不跳转下一篇
+
+### 117.3 修复方案
+
+在 `_buildAnimatedReviewRow` 中，点击「保留」或「移除」按钮时，**先将 `_selectedArticle` 设为当前行的文章**，再执行 `_keep`/`_reject`：
+
+```dart
+onKeep: () {
+  _selectedArticle.value = article;
+  _keep(article);
+},
+onReject: () {
+  _selectedArticle.value = article;
+  _reject(article);
+},
+```
+
+这样 `_keep`/`_reject` 内部的 `isSelected` 判断就会为 `true`，自动跳转到下一篇，行为与 `k`/`m` 快捷键一致。
+
+### 117.4 行为变化对照
+
+| 场景 | 修复前 | 修复后 |
+|------|--------|--------|
+| `k` 键 | 始终跳转下一篇 | 不变 |
+| `m` 键 | 始终跳转下一篇 | 不变 |
+| 点击「保留」按钮（选中行） | 跳转下一篇 | 不变 |
+| 点击「保留」按钮（非选中行） | 不跳转 | 跳转下一篇 |
+| 点击「移除」按钮（选中行） | 跳转下一篇 | 不变 |
+| 点击「移除」按钮（非选中行） | 不跳转 | 跳转下一篇 |
+
+### 117.5 影响文件
+
+- `lib/pages/timeline/filter_review_page.dart` — `_buildAnimatedReviewRow` 方法（+6 行）
+
+### 117.6 验证
+
+- `flutter analyze lib/pages/timeline/filter_review_page.dart`：No issues found
+
+<a id="legacy-123"></a>
+
+## 123. 垃圾拦截页"移除"后不跳转下一篇 & 焦点丢失修复（2026-06-08）
+
+### 123.1 问题现象
+
+用户在 macOS 垃圾拦截页（`FilterReviewPage`）反馈两个问题：
+1. **不自动跳转下一篇**：点击"移除"(拒绝)按钮后，文章被删除但未自动选中下一篇，右侧阅读面板变为空白。
+2. **焦点丢失导致文本选择光标**：移除后焦点丢失，按 ←/→ 方向键时 Flutter 的 `SelectionArea`（文章正文）捕获了键盘事件，出现文本选择光标，而非切换上/下一篇。
+
+### 123.2 根因分析（与第 111 节不同）
+
+第 111 节修复的是快捷键与 UI 按钮行为不一致（快捷键能跳转、UI 按钮不能），但本轮修复覆盖第 111 节未涉及的两个更深层问题：
+
+| 根因 | 位置 | 说明 |
+|------|------|------|
+| **RxList + setState 双重驱动** | `_keep()` / `_reject()` — 第 216-311 行 | `_articles` 是 `RxList`（`.obs`），但 `removeWhere` 被包在 `setState(() => ...)` 中。RxList 自身已触发 Obx 重建，setState 又额外触发一次重建，导致选中态更新（`_selectedArticle.value = _articles[nextIndex]`）与被重建的 UI 产生时序竞争。 |
+| **滚动时机与动画冲突** | `_scrollToArticle()` — 第 181-188 行 | 使用 `addPostFrameCallback` 滚动到新选中项，但 `ImplicitlyAnimatedList` 的移除动画（默认 180ms）正在进行中，目标项的 `GlobalKey.currentContext` 尚未就绪，滚动静默失效。 |
+| **焦点未显式转移** | `ArticlePageView.build()` — 第 1240-1287 行 | `Focus(autofocus: true)` 在文章切换时（`ValueKey` 变化触发新实例）依赖 Flutter 自动抢焦，但 `SelectionArea`（文章内容）可能抢先夺走焦点。方向键因此被 `SelectionArea` 捕获，显示文本选择光标。 |
+
+### 123.3 修改内容
+
+#### 文件 1：`lib/pages/timeline/filter_review_page.dart`
+
+| 修改点 | 改前 | 改后 |
+|--------|------|------|
+| `_keep()` 第 243 行 | `setState(() => _articles.removeWhere(...))` | `_articles.removeWhere(...)` — 直接操作 RxList |
+| `_reject()` 第 300 行 | `setState(() => _articles.removeWhere(...))` | `_articles.removeWhere(...)` — 直接操作 RxList |
+| `_scrollToArticle()` 第 182 行 | `WidgetsBinding.instance.addPostFrameCallback(...)` | `Future.delayed(const Duration(milliseconds: 220), ...)` — 等待 `ImplicitlyAnimatedList` 移除动画（180ms）完成后 + 一帧渲染再滚动 |
+
+#### 文件 2：`lib/pages/article/article_page.dart`
+
+| 修改点 | 改前 | 改后 |
+|--------|------|------|
+| `_ArticlePageViewState` | 无 `FocusNode` | 新增 `late final FocusNode _focusNode` |
+| `initState()` | — | 初始化 `_focusNode`；`addPostFrameCallback` 中调用 `_focusNode.requestFocus()` 确保焦点落到导航层 |
+| `dispose()` | — | 新增 `_focusNode.dispose()` |
+| `build()` 第 1242 行 | `Focus(autofocus: true, ...)` | `Focus(focusNode: _focusNode, ...)` — 用显式 FocusNode 替代 autofocus，确保每次文章切换后都能程序化请求焦点 |
+
+### 123.4 修复原理
+
+1. **跳转失效**：移除 `setState` 后，RxList 的 `removeWhere` 触发 Obx 重建与 `_selectedArticle.value = _articles[nextIndex]` 在同一次微任务中按序执行，不再被 setState 冲乱。`Future.delayed(220ms)` 确保 `ImplicitlyAnimatedList` 完成收起动画后再滚动，此时目标 `GlobalKey` 已就绪。
+2. **焦点丢失**：`FocusNode` + 显式 `requestFocus()` 确保每次 `ArticlePageView` 重建（文章切换）后，焦点落在处理导航键的 `Focus` widget 上，而非 `SelectionArea` 内容中。
+
+### 123.5 影响文件
+
+- `lib/pages/timeline/filter_review_page.dart` — 3 处改动
+- `lib/pages/article/article_page.dart` — 3 处改动
+
+### 123.6 验收要点
+
+1. 在 macOS 垃圾拦截页点击"移除"按钮 → 文章应自动从列表消失，选中下一篇并滚动到可见。
+2. 移除后按 ←/→ 方向键 → 应切换上/下一篇，不出现文本选择光标。
+3. `dart analyze lib/` 通过。
+
+<a id="legacy-129"></a>
+
+## 129. 翻译与摘要的自动重试机制实现
+
+### 129.1 需求背景
+- 用户发现翻译功能未能实现自动重试，希望在请求失败（如网络错误、解析错误）时能自动重试。
+- 摘要功能也需要加入相同的自动重试机制。
+- 自动重试的最大次数应当可以在**设置页面**进行配置。
+
+### 129.2 架构选择与讨论
+- **初步想法**：曾经考虑使用类似于已读同步的后台队列轮询机制。
+- **用户反馈**：用户明确提出“配置重试次数，重试的时候直接已经在队列中了吧？原地重试即可？为什么会需要讨论这么多逻辑？”
+- **最终方案**：根据用户偏好，采用了最轻量的**原地重试（In-place Retry）**方案。抛弃了维护后台持续轮询任务的复杂想法。在发起请求的异步方法底层，如果遇到特定的异常（如 `DioException` 或 JSON 格式错误），并且重试次数未耗尽，则会 `await Future.delayed(1s)` 并在 `for` 循环中再次尝试请求。这在外部看来，任务仍然是 `pending`（加载中），直到重试完全失败才输出 `error`。
+
+### 129.3 具体修改
+1. **`lib/pages/settings/settings_page.dart`**:
+   - 新增 `_autoRetryMaxCount` 并在界面新增“后台任务容错设置”（可选 0, 1, 3, 5 次），使用 `GStorage.setting.put('auto_retry_max_count', ...)` 保存。
+2. **`lib/services/translation_service.dart`**:
+   - `_translateArticleInternal` (全量翻译)：在 API 请求外部包裹了一层重试 `for` 循环，读取配置的最大重试次数。失败时延时 1s 继续下一次尝试。
+   - `_translateInChunks` (分块翻译)：将原先硬编码的 5 次尝试改为了动态读取设置文件里的自动重试次数。
+3. **`lib/services/summary_service.dart`**:
+   - `_summarizeArticleInternal`：同样包裹了一层由配置控制的重试 `for` 循环，并在异常捕获块中执行重试延迟。
+
+### 129.4 注意事项
+- 原地重试属于阻塞重试，单次网络请求较耗时的话，会在 UI 层保持 Loading 状态较长时间。
+- 对于极端情况（例如应用进程被强杀），此原地任务也会被中断，但对当前产品形态来说可以接受（重启后可重新手动触发）。

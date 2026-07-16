@@ -1,0 +1,229 @@
+# 历史归档：设置、身份与迁移
+
+> 本页保存从旧 `history/timeline.md` 迁移来的原始历史证据。内容可能描述已经废弃的实现；当前事实以专题页和 `history/decisions.md` 为准。
+
+<a id="legacy-074"></a>
+
+## 74. 设置页任务中心（2026-05-31）
+
+### 74.1 产品定位
+
+用户明确希望审核页的高频交互和入口保持不变，因此任务中心不承载逐篇审核流程。任务中心定位为设置页内的低频诊断入口，用于查看后台同步和 AI 队列是否正常。
+
+### 74.2 第一版范围
+
+入口：
+
+- 设置页新增“后台任务与同步”卡片。
+- 路由：`Routes.taskCenter` / `/task-center`。
+
+页面能力：
+
+- 总览本地文章数、未读数、待人工审核数。
+- 查看已读待同步数量和最近已读同步时间。
+- 手动触发“同步已读”。
+- 查看 AI 过滤、自动翻译、自动摘要的排队数、处理中数和失败数。
+- AI 过滤区只提供“去审核”跳转，不展示审核列表，不替代 `FilterReviewPage`。
+- 自动翻译/自动摘要失败时，可从任务中心进入失败文章列表，逐篇查看失败原因，并对单篇文章执行“打开”或“重试”。
+
+### 74.3 有意不做
+
+第一版不做暂停/继续、清空队列、批量重试、详细日志和批量审核。原因是这些操作会改变后台行为，容易引入误操作和更复杂的状态恢复；当前阶段只解决“用户能看懂后台是否在工作”的问题。
+
+这里的“单篇重试”不是批量操作：用户明确希望能在 AI 任务下排查“是哪篇文章失败了”，并对具体文章手动处理。因此任务中心允许查看失败明细和单篇重试，但仍不提供“一键全部重试”。
+
+### 74.4 影响文件
+
+- `lib/pages/settings/task_center_page.dart` — 新增任务中心页面。
+- `lib/pages/settings/settings_page.dart` — 设置页入口卡片。
+- `lib/router/app_pages.dart` — 新增任务中心路由。
+- `lib/services/read_sync_service.dart` — 记录最近已读同步时间。
+- `lib/services/auto_translation_worker.dart` / `auto_summary_worker.dart` — 暴露当前处理中数量。
+- `lib/services/translation_service.dart` / `summary_service.dart` — 提供按状态计数和失败记录查询，用于失败数量展示和失败明细页。
+
+---
+
+<a id="legacy-142"></a>
+
+## 142. 设置导入/导出到剪贴板（2026-06-19）
+
+### 142.1 背景
+
+由于后续将整改 Android `applicationId` 和 macOS `PRODUCT_BUNDLE_IDENTIFIER`，新安装包会使用新的应用身份和数据容器，旧设置不会自动共享。用户希望先发布一个临时版本，用旧包名安装后导出配置，再在改包名后的版本中导入。
+
+讨论后决定：
+
+1. 使用纯 JSON 字典格式，不包额外前缀。
+2. 只导出“设置、偏好和密钥”，不导出文章内容、已读历史、摘要/翻译缓存。
+3. 手机端和电脑端共用同一套配置格式；平台不使用的配置可以保存但不生效。
+4. 导入时应覆盖当前已保存的受管理设置，形成接近快照恢复的效果。
+
+### 142.2 实现
+
+`lib/services/settings_backup_service.dart`：
+
+- 新增 `SettingsBackupService`。
+- 导出格式：
+
+```json
+{
+  "type": "auto_folo_settings",
+  "version": 1,
+  "exportedAt": "2026-06-19T00:00:00.000Z",
+  "settings": {
+    "session_token": "...",
+    "client_id": "...",
+    "session_id": "..."
+  }
+}
+```
+
+- 导出只收集 allowlist：
+  - 固定 key：Folo 凭据、DeepSeek API key、Prompt、自动重试、已读拉取窗口、角标策略、正文最大宽度。
+  - LLM 前缀：`llm_translate_`、`llm_summary_`、`llm_filter_`。
+  - 订阅源偏好前缀：`feed_auto_translate_`、`feed_silent_`、`feed_auto_readability_`。
+- 导入时校验 `type` 和 `version`。
+- 导入时只接受字符串、数字、布尔等 JSON primitive，并按 key 归一化类型：
+  - `temperature` 写入 double。
+  - `max_tokens` / `concurrency` / 窗口天数 / 正文宽度 / 重试次数写入 int。
+  - `thinking` 和订阅源偏好写入 bool。
+- 导入时先删除所有受管理 key，再写入 JSON 内的设置，避免旧订阅源偏好残留。
+- 导入后刷新 DeepSeek API key 的运行期缓存，并递增静默订阅源版本号以触发 UI 响应。
+
+`lib/pages/settings/settings_page.dart`：
+
+- 新增“配置迁移”区块。
+- 新增“导出到剪贴板”和“从剪贴板导入”按钮。
+- 导出前提示 JSON 包含 Folo 登录凭据、DeepSeek API key、Prompt 和订阅源偏好。
+- 导入前提示会覆盖当前设置，且不会导入文章缓存、已读历史、摘要和翻译结果。
+- 导入成功后刷新设置页表单和 `AccountService` 登录状态。
+
+`lib/services/account_service.dart`：
+
+- 新增 `reload()`，供导入配置后重新计算登录状态。
+
+### 142.3 验证
+
+已执行：
+
+```bash
+dart format lib/services/settings_backup_service.dart lib/services/account_service.dart lib/pages/settings/settings_page.dart
+dart analyze lib/services/settings_backup_service.dart lib/services/account_service.dart lib/pages/settings/settings_page.dart
+flutter analyze --no-fatal-infos lib test
+flutter test
+```
+
+结果均通过。`flutter analyze` 和 `flutter test` 首次被 Flutter SDK cache 写入权限拦截，授权后重跑通过。
+
+### 142.4 后续流程
+
+本版本用于让用户在旧应用身份下导出配置。用户安装本临时版本并导出 JSON 后，再继续进行 `com.folo.*` 命名空间整改。整改后的新包将使用同一套导入逻辑恢复配置。
+
+<a id="legacy-143"></a>
+
+## 143. 应用命名空间迁移与非官方声明（2026-06-19）
+
+### 143.1 背景与边界
+
+用户确认：本项目不需要隐藏与 Folo 的关系，也不需要把 `Auto Folo` 包装成完全独立品牌；它本质上是基于 Folo/Folo API 的个人二次开发客户端。真正需要规避的是让人误以为这是 Folo/RSSNext 官方应用、授权应用或商业运营产品。
+
+因此本轮不改：
+
+- 应用展示名 `Auto Folo`。
+- 当前差异化图标。
+- Folo API / Folo Token / `api.folo.is` 等事实性说明。
+
+本轮必须改：
+
+- `com.folo.*` 这类官方域名式命名空间。
+- 旧的 `com.autofolo` MethodChannel 命名空间。
+- macOS copyright 中的 `com.folo`。
+- README / 设置页 / 网页中缺少“非官方个人二次开发客户端”的说明。
+
+### 143.2 当前标识
+
+新的统一命名空间：
+
+```text
+io.github.xraygit.autofolo
+```
+
+该命名空间应用于：
+
+- Android `namespace`。
+- Android `applicationId`。
+- Android Kotlin 包声明和文件路径。
+- macOS `PRODUCT_BUNDLE_IDENTIFIER`。
+- macOS RunnerTests bundle id。
+- Flutter MethodChannel：
+  - `io.github.xraygit.autofolo/badge`
+  - `io.github.xraygit.autofolo/move_to_background`
+  - `io.github.xraygit.autofolo/image_clipboard`
+
+### 143.3 实现文件
+
+Android：
+
+- `android/app/build.gradle.kts`
+  - `namespace = "io.github.xraygit.autofolo"`
+  - `applicationId = "io.github.xraygit.autofolo"`
+- `android/app/src/main/kotlin/io/github/xraygit/autofolo/MainActivity.kt`
+  - package 改为 `io.github.xraygit.autofolo`
+  - badge / move-to-background channel 改为新命名空间。
+- 旧路径 `android/app/src/main/kotlin/com/folo/folo_reader/MainActivity.kt` 已移除。
+
+macOS：
+
+- `macos/Runner/Configs/AppInfo.xcconfig`
+  - `PRODUCT_BUNDLE_IDENTIFIER = io.github.xraygit.autofolo`
+  - `PRODUCT_COPYRIGHT = Copyright © 2026 X-Ray. All rights reserved.`
+- `macos/Runner.xcodeproj/project.pbxproj`
+  - RunnerTests bundle id 改为 `io.github.xraygit.autofolo.RunnerTests`
+- `macos/Runner/AppDelegate.swift`
+  - badge / image clipboard channel 改为新命名空间。
+
+Dart：
+
+- `lib/common/widgets/app_badger.dart`
+- `lib/utils/move_to_background.dart`
+- `lib/utils/image_clipboard.dart`
+
+上述 Dart 侧 MethodChannel 均与 Android/macOS 原生侧保持一致。
+
+公开说明：
+
+- `README.md` 顶部新增声明：Auto Folo 是个人用途的非官方二次开发客户端，不隶属于 Folo、RSSNext 或其运营方，也不代表官方发布版本。
+- 设置页“关于”新增同类短声明。
+- `index.html` hero 区新增非官方声明，并将“Folo 官方 img.folo.is 代理”改为“Folo img.folo.is 图片代理”。
+- `lib/services/article_image_service.dart` 注释中去掉“官方”背书式措辞。
+
+### 143.4 安装与数据影响
+
+Android：
+
+- 新 APK 会作为新应用安装，不会覆盖旧 `com.folo.folo_reader`。
+- 旧应用数据不会自动共享。
+- 迁移方式：先在旧 v1.1.19 中导出 JSON 配置，再在新包中从剪贴板导入。
+
+macOS：
+
+- 新 bundle id 会使用新的 sandbox 容器。
+- 旧 `com.folo.autofolo` 容器中的设置不会自动共享。
+- 迁移方式同样使用第 142 节的 JSON 配置导入导出。
+
+### 143.5 后续验证重点
+
+1. Android 安装新包：应与旧包并存，不出现“软件包冲突”。
+2. Android 新包设置页：应能从剪贴板导入 v1.1.19 导出的 JSON。
+3. Android 角标与退到后台 MethodChannel 仍可用。
+4. macOS 新包启动后：bundle id 应为 `io.github.xraygit.autofolo`，设置页能导入 JSON。
+5. macOS Dock badge 与图片复制功能仍可用。
+6. README/设置页/网页明确说明非官方个人二次开发身份。
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.19 -m "- feat: add clipboard JSON settings export and import\n- chore: prepare migration before package identifier cleanup" --push`*
+
+---
+*🤖 Automated Release Footprint:*
+*执行指令: `./scripts/release.sh 1.1.20 -m "- chore: migrate Android package and macOS bundle identifiers to io.github.xraygit.autofolo\n- docs: clarify Auto Folo is an unofficial personal client" --push`*

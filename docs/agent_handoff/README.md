@@ -8,7 +8,7 @@
 2. [status/pending.md](status/pending.md)
 3. [operations/testing.md](operations/testing.md)
 4. 当前任务对应的专题页。
-5. 只有需要完整时间线记录时再读 [history/timeline.md](history/timeline.md)。
+5. 需要历史证据时查 [历史主题归档](history/archive/README.md)；按旧编号查找时使用 [历史时间索引](history/chronology.md)。
 
 知识地图：
 
@@ -19,11 +19,12 @@
 - 功能：[时间线](features/timeline.md)、[文章渲染](features/article-rendering.md)、[性能](features/performance.md)、[翻译与摘要](features/translation-summary.md)、[垃圾拦截/审核](features/filter-review.md)、[设置](features/settings.md)、[后台任务](features/background-tasks.md)、[订阅源](features/subscriptions.md)、[快捷键](features/keyboard-shortcuts.md)。
 - 操作：[发布与构建](operations/release-build.md)、[Git worktree](operations/git-worktrees.md)、[测试](operations/testing.md)、[故障排查](operations/troubleshooting.md)。
 - 设计：[Liquid Glass](design/liquid-glass.md)、[macOS UI](design/macos-ui.md)、[交互模式](design/interaction-patterns.md)。
-- 历史：[决策日志](history/decisions.md)、[迁移](history/migrations.md)、[历史索引](history/historical-map.md)、[完整时间线归档](history/timeline.md)。
+- 历史：[决策日志](history/decisions.md)、[迁移](history/migrations.md)、[发布记录](history/releases.md)、[历史主题地图](history/historical-map.md)、[逐章时间索引](history/chronology.md)、[主题归档](history/archive/README.md)。
 
 维护规则：
 
 - 这个知识库只保留当前仍有用的知识。
 - 如果某个专题页继续变大，按子专题拆分，不要无限追加。
-- 完整时间线保存在 `history/timeline.md`；提炼总结时不要删除归档。
+- 原始历史证据按主题保存在 `history/archive/`；提炼总结时不要删除归档。`history/timeline.md` 只用于兼容旧链接，不再追加内容。
+- 历史归档接近 1,000 行时按自然子主题继续拆分；旧编号只作为 `history/chronology.md` 的追溯标识，不用于文件命名。
 - 记录决策时优先写入 `history/decisions.md`，包含背景、决策、后果和“不要回退”的说明。

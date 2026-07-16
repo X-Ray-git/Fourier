@@ -7,7 +7,7 @@
 - GitHub Secrets 不存放在仓库中。
 - 历史敏感信息此前已经清理；不要重新引入到文档、提交、测试 fixture 或日志里。
 - 不要把真实导出设置值粘贴到文档中，只泛化提到设置 key。
-- 不要在 `history/timeline.md` 里保存真实文章 HTML/API payload；改为总结观察结果。
+- 不要在 `history/archive/`、`history/chronology.md` 或其他交接文档中保存真实文章 HTML/API payload；改为总结观察结果。
 
 发布产物：
 

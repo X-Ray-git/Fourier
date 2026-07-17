@@ -19,6 +19,41 @@ void main() {
     expect(normalized.contains('https://cdn.example.com/a.png'), isTrue);
   });
 
+  test('normalizeHtml removes nested formatting-only spacer paragraphs', () {
+    const raw = '''
+<p><span>第一句话。</span></p>
+<p><span><br></span></p>
+<section><p><strong><span>&nbsp;<br></span></strong></p></section>
+<p><span>第二句话。</span></p>
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(raw),
+    );
+
+    expect(fragment.querySelectorAll('p'), hasLength(2));
+    expect(fragment.querySelector('section'), isNull);
+    expect(fragment.querySelectorAll('br'), isEmpty);
+    expect(fragment.text, contains('第一句话。'));
+    expect(fragment.text, contains('第二句话。'));
+  });
+
+  test('normalizeHtml preserves empty anchors and media blocks', () {
+    const raw = '''
+<p id="chapter-anchor"><span><br></span></p>
+<section><span name="legacy-anchor"><br></span></section>
+<p><span><img src="https://cdn.example.com/content.png"></span></p>
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(raw),
+    );
+
+    expect(fragment.querySelector('#chapter-anchor'), isNotNull);
+    expect(fragment.querySelector('[name="legacy-anchor"]'), isNotNull);
+    expect(fragment.querySelector('img'), isNotNull);
+  });
+
   test('extractImageUrls should dedupe and keep valid http/https urls', () {
     const html = '''
 <img src="https://a.com/1.png" />

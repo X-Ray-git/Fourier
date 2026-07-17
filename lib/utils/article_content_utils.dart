@@ -179,6 +179,23 @@ abstract final class ArticleContentUtils {
   }
 
   static final _whitespaceCollapseRe = RegExp(r'[\u00A0\s]+');
+  static const Set<String> _emptyBlockFormattingTags = {
+    'br',
+    'span',
+    'font',
+    'b',
+    'strong',
+    'i',
+    'em',
+    'u',
+    'small',
+    'mark',
+    's',
+    'del',
+    'ins',
+    'sub',
+    'sup',
+  };
 
   static void _removeEmptyBlocks(dom.DocumentFragment fragment) {
     bool changed = true;
@@ -191,15 +208,29 @@ abstract final class ArticleContentUtils {
         final text = element.text.replaceAll(_whitespaceCollapseRe, '').trim();
         if (text.isNotEmpty) continue;
 
-        final hasNonBreakChild = element.children.any(
-          (child) => child.localName != 'br',
-        );
-        if (hasNonBreakChild) continue;
+        if (_hasMeaningfulEmptyStructure(element)) continue;
 
         element.remove();
         changed = true;
       }
     }
+  }
+
+  static bool _hasMeaningfulEmptyStructure(dom.Element element) {
+    if (_hasAnchorIdentity(element)) return true;
+
+    for (final descendant in element.querySelectorAll('*')) {
+      if (_hasAnchorIdentity(descendant)) return true;
+      if (!_emptyBlockFormattingTags.contains(descendant.localName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _hasAnchorIdentity(dom.Element element) {
+    return (element.attributes['id']?.trim().isNotEmpty ?? false) ||
+        (element.attributes['name']?.trim().isNotEmpty ?? false);
   }
 
   static bool _hasMediaChild(dom.Element element) {

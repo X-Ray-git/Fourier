@@ -639,72 +639,61 @@ class _CategoryItem extends StatelessWidget {
             ? cs.primaryContainer.withValues(alpha: 0.62)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.only(left: 2),
-          child: Row(
-            children: [
-              AppGlassTooltip(
-                message: toggleTooltip ?? (isExpanded ? '折叠' : '展开'),
-                child: IconButton(
-                  icon: AnimatedRotation(
-                    turns: isExpanded ? 0.25 : 0,
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOutCubic,
-                    child: const Icon(Icons.chevron_right_rounded),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Row(
+              children: [
+                AppGlassTooltip(
+                  message: toggleTooltip ?? (isExpanded ? '折叠' : '展开'),
+                  child: IconButton(
+                    icon: AnimatedRotation(
+                      turns: isExpanded ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutCubic,
+                      child: const Icon(Icons.chevron_right_rounded),
+                    ),
+                    iconSize: 18,
+                    tooltip: '',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 28,
+                      height: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                    style: const ButtonStyle(
+                      overlayColor: WidgetStatePropertyAll(Colors.transparent),
+                    ),
+                    // Keep this hit target separate from the category action.
+                    // When expansion is temporarily locked, it intentionally
+                    // consumes the click without changing either state.
+                    onPressed: onToggle ?? () {},
                   ),
-                  iconSize: 18,
-                  tooltip: '',
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 32,
-                  ),
-                  padding: EdgeInsets.zero,
-                  onPressed: onToggle,
                 ),
-              ),
-              Expanded(
-                child: InkWell(
-                  onTap: onTap,
-                  borderRadius: const BorderRadius.horizontal(
-                    right: Radius.circular(8),
-                  ),
-                  child: SizedBox(
-                    height: 32,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isExpanded ? expandedIcon : collapsedIcon,
-                            size: 16,
-                            color: isSelected
-                                ? cs.primary
-                                : cs.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: isSelected
-                                    ? cs.primary
-                                    : cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          _UnreadBadge(count: badgeCount, selected: isSelected),
-                        ],
-                      ),
+                Icon(
+                  isExpanded ? expandedIcon : collapsedIcon,
+                  size: 16,
+                  color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isSelected ? cs.primary : cs.onSurfaceVariant,
                     ),
                   ),
                 ),
-              ),
-            ],
+                _UnreadBadge(count: badgeCount, selected: isSelected),
+                const SizedBox(width: 10),
+              ],
+            ),
           ),
         ),
       ),

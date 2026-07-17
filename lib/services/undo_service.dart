@@ -85,6 +85,7 @@ class UndoService {
       Get.find<TimelineController>().markAsReadLocal(
         article.entryId,
         deferVisualUpdateToFrameBoundary: deferTimelineVisualUpdate,
+        deferArticleStateNotification: deferTimelineVisualUpdate,
       );
     } else {
       GStorage.readStatus.put(article.entryId, true);

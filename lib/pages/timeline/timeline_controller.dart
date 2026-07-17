@@ -56,6 +56,8 @@ class TimelineController extends GetxController {
   int _timelineListResetVersion = 0;
   String _timelineScopeKey = 'normal::';
   final Map<String, Object> _deferredReadVisualUpdates = {};
+  final Map<String, Object> _deferredArticleStateNotifications = {};
+  final Map<String, Timer> _deferredArticleStateNotificationFallbacks = {};
   final Set<String> _probeLocallyReadIds = {};
   final Set<String> _probeReportedReappearedIds = {};
 
@@ -404,6 +406,7 @@ class TimelineController extends GetxController {
     String entryId, {
     bool recordHistory = true,
     bool deferVisualUpdateToFrameBoundary = false,
+    bool deferArticleStateNotification = false,
   }) {
     if (entryId.trim().isEmpty) return;
     GStorage.readStatus.put(entryId, true);
@@ -419,8 +422,27 @@ class TimelineController extends GetxController {
     }
 
     void updateVisualState() {
-      _updateReadStateInMemory(entryId, true);
-      ArticleStateNotifier.tick(entryId);
+      final stopwatch = _animationProbeRequested
+          ? (Stopwatch()..start())
+          : null;
+      _updateReadStateInMemory(
+        entryId,
+        true,
+        updateSelectedArticle: !deferArticleStateNotification,
+        useIncrementalUnreadRemoval: deferArticleStateNotification,
+      );
+      if (stopwatch != null) {
+        _logReadStateProbe(
+          entryId,
+          'visual.update-complete-${stopwatch.elapsedMicroseconds}us',
+        );
+      }
+      if (deferArticleStateNotification) {
+        _deferArticleStateNotification(entryId);
+      } else {
+        _cancelDeferredArticleStateNotification(entryId);
+        ArticleStateNotifier.tick(entryId);
+      }
     }
 
     if (deferVisualUpdateToFrameBoundary) {
@@ -444,10 +466,64 @@ class TimelineController extends GetxController {
     _probeLocallyReadIds.remove(entryId);
     _probeReportedReappearedIds.remove(entryId);
     _deferredReadVisualUpdates.remove(entryId);
+    _cancelDeferredArticleStateNotification(entryId);
     GStorage.readStatus.delete(entryId);
     LocalArticleDbService.setReadState(entryId, false);
     _updateReadStateInMemory(entryId, false);
     ArticleStateNotifier.tick(entryId);
+  }
+
+  /// Broadcast the read-state change after the list removal has painted.
+  ///
+  /// Other pages subscribe to [ArticleStateNotifier] and may synchronously
+  /// rebuild large local lists. Keeping that fan-out outside the removal
+  /// window prevents it from consuming nearly every exit-animation frame.
+  void completeDeferredReadTransition(String entryId) {
+    final token = _deferredArticleStateNotifications[entryId];
+    if (token == null) return;
+    _deferredArticleStateNotificationFallbacks.remove(entryId)?.cancel();
+    unawaited(
+      SchedulerBinding.instance.endOfFrame.then((_) {
+        if (!identical(_deferredArticleStateNotifications[entryId], token)) {
+          return;
+        }
+        _deferredArticleStateNotifications.remove(entryId);
+        ArticleStateNotifier.tick(entryId);
+      }),
+    );
+  }
+
+  void _deferArticleStateNotification(String entryId) {
+    _cancelDeferredArticleStateNotification(entryId);
+    final token = Object();
+    _deferredArticleStateNotifications[entryId] = token;
+    _deferredArticleStateNotificationFallbacks[entryId] = Timer(
+      const Duration(seconds: 1),
+      () {
+        if (!identical(_deferredArticleStateNotifications[entryId], token)) {
+          return;
+        }
+        _deferredArticleStateNotificationFallbacks.remove(entryId);
+        _deferredArticleStateNotifications.remove(entryId);
+        ArticleStateNotifier.tick(entryId);
+      },
+    );
+  }
+
+  void _cancelDeferredArticleStateNotification(String entryId) {
+    _deferredArticleStateNotifications.remove(entryId);
+    _deferredArticleStateNotificationFallbacks.remove(entryId)?.cancel();
+  }
+
+  @override
+  void onClose() {
+    for (final timer in _deferredArticleStateNotificationFallbacks.values) {
+      timer.cancel();
+    }
+    _deferredArticleStateNotificationFallbacks.clear();
+    _deferredArticleStateNotifications.clear();
+    _deferredReadVisualUpdates.clear();
+    super.onClose();
   }
 
   bool get hasMore => selectedMode.value != TimelineViewMode.read && _hasMore;
@@ -712,7 +788,6 @@ class TimelineController extends GetxController {
     );
 
     allArticles[idx] = finalUpdated;
-    allArticles.refresh();
     _applyFilter();
     final currentTimelineOrder = articles
         .map((article) => article.entryId)
@@ -723,7 +798,12 @@ class TimelineController extends GetxController {
     _updateFilterCount();
   }
 
-  void _updateReadStateInMemory(String entryId, bool isRead) {
+  void _updateReadStateInMemory(
+    String entryId,
+    bool isRead, {
+    bool updateSelectedArticle = true,
+    bool useIncrementalUnreadRemoval = false,
+  }) {
     final idx = allArticles.indexWhere((a) => a.entryId == entryId);
     if (idx < 0) return;
 
@@ -749,17 +829,30 @@ class TimelineController extends GetxController {
       filterReviewed: a.filterReviewed,
       filteredAt: a.filteredAt,
     );
+    if (useIncrementalUnreadRemoval &&
+        isRead &&
+        selectedMode.value == TimelineViewMode.unread) {
+      // A normal allArticles write would synchronously recalculate the app
+      // badge, while _applyFilter would rescan and sort the entire article
+      // database. The persisted state is already current; the deferred global
+      // notification updates the full in-memory model after the card leaves.
+      final visibleIndex = articles.indexWhere(
+        (article) => article.entryId == entryId,
+      );
+      if (visibleIndex >= 0) {
+        articles.removeAt(visibleIndex);
+      }
+      return;
+    }
+
     allArticles[idx] = updated;
-    allArticles.refresh();
     _applyFilter();
     _updateFilterCount();
 
     // Update selectedArticle if it was modified
-    if (selectedArticle.value?.entryId == entryId) {
+    if (updateSelectedArticle && selectedArticle.value?.entryId == entryId) {
       selectedArticle.value = updated;
     }
-
-    loadingState.value = Success(articles.toList());
   }
 
   List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {

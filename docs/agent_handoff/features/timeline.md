@@ -92,7 +92,11 @@ macOS 分栏选择与移除协调：
 
 - 主时间线在未读模式下处理 `M` 或双击时，先登记后继文章，但保持当前详情；卡片真实完成退出后再切换详情并把后继卡片留在可见区域。非移除模式继续使用普通相对选择。
 - 本地数据库写入是同步重工作；不能在 `addPostFrameCallback` 中同时做持久化和列表变更。post-frame callback 仍属于当前帧，实测会让 180ms 动画只剩约 30–55ms 可见时间。
-- `UndoService.markAsRead(... deferTimelineVisualUpdate: true)` 供 macOS 双击路径使用；主时间线 `M` 在未读模式下也直接要求 `TimelineController.markAsReadLocal(... deferVisualUpdateToFrameBoundary: true)`。控制器先持久化，再等待新的 `endOfFrame` 才更新内存列表；其他调用方默认行为不变。
-- 延后的视觉更新带一次性 token；在它执行前恢复未读会取消 token，避免极快 `Command-Z` 被迟到的“标为已读”界面更新覆盖。
+- `UndoService.markAsRead(... deferTimelineVisualUpdate: true)` 供 macOS 双击路径使用；主时间线 `M` 在未读模式下也直接要求 `TimelineController.markAsReadLocal(... deferVisualUpdateToFrameBoundary: true, deferArticleStateNotification: true)`。控制器先持久化，再等待新的 `endOfFrame` 才更新当前可见列表；其他调用方默认行为不变。
+- 单篇已读不能在动画首帧调用完整 `_applyFilter()`。日志曾确认本地模型约有 `4799` 篇文章，全量扫描、应用角标/计数并通知所有订阅者会占用约 73–90ms。当前移除路径只从可见 `articles` 中增量删除对应项，离场文章的 `allArticles`、角标、计数和其他页面状态在动画完成后统一维护。
+- `ArticleStateNotifier.tick()` 会同步扇出到最近阅读全库读取/排序、订阅源未读计数、订阅源详情和垃圾拦截等页面。会移除卡片时，跨页面通知由 `completeDeferredReadTransition(entryId)` 在真实 `onRemoveEnd` 后再跨一个 `endOfFrame` 发出，避免其他页面的同步工作吞掉 180ms 退场动画。若生命周期异常没有回调，控制器用 1 秒 fallback 保证通知最终发生。
+- 延后的视觉更新和跨页面通知分别带一次性 token；在执行前恢复未读会同时取消它们，避免极快 `Command-Z` 被迟到的“标为已读”更新覆盖。
+- 退场期间不要更新当前选中文章对象，也不要为单篇已读重复写入 `loadingState = Success(...)` 或额外执行 `allArticles.refresh()`；这些更新会无意义地重建右侧详情或放大通知成本。
 - 如果当前是未读模式并会删除卡片，原文浏览器必须等列表 `onRemoveEnd` 后再跨一帧打开。固定 `200ms` 延迟曾在动画中途抢走前台，视觉上看起来像没有动画。
 - 不要把这个特殊时序全局套到文章页按钮或 Android；默认参数刻意保持原行为。
+- 最终诊断结果：在约 `4799` 篇本地文章的环境中，增量可视更新耗时约 164–671 微秒；两次 `M` 和四次双击都完整经过动画 bucket `4→3→2→1→0`，双击在 141–166ms 内识别，且移除期间没有列表 reset。用户随后完成视觉确认。

@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-07-16：
+截至 2026-07-17：
 
 - `main` 是当前集成分支。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
@@ -45,11 +45,12 @@
 - macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界为 `2px`；正文基础左右 padding 为 `11px`。中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
 - macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。
 - macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。
-- macOS 主时间线偶发无动画和 `M` 后回到顶部已通过诊断日志确认同一结构根因：单篇数据库通知把 `timelineListResetVersion` 放进 key，销毁了整列和 ScrollPosition；另有详情提前切换与 UI isolate 重工作竞争动画帧。当前修复改为稳定列表实例上的零时长批量同步，并让 `M`/双击共用 `MacSplitArticleListCoordinator`，在真实 `onRemoveEnd` 后再切换详情。代码与回归测试已通过，仍待用户长期运行验证。
+- macOS 主时间线偶发无动画和 `M` 后回到顶部已完成分层修复并由用户确认：列表实例保持稳定，`M`/双击共用 `MacSplitArticleListCoordinator`；会移除卡片时只增量删除当前可见项，完整 `_applyFilter()`、角标/计数和 `ArticleStateNotifier` 跨页面扇出延后到真实 `onRemoveEnd` 后。最终日志在约 `4799` 篇本地文章下确认两次 `M`、四次双击都完整经过 `4→3→2→1→0` 动画阶段，增量更新约 164–671 微秒，移除期间没有列表 reset。
 - 已读文章偶发重新出现的状态竞态已定位并修复：mark-read 与未读列表请求并发时，旧代码会在同步成功后过早清除本地 true 覆盖，较早发出的旧未读快照随后把文章降级。当前 true 覆盖保留到成功未读快照明确不再包含该文章；主时间线和订阅源详情规则一致。
 - 两条动画链保留默认关闭的诊断埋点。仅在 Debug 并显式传 `--dart-define=AUTO_FOLO_ANIMATION_PROBE=true` 时启用；Release 和普通 Debug 不注册帧耗时回调，也不挂载动画监听器。
 - macOS 静默订阅源分组不再因“被选中”而自动展开。点击分组行只进入静默时间线，只有独立展开按钮会改变子列表展开状态。
 - macOS 普通订阅源分类已分离手动展开与当前订阅源触发的临时展开：查看具体订阅源时父分类锁定展开，切到最近阅读等其他页面后解除锁定并恢复用户原来的展开状态；用户已验证该交互符合预期。
+- macOS 订阅源分类行现在共用整行 hover/press 反馈；展开箭头保留独立点击和 tooltip，但不再绘制第二套圆形 overlay。用户已确认箭头区域与分类其余区域的视觉反馈一致。
 - macOS 透明 header + soft scroll edge 实验已按用户长期视觉反馈撤销。主时间线、垃圾拦截、最近阅读和订阅源详情改用共享 `MacHeaderPane`：固定 `surface` header，内容和 scrollbar 从其下方开始，中间栏 header 仍无底部分隔线。
 - macOS 文章 header 保持固定 `surface`，且继续不使用整块 `BackdropFilter`，避免采样相邻按钮高光。顶部状态不再显示“文章详情”、分隔线和阅读进度；正文大标题接近完全滚出后，文章标题左对齐进入 header，`1px outlineVariant / alpha 0.30` 分隔线与橙色阅读进度同步渐显。用户已完成视觉验证。
 - 垃圾拦截同步按钮与主时间线共用 `AppGlassSyncButton`，右侧 inset 也统一为 `10px`。

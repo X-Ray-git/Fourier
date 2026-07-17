@@ -26,7 +26,6 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/widgets/feedback_toast.dart';
-import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
@@ -92,6 +91,19 @@ class _TimelineAnimationProbe {
     log(entryId, 'session.finished');
     _activeEntryId = null;
     _activeSource = null;
+  }
+
+  static void logTap(
+    String entryId, {
+    required bool isDoubleTap,
+    required int elapsedSincePreviousTapMs,
+  }) {
+    if (!enabled) return;
+    debugPrintSynchronously(
+      '[TimelineTapProbe] id=${shortId(entryId)} '
+      'double=$isDoubleTap previousMs=$elapsedSincePreviousTapMs',
+      wrapWidth: 2000,
+    );
   }
 
   static void _installTimingsProbe() {
@@ -405,8 +417,12 @@ class _TimelinePageState extends State<TimelinePage> {
 
   Map<String, Object?> _timelineProbeFields({ArticleModel? article}) {
     final attachedPositions = _scrollController.positions.length;
+    final lastTapAgeMs = _lastArticleTapAt == null
+        ? -1
+        : DateTime.now().difference(_lastArticleTapAt!).inMilliseconds;
     return {
       'count': controller.articles.length,
+      'allCount': controller.allArticles.length,
       'index': article == null
           ? -1
           : controller.articles.indexWhere(
@@ -423,15 +439,24 @@ class _TimelinePageState extends State<TimelinePage> {
           : attachedPositions == 0
           ? 'detached'
           : 'multiple',
+      'lastTapAgeMs': lastTapAgeMs,
     };
   }
 
   void _handleMacArticleTap(ArticleModel article) {
     final now = DateTime.now();
+    final elapsedSincePreviousTap = _lastArticleTapAt == null
+        ? -1
+        : now.difference(_lastArticleTapAt!).inMilliseconds;
     final isDoubleTap =
         _lastArticleTapEntryId == article.entryId &&
         _lastArticleTapAt != null &&
-        now.difference(_lastArticleTapAt!).inMilliseconds < 300;
+        elapsedSincePreviousTap < 300;
+    _TimelineAnimationProbe.logTap(
+      article.entryId,
+      isDoubleTap: isDoubleTap,
+      elapsedSincePreviousTapMs: elapsedSincePreviousTap,
+    );
 
     controller.selectedArticle.value = article;
     _lastArticleTapEntryId = article.entryId;
@@ -544,6 +569,7 @@ class _TimelinePageState extends State<TimelinePage> {
 
   void _handleTimelineRemoveEnd(ArticleModel article) {
     _listCoordinator.onRemoveEnd(article);
+    controller.completeDeferredReadTransition(article.entryId);
     _TimelineAnimationProbe.log(
       article.entryId,
       'remove.end',
@@ -635,6 +661,7 @@ class _TimelinePageState extends State<TimelinePage> {
     controller.markAsReadLocal(
       current.entryId,
       deferVisualUpdateToFrameBoundary: expectsRemoval,
+      deferArticleStateNotification: expectsRemoval,
     );
     _TimelineAnimationProbe.log(
       current.entryId,
@@ -836,7 +863,6 @@ class _TimelinePageState extends State<TimelinePage> {
 
   Widget _buildListView(BuildContext context) {
     return Obx(() {
-      ArticleStateNotifier.version.value; // 订阅变更通知
       final filterCount = controller.filterCount.value;
       final filterBarCount = Platform.isMacOS ? 0 : 1;
       Widget content;

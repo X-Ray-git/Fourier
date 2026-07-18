@@ -54,6 +54,86 @@ void main() {
     expect(fragment.querySelector('img'), isNotNull);
   });
 
+  test('normalizeHtml converts a Hugging Face byline to compact authors', () {
+    const raw = '''
+<div data-target="BlogAuthorsByline">
+  <div>
+    <a href="/jane">
+      <img class="rounded-full! size-12" alt="Jane Doe's avatar"
+           src="https://cdn-avatars.huggingface.co/v1/uploads/jane.png">
+    </a>
+    <span class="fullname">Jane Doe</span>
+  </div>
+</div>
+<p><img src="https://huggingface.co/datasets/docs/article-image.png"></p>
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(raw),
+    );
+
+    final authorList = fragment.querySelector('auto-folo-author-list');
+    final author = authorList?.querySelector('auto-folo-author');
+    expect(authorList, isNotNull);
+    expect(author?.attributes['name'], 'Jane Doe');
+    expect(author?.attributes['handle'], 'jane');
+    expect(author?.attributes['profile'], 'https://huggingface.co/jane');
+    expect(
+      author?.attributes['avatar'],
+      'https://cdn-avatars.huggingface.co/v1/uploads/jane.png',
+    );
+    expect(fragment.querySelectorAll('img'), hasLength(1));
+    expect(
+      fragment.querySelector('img')!.attributes['src'],
+      'https://huggingface.co/datasets/docs/article-image.png',
+    );
+  });
+
+  test('normalizeHtml removes empty Hugging Face avatar stacks', () {
+    const raw = '''
+<ul>
+  <li><a href="/one"><img class="rounded-full" src="https://cdn-avatars.huggingface.co/v1/one.png"></a></li>
+  <li><a href="/two"><img class="rounded-full" src="https://cdn-avatars.huggingface.co/v1/two.png"></a></li>
+</ul>
+<p>正文</p>
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(raw),
+    );
+
+    expect(fragment.querySelector('ul'), isNull);
+    expect(fragment.querySelectorAll('img'), isEmpty);
+    expect(fragment.text, contains('正文'));
+  });
+
+  test('normalizeHtml keeps avatar-like images from unrelated sources', () {
+    const raw = '''
+<p><img class="rounded-full" alt="Demo avatar"
+        src="https://example.com/avatar.png"></p>
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(raw),
+    );
+
+    expect(fragment.querySelector('img'), isNotNull);
+  });
+
+  test('normalizeHtml removes semantic relative Hugging Face avatars', () {
+    const raw = '''
+<div><img class="rounded-full! size-9" alt="Jane's avatar"
+          src="/avatars/jane.svg"><span>Jane Doe</span></div>
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(raw),
+    );
+
+    expect(fragment.querySelector('img'), isNull);
+    expect(fragment.text, contains('Jane Doe'));
+  });
+
   test('extractImageUrls should dedupe and keep valid http/https urls', () {
     const html = '''
 <img src="https://a.com/1.png" />

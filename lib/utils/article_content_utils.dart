@@ -6,6 +6,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../services/article_image_service.dart';
+import 'article_content_compatibility.dart';
 import 'youtube_embed_utils.dart';
 
 abstract final class ArticleContentUtils {
@@ -74,6 +75,7 @@ abstract final class ArticleContentUtils {
     _removeUnsafeTags(fragment);
     _removeTrackingPixels(fragment);
     _removeHiddenElements(fragment);
+    ArticleContentCompatibility.apply(fragment);
     _normalizeImages(fragment);
     _trimSpacingStyles(fragment);
     _removeEmptyBlocks(fragment);

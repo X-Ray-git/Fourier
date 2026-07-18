@@ -184,6 +184,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     HtmlChunkType.horizontalRule => const EdgeInsets.symmetric(vertical: 16),
     HtmlChunkType.iframeVideo => const EdgeInsets.symmetric(vertical: 12),
     HtmlChunkType.rawHtml => const EdgeInsets.only(bottom: 14),
+    HtmlChunkType.authorList => const EdgeInsets.only(bottom: 20),
   };
 
   Widget? _buildContent(BuildContext context) {
@@ -200,7 +201,129 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
       HtmlChunkType.horizontalRule => _buildDivider(colorScheme),
       HtmlChunkType.iframeVideo => _buildMediaPlaceholder(context, colorScheme),
       HtmlChunkType.rawHtml => _buildRawHtml(context, colorScheme),
+      HtmlChunkType.authorList => _buildAuthorList(context, colorScheme),
     };
+  }
+
+  Widget _buildAuthorList(BuildContext context, ColorScheme cs) {
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    const avatarSize = 36.0;
+    final cacheWidth = math.max(1, (avatarSize * dpr).round());
+    final itemWidth = math.min(176.0, widget.maxWidth);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        children: widget.chunk.authors
+            .map((author) {
+              ArticleImageCacheService.registerImage(
+                widget.articleId,
+                author.avatarUrl,
+                maxWidth: cacheWidth * 2,
+              );
+
+              final fallbackLetter = author.name.characters.firstOrNull ?? '';
+              Widget item = SizedBox(
+                width: itemWidth,
+                child: Row(
+                  children: [
+                    ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: author.avatarUrl,
+                        cacheKey: ArticleImageCacheService.displayCacheKey(
+                          widget.articleId,
+                          author.avatarUrl,
+                        ),
+                        httpHeaders: ArticleImageService.httpHeaders,
+                        width: avatarSize,
+                        height: avatarSize,
+                        fit: BoxFit.cover,
+                        memCacheWidth: cacheWidth,
+                        maxWidthDiskCache: cacheWidth * 2,
+                        fadeInDuration: const Duration(milliseconds: 80),
+                        fadeOutDuration: const Duration(milliseconds: 80),
+                        placeholder: (context, url) => Container(
+                          width: avatarSize,
+                          height: avatarSize,
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.3,
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: avatarSize,
+                          height: avatarSize,
+                          alignment: Alignment.center,
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.5,
+                          ),
+                          child: Text(
+                            fallbackLetter,
+                            style: TextStyle(
+                              color: cs.onSurfaceVariant,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            author.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: cs.onSurface,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (author.handle.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              '@${author.handle}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: cs.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (author.profileUrl.isNotEmpty) {
+                item = MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openExternalUrl(author.profileUrl),
+                    child: item,
+                  ),
+                );
+              }
+
+              return Semantics(
+                label: author.name,
+                button: author.profileUrl.isNotEmpty,
+                child: item,
+              );
+            })
+            .toList(growable: false),
+      ),
+    );
   }
 
   Future<void> _handleLinkTap(

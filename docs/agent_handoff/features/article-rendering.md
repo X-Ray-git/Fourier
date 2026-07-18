@@ -5,6 +5,7 @@
 - `lib/pages/article/article_page.dart`
 - `lib/pages/article/widgets/html_chunk_card.dart`
 - `lib/utils/article_content_utils.dart`
+- `lib/utils/article_content_compatibility.dart`
 - `lib/utils/html_chunk_parser.dart`
 
 当前设计：
@@ -21,6 +22,15 @@ HTML 空段规范化：
 - 带 `id` 或 `name` 的空元素可能是目录/页面锚点，必须保留；图片、视频、表格、代码、引用和列表等媒体/结构内容也必须保留。新增格式标签时，只有确定其在无文本时没有独立语义，才能加入格式包装白名单。
 - 新智元文章《奥特曼回斯坦福认错：思考外包给AI，一代人大脑正在萎缩》的源 HTML 把几乎每句话放在独立 `<p>` 中，并在段落间插入 `<p><span><br></span></p>`。旧清洗在 152 个段落中残留 82 个这种空段，chunk 合并又在每个段落之间添加 `<br><br>`，最终相邻句子间最多叠加 5 个 `<br>`。当前窄修复只删除空格式段，使其回到标准段落间距。
 - 不要自动合并该类“一句话一个 `<p>`”的正常非空段落。这是上游排版语义；可靠合并需要复杂启发式，会增加误伤和维护成本，用户已明确暂不考虑。
+
+来源兼容规则：
+
+- 依赖站点 CSS 才能成立的窄兼容修复集中放在 `ArticleContentCompatibility`，由 `ArticleContentUtils.normalizeHtml()` 在通用安全清洗后、图片 URL 规范化前调用。不要把来源判断散落到 `HtmlChunkParser` 或普通图片 widget，也不要为单一规则引入动态规则引擎。
+- Hugging Face Blog 的作者头像没有 `width/height`，只使用 Tailwind 的 `size-9 sm:size-12` 或父容器 `h-5/w-5` 控制显示尺寸。图片文件的固有像素不能代表网页显示尺寸；不应直接按正文最大宽度放大，也不应加载上游整套 CSS。
+- 官方作者区有稳定的 `data-target="BlogAuthorsByline"`。兼容层将其转换为内部 `auto-folo-author-list/auto-folo-author` 语义结构，`HtmlChunkParser` 生成单个 `authorList` chunk，`HtmlChunkCard` 以 `36px` 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。
+- 作者区之外的 Hugging Face 头像堆叠属于站点装饰信息，仍按明确的 `cdn-avatars.huggingface.co` 或 `/avatars/` 头像语义移除；普通正文图片和其他来源即使带有 `avatar`/圆形类名也不能被误删。
+- 已保存译文此前直接进入 `HtmlChunkParser`，会绕过正文规范化。当前原文、历史译文和新生成译文在展示前都统一经过 `normalizeHtml()`；历史数据不需要批量迁移，重新构建文章 Controller 即可生效。
+- 来源规则必须依赖稳定的来源标记、域名或明确语义，并配正向/反向最小 HTML 测试。不要按文章标题、订阅源 ID、图片是否圆形或图片固有尺寸做宽泛判断。
 
 超链接：
 

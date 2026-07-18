@@ -37,6 +37,31 @@ void main() {
     expect(chunks.single.imageSrc, 'https://example.com/audio.mp3');
   });
 
+  test('compact author markup becomes one author-list chunk', () {
+    const html = '''
+<auto-folo-author-list>
+  <auto-folo-author name="Jane Doe" handle="jane"
+      avatar="https://example.com/jane.png"
+      profile="https://huggingface.co/jane"></auto-folo-author>
+  <auto-folo-author name="John Doe" handle="john"
+      avatar="https://example.com/john.png"
+      profile="https://huggingface.co/john"></auto-folo-author>
+</auto-folo-author-list>
+''';
+
+    final chunks = HtmlChunkParser.parseSync(html);
+
+    expect(chunks, hasLength(1));
+    expect(chunks.single.type, HtmlChunkType.authorList);
+    expect(chunks.single.authors, hasLength(2));
+    expect(chunks.single.authors.first.name, 'Jane Doe');
+    expect(chunks.single.authors.first.handle, 'jane');
+    expect(
+      chunks.single.authors.first.profileUrl,
+      'https://huggingface.co/jane',
+    );
+  });
+
   testWidgets('resource-less media explains the problem instead of hiding it', (
     tester,
   ) async {

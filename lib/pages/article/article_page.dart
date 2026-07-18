@@ -2122,6 +2122,10 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
     final radiusT = Curves.easeOutCubic.transform(morphT.clamp(0.0, 1.0));
     final currentRadius = lerpDouble(maxRadius, 18, radiusT)!;
     final contentOpacity = ((clampedValue - 0.82) / 0.18).clamp(0.0, 1.0);
+    final panelScrimOpacity = Curves.easeInOutCubic.transform(
+      ((clampedValue - 0.48) / 0.52).clamp(0.0, 1.0),
+    );
+    final panelScrim = appGlassFloatingPanelScrim(context);
     final showContent =
         clampedValue > 0.82 && !widget.morphController.isClosing;
     final showTriggerIcon = clampedValue < 0.34;
@@ -2188,6 +2192,16 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
                         child: Stack(
                           alignment: Alignment.topRight,
                           children: [
+                            if (panelScrimOpacity > 0)
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: ColoredBox(
+                                    color: panelScrim.withValues(
+                                      alpha: panelScrim.a * panelScrimOpacity,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             if (showTriggerIcon)
                               Opacity(
                                 opacity: triggerIconOpacity,

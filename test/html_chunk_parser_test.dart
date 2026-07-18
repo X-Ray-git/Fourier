@@ -59,4 +59,26 @@ void main() {
     expect(find.text('源内容未提供可用的媒体地址'), findsOneWidget);
     expect(find.text('打开原文'), findsOneWidget);
   });
+
+  testWidgets('Bilibili iframe renders as a lazy video player', (tester) async {
+    final chunk = HtmlChunkParser.parseSync(
+      '<iframe src="https://player.bilibili.com/player.html?bvid=BV1ZiM86BEwu&amp;autoplay=false"></iframe>',
+    ).single;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HtmlChunkCard(
+            chunk: chunk,
+            articleId: 'entry-id',
+            articleUrl: 'https://sspai.com/post/112169',
+            maxWidth: 420,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Bilibili'), findsOneWidget);
+    expect(find.text('外部网页'), findsNothing);
+  });
 }

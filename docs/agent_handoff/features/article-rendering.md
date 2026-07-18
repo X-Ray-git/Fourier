@@ -54,19 +54,21 @@ HTML 空段规范化：
 - `AnimatedOpacity` 不会自动停止命中测试。inline 与全屏视频控制栏隐藏时必须同时 `IgnorePointer`，否则不可见的全屏/退出按钮仍会拦截角落点击。
 - inline 与全屏普通视频的 `VideoProgressIndicator` 均已启用 `allowScrubbing: true`。`video_player` 内部支持点击定位和水平拖拽：拖动开始时暂时暂停，拖动中连续 seek，结束后按拖动前状态恢复。两处进度条都用 `MouseRegion(SystemMouseCursors.click)` 提示可交互；这只适用于本地 `video_player`，YouTube 进度条由 WebView/YouTube 自己管理。
 
-YouTube：
+官方网页视频（YouTube / Bilibili）：
 
 - Folo/Newtype 等源会返回 `youtube.com` 或 `youtube-nocookie.com/embed/...` iframe。它不是媒体文件，不能交给 `video_player`；当前使用 Flutter 官方 `webview_flutter`，Android 与 macOS 平台实现作为直接依赖。
-- `YouTubeEmbedInfo` 只识别明确的 YouTube embed/watch/shorts/live/youtu.be URL，并统一生成隐私增强 `youtube-nocookie.com` 地址。非 YouTube iframe 继续保持静态占位并用外部浏览器打开，不要宽泛内嵌任意网页。
-- YouTube WebView 必须懒加载：文章初始只显示固定 `16:9` 缩略图和共用播放按钮，用户点击后才创建原生 WebView，避免长文章一次创建多个 platform view。播放后遵循 YouTube 自带控制栏、字幕、清晰度和结束行为，不强行伪装成本地 `video_player`。
+- 少数派“本周看什么”、少数派其他文章与小众软件会稳定返回 `player.bilibili.com/player.html` iframe。2026-07-18 本地文章库检查到最近 5 篇“本周看什么”共 23 个标准 Bilibili embed，因此它属于应正式支持的常见视频媒介，不再作为普通“外部网页”处理。
+- `YouTubeEmbedInfo` 只识别明确的 YouTube embed/watch/shorts/live/youtu.be URL，并统一生成隐私增强 `youtube-nocookie.com` 地址。`BilibiliEmbedInfo` 只识别精确的官方 player host/path，并要求有效 `bvid` 或 `aid`；支持少数派返回的 HTML entity 查询分隔符和小众软件使用的 protocol-relative URL。其他 iframe 继续保持静态占位并用外部浏览器打开，不要宽泛内嵌任意网页。
+- 两类 WebView 共用 `WebEmbedVideoPlayer` 的创建、导航、全屏、加载与错误处理，但各自提供严格的解析器、允许域名和外部打开地址。不要把 URL 白名单下沉成宽泛的“网页播放器”判断。
+- WebView 必须懒加载：用户点击后才创建原生 WebView，避免长文章一次创建多个 platform view。YouTube 初始显示固定 `16:9` 缩略图；Bilibili 未播放态使用轻量来源占位，不额外请求 API 获取封面。播放后遵循各平台自带控制栏、清晰度和结束行为，不强行伪装成本地 `video_player`。
 - YouTube 错误 `153` 表示 embed 请求缺少 HTTP Referer/客户端身份。不要直接把 embed URL 当作 WebView 顶层请求；当前通过受控本地 HTML iframe、`YouTubeEmbedInfo.clientBaseUrl`（公开仓库地址）、`strict-origin-when-cross-origin` 和 `allowfullscreen` 提供合法身份与全屏权限。导航代理需精确放行该 client document URL，否则会误把初始化 base URL 打开到默认浏览器并留下白屏转圈。
-- readability 仅保留能被 `YouTubeEmbedInfo` 识别的 iframe，仍删除其他 iframe。这个白名单是安全与复杂度边界，不要为了支持更多站点直接取消 iframe 清理。
+- readability 仅保留能被 `YouTubeEmbedInfo` 或 `BilibiliEmbedInfo` 识别的 iframe，仍删除其他 iframe。这个白名单是安全与复杂度边界；新增平台必须使用同样严格的 provider parser，不能直接取消 iframe 清理。
 - macOS 网页元素系统全屏需要 `WKPreferences.isElementFullscreenEnabled`（macOS 12.3+）。当前 Dart 通过 `WebKitWebViewController.webViewIdentifier` 和 `MacOSWebViewControls` 通道，Runner 再用插件官方 `FWFWebViewFlutterWKWebViewExternalAPI` 找回原生 WKWebView 并启用该属性；不要修改 pub cache 或 fork 插件。用户已验证 YouTube 内联播放、按钮操作和系统全屏可用，细节优化留待后续需求。
 
 已确认但暂不修复的源内容边界：
 
 - OpenAI News 的 `Improving health intelligence in ChatGPT`：Folo 条目只有短摘要，没有 media、attachments、video 或 iframe。全文 readability 会从 OpenAI 动态页面留下一个无 `src`/`source` 的 `<audio preload="none">`；它原本属于依赖网页 JavaScript 后续注入资源的“朗读文章”控件，不是视频。不要尝试猜测 OpenAI 的动态音频地址，也不要静默删除该节点；当前把它显示为明确的“音频不可用”状态。
-- MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“仅 YouTube iframe”白名单。
+- MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“受支持官方视频 iframe”白名单。
 - 无有效 `src/source` 的 audio、video、iframe 不得静默删除，也不得继续伪装成可播放的空播放器。当前保留媒体 chunk，并明确显示“源内容未提供可用的媒体地址”；文章有原始链接时提供“打开原文”。这既暴露源内容/解析问题，又避免误导用户。
 
 表格：

@@ -15,6 +15,7 @@ import 'package:html/parser.dart' as html_parser;
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/app_context_menu.dart';
 import '../../../utils/article_content_utils.dart';
+import '../../../utils/bilibili_embed_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
 import '../../../utils/youtube_embed_utils.dart';
 import '../../../utils/html_contrast_utils.dart';
@@ -23,6 +24,7 @@ import '../../../utils/macos_zoom_in_cursor.dart';
 import '../../../utils/security_utils.dart';
 import '../../../services/article_image_service.dart';
 import '../../../services/article_image_cache_service.dart';
+import 'bilibili_embed_player.dart';
 import 'inline_video_player.dart';
 import 'youtube_embed_player.dart';
 
@@ -567,6 +569,14 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: YouTubeEmbedPlayer(info: youtube),
+      );
+    }
+
+    final bilibili = BilibiliEmbedInfo.tryParse(videoUrl);
+    if (bilibili != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: BilibiliEmbedPlayer(info: bilibili),
       );
     }
 

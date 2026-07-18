@@ -1,8 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -554,6 +556,7 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onMKeyPressed;
+  final VoidCallback? onOpenOriginalAndMarkRead;
   final bool Function()? isActive;
   final bool Function(String entryId)? isSelectedArticle;
 
@@ -566,6 +569,7 @@ class ArticlePageView extends StatefulWidget {
     this.onPrevious,
     this.onNext,
     this.onMKeyPressed,
+    this.onOpenOriginalAndMarkRead,
     this.isActive,
     this.isSelectedArticle,
   });
@@ -753,6 +757,33 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       if (_hasShortcutModifierPressed()) return false;
       if (event is KeyRepeatEvent) return true;
       _copyOriginalArticleMarkdown();
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.keyB) {
+      if (event is KeyRepeatEvent) return true;
+      final keyboard = HardwareKeyboard.instance;
+      final hasNonShiftModifier =
+          keyboard.isAltPressed ||
+          keyboard.isControlPressed ||
+          keyboard.isMetaPressed;
+      if (hasNonShiftModifier) return false;
+
+      if (keyboard.isShiftPressed) {
+        final combinedAction = widget.onOpenOriginalAndMarkRead;
+        if (combinedAction != null) {
+          combinedAction();
+        } else {
+          final wasUnread = !controller.isRead.value;
+          if (wasUnread && !controller.isUpdatingReadState.value) {
+            unawaited(controller.markAsRead(showSuccess: false));
+            widget.onNext?.call();
+          }
+          unawaited(controller.openInBrowser());
+        }
+      } else {
+        unawaited(controller.openInBrowser());
+      }
       return true;
     }
 

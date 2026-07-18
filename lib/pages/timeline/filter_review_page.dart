@@ -8,16 +8,20 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
+import '../../common/widgets/feedback_toast.dart';
 import '../../services/auto_filter_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/mac_article_shortcut_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
+import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
 import '../main/main_controller.dart';
 import '../timeline/timeline_controller.dart';
@@ -146,10 +150,14 @@ class FilterReviewPage extends StatefulWidget {
 class _FilterReviewPageState extends State<FilterReviewPage> {
   final _articles = <ArticleModel>[].obs;
   final _selectedArticle = Rxn<ArticleModel>();
+  final FocusNode _emptyDetailFocusNode = FocusNode(
+    debugLabel: 'filter-review-empty-detail',
+  );
   final Set<String> _seenIds = {};
   final Set<String> _trackpadDismissedIds = {};
   final Set<String> _pendingReviewActionIds = {};
   final Map<String, UndoRestoreEvent> _deferredTrackpadRestores = {};
+  final Map<String, ArticleModel> _pendingOriginalOpenAfterRemoval = {};
   bool _reloadAfterPendingReviewAction = false;
   late final MacSplitArticleListCoordinator _listCoordinator;
   Worker? _articleStateWorker;
@@ -166,6 +174,20 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       revealArticle: _revealCoordinatedArticle,
     );
     HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
+    if (Platform.isMacOS) {
+      MacArticleShortcutService.instance.register(
+        this,
+        isActive: () =>
+            mounted &&
+            _isActiveMacReviewPage &&
+            (ModalRoute.of(context)?.isCurrent ?? true),
+        hasSelection: () => _selectedArticle.value != null,
+        selectBoundary: (direction) {
+          final selected = _listCoordinator.selectRelative(direction);
+          return selected;
+        },
+      );
+    }
     _loadArticles();
     _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
       final entryId = ArticleStateNotifier.lastEntryId;
@@ -213,7 +235,20 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     _filterCountWorker?.dispose();
     _undoRestoreWorker?.dispose();
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
+    if (Platform.isMacOS) {
+      MacArticleShortcutService.instance.unregister(this);
+    }
+    _emptyDetailFocusNode.dispose();
     super.dispose();
+  }
+
+  void _clearSelectionAndFocusEmptyDetail() {
+    _selectedArticle.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isActiveMacReviewPage) {
+        _emptyDetailFocusNode.requestFocus();
+      }
+    });
   }
 
   bool _handleHardwareKeyEvent(KeyEvent event) {
@@ -222,13 +257,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     if (!isCurrentRoute) return false;
     if (event is! KeyDownEvent) return false;
 
-    if (Platform.isMacOS) {
-      if (event.logicalKey == LogicalKeyboardKey.keyK) {
-        final selected = _selectedArticle.value;
-        if (selected != null) {
-          _keep(selected, source: 'keyK');
-          return true;
-        }
+    if (!Platform.isMacOS || !_isActiveMacReviewPage) return false;
+    if (event.logicalKey == LogicalKeyboardKey.keyK) {
+      final selected = _selectedArticle.value;
+      if (selected != null) {
+        _keep(selected, source: 'keyK');
+        return true;
       }
     }
     return false;
@@ -605,6 +639,29 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
   }
 
+  void _rejectAndOpenOriginal(ArticleModel article) {
+    _reject(article, source: 'shiftB');
+    if (!_pendingReviewActionIds.contains(article.entryId)) return;
+
+    _pendingOriginalOpenAfterRemoval[article.entryId] = article;
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      final pending = _pendingOriginalOpenAfterRemoval.remove(article.entryId);
+      if (pending != null) unawaited(_openOriginalArticle(pending));
+    });
+  }
+
+  Future<void> _openOriginalArticle(ArticleModel article) async {
+    final uri = SecurityUtils.parseHttpUrl(article.url);
+    if (uri == null) {
+      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
+      return;
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      AppFeedback.error('无法打开链接', '未找到默认浏览器');
+    }
+  }
+
   void _handleReviewRemoveStart(ArticleModel article) {
     _ReviewAnimProbe.log(article.entryId, 'remove.start', {
       'selected': _selectedArticle.value?.entryId == article.entryId,
@@ -623,6 +680,17 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       'selected': _selectedArticle.value?.entryId,
     });
     _ReviewAnimProbe.finish(article.entryId);
+
+    final pendingOpen = _pendingOriginalOpenAfterRemoval.remove(
+      article.entryId,
+    );
+    if (pendingOpen != null) {
+      unawaited(
+        SchedulerBinding.instance.endOfFrame.then((_) {
+          if (mounted) unawaited(_openOriginalArticle(pendingOpen));
+        }),
+      );
+    }
 
     final restored = _deferredTrackpadRestores.remove(article.entryId);
     if (restored == null) return;
@@ -877,6 +945,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
               if (selected == null) {
                 return MacSplitDetailEmptyPlaceholder(
                   topInset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                  focusNode: _emptyDetailFocusNode,
                 );
               }
               return ArticlePageView(
@@ -888,13 +957,19 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                     Get.find<MainController>().currentIndex.value == 1,
                 isSelectedArticle: (entryId) =>
                     _selectedArticle.value?.entryId == entryId,
-                onClose: () => _selectedArticle.value = null,
+                onClose: _clearSelectionAndFocusEmptyDetail,
                 onPrevious: () => _selectRelativeArticle(-1),
                 onNext: () => _selectRelativeArticle(1),
                 onMKeyPressed: () {
                   final currentSelected = _selectedArticle.value;
                   if (currentSelected != null) {
                     _reject(currentSelected, source: 'keyM');
+                  }
+                },
+                onOpenOriginalAndMarkRead: () {
+                  final currentSelected = _selectedArticle.value;
+                  if (currentSelected != null) {
+                    _rejectAndOpenOriginal(currentSelected);
                   }
                 },
               );

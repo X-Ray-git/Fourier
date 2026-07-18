@@ -69,6 +69,7 @@
 - 浅色玻璃控件已补齐明暗同步和材质一致性：原生 AppKit appearance、Flutter theme 和 renderer platform brightness 同步；浅色选中控件使用稳定冷白基底；文章目录关闭态复用普通圆形玻璃按钮，只有形变期间使用 morph layer；复制/已读按钮恢复 own layer 边界层次。
 - macOS 文章目录展开态已增加浮动玻璃可读性遮罩：深色模式黑色 `32%`、浅色模式白色 `18%`，在 morph 后半段平滑渐入并先于目录文字到位。它避免目录覆盖白色图片等高亮正文时浅色文字完全消失；关闭态圆形按钮、玻璃折射、边缘和既有展开/收起动画不变。用户已完成视觉检查并确认效果良好。
 - macOS 正文链接 hover 的瞬时卡顿已修复并经用户验证。根因是所有 `HtmlChunkCard` 监听共享 `_hoveredUrl`，任意链接进入/离开都会让全篇 HTML 缓存失效并重新解析。当前取消动态下划线和 chunk 监听，只保留主题色、手型光标、点击及底部 URL 预览。
+- 详情页补抓普通全文或 Inbox 正文成功后，现已和后台 Readability 共用 `AutoAiQueueCoordinator.onArticleContentAvailable()`：只给最新状态仍为未读的文章排摘要，并按订阅源开关排翻译。打开页面期间后台译文完成后，`ArticleController` 会解析并刷新当前译文，不再要求切走后重开。已读取消策略、已开始请求和手动 AI 操作保持原语义。
 
 仍需持续观察的少量项目集中记录在[验证记录](verification.md)，不要再把完整验证清单追加到当前事实页。
 

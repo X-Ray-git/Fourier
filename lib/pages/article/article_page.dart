@@ -22,6 +22,7 @@ import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/article_image_cache_service.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/auto_ai_queue_coordinator.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/translation_service.dart';
 import '../../services/summary_service.dart';
@@ -57,12 +58,18 @@ class ArticleController extends GetxController {
   final isFetchingReadability = false.obs;
   final isFetchingContent = false.obs;
   final isParsingContent = false.obs;
+  Worker? _translationRecordWorker;
+  String _translationSourceContent = '';
 
   ArticleController(this.article);
 
   @override
   void onInit() {
     super.onInit();
+    _translationRecordWorker = ever(
+      TranslationService.recordsVersion,
+      (_) => _refreshTranslationFromService(),
+    );
     isRead.value =
         LocalArticleDbService.readOverrideOf(article.entryId) ?? article.isRead;
     if (article.category == 'inbox' &&
@@ -78,6 +85,12 @@ class ArticleController extends GetxController {
         fetchReadabilityContent();
       }
     }
+  }
+
+  @override
+  void onClose() {
+    _translationRecordWorker?.dispose();
+    super.onClose();
   }
 
   Future<void> _initContent({String? overrideContent}) async {
@@ -118,6 +131,7 @@ class ArticleController extends GetxController {
       chunks.value = result.chunks;
 
       if (hasTranslation) {
+        _translationSourceContent = tContent;
         isTranslated.value = true;
         translationContent.value = result.normalizedTranslation;
         if (result.translatedChunks.isNotEmpty) {
@@ -136,31 +150,50 @@ class ArticleController extends GetxController {
     }
   }
 
+  Future<void> _refreshTranslationFromService() async {
+    final record = TranslationService.recordOf(article.entryId);
+    if (record == null) {
+      _translationSourceContent = '';
+      isTranslated.value = false;
+      translationContent.value = '';
+      translatedChunks.clear();
+      showTranslation.value = false;
+      return;
+    }
+
+    final sourceContent = record.translatedContent?.trim() ?? '';
+    if (!record.isTranslated || sourceContent.isEmpty) return;
+    if (_translationSourceContent == sourceContent &&
+        translatedChunks.isNotEmpty) {
+      isTranslated.value = true;
+      return;
+    }
+
+    final shouldReveal = !isTranslated.value;
+    final result = await Isolate.run(() {
+      final normalized = ArticleContentUtils.normalizeHtml(sourceContent);
+      return (
+        normalized: normalized,
+        chunks: HtmlChunkParser.parseSync(normalized),
+      );
+    });
+    if (isClosed) return;
+
+    final latestSourceContent =
+        TranslationService.translatedContentFor(article.entryId)?.trim() ?? '';
+    if (latestSourceContent != sourceContent) return;
+    _translationSourceContent = sourceContent;
+    translationContent.value = result.normalized;
+    translatedChunks.value = result.chunks;
+    isTranslated.value = true;
+    if (shouldReveal) showTranslation.value = true;
+  }
+
   Future<void> _fetchInboxContent() async {
     final result = await FeedHttp.getInboxEntryDetail(entryId: article.entryId);
     if (result is Success<String> && result.response.isNotEmpty) {
-      _initContent(overrideContent: result.response);
-      // 持久化到本地，下次打开无需重复拉取
-      LocalArticleDbService.upsertOne(
-        ArticleModel(
-          entryId: article.entryId,
-          feedId: article.feedId,
-          feedTitle: article.feedTitle,
-          feedImage: article.feedImage,
-          title: article.title,
-          url: article.url,
-          content: result.response,
-          publishedAt: article.publishedAt,
-          category: article.category,
-          subscriptionCategory: article.subscriptionCategory,
-          author: article.author,
-          imageUrl: article.imageUrl,
-          isRejectedByAi: article.isRejectedByAi,
-          filterReason: article.filterReason,
-          filterReviewed: article.filterReviewed,
-          filteredAt: article.filteredAt,
-        ),
-      );
+      await _initContent(overrideContent: result.response);
+      _persistFetchedContent(result.response);
       update(); // 通知 UI 重建
     }
     isFetchingContent.value = false;
@@ -178,28 +211,8 @@ class ArticleController extends GetxController {
         final document = html_parser.parse(htmlStr);
         final articleNode = ArticleContentUtils.getReadabilityContent(document);
         if (articleNode != null) {
-          _initContent(overrideContent: articleNode.outerHtml);
-          // 持久化抓取结果，下次打开无需重复抓
-          LocalArticleDbService.upsertOne(
-            ArticleModel(
-              entryId: article.entryId,
-              feedId: article.feedId,
-              feedTitle: article.feedTitle,
-              feedImage: article.feedImage,
-              title: article.title,
-              url: article.url,
-              content: articleNode.outerHtml,
-              publishedAt: article.publishedAt,
-              category: article.category,
-              subscriptionCategory: article.subscriptionCategory,
-              author: article.author,
-              imageUrl: article.imageUrl,
-              isRejectedByAi: article.isRejectedByAi,
-              filterReason: article.filterReason,
-              filterReviewed: article.filterReviewed,
-              filteredAt: article.filteredAt,
-            ),
-          );
+          await _initContent(overrideContent: articleNode.outerHtml);
+          _persistFetchedContent(articleNode.outerHtml);
         }
       } catch (e) {
         // silently fail on auto-fetch
@@ -208,6 +221,31 @@ class ArticleController extends GetxController {
         isFetchingContent.value = false;
       }
     });
+  }
+
+  void _persistFetchedContent(String content) {
+    final fetchedArticle = ArticleModel(
+      entryId: article.entryId,
+      feedId: article.feedId,
+      feedTitle: article.feedTitle,
+      feedImage: article.feedImage,
+      title: article.title,
+      url: article.url,
+      content: content,
+      publishedAt: article.publishedAt,
+      isRead: isRead.value,
+      category: article.category,
+      subscriptionCategory: article.subscriptionCategory,
+      author: article.author,
+      imageUrl: article.imageUrl,
+      isRejectedByAi: article.isRejectedByAi,
+      filterReason: article.filterReason,
+      filterReviewed: article.filterReviewed,
+      filteredAt: article.filteredAt,
+    );
+    LocalArticleDbService.upsertOne(fetchedArticle);
+    ArticleContentUtils.clearCacheForEntry(article.entryId);
+    AutoAiQueueCoordinator.onArticleContentAvailable(fetchedArticle);
   }
 
   /// 标为已读（本地 + 云端同步 + 失败重试最多 5 次）
@@ -336,6 +374,7 @@ class ArticleController extends GetxController {
 
       if (record.translatedContent != null &&
           record.translatedContent!.isNotEmpty) {
+        _translationSourceContent = record.translatedContent!.trim();
         final normalizedTranslation = ArticleContentUtils.normalizeHtml(
           record.translatedContent!,
         );

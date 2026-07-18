@@ -87,6 +87,29 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       }
     }
 
+    let appMenuChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/app_menu", binaryMessenger: controller.engine.binaryMessenger)
+    appMenuChannel.setMethodCallHandler { (call, result) in
+      guard call.method == "setItemStates" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let items = call.arguments as? [[String: Any]] else {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected menu state items", details: nil))
+        return
+      }
+      DispatchQueue.main.async {
+        for item in items {
+          guard let path = item["path"] as? [String],
+                let selected = item["selected"] as? Bool,
+                let menuItem = Self.menuItem(at: path) else {
+            continue
+          }
+          menuItem.state = selected ? .on : .off
+        }
+      }
+      result(nil)
+    }
+
     let windowControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/window_controls", binaryMessenger: controller.engine.binaryMessenger)
     windowControlsChannel.setMethodCallHandler { [weak self] (call, result) in
       if call.method == "setTrafficLightsHidden", let hidden = call.arguments as? Bool {
@@ -156,6 +179,21 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       webView.configuration.preferences.isElementFullscreenEnabled = true
       result(nil)
     }
+  }
+
+  private static func menuItem(at path: [String]) -> NSMenuItem? {
+    guard !path.isEmpty, let mainMenu = NSApp.mainMenu else { return nil }
+    var currentMenu = mainMenu
+    var currentItem: NSMenuItem?
+    for title in path {
+      currentItem = currentMenu.items.first { $0.title == title }
+      guard let item = currentItem else { return nil }
+      if title != path.last {
+        guard let submenu = item.submenu else { return nil }
+        currentMenu = submenu
+      }
+    }
+    return currentItem
   }
 }
 

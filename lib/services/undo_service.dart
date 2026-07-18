@@ -1,60 +1,129 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+
+import '../common/widgets/feedback_toast.dart';
+import '../http/feed_http.dart';
+import '../http/init.dart';
 import '../models/article.dart';
 import '../pages/article/article_page.dart';
 import '../pages/timeline/timeline_controller.dart';
-import '../services/local_article_db_service.dart';
-import '../services/article_state_notifier.dart';
-import '../services/read_sync_service.dart';
-import '../http/feed_http.dart';
-import '../http/init.dart';
-import '../common/widgets/feedback_toast.dart';
 import '../utils/storage.dart';
+import 'article_state_notifier.dart';
+import 'auto_filter_worker.dart';
+import 'bounded_history.dart';
+import 'local_article_db_service.dart';
+import 'read_sync_service.dart';
 
 enum UndoActionType { read, filterReject, filterKeep }
 
 class UndoAction {
-  final UndoActionType type;
-  final ArticleModel article;
+  const UndoAction({
+    required this.sequence,
+    required this.type,
+    required this.article,
+  });
 
-  UndoAction(this.type, this.article);
-}
-
-class UndoRestoreEvent {
   final int sequence;
   final UndoActionType type;
   final ArticleModel article;
 
+  String get actionName => switch (type) {
+    UndoActionType.read => '标为已读',
+    UndoActionType.filterReject => '从垃圾拦截移除',
+    UndoActionType.filterKeep => '在垃圾拦截中保留',
+  };
+
+  String get description => switch (type) {
+    UndoActionType.read => '将《${article.title}》标为已读',
+    UndoActionType.filterReject => '从垃圾拦截移除《${article.title}》',
+    UndoActionType.filterKeep => '在垃圾拦截中保留《${article.title}》',
+  };
+}
+
+class UndoRestoreEvent {
   const UndoRestoreEvent({
     required this.sequence,
     required this.type,
     required this.article,
   });
+
+  final int sequence;
+  final UndoActionType type;
+  final ArticleModel article;
 }
 
-class UndoService {
-  static UndoAction? _lastAction;
-  static int _restoreSequence = 0;
-  static final restoredAction = Rxn<UndoRestoreEvent>();
+typedef UndoRedoTargetPredicate = bool Function();
+typedef RedoPreparation = bool? Function(UndoAction action);
 
-  static ArticleModel? get lastReadArticle =>
-      _lastAction?.type == UndoActionType.read ? _lastAction?.article : null;
+class UndoService {
+  static const int historyLimit = 50;
+
+  static final _history = BoundedHistory<UndoAction>(limit: historyLimit);
+  static final Map<Object, _RedoPreparationTarget> _redoTargets = {};
+  static int _actionSequence = 0;
+  static int _restoreSequence = 0;
+  static Future<void> _operationTail = Future<void>.value();
+
+  static final restoredAction = Rxn<UndoRestoreEvent>();
+  static final historyRevision = ValueNotifier<int>(0);
+
+  static bool get canUndo => _history.canUndo;
+  static bool get canRedo => _history.canRedo;
+  static UndoAction? get nextUndoAction => _history.nextUndo;
+  static UndoAction? get nextRedoAction => _history.nextRedo;
+
+  static ArticleModel? get lastReadArticle {
+    final action = _history.nextUndo;
+    return action?.type == UndoActionType.read ? action?.article : null;
+  }
+
+  static void registerRedoPreparation(
+    Object owner, {
+    required UndoRedoTargetPredicate isActive,
+    required RedoPreparation prepare,
+  }) {
+    _redoTargets[owner] = _RedoPreparationTarget(
+      isActive: isActive,
+      prepare: prepare,
+    );
+  }
+
+  static void unregisterRedoPreparation(Object owner) {
+    _redoTargets.remove(owner);
+  }
 
   static void recordRead(ArticleModel article) {
-    _lastAction = UndoAction(UndoActionType.read, article);
+    _record(UndoActionType.read, article);
   }
 
   static void recordFilterAction(ArticleModel article, UndoActionType type) {
-    _lastAction = UndoAction(type, article);
+    assert(type != UndoActionType.read);
+    _record(type, article);
+  }
+
+  static void _record(UndoActionType type, ArticleModel article) {
+    _history.push(
+      UndoAction(sequence: ++_actionSequence, type: type, article: article),
+    );
+    _notifyHistoryChanged();
   }
 
   static void clear() {
-    _lastAction = null;
+    if (!canUndo && !canRedo) return;
+    _history.clear();
+    _notifyHistoryChanged();
   }
 
   static void clearForEntry(String entryId) {
-    if (_lastAction?.article.entryId == entryId) {
-      _lastAction = null;
-    }
+    final hadHistory = canUndo || canRedo;
+    _history.removeWhere((action) => action.article.entryId == entryId);
+    if (hadHistory) _notifyHistoryChanged();
+  }
+
+  static void _notifyHistoryChanged() {
+    historyRevision.value++;
   }
 
   static void _notifyRestored(UndoAction action) {
@@ -65,21 +134,14 @@ class UndoService {
     );
   }
 
-  static Future<void> markAsRead(
+  static void applyReadLocally(
     ArticleModel article, {
-    bool showSuccess = true,
+    bool recordHistory = true,
     bool deferTimelineVisualUpdate = false,
-  }) async {
-    if (article.isRead || article.entryId.trim().isEmpty) return;
-    if (!deferTimelineVisualUpdate &&
-        Get.isRegistered<ArticleController>(tag: article.entryId)) {
-      await Get.find<ArticleController>(
-        tag: article.entryId,
-      ).markAsRead(showSuccess: showSuccess);
-      return;
-    }
-
-    recordRead(article);
+    bool queueSync = true,
+  }) {
+    if (article.entryId.trim().isEmpty) return;
+    if (recordHistory) recordRead(article);
 
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsReadLocal(
@@ -96,10 +158,66 @@ class UndoService {
       );
       ArticleStateNotifier.tick(article.entryId);
     }
+    if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
+      Get.find<ArticleController>(tag: article.entryId).isRead.value = true;
+    }
+
+    if (queueSync) {
+      ReadSyncService.enqueue(
+        article.entryId,
+        isInbox: article.category == 'inbox',
+      );
+      unawaited(ReadSyncService.syncPendingReads());
+    }
+  }
+
+  static void applyFilterKeep(
+    ArticleModel article, {
+    bool recordHistory = true,
+  }) {
+    if (recordHistory) {
+      recordFilterAction(article, UndoActionType.filterKeep);
+    }
+    AutoFilterWorker.unReject(article.entryId);
+    GStorage.readStatus.delete(article.entryId);
+    _refreshTimelineArticleFromCache(article.entryId);
+  }
+
+  static void applyFilterReject(
+    ArticleModel article, {
+    bool recordHistory = true,
+  }) {
+    if (recordHistory) {
+      recordFilterAction(article, UndoActionType.filterReject);
+    }
+    LocalArticleDbService.upsertOne(
+      _copyArticle(article, isRead: article.isRead, filterReviewed: true),
+    );
+    applyReadLocally(article, recordHistory: false);
+    ArticleStateNotifier.tick(article.entryId);
+  }
+
+  static Future<void> markAsRead(
+    ArticleModel article, {
+    bool showSuccess = true,
+    bool deferTimelineVisualUpdate = false,
+  }) async {
+    if (article.isRead || article.entryId.trim().isEmpty) return;
+    if (!deferTimelineVisualUpdate &&
+        Get.isRegistered<ArticleController>(tag: article.entryId)) {
+      await Get.find<ArticleController>(
+        tag: article.entryId,
+      ).markAsRead(showSuccess: showSuccess);
+      return;
+    }
+
+    applyReadLocally(
+      article,
+      deferTimelineVisualUpdate: deferTimelineVisualUpdate,
+      queueSync: false,
+    );
 
     final isInbox = article.category == 'inbox';
-    ReadSyncService.enqueue(article.entryId, isInbox: isInbox);
-
     final ok = await _retrySync(
       action: () =>
           FeedHttp.markRead(entryIds: [article.entryId], isInbox: isInbox),
@@ -124,35 +242,27 @@ class UndoService {
     }
   }
 
-  static Future<ArticleModel?> undoLastAction() async {
-    final action = _lastAction;
+  static Future<ArticleModel?> undoLastAction() {
+    return _enqueueOperation(_undoLastAction);
+  }
+
+  static Future<ArticleModel?> _undoLastAction() async {
+    final action = _history.takeUndo();
     if (action == null) return null;
-    _lastAction = null;
+    _notifyHistoryChanged();
 
     final article = action.article;
 
     if (action.type == UndoActionType.filterKeep) {
-      // Undo a KEEP action: restore the AI reject status. No network calls.
       LocalArticleDbService.upsertOne(article);
-      if (Get.isRegistered<TimelineController>()) {
-        final tc = Get.find<TimelineController>();
-        final idx = tc.allArticles.indexWhere(
-          (a) => a.entryId == article.entryId,
-        );
-        if (idx >= 0) {
-          tc.allArticles[idx] = article;
-          tc.allArticles.refresh();
-        }
-      }
+      _replaceTimelineArticle(article);
       ArticleStateNotifier.tick(article.entryId);
       _notifyRestored(action);
       AppFeedback.success('已撤销', '文章已重新移入拦截列表');
       return article;
     }
 
-    // Both 'read' and 'filterReject' mark the article as read. We must revert to unread.
     if (action.type == UndoActionType.filterReject) {
-      // Restore to the original filterReviewed:false state.
       LocalArticleDbService.upsertOne(article);
     }
 
@@ -163,6 +273,7 @@ class UndoService {
         _notifyRestored(action);
         return article;
       }
+      _rollbackUndo(action);
       return null;
     }
 
@@ -189,29 +300,11 @@ class UndoService {
         ArticleStateNotifier.tick(article.entryId);
       }
       if (action.type == UndoActionType.filterReject) {
-        // Re-apply filterReviewed:true since the network request failed
         LocalArticleDbService.upsertOne(
-          ArticleModel(
-            entryId: article.entryId,
-            feedId: article.feedId,
-            feedTitle: article.feedTitle,
-            feedImage: article.feedImage,
-            title: article.title,
-            url: article.url,
-            content: article.content,
-            publishedAt: article.publishedAt,
-            isRead: true,
-            category: article.category,
-            subscriptionCategory: article.subscriptionCategory,
-            author: article.author,
-            imageUrl: article.imageUrl,
-            isRejectedByAi: article.isRejectedByAi,
-            filterReason: article.filterReason,
-            filterReviewed: true,
-            filteredAt: article.filteredAt,
-          ),
+          _copyArticle(article, isRead: true, filterReviewed: true),
         );
       }
+      _rollbackUndo(action);
       AppFeedback.error('撤销失败', '网络请求失败，已恢复为已读');
       return null;
     }
@@ -220,18 +313,126 @@ class UndoService {
     return article;
   }
 
+  static Future<ArticleModel?> redoLastAction() {
+    return _enqueueOperation(_redoLastAction);
+  }
+
+  static Future<ArticleModel?> _redoLastAction() async {
+    final action = _history.nextRedo;
+    if (action == null) return null;
+    if (!_prepareRedo(action)) return null;
+
+    switch (action.type) {
+      case UndoActionType.read:
+        applyReadLocally(
+          action.article,
+          recordHistory: false,
+          deferTimelineVisualUpdate: true,
+        );
+        break;
+      case UndoActionType.filterReject:
+        applyFilterReject(action.article, recordHistory: false);
+        break;
+      case UndoActionType.filterKeep:
+        applyFilterKeep(action.article, recordHistory: false);
+        break;
+    }
+
+    final redone = _history.takeRedo();
+    if (!identical(redone, action)) return null;
+    _notifyHistoryChanged();
+    AppFeedback.success('已重做', action.description);
+    return action.article;
+  }
+
+  static bool _prepareRedo(UndoAction action) {
+    for (final target in _redoTargets.values.toList().reversed) {
+      if (!target.isActive()) continue;
+      final result = target.prepare(action);
+      if (result != null) return result;
+    }
+    return true;
+  }
+
+  static Future<T> _enqueueOperation<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  static void _rollbackUndo(UndoAction action) {
+    if (_history.rollbackUndo(action)) _notifyHistoryChanged();
+  }
+
+  static void _refreshTimelineArticleFromCache(String entryId) {
+    if (!Get.isRegistered<TimelineController>()) return;
+    final raw = GStorage.articleDb.get(entryId);
+    if (raw is! Map) return;
+    _replaceTimelineArticle(
+      ArticleModel.fromCache(Map<String, dynamic>.from(raw)),
+    );
+  }
+
+  static void _replaceTimelineArticle(ArticleModel article) {
+    if (!Get.isRegistered<TimelineController>()) return;
+    final controller = Get.find<TimelineController>();
+    final index = controller.allArticles.indexWhere(
+      (candidate) => candidate.entryId == article.entryId,
+    );
+    if (index < 0) return;
+    controller.allArticles[index] = article;
+    controller.allArticles.refresh();
+  }
+
+  static ArticleModel _copyArticle(
+    ArticleModel article, {
+    required bool isRead,
+    required bool filterReviewed,
+  }) {
+    return ArticleModel(
+      entryId: article.entryId,
+      feedId: article.feedId,
+      feedTitle: article.feedTitle,
+      feedImage: article.feedImage,
+      title: article.title,
+      url: article.url,
+      content: article.content,
+      publishedAt: article.publishedAt,
+      isRead: isRead,
+      category: article.category,
+      subscriptionCategory: article.subscriptionCategory,
+      author: article.author,
+      imageUrl: article.imageUrl,
+      isRejectedByAi: article.isRejectedByAi,
+      filterReason: article.filterReason,
+      filterReviewed: filterReviewed,
+      filteredAt: article.filteredAt,
+    );
+  }
+
   static Future<bool> _retrySync({
     required Future<LoadingState<void>> Function() action,
   }) async {
-    for (int attempt = 1; attempt <= 5; attempt++) {
+    for (var attempt = 1; attempt <= 5; attempt++) {
       final result = await action();
-      if (result is Success<void>) {
-        return true;
-      }
+      if (result is Success<void>) return true;
       if (attempt < 5) {
-        await Future.delayed(Duration(milliseconds: 800 * attempt));
+        await Future<void>.delayed(Duration(milliseconds: 800 * attempt));
       }
     }
     return false;
   }
+}
+
+class _RedoPreparationTarget {
+  const _RedoPreparationTarget({required this.isActive, required this.prepare});
+
+  final UndoRedoTargetPredicate isActive;
+  final RedoPreparation prepare;
 }

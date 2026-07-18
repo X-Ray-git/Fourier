@@ -10,8 +10,10 @@
 - 无修饰键 `B` 在默认浏览器打开当前原文；`Shift+B` 是确保已读后打开原文，已经已读时不能反向恢复未读。垃圾拦截页中 `Shift+B` 复用该页的 `M` 语义，即移除当前文章并在退场动画结束后打开原文。`Command-B` 保留给 macOS 的常规文本语义，不作为应用快捷键。
 - `Cmd+1` 回到无订阅源/分类/静默筛选的“全部文章”，`Cmd+2` 打开垃圾拦截，`Cmd+0` 打开静默订阅源。键盘页面切换不能复用侧边栏双击计时，否则连续按键可能意外触发时间线回顶。
 - 垃圾拦截/审核页快捷键不能被主时间线抢走。
-- 已实现位置中，`Cmd+Z` 支持撤销最近的已读/未读操作。
+- `Cmd+Z` 使用最多 50 项的业务历史连续撤销“标为已读、垃圾拦截保留、垃圾拦截移除”；`Shift+Cmd+Z` 按相反顺序连续重做。新的业务动作会清空 redo 栈，切换时间线范围、订阅源、分类或静默 scope 会清空整组业务历史，避免把旧页面操作恢复到当前列表。
+- 文本输入框继续使用 Flutter 自身的文本 Undo/Redo。原生“编辑”菜单与全局快捷键必须先检查当前焦点，不能让文章业务历史抢走输入框里的 `Cmd+Z` / `Shift+Cmd+Z`。
 - `Cmd+R` 触发全局刷新。
+- `Cmd+W` 关闭当前主窗口，行为与点击红色按钮相同：隐藏窗口但不退出应用。
 - 当前 inline 视频由 `activePlayer` 归属空格和媒体键；全屏视频独占这些按键。
 - 全屏视频中 `Left`/`Right` 分别后退/前进 5 秒，`Esc` 退出；这些行为只在全屏视频路由存在时接管，不应影响文章列表的左右导航。
 - Escape 关闭全屏图片预览。
@@ -32,6 +34,10 @@
 
 ## 实现结构
 
+- macOS 菜单栏由 `MacOSAppMenu` 的 `PlatformMenuBar` 管理，结构为 `Auto Folo / 编辑 / 显示 / 文章 / 窗口 / 帮助`。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 `PlatformProvidedMenuItem`；XIB 只为这些系统项提供本地化标题和 AppKit selector，不要恢复 Flutter 模板中未使用的拼写、替换、语音等菜单。
+- “编辑”菜单的业务动作名必须始终放在长标题之前，格式为 `撤销“动作” · 《截断标题…》` / `重做“动作” · 《截断标题…》`。完整 50 项栈不暴露成菜单列表，只展示下一项。`UndoAction.actionName` 是菜单动作名，`description` 用于反馈正文，不要再把完整句子整体截断。
+- `UndoService` 使用 `BoundedHistory` 保存 undo/redo 双栈，并串行执行撤销/重做，避免快速连续按键造成网络回滚乱序。页面只通过 redo preparation 在数据变化前登记列表离场；数据变更集中复用 `applyReadLocally`、`applyFilterKeep`、`applyFilterReject`，不能在重做路径复制数据库规则。
+- 当前分栏文章通过 `MacOSAppMenuService` 注册原文、复制 Markdown、已读/审核动作、前后导航、翻译和摘要能力。注册者必须同时验证 route、当前 macOS 页面和当前选中文章，并在销毁时注销，避免 `IndexedStack` 中隐藏文章污染“文章”菜单。
 - 应用级组合键和无选中文章时的裸方向键定义在 `main.dart` 的 `Shortcuts/Actions`。主时间线、垃圾拦截和最近阅读通过 `MacArticleShortcutService` 注册当前页面是否激活、是否已有选择以及首末选择动作。裸方向键必须在 Flutter 默认方向焦点移动之前被消费；不要退回到每个页面各挂一套 `HardwareKeyboard` 方向键监听，否则侧边栏可能已经先获得灰色焦点高亮。
 - 注册器只在当前 macOS 页面、当前 route、没有文章选中且焦点不在 `EditableText` 时启用。选择前会释放侧边栏旧焦点；有文章选中时，左右键继续由当前 `ArticlePageView` 处理。页面销毁时必须注销注册，避免 `IndexedStack` 中失活页面抢按键。
 - `Shift+B` 在普通时间线复用双击的 `_openOriginalAndMarkRead` 路径，保持帧边界持久化、列表退场、后继选择和退场结束后打开浏览器的既有顺序。垃圾拦截复用 `_reject`，并同样等真实 `remove.end` 后再打开；最近阅读复用其双击行为。不要另写一条直接修改数据库的快捷路径。

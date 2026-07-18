@@ -24,6 +24,7 @@ import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/article_image_cache_service.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/macos_app_menu_service.dart';
 import '../../services/auto_ai_queue_coordinator.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/translation_service.dart';
@@ -604,6 +605,8 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onOpenOriginalAndMarkRead;
   final bool Function()? isActive;
   final bool Function(String entryId)? isSelectedArticle;
+  final bool isReviewContext;
+  final VoidCallback? onKeepReviewArticle;
 
   const ArticlePageView({
     super.key,
@@ -617,6 +620,8 @@ class ArticlePageView extends StatefulWidget {
     this.onOpenOriginalAndMarkRead,
     this.isActive,
     this.isSelectedArticle,
+    this.isReviewContext = false,
+    this.onKeepReviewArticle,
   });
 
   @override
@@ -648,12 +653,25 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   final Map<String, GlobalKey> _headingKeys = {};
   final Map<String, String> _headingTextCache = {};
   final Map<String, List<_ArticleTocEntry>> _tocEntriesCache = {};
+  Worker? _menuStateWorker;
 
   @override
   void initState() {
     super.initState();
     _tag = widget.article.entryId;
     controller = Get.put(ArticleController(widget.article), tag: _tag);
+    if (Platform.isMacOS) {
+      _registerMacOSMenuTarget();
+      _menuStateWorker = everAll(<RxInterface<dynamic>>[
+        controller.isRead,
+        controller.isTranslated,
+        controller.showTranslation,
+        controller.isTranslating,
+        controller.isSummarized,
+        controller.showSummary,
+        controller.isSummarizing,
+      ], (_) => MacOSAppMenuService.instance.notifyChanged());
+    }
     _scrollController = ScrollController();
     _scrollController.addListener(_handleArticleScroll);
     _focusNode = FocusNode();
@@ -705,6 +723,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     }
+    if (Platform.isMacOS) {
+      MacOSAppMenuService.instance.unregisterArticleTarget(this);
+      _menuStateWorker?.dispose();
+    }
     _scrollController.dispose();
     _scrollProgress.dispose();
     _headerCollapseProgress.dispose();
@@ -719,6 +741,61 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   }
 
   bool get _usesGlobalShortcuts => Platform.isMacOS && widget.isSplitView;
+
+  void _registerMacOSMenuTarget() {
+    MacOSAppMenuService.instance.registerArticleTarget(
+      this,
+      MacOSArticleMenuTarget(
+        article: widget.article,
+        isActive: () {
+          if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) {
+            return false;
+          }
+          if (widget.isActive != null && !widget.isActive!()) return false;
+          final isSelected = widget.isSelectedArticle;
+          return isSelected == null || isSelected(widget.article.entryId);
+        },
+        isRead: () => controller.isRead.value,
+        isReviewContext: widget.isReviewContext,
+        canGoPrevious: () => widget.onPrevious != null,
+        canGoNext: () => widget.onNext != null,
+        openOriginal: () => unawaited(controller.openInBrowser()),
+        copyMarkdown: () => unawaited(_copyOriginalArticleMarkdown()),
+        performPrimaryAction: () {
+          if (widget.onMKeyPressed != null) {
+            widget.onMKeyPressed!();
+          } else {
+            _toggleReadState();
+          }
+        },
+        goPrevious: () => widget.onPrevious?.call(),
+        goNext: () => widget.onNext?.call(),
+        performTranslationAction: () {
+          if (controller.isTranslating.value) return null;
+          return controller.isTranslated.value
+              ? controller.showTranslation.toggle
+              : () => unawaited(controller.translateArticle());
+        },
+        translationLabel: () {
+          if (controller.isTranslating.value) return '翻译中…';
+          if (!controller.isTranslated.value) return '翻译';
+          return controller.showTranslation.value ? '隐藏译文' : '显示译文';
+        },
+        performSummaryAction: () {
+          if (controller.isSummarizing.value) return null;
+          return controller.isSummarized.value
+              ? controller.showSummary.toggle
+              : () => unawaited(controller.summarizeArticle());
+        },
+        summaryLabel: () {
+          if (controller.isSummarizing.value) return '摘要中…';
+          if (!controller.isSummarized.value) return '摘要';
+          return controller.showSummary.value ? '隐藏摘要' : '显示摘要';
+        },
+        keepReviewArticle: widget.onKeepReviewArticle,
+      ),
+    );
+  }
 
   bool _handleHardwareKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;

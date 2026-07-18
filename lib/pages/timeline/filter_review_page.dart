@@ -17,7 +17,6 @@ import '../../services/auto_filter_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/mac_article_shortcut_service.dart';
-import '../../services/read_sync_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
@@ -187,6 +186,14 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
           return selected;
         },
       );
+      UndoService.registerRedoPreparation(
+        this,
+        isActive: () =>
+            mounted &&
+            _isActiveMacReviewPage &&
+            (ModalRoute.of(context)?.isCurrent ?? true),
+        prepare: _prepareRedo,
+      );
     }
     _loadArticles();
     _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
@@ -237,6 +244,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     if (Platform.isMacOS) {
       MacArticleShortcutService.instance.unregister(this);
+      UndoService.unregisterRedoPreparation(this);
     }
     _emptyDetailFocusNode.dispose();
     super.dispose();
@@ -530,26 +538,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         ? _nextArticleAfterRemoving(article.entryId)
         : null;
 
-    UndoService.recordFilterAction(article, UndoActionType.filterKeep);
-    AutoFilterWorker.unReject(article.entryId);
-    // 清除遗留的 readStatus 覆盖（不应写入 false，用户只是保留文章，不是标未读）
-    GStorage.readStatus.delete(article.entryId);
-    // 更新 TimelineController 内存状态，使文章立即可见（清除 AI 拦截标记）
-    if (Get.isRegistered<TimelineController>()) {
-      final tc = Get.find<TimelineController>();
-      final idx = tc.allArticles.indexWhere(
-        (a) => a.entryId == article.entryId,
-      );
-      if (idx >= 0) {
-        final raw = GStorage.articleDb.get(article.entryId);
-        if (raw is Map) {
-          tc.allArticles[idx] = ArticleModel.fromCache(
-            Map<String, dynamic>.from(raw),
-          );
-          tc.allArticles.refresh();
-        }
-      }
-    }
+    UndoService.applyFilterKeep(article);
 
     _scheduleReviewedArticleRemoval(article.entryId);
     if (shouldAdvance && !Platform.isMacOS) {
@@ -594,49 +583,27 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
         ? _nextArticleAfterRemoving(article.entryId)
         : null;
 
-    UndoService.recordFilterAction(article, UndoActionType.filterReject);
-    LocalArticleDbService.upsertOne(
-      ArticleModel(
-        entryId: article.entryId,
-        feedId: article.feedId,
-        feedTitle: article.feedTitle,
-        feedImage: article.feedImage,
-        title: article.title,
-        url: article.url,
-        content: article.content,
-        publishedAt: article.publishedAt,
-        isRead: article.isRead,
-        category: article.category,
-        subscriptionCategory: article.subscriptionCategory,
-        author: article.author,
-        imageUrl: article.imageUrl,
-        isRejectedByAi: article.isRejectedByAi,
-        filterReason: article.filterReason,
-        filterReviewed: true,
-        filteredAt: article.filteredAt,
-      ),
-    );
-    if (Get.isRegistered<TimelineController>()) {
-      Get.find<TimelineController>().markAsReadLocal(article.entryId);
-    } else {
-      GStorage.readStatus.put(article.entryId, true);
-      LocalArticleDbService.setReadState(
-        article.entryId,
-        true,
-        recordHistory: true,
-      );
-    }
-    ReadSyncService.enqueue(
-      article.entryId,
-      isInbox: article.category == 'inbox',
-    );
-    unawaited(ReadSyncService.syncPendingReads());
-    ArticleStateNotifier.tick(article.entryId);
+    UndoService.applyFilterReject(article);
 
     _scheduleReviewedArticleRemoval(article.entryId);
     if (shouldAdvance && !Platform.isMacOS) {
       _selectReviewedSuccessor(nextArticle);
     }
+  }
+
+  bool? _prepareRedo(UndoAction action) {
+    if (action.type != UndoActionType.filterKeep &&
+        action.type != UndoActionType.filterReject) {
+      return null;
+    }
+    final index = _articles.indexWhere(
+      (article) => article.entryId == action.article.entryId,
+    );
+    if (index < 0) return true;
+    if (!_listCoordinator.beginRemoval(action.article.entryId)) return false;
+    _pendingReviewActionIds.add(action.article.entryId);
+    _scheduleReviewedArticleRemoval(action.article.entryId);
+    return true;
   }
 
   void _rejectAndOpenOriginal(ArticleModel article) {
@@ -957,6 +924,13 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                     Get.find<MainController>().currentIndex.value == 1,
                 isSelectedArticle: (entryId) =>
                     _selectedArticle.value?.entryId == entryId,
+                isReviewContext: true,
+                onKeepReviewArticle: () {
+                  final currentSelected = _selectedArticle.value;
+                  if (currentSelected != null) {
+                    _keep(currentSelected, source: 'menuKeep');
+                  }
+                },
                 onClose: _clearSelectionAndFocusEmptyDetail,
                 onPrevious: () => _selectRelativeArticle(-1),
                 onNext: () => _selectRelativeArticle(1),

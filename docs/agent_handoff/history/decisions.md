@@ -534,3 +534,11 @@
 决策：只移除 macOS 分屏正文 clip 外层的显式 `Scrollbar`，并继续通过局部 `ScrollConfiguration` 关闭 Flutter 自动 scrollbar。保留 `_scrollController`、滚动通知、阅读进度、标题折叠、目录定位、方向键滚动和右下角圆角安全裁剪。时间线、垃圾拦截、设置页、侧边栏和 Android 不改。
 
 后果：正文右侧更安静，布局宽度和滚动手感不应变化，但不再支持拖动 thumb 快速跳转，也不再直接显示当前视口占全文的比例。用户将持续使用观察；若长文导航明显退化，优先恢复这一层显式 scrollbar，或另行讨论进度条的点击/拖动能力，不要为此改写正文 sliver 或目录锚点结构。
+
+## macOS 业务撤销使用有界双栈并接入标准菜单
+
+背景：旧 `UndoService` 只保存一个 `_lastAction`，只能撤销一次，也没有 redo。macOS XIB 仍是 Flutter 模板菜单，包含大量应用不支持的文本命令；改用 `PlatformMenuBar` 后，如果遗漏模板中的 `performClose:`，`Cmd+W` 也会失效。最初把完整动作句子整体截断后，长文章标题还会挤掉真正重要的“标为已读/移除/保留”语义。
+
+决策：使用容量 50 的 `BoundedHistory` 维护 undo/redo 双栈，新业务动作清空 redo，时间线 scope 变化清空整组历史。`UndoService` 串行处理请求，页面只在 redo 前登记动画，标为已读和垃圾拦截保留/移除继续复用统一数据入口。文本输入焦点优先使用 Flutter 的 `UndoTextIntent/RedoTextIntent`。macOS 菜单使用原生 `PlatformMenuBar`，只保留应用真实支持的六组菜单；系统项使用 `PlatformProvidedMenuItem`，显示/排序状态通过轻量 AppKit channel 设置原生勾选。下一项采用 `撤销“动作” · 《截断标题…》`，动作名不截断。`Cmd+W` 在“窗口”菜单显式调用 `windowManager.close()`，保持红色按钮的隐藏窗口语义。
+
+后果：用户能连续撤销/重做并在操作前看清下一项，但不会看到完整历史栈。不要把页面 State 闭包存进历史项，也不要让 redo 直接绕过列表协调器修改数据库，否则会重新破坏离场动画。新增可撤销业务类型时，应先提供稳定的 `actionName`、集中前向操作和必要的页面动画 preparation；不要仅在菜单中拼一条句子。当前历史范围不自动扩展到所有设置、导航或文本操作。

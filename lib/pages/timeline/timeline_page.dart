@@ -24,7 +24,6 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/widgets/feedback_toast.dart';
-import '../../services/read_sync_service.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
@@ -199,6 +198,14 @@ class _TimelinePageState extends State<TimelinePage> {
           return controller.articles.isNotEmpty;
         },
       );
+      UndoService.registerRedoPreparation(
+        this,
+        isActive: () =>
+            mounted &&
+            _isActiveMacTimeline &&
+            (ModalRoute.of(context)?.isCurrent ?? true),
+        prepare: _prepareRedo,
+      );
     }
   }
 
@@ -207,6 +214,7 @@ class _TimelinePageState extends State<TimelinePage> {
     controller.bindScrollToTopHandler(null);
     if (Platform.isMacOS) {
       MacArticleShortcutService.instance.unregister(this);
+      UndoService.unregisterRedoPreparation(this);
     }
     _listCoordinator.dispose();
     _undoRestoreWorker?.dispose();
@@ -689,23 +697,15 @@ class _TimelinePageState extends State<TimelinePage> {
       _timelineProbeFields(article: current),
     );
 
-    UndoService.recordRead(current);
-    controller.markAsReadLocal(
-      current.entryId,
-      deferVisualUpdateToFrameBoundary: expectsRemoval,
-      deferArticleStateNotification: expectsRemoval,
+    UndoService.applyReadLocally(
+      current,
+      deferTimelineVisualUpdate: expectsRemoval,
     );
     _TimelineAnimationProbe.log(
       current.entryId,
       'mark-read.dispatched',
       _timelineProbeFields(article: current),
     );
-    ReadSyncService.enqueue(
-      current.entryId,
-      isInbox: current.category == 'inbox',
-    );
-    unawaited(ReadSyncService.syncPendingReads());
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _TimelineAnimationProbe.log(
@@ -722,6 +722,26 @@ class _TimelinePageState extends State<TimelinePage> {
         _timelineProbeFields(article: current),
       );
     });
+  }
+
+  bool? _prepareRedo(UndoAction action) {
+    if (action.type != UndoActionType.read) return null;
+    final index = controller.articles.indexWhere(
+      (article) => article.entryId == action.article.entryId,
+    );
+    if (index < 0) return true;
+
+    final article = controller.articles[index];
+    final expectsRemoval =
+        controller.selectedMode.value == TimelineViewMode.unread;
+    if (expectsRemoval && !_listCoordinator.beginRemoval(article.entryId)) {
+      return false;
+    }
+    if (!expectsRemoval &&
+        controller.selectedArticle.value?.entryId == article.entryId) {
+      _selectRelativeArticle(1, scrollTo: false);
+    }
+    return true;
   }
 
   Widget _buildFilterBar(int count) {

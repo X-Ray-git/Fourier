@@ -15,6 +15,7 @@ import 'common/constants/constants.dart';
 import 'common/constants/macos_layout_metrics.dart';
 import 'common/liquid_glass/liquid_glass.dart';
 import 'common/widgets/loading_widget.dart';
+import 'common/widgets/macos_app_menu.dart';
 import 'common/widgets/no_overscroll_indicator_behavior.dart';
 import 'http/init.dart';
 import 'router/app_pages.dart';
@@ -29,6 +30,10 @@ import 'utils/macos_window_controls.dart';
 
 class UndoReadIntent extends Intent {
   const UndoReadIntent();
+}
+
+class RedoReadIntent extends Intent {
+  const RedoReadIntent();
 }
 
 class OpenSettingsIntent extends Intent {
@@ -236,6 +241,12 @@ class AutoFoloApp extends StatelessWidget {
                   control: !Platform.isMacOS,
                 ): const UndoReadIntent(),
                 if (Platform.isMacOS)
+                  const SingleActivator(
+                    LogicalKeyboardKey.keyZ,
+                    meta: true,
+                    shift: true,
+                  ): const RedoReadIntent(),
+                if (Platform.isMacOS)
                   SingleActivator(LogicalKeyboardKey.comma, meta: true):
                       const OpenSettingsIntent(),
                 if (Platform.isMacOS)
@@ -269,6 +280,19 @@ class AutoFoloApp extends StatelessWidget {
                         return null;
                       }
                       unawaited(UndoService.undoLastAction());
+                      return null;
+                    },
+                  ),
+                  RedoReadIntent: CallbackAction<RedoReadIntent>(
+                    onInvoke: (intent) {
+                      final focusContext =
+                          FocusManager.instance.primaryFocus?.context;
+                      if (focusContext
+                              ?.findAncestorWidgetOfExactType<EditableText>() !=
+                          null) {
+                        return null;
+                      }
+                      unawaited(UndoService.redoLastAction());
                       return null;
                     },
                   ),
@@ -357,6 +381,7 @@ class AutoFoloApp extends StatelessWidget {
               },
             );
             if (Platform.isMacOS) {
+              result = MacOSAppMenu(child: result);
               result = _MacOSAppearanceSync(
                 mode: appearanceMode,
                 child: MediaQuery(

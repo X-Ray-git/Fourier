@@ -225,19 +225,24 @@ void main() {
     },
   );
 
-  test('readability keeps YouTube embeds and removes other iframes', () {
-    final document = html_parser.parse('''
+  test(
+    'readability keeps supported video embeds and removes other iframes',
+    () {
+      final document = html_parser.parse('''
 <article>
   <p>This paragraph contains enough useful article text to become a readability candidate.</p>
   <iframe src="https://www.youtube-nocookie.com/embed/sH6mlUzAMzU"></iframe>
+  <iframe src="https://player.bilibili.com/player.html?bvid=BV1ZiM86BEwu&amp;autoplay=false"></iframe>
   <iframe src="https://tracking.example.com/widget"></iframe>
   <p>Another substantial paragraph keeps the selected article container stable for this test.</p>
 </article>
 ''');
 
-    final content = ArticleContentUtils.getReadabilityContent(document);
-    expect(content, isNotNull);
-    expect(content!.outerHtml, contains('youtube-nocookie.com/embed'));
-    expect(content.outerHtml, isNot(contains('tracking.example.com')));
-  });
+      final content = ArticleContentUtils.getReadabilityContent(document);
+      expect(content, isNotNull);
+      expect(content!.outerHtml, contains('youtube-nocookie.com/embed'));
+      expect(content.outerHtml, contains('player.bilibili.com/player.html'));
+      expect(content.outerHtml, isNot(contains('tracking.example.com')));
+    },
+  );
 }

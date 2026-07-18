@@ -6,6 +6,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../services/article_image_service.dart';
+import 'bilibili_embed_utils.dart';
 import 'youtube_embed_utils.dart';
 
 abstract final class ArticleContentUtils {
@@ -381,7 +382,9 @@ abstract final class ArticleContentUtils {
       el.remove();
     }
     for (final iframe in document.querySelectorAll('iframe')) {
-      if (YouTubeEmbedInfo.tryParse(iframe.attributes['src']) == null) {
+      final src = iframe.attributes['src'];
+      if (YouTubeEmbedInfo.tryParse(src) == null &&
+          BilibiliEmbedInfo.tryParse(src) == null) {
         iframe.remove();
       }
     }

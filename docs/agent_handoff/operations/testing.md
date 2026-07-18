@@ -17,12 +17,15 @@ flutter build macos --debug
 当前测试：
 
 - `test/article_content_utils_test.dart`
+- `test/html_chunk_parser_test.dart`
 - `test/article_card_test.dart`
 - `test/article_model_test.dart`
 - `test/feed_model_test.dart`
 - `test/html_entity_utils_test.dart`
 - `test/implicitly_animated_list_test.dart`
 - `test/widget_test.dart`
+
+正文来源兼容回归至少应覆盖：目标来源作者区被转换、作者姓名/账号/主页和头像地址保留、装饰头像空壳被清理、其他来源的圆形/头像式图片不被误删，以及内部作者标记只生成一个 `authorList` chunk。
 
 修改单个功能时，先运行相关窄测试；推送前再运行完整项目测试套件。
 

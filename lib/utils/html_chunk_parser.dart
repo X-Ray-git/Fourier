@@ -16,6 +16,21 @@ enum HtmlChunkType {
   horizontalRule,
   iframeVideo,
   rawHtml,
+  authorList,
+}
+
+class HtmlAuthorItem {
+  final String name;
+  final String handle;
+  final String avatarUrl;
+  final String profileUrl;
+
+  const HtmlAuthorItem({
+    required this.name,
+    required this.handle,
+    required this.avatarUrl,
+    required this.profileUrl,
+  });
 }
 
 class HtmlChunk {
@@ -29,6 +44,7 @@ class HtmlChunk {
   final String? imageAlt;
   final String? posterSrc;
   final List<String> listItems;
+  final List<HtmlAuthorItem> authors;
 
   const HtmlChunk({
     required this.type,
@@ -41,6 +57,7 @@ class HtmlChunk {
     this.imageAlt,
     this.posterSrc,
     this.listItems = const [],
+    this.authors = const [],
   });
 
   String? get normalizedImageUrl {
@@ -110,6 +127,8 @@ class HtmlChunk {
             .clamp(1, 50)
             .toDouble();
         return lines * lineH + 14;
+      case HtmlChunkType.authorList:
+        return ((authors.length / 3).ceil().clamp(1, 10) * 52).toDouble();
     }
   }
 }
@@ -267,6 +286,7 @@ abstract final class HtmlChunkParser {
             tag == 'hr' ||
             tag == 'figure' ||
             tag == 'blockquote' ||
+            tag == 'auto-folo-author-list' ||
             _isBlockCode(child);
         if (_mediaTags.contains(tag) ||
             isBlockLike ||
@@ -285,6 +305,33 @@ abstract final class HtmlChunkParser {
 
   static void _processElement(dom.Element element, List<HtmlChunk> chunks) {
     final tag = element.localName?.toLowerCase() ?? '';
+
+    if (tag == 'auto-folo-author-list') {
+      final authors = element
+          .querySelectorAll('auto-folo-author')
+          .map(
+            (author) => HtmlAuthorItem(
+              name: (author.attributes['name'] ?? '').trim(),
+              handle: (author.attributes['handle'] ?? '').trim(),
+              avatarUrl: (author.attributes['avatar'] ?? '').trim(),
+              profileUrl: (author.attributes['profile'] ?? '').trim(),
+            ),
+          )
+          .where(
+            (author) => author.name.isNotEmpty && author.avatarUrl.isNotEmpty,
+          )
+          .toList(growable: false);
+      if (authors.isNotEmpty) {
+        chunks.add(
+          HtmlChunk(
+            type: HtmlChunkType.authorList,
+            content: '',
+            authors: authors,
+          ),
+        );
+      }
+      return;
+    }
 
     // 标题 — BUGFIX: 有媒体子节点时保留标题文本+单独发媒体块，空标题跳过
     if (_headingTags.contains(tag)) {

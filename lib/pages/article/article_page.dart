@@ -96,13 +96,16 @@ class ArticleController extends GetxController {
         final urls = ArticleContentUtils.extractImageUrls(normalized);
         final parsedChunks = HtmlChunkParser.parseSync(normalized);
 
+        var normalizedTranslation = '';
         List<HtmlChunk> tParsedChunks = const [];
         if (hasTranslation && tContent.isNotEmpty) {
-          tParsedChunks = HtmlChunkParser.parseSync(tContent);
+          normalizedTranslation = ArticleContentUtils.normalizeHtml(tContent);
+          tParsedChunks = HtmlChunkParser.parseSync(normalizedTranslation);
         }
 
         return (
           normalizedContent: normalized,
+          normalizedTranslation: normalizedTranslation,
           imageUrls: urls,
           chunks: parsedChunks,
           translatedChunks: tParsedChunks,
@@ -116,7 +119,7 @@ class ArticleController extends GetxController {
 
       if (hasTranslation) {
         isTranslated.value = true;
-        translationContent.value = tContent;
+        translationContent.value = result.normalizedTranslation;
         if (result.translatedChunks.isNotEmpty) {
           translatedChunks.value = result.translatedChunks;
         }
@@ -333,10 +336,13 @@ class ArticleController extends GetxController {
 
       if (record.translatedContent != null &&
           record.translatedContent!.isNotEmpty) {
-        translationContent.value = record.translatedContent!;
+        final normalizedTranslation = ArticleContentUtils.normalizeHtml(
+          record.translatedContent!,
+        );
+        translationContent.value = normalizedTranslation;
         isTranslated.value = true;
         // 同步解析译文的块
-        final tChunks = HtmlChunkParser.parseSync(record.translatedContent!);
+        final tChunks = HtmlChunkParser.parseSync(normalizedTranslation);
         translatedChunks.value = tChunks;
         showTranslation.value = true;
         AppFeedback.success('翻译完成', '已生成文章译文');
@@ -1711,6 +1717,14 @@ class _OriginalArticleMarkdownExporter {
       HtmlChunkType.list => _listToMarkdown(chunk.content),
       HtmlChunkType.horizontalRule => '---',
       HtmlChunkType.iframeVideo => _iframeToMarkdown(chunk),
+      HtmlChunkType.authorList =>
+        chunk.authors
+            .map(
+              (author) => author.handle.isEmpty
+                  ? author.name
+                  : '${author.name} (@${author.handle})',
+            )
+            .join(', '),
     };
   }
 

@@ -181,6 +181,13 @@ AppGlassControlPalette appGlassControlPalette(BuildContext context) {
   return AppGlassControlPalette(context);
 }
 
+Color appGlassFloatingPanelScrim(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return (isDark ? Colors.black : Colors.white).withValues(
+    alpha: isDark ? 0.32 : 0.18,
+  );
+}
+
 LiquidGlassSettings appGlassSettingsFor(
   BuildContext context,
   AppGlassTone tone,

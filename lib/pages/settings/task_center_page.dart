@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -8,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/auto_filter_worker.dart';
@@ -18,6 +18,7 @@ import '../../services/read_sync_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/translation_service.dart';
 import '../main/main_controller.dart';
+import 'widgets/mobile_settings_chrome.dart';
 
 class TaskCenterPage extends StatefulWidget {
   final bool embedded;
@@ -98,7 +99,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
       );
       if (widget.embedded) return content;
       return Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: cs.surface.withValues(alpha: 0.74),
         body: SafeArea(
           bottom: false,
           child: Padding(
@@ -111,46 +112,27 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        leadingWidth: Platform.isMacOS ? 88 : null,
-        leading: Platform.isMacOS
-            ? Padding(
-                padding: const EdgeInsets.only(left: 66),
-                child: AppGlassIconButton(
-                  icon: Icons.arrow_back_ios_new_rounded,
-                  tooltip: '返回',
-                  onPressed: Get.back,
-                  useOwnLayer: false,
-                ),
-              )
-            : null,
-        title: const Text(
+      appBar: const MobileBlurAppBar(
+        title: Text(
           '后台任务与同步',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(color: cs.surface.withValues(alpha: 0.50)),
-          ),
         ),
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
-          16,
-          MediaQuery.paddingOf(context).top + kToolbarHeight + 16,
-          16,
+          12,
+          MediaQuery.paddingOf(context).top + mobileAppBarToolbarHeight + 16,
+          12,
           MediaQuery.paddingOf(context).bottom + 24,
         ),
         children: [
           _OverviewCard(articles: articles, rejectedCount: rejected),
-          const SizedBox(height: 24),
-          _SectionTitle(title: '同步', subtitle: '查看已读同步队列和本地文章库'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
+          const MobileSettingsSectionHeader(
+            icon: Icons.sync_rounded,
+            title: '同步',
+            subtitle: '查看已读同步队列和本地文章库',
+          ),
           _SyncCard(
             pendingReads: pendingReads,
             lastSyncAt: ReadSyncService.lastReadSyncAt,
@@ -158,8 +140,11 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
             onSync: _syncPendingReads,
           ),
           const SizedBox(height: 20),
-          _SectionTitle(title: 'AI 任务', subtitle: '后台翻译、摘要和过滤的当前状态'),
-          const SizedBox(height: 8),
+          const MobileSettingsSectionHeader(
+            icon: Icons.auto_awesome_rounded,
+            title: 'AI 任务',
+            subtitle: '后台翻译、摘要和过滤的当前状态',
+          ),
           Obx(() {
             final filterQueued = AutoFilterWorker.queuedCount.value;
             final filterProcessing = AutoFilterWorker.processingCount.value;
@@ -392,7 +377,7 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
 
     if (Platform.isMacOS) {
       return Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: cs.surface.withValues(alpha: 0.74),
         body: SafeArea(
           bottom: false,
           child: Padding(
@@ -478,32 +463,10 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        leadingWidth: Platform.isMacOS ? 88 : null,
-        leading: Platform.isMacOS
-            ? Padding(
-                padding: const EdgeInsets.only(left: 66),
-                child: AppGlassIconButton(
-                  icon: Icons.arrow_back_ios_new_rounded,
-                  tooltip: '返回',
-                  onPressed: Get.back,
-                  useOwnLayer: false,
-                ),
-              )
-            : null,
+      appBar: MobileBlurAppBar(
         title: Text(
           _isTranslation ? '翻译失败文章' : '摘要失败文章',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(color: cs.surface.withValues(alpha: 0.50)),
-          ),
         ),
       ),
       body: failures.isEmpty
@@ -533,9 +496,11 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
             )
           : ListView.separated(
               padding: EdgeInsets.fromLTRB(
-                16,
-                MediaQuery.paddingOf(context).top + kToolbarHeight + 16,
-                16,
+                12,
+                MediaQuery.paddingOf(context).top +
+                    mobileAppBarToolbarHeight +
+                    16,
+                12,
                 MediaQuery.paddingOf(context).bottom + 24,
               ),
               itemBuilder: (context, index) {
@@ -1073,7 +1038,6 @@ class _TaskPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     if (Platform.isMacOS) {
       return AppGlassSurface(
         borderRadius: AppGlassRadii.panel,
@@ -1085,14 +1049,7 @@ class _TaskPanel extends StatelessWidget {
       );
     }
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-      ),
-      child: child,
-    );
+    return MobileSettingsPanel(child: child);
   }
 }
 
@@ -1166,36 +1123,6 @@ class _MacTaskSectionHeader extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  const _SectionTitle({required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: cs.onSurface,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          subtitle,
-          style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-        ),
-      ],
     );
   }
 }

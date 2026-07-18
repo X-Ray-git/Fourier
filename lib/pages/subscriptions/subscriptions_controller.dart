@@ -146,8 +146,9 @@ class SubscriptionsController extends GetxController {
   }
 
   int unreadFor(String feedId) {
+    final unread = _unreadCounts[feedId] ?? 0;
     if (FeedSilentSettingsService.isSilent(feedId)) return 0;
-    return _unreadCounts[feedId] ?? 0;
+    return unread;
   }
 
   int rawUnreadFor(String feedId) => _unreadCounts[feedId] ?? 0;

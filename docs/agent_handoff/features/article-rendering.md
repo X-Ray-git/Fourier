@@ -42,8 +42,9 @@ HTML 空段规范化：
 图片：
 
 - 使用 `ArticleImageService` 处理代理/请求头。
-- macOS 正文图片使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；Android 暂时保持原缓存路径。
-- macOS 刷新完成后预取全部本地未读文章的正文静态图片：按文章顺序、每篇最多 8 张、总调度并发 16；当前文章前 4 张提升到队首。不要加入 hover 触发，也不要把预取改成批量 `precacheImage()` 常驻内存。
+- macOS 与 Android 正文图片都使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；历史 `v2_` 缓存暂不迁移。
+- macOS 刷新完成后预取全部本地未读文章的正文静态图片：按文章顺序、每篇最多 8 张、总调度并发 16；当前文章前 4 张提升到队首。
+- Android 使用保守参数：刷新时预取前 50 篇本地未读文章、每篇最多 4 张、总调度并发 4；当前文章前 2 张提升到队首。当前不区分 Wi-Fi 与移动网络。不要加入 hover 触发，也不要把预取改成批量 `precacheImage()` 常驻内存。
 - 宽度尽量尊重文章内容最大宽度和源图片尺寸。
 - macOS hover 不再缩小图片，也不绘制边框。
 - 可点击图片在 macOS 通过 `MacOSZoomInCursor` 使用 zoom-in 光标。
@@ -95,7 +96,7 @@ HTML 空段规范化：
 底部间距：
 
 - macOS 文章底部 padding 较小。
-- 移动端保留更大底部 padding，以避开浮动控件。
+- 移动端保留更大底部 padding，以避开浮动控件。Android 文章页当前按目录存在与否动态使用两档避让：只有已读按钮时较小，同时有目录按钮时增大。
 - macOS 分屏文章详情使用 `_MacSplitArticleCornerClipper` 对文章 body 做右下角圆角安全裁剪。背景原因是窗口外层圆角会向内收，普通矩形 padding 在右下角不能保持“正文到应用外框”的视觉距离。
 - 该 clip 只应用于 `Platform.isMacOS && isSplitView`，且只包裹文章 body，不包裹 AppBar、进度条、右上工具按钮或 hover 链接状态栏。用户已验证这是正确问题位置。
 - 当前参数：外层窗口半径 `24`，安全 inset `8`，内侧右下角半径 `16`。如果后续窗口圆角或外框间距改动，需要同步评估这些值。
@@ -103,6 +104,12 @@ HTML 空段规范化：
 - 分屏正文使用固定 `surface` header，正文从 header 下方开始。整块 header 不使用 `BackdropFilter`，避免左侧采样到相邻时间线按钮光效；右上角交互按钮仍保留各自玻璃材质。顶部状态不显示“文章详情”、分隔线和阅读进度；正文大标题接近完全滚出后，文章标题以单行省略形式进入 header，分隔线和进度条同步渐显。实现通过真实标题高度和滚动 offset 驱动局部 `ValueNotifier`，不使用 `SliverAppBar`，不要为该效果改动正文 sliver、scrollbar 或目录锚点结构。
 - 分屏正文不再显示或保留可拖动 scrollbar；正文基础左右 padding 仍为 `11px`，最大正文宽度设置独立生效。该取舍只应用于 macOS 分屏正文，不影响时间线、垃圾拦截、设置页、侧边栏和 Android 的 scrollbar。
 - macOS 阅读进度条位于文章 header 下边缘；正文大标题尚未离开时，`1px` 细分隔线和橙色进度都隐藏；header 标题折叠出现时，两者同步渐显，橙色进度覆盖在细线上。Android 保留原 appbar 底部行为。
+
+Android 文章操作：
+
+- 右下角已读/恢复未读入口是 `48px` 圆形 Flutter 玻璃按钮，不再使用旧 FAB；Android 不提供复制全文按钮。
+- 文章存在目录时，目录按钮位于已读按钮上方，间隔 `8px`；目录内容通过 `AppMobileGlassSheet` 展开，继续复用正文 heading key 和跳转逻辑。
+- 翻译与摘要 pill 和 macOS 共用状态语义与文案，但保留移动端触摸目标，不要为了视觉一致缩成桌面点击尺寸。
 
 HTML entity 解码：
 

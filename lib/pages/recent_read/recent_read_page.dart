@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -160,6 +161,14 @@ class _RecentReadPageState extends State<RecentReadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: Platform.isMacOS
+          ? null
+          : const MobileBlurAppBar(
+              title: Text(
+                '最近阅读',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              ),
+            ),
       body: Obx(() {
         final state = controller.loadingState.value;
 
@@ -263,11 +272,8 @@ class _RecentReadPageState extends State<RecentReadPage> {
           : ListView.builder(
               controller: _scrollController,
               padding: EdgeInsets.only(
-                top: Platform.isMacOS ? 0 : MediaQuery.paddingOf(context).top,
-                bottom:
-                    8 +
-                    (Platform.isMacOS ? 0 : kBottomNavigationBarHeight) +
-                    MediaQuery.of(context).padding.bottom,
+                top: 0,
+                bottom: 8 + MediaQuery.of(context).padding.bottom,
               ),
               itemCount: controller.articles.length,
               itemBuilder: (context, index) {

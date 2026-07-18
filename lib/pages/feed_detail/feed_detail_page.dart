@@ -19,6 +19,8 @@ import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_selection_button.dart';
+import '../../common/widgets/article_card_chrome.dart';
+import '../../common/widgets/mobile_article_range_button.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
@@ -554,243 +556,84 @@ class FeedDetailPage extends StatelessWidget {
             const AlwaysScrollableScrollPhysics(),
           ),
           slivers: [
-            // ─── 杂志级沉浸式头部 ───
             SliverAppBar(
-              expandedHeight: 220,
               pinned: true,
-              stretch: true,
-              backgroundColor:
-                  Colors.transparent, // 必须透明，靠内部的 BackdropFilter 呈现毛玻璃
+              toolbarHeight: 68,
+              backgroundColor: cs.surface.withValues(alpha: 0.74),
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
               iconTheme: IconThemeData(color: cs.onSurface),
               actionsIconTheme: IconThemeData(color: cs.onSurface),
-              flexibleSpace: Stack(
-                fit: StackFit.expand,
+              flexibleSpace: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              titleSpacing: 0,
+              title: Row(
                 children: [
-                  // Persistent Glassmorphism Base
-                  ClipRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                      child: Container(
-                        color: cs.surface.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
-                  FlexibleSpaceBar(
-                    titlePadding: const EdgeInsets.only(
-                      left: 48,
-                      right: 48,
-                      bottom: 16,
-                    ),
-                    centerTitle: true,
-                    title: Text(
-                      controller.feedTitle,
-                      style: TextStyle(
-                        color: cs.onSurface,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    background: Stack(
-                      fit: StackFit.expand,
+                  _MobileFeedAvatar(imageUrl: safeImageUrl),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 1. 底层背景图：抓取源图片或者使用主题色填充
-                        if (safeImageUrl != null)
-                          CachedNetworkImage(
-                            imageUrl: safeImageUrl,
-                            fit: BoxFit.cover,
-                          )
-                        else
-                          Container(color: cs.primaryContainer),
-
-                        // 2. 极致的高斯模糊与表面色彩融合（Glassmorphism）
-                        // 既能保留原图的色彩分布，又绝对保证文字的对比度可读性
-                        BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                          child: Container(
-                            color: cs.surface.withValues(alpha: 0.85),
+                        Text(
+                          controller.feedTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-
-                        // 3. 居中大头像展示区（向上滚动时会自动淡出）
-                        Positioned(
-                          top:
-                              MediaQuery.of(context).padding.top +
-                              kToolbarHeight +
-                              10,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: Container(
-                              width: 68,
-                              height: 68,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: cs.surface,
-                                border: Border.all(
-                                  color: cs.primary.withValues(alpha: 0.15),
-                                  width: 3,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                                image: safeImageUrl != null
-                                    ? DecorationImage(
-                                        image: CachedNetworkImageProvider(
-                                          safeImageUrl,
-                                        ),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: safeImageUrl == null
-                                  ? Icon(
-                                      Icons.rss_feed,
-                                      size: 32,
-                                      color: cs.primary,
-                                    )
-                                  : null,
+                        Obx(() {
+                          final unread = controller.articles
+                              .where((article) => !article.isRead)
+                              .length;
+                          final total = controller.articles.length;
+                          return Text(
+                            unread > 0
+                                ? '$unread 篇未读 · $total 篇当前列表'
+                                : '$total 篇当前列表',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant,
                             ),
-                          ),
-                        ),
+                          );
+                        }),
                       ],
                     ),
-                    collapseMode: CollapseMode.pin,
                   ),
                 ],
               ),
               actions: [
-                // Unread Count Badge
-                Obx(() {
-                  final unreadCount = controller.articles
-                      .where((a) => !a.isRead)
-                      .length;
-                  if (unreadCount == 0) return const SizedBox.shrink();
-                  return Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        unreadCount.toString(),
-                        style: TextStyle(
-                          color: cs.primary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-                // 已读筛选
                 Obx(
-                  () => PopupMenuButton<int>(
-                    tooltip: '筛选文章状态',
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  () => MobileArticleRangeButton(
+                    unreadOnly: controller.readFilter.value == 0,
+                    onChanged: (unreadOnly) => controller.setReadFilter(
+                      unreadOnly ? 0 : 1,
+                      clearSelection: true,
                     ),
-                    icon: Icon(
-                      controller.readFilter.value == 0
-                          ? Icons.mark_email_unread_outlined
-                          : controller.readFilter.value == 1
-                          ? Icons.inbox
-                          : Icons.done_all,
-                      size: 22,
-                      color: cs.onSurfaceVariant,
-                    ),
-                    onSelected: controller.setReadFilter,
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(value: 0, child: Text('仅未读')),
-                      const PopupMenuItem(value: 1, child: Text('全部')),
-                      const PopupMenuItem(value: 2, child: Text('仅已读')),
-                    ],
                   ),
                 ),
-                // 强制提取长文
-                if (controller.filterFeedId != null)
-                  Obx(() {
-                    final isEnabled = controller.isAutoReadabilityEnabled.value;
-                    return IconButton(
-                      icon: Icon(
-                        isEnabled
-                            ? Icons.chrome_reader_mode
-                            : Icons.chrome_reader_mode_outlined,
-                        color: isEnabled ? cs.primary : cs.onSurfaceVariant,
-                      ),
-                      tooltip: isEnabled ? '强制全文提取已开启' : '开启强制全文提取',
-                      onPressed: () async {
-                        await FeedReadabilitySettingsService.toggleAutoReadability(
-                          controller.filterFeedId ?? '',
-                        );
-                        controller.refreshAutoReadabilityStatus();
-                        AppFeedback.success(
-                          isEnabled ? '强制全文提取已关闭' : '强制全文提取已开启',
-                          '仅对当前订阅源生效，下次同步时应用',
-                        );
-                      },
-                    );
-                  }),
-                // 自动翻译
-                if (controller.filterFeedId != null)
-                  Obx(() {
-                    final isEnabled = controller.isAutoTranslateEnabled.value;
-                    return IconButton(
-                      icon: Icon(
-                        isEnabled ? Icons.translate : Icons.translate_outlined,
-                        color: isEnabled ? cs.primary : cs.onSurfaceVariant,
-                      ),
-                      tooltip: isEnabled ? '自动翻译已启用' : '启用自动翻译',
-                      onPressed: () async {
-                        await FeedTranslationSettingsService.toggleAutoTranslate(
-                          controller.filterFeedId ?? '',
-                        );
-                        controller.refreshAutoTranslateStatus();
-                        AppFeedback.success(
-                          isEnabled ? '自动翻译已关闭' : '自动翻译已开启',
-                          '仅对当前订阅源生效',
-                        );
-                      },
-                    );
-                  }),
-                // 静默订阅源
-                if (controller.filterFeedId != null)
-                  Obx(() {
-                    final isEnabled = controller.isSilentEnabled.value;
-                    return IconButton(
-                      icon: Icon(
-                        isEnabled
-                            ? Icons.notifications_off
-                            : Icons.notifications_off_outlined,
-                        color: isEnabled ? cs.error : cs.onSurfaceVariant,
-                      ),
-                      tooltip: isEnabled ? '已开启静默' : '设为静默',
-                      onPressed: () async {
-                        await FeedSilentSettingsService.toggleSilent(
-                          controller.filterFeedId ?? '',
-                        );
-                        controller.refreshSilentStatus();
-                        AppFeedback.success(
-                          isEnabled ? '已取消静默' : '已设为静默',
-                          '从原分类列表中隔离该订阅源',
-                        );
-                      },
-                    );
-                  }),
-                const SizedBox(width: 8),
+                if (controller.filterFeedId != null) ...[
+                  const SizedBox(width: 6),
+                  AppGlassIconButton(
+                    icon: Icons.tune_rounded,
+                    tooltip: '订阅源设置',
+                    size: 36,
+                    iconSize: 19,
+                    onPressed: () =>
+                        _showMobileFeedSettings(context, controller),
+                  ),
+                ],
+                const SizedBox(width: 10),
               ],
             ),
 
@@ -861,6 +704,21 @@ class FeedDetailPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showMobileFeedSettings(
+    BuildContext context,
+    FeedDetailController controller,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.30),
+      builder: (sheetContext) =>
+          _MobileFeedSettingsSheet(controller: controller),
     );
   }
 
@@ -1104,6 +962,160 @@ class _MacFeedReadFilterToggleState extends State<_MacFeedReadFilterToggle> {
   }
 }
 
+class _MobileFeedAvatar extends StatelessWidget {
+  final String? imageUrl;
+
+  const _MobileFeedAvatar({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ClipOval(
+      child: Container(
+        width: 36,
+        height: 36,
+        color: cs.primaryContainer.withValues(alpha: 0.45),
+        child: imageUrl == null
+            ? Icon(Icons.rss_feed_rounded, size: 19, color: cs.primary)
+            : CachedNetworkImage(
+                imageUrl: imageUrl!,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) =>
+                    Icon(Icons.rss_feed_rounded, size: 19, color: cs.primary),
+              ),
+      ),
+    );
+  }
+}
+
+class _MobileFeedSettingsSheet extends StatelessWidget {
+  final FeedDetailController controller;
+
+  const _MobileFeedSettingsSheet({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AppMobileGlassSheet(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: cs.onSurfaceVariant.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          Row(
+            children: [
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '订阅源设置',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: '关闭',
+                onPressed: Navigator.of(context).pop,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          Obx(
+            () => _MobileFeedSettingTile(
+              icon: Icons.chrome_reader_mode_outlined,
+              title: '自动拉取全文',
+              subtitle: '下次同步时对当前订阅源应用',
+              value: controller.isAutoReadabilityEnabled.value,
+              onChanged: () async {
+                await FeedReadabilitySettingsService.toggleAutoReadability(
+                  controller.filterFeedId ?? '',
+                );
+                controller.refreshAutoReadabilityStatus();
+              },
+            ),
+          ),
+          Obx(
+            () => _MobileFeedSettingTile(
+              icon: Icons.translate_rounded,
+              title: '自动翻译',
+              subtitle: '仅对当前订阅源生效',
+              value: controller.isAutoTranslateEnabled.value,
+              onChanged: () async {
+                await FeedTranslationSettingsService.toggleAutoTranslate(
+                  controller.filterFeedId ?? '',
+                );
+                controller.refreshAutoTranslateStatus();
+              },
+            ),
+          ),
+          Obx(
+            () => _MobileFeedSettingTile(
+              icon: Icons.notifications_off_outlined,
+              title: '静默订阅源',
+              subtitle: '从原分类列表中隔离',
+              value: controller.isSilentEnabled.value,
+              danger: controller.isSilentEnabled.value,
+              onChanged: () async {
+                await FeedSilentSettingsService.toggleSilent(
+                  controller.filterFeedId ?? '',
+                );
+                controller.refreshSilentStatus();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileFeedSettingTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final bool danger;
+  final Future<void> Function() onChanged;
+
+  const _MobileFeedSettingTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final activeColor = danger ? cs.error : cs.primary;
+    return ListTile(
+      minTileHeight: 60,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      leading: Icon(icon, color: value ? activeColor : cs.onSurfaceVariant),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle),
+      trailing: Switch.adaptive(
+        value: value,
+        activeTrackColor: activeColor,
+        onChanged: (_) => onChanged(),
+      ),
+      onTap: onChanged,
+    );
+  }
+}
+
 class _MacFeedAvatar extends StatelessWidget {
   final String? imageUrl;
   final ColorScheme colorScheme;
@@ -1191,21 +1203,17 @@ class _FeedDetailSkeleton extends StatelessWidget {
     return ShimmerFadeList(
       itemCount: 4,
       itemBuilder: (context, index) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Card(
-          margin: EdgeInsets.zero,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: Theme.of(
-                context,
-              ).colorScheme.outlineVariant.withValues(alpha: 0.3),
-              width: 1,
+        padding: ArticleCardChrome.outerPadding,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: ArticleCardChrome.fillColor(context, selected: false),
+            borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
+            border: Border.fromBorderSide(
+              ArticleCardChrome.borderSide(context, selected: false),
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: ArticleCardChrome.contentPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1280,24 +1288,17 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: colorScheme.errorContainer.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.cloud_off_rounded,
-                size: 48,
-                color: colorScheme.error,
-              ),
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 44,
+              color: colorScheme.error.withValues(alpha: 0.72),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               '数据加载异常',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: colorScheme.onSurface,
               ),
             ),
@@ -1312,7 +1313,7 @@ class _ErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh, size: 18),
@@ -1359,24 +1360,17 @@ class _EmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isUnread ? Icons.done_all_rounded : Icons.inbox_outlined,
-                size: 56,
-                color: colorScheme.primary,
-              ),
+            Icon(
+              isUnread ? Icons.done_all_rounded : Icons.inbox_outlined,
+              size: 44,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.58),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               isUnread ? '全部读完啦' : '暂无文章',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: colorScheme.onSurface,
               ),
             ),
@@ -1391,20 +1385,11 @@ class _EmptyView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 32),
-              OutlinedButton.icon(
+              const SizedBox(height: 20),
+              TextButton.icon(
                 onPressed: onRetry,
-                icon: const Icon(Icons.sync, size: 18),
-                label: const Text('强制同步'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('刷新'),
               ),
             ],
           ],

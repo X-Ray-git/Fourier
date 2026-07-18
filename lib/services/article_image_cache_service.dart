@@ -9,11 +9,15 @@ import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'article_image_service.dart';
 
-/// macOS article-body image prefetching and article-scoped cache cleanup.
+/// Article-body image prefetching and article-scoped cache cleanup.
 abstract final class ArticleImageCacheService {
-  static const int maxConcurrentDownloads = 16;
-  static const int foregroundImageLimit = 4;
-  static const int imagesPerArticle = 8;
+  static const int macosMaxConcurrentDownloads = 16;
+  static const int macosForegroundImageLimit = 4;
+  static const int macosImagesPerArticle = 8;
+  static const int androidMaxConcurrentDownloads = 4;
+  static const int androidForegroundImageLimit = 2;
+  static const int androidImagesPerArticle = 4;
+  static const int androidBackgroundArticleLimit = 50;
   static const Duration readCacheRetention = Duration(minutes: 5);
 
   static const String _cacheKeyPrefix = 'article_body_v1';
@@ -34,7 +38,20 @@ abstract final class ArticleImageCacheService {
 
   static BaseCacheManager get _cacheManager => DefaultCacheManager();
 
-  static bool get _enabled => Platform.isMacOS;
+  static bool get _enabled => Platform.isMacOS || Platform.isAndroid;
+
+  static _ImageCacheProfile get _profile => Platform.isAndroid
+      ? const _ImageCacheProfile(
+          maxConcurrentDownloads: androidMaxConcurrentDownloads,
+          foregroundImageLimit: androidForegroundImageLimit,
+          imagesPerArticle: androidImagesPerArticle,
+          backgroundArticleLimit: androidBackgroundArticleLimit,
+        )
+      : const _ImageCacheProfile(
+          maxConcurrentDownloads: macosMaxConcurrentDownloads,
+          foregroundImageLimit: macosForegroundImageLimit,
+          imagesPerArticle: macosImagesPerArticle,
+        );
 
   static String cacheKey(String articleId, String imageUrl) {
     return '$_cacheKeyPrefix:$articleId:$imageUrl';
@@ -139,7 +156,7 @@ abstract final class ArticleImageCacheService {
     markArticleActive(articleId);
 
     final tasks = imageUrls
-        .take(foregroundImageLimit)
+        .take(_profile.foregroundImageLimit)
         .map(
           (url) => _ImageDownloadTask(
             articleId: articleId,
@@ -163,7 +180,7 @@ abstract final class ArticleImageCacheService {
     final plan = await Isolate.run(
       () => buildPrefetchPlan([
         {'articleId': article.entryId, 'content': content},
-      ], maxImages: imagesPerArticle),
+      ], maxImages: _profile.imagesPerArticle),
     );
     for (final item in plan) {
       _enqueue(
@@ -187,7 +204,7 @@ abstract final class ArticleImageCacheService {
     _clearBackgroundQueue();
     await _reconcileCleanupSchedule(articles);
 
-    final source = articles
+    final candidates = articles
         .where((article) => !article.isRead)
         .where((article) => (article.content ?? '').trim().isNotEmpty)
         .map(
@@ -195,12 +212,15 @@ abstract final class ArticleImageCacheService {
             'articleId': article.entryId,
             'content': article.content!,
           },
-        )
-        .toList(growable: false);
+        );
+    final articleLimit = _profile.backgroundArticleLimit;
+    final source =
+        (articleLimit == null ? candidates : candidates.take(articleLimit))
+            .toList(growable: false);
     if (source.isEmpty) return;
 
     final plan = await Isolate.run(
-      () => buildPrefetchPlan(source, maxImages: imagesPerArticle),
+      () => buildPrefetchPlan(source, maxImages: _profile.imagesPerArticle),
     );
     if (generation != _prefetchGeneration) return;
 
@@ -221,10 +241,12 @@ abstract final class ArticleImageCacheService {
 
   static List<Map<String, String>> buildPrefetchPlan(
     List<Map<String, String>> articles, {
-    int maxImages = imagesPerArticle,
+    int maxImages = macosImagesPerArticle,
+    int? maxArticles,
   }) {
     final plan = <Map<String, String>>[];
-    for (final article in articles) {
+    final source = maxArticles == null ? articles : articles.take(maxArticles);
+    for (final article in source) {
       final articleId = article['articleId'] ?? '';
       final content = article['content'] ?? '';
       if (articleId.isEmpty || content.trim().isEmpty) continue;
@@ -277,7 +299,7 @@ abstract final class ArticleImageCacheService {
 
   static void _pumpQueue() {
     if (!_enabled) return;
-    while (_runningDownloads < maxConcurrentDownloads) {
+    while (_runningDownloads < _profile.maxConcurrentDownloads) {
       final task = _nextTask();
       if (task == null) return;
 
@@ -442,6 +464,20 @@ abstract final class ArticleImageCacheService {
     final prefix = '$_cacheKeyPrefix:$articleId:';
     return _runningKeys.any((key) => key.startsWith(prefix));
   }
+}
+
+class _ImageCacheProfile {
+  final int maxConcurrentDownloads;
+  final int foregroundImageLimit;
+  final int imagesPerArticle;
+  final int? backgroundArticleLimit;
+
+  const _ImageCacheProfile({
+    required this.maxConcurrentDownloads,
+    required this.foregroundImageLimit,
+    required this.imagesPerArticle,
+    this.backgroundArticleLimit,
+  });
 }
 
 class _ImageDownloadTask {

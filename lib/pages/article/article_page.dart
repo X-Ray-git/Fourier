@@ -1073,6 +1073,127 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         _macToolbarButtonGap * 2;
   }
 
+  Future<void> _showMobileToc(List<_ArticleTocEntry> entries) async {
+    if (entries.isEmpty || !mounted) return;
+
+    setState(() => _isTocOpen = true);
+    _updateActiveTocEntry();
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final panelHeight = math.min(
+      screenHeight * 0.72,
+      76.0 + entries.length * 48.0,
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.30),
+      builder: (sheetContext) {
+        final cs = Theme.of(sheetContext).colorScheme;
+        final controls = appGlassControlPalette(sheetContext);
+        return AppMobileGlassSheet(
+          height: panelHeight,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.format_list_bulleted_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '目录',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭目录',
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(
+                height: 1,
+                color: cs.outlineVariant.withValues(alpha: 0.28),
+              ),
+              Expanded(
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: _activeTocId,
+                  builder: (context, activeTocId, child) {
+                    return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                      itemCount: entries.length,
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        final active = entry.id == activeTocId;
+                        final indent = ((entry.level - 1).clamp(0, 3)) * 14.0;
+                        return Padding(
+                          padding: EdgeInsets.only(left: indent, bottom: 2),
+                          child: Material(
+                            color: active
+                                ? controls.activeFill(accentAlpha: 0.05)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.of(sheetContext).pop();
+                                unawaited(_scrollToTocEntry(entry));
+                              },
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 48,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Text(
+                                    entry.title,
+                                    style: TextStyle(
+                                      fontSize: entry.level <= 2 ? 14 : 13,
+                                      height: 1.35,
+                                      fontWeight: active
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: active
+                                          ? cs.primary
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (mounted) setState(() => _isTocOpen = false);
+  }
+
   Future<void> _copyOriginalArticleMarkdown() async {
     final chunks = controller.chunks.toList(growable: false);
     if (chunks.isEmpty) {
@@ -1274,7 +1395,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
                           const Divider(height: 24),
 
-                          _ToolbarRow(controller: controller, cs: colorScheme),
+                          _ToolbarRow(controller: controller),
                           _SummaryCard(controller: controller),
                         ],
                       ),
@@ -1427,10 +1548,25 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 }),
               ),
 
-              // 底部间距：移动端需要避让右下角 FAB，macOS 仅保留小的视觉间距。
-              SliverPadding(
-                padding: EdgeInsets.only(bottom: Platform.isMacOS ? 16 : 80),
-              ),
+              // 移动端按实际操作按钮数量避让，避免正文被悬浮控件遮挡。
+              if (Platform.isMacOS)
+                const SliverPadding(padding: EdgeInsets.only(bottom: 16))
+              else
+                Obx(() {
+                  final showTrans =
+                      controller.showTranslation.value &&
+                      controller.translatedChunks.isNotEmpty;
+                  final activeChunks = showTrans
+                      ? controller.translatedChunks
+                      : controller.chunks;
+                  final hasToc = _tocEntriesFor(
+                    activeChunks,
+                    showTrans,
+                  ).isNotEmpty;
+                  return SliverPadding(
+                    padding: EdgeInsets.only(bottom: hasToc ? 144 : 88),
+                  );
+                }),
             ],
           ),
         ),
@@ -1584,28 +1720,46 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           : Obx(() {
               final isRead = controller.isRead.value;
               final isUpdating = controller.isUpdatingReadState.value;
-              return Opacity(
-                opacity: 0.85,
-                child: FloatingActionButton(
-                  onPressed: isUpdating
-                      ? null
-                      : () {
-                          if (isRead) {
-                            controller.markAsUnread();
-                          } else {
-                            if (widget.onMKeyPressed != null) {
+              final showTrans =
+                  controller.showTranslation.value &&
+                  controller.translatedChunks.isNotEmpty;
+              final activeChunks = showTrans
+                  ? controller.translatedChunks
+                  : controller.chunks;
+              final entries = _tocEntriesFor(activeChunks, showTrans);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (entries.isNotEmpty) ...[
+                    AppGlassIconButton(
+                      icon: Icons.format_list_bulleted_rounded,
+                      tooltip: '目录',
+                      size: 48,
+                      iconSize: 22,
+                      onPressed: () => _showMobileToc(entries),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  AppGlassIconButton(
+                    icon: isRead ? Icons.undo_rounded : Icons.check_rounded,
+                    tooltip: isRead ? '恢复未读' : '标为已读',
+                    selected: !isRead,
+                    size: 48,
+                    iconSize: 22,
+                    onPressed: isUpdating
+                        ? null
+                        : () {
+                            if (isRead) {
+                              controller.markAsUnread();
+                            } else if (widget.onMKeyPressed != null) {
                               widget.onMKeyPressed!();
                             } else {
                               controller.markAsRead();
-                              if (widget.onNext != null) {
-                                widget.onNext!();
-                              }
+                              widget.onNext?.call();
                             }
-                          }
-                        },
-                  tooltip: isRead ? '恢复未读' : '标为已读',
-                  child: Icon(isRead ? Icons.undo : Icons.check),
-                ),
+                          },
+                  ),
+                ],
               );
             }),
       body: articleBody,
@@ -2731,8 +2885,7 @@ class _MetadataSection extends StatelessWidget {
 
 class _ToolbarRow extends StatelessWidget {
   final ArticleController controller;
-  final ColorScheme cs;
-  const _ToolbarRow({required this.controller, required this.cs});
+  const _ToolbarRow({required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -2752,83 +2905,22 @@ class _ToolbarRow extends StatelessWidget {
       final isFetchingReadability = controller.isFetchingReadability.value;
       final showTranslation = controller.showTranslation.value;
       final showSummary = controller.showSummary.value;
-      if (Platform.isMacOS) {
-        return _MacGlassToolbarRow(
-          controller: controller,
-          cs: cs,
-          isPending: isPending,
-          hasTranslation: hasTranslation,
-          showTranslation: showTranslation,
-          isSummaryPending: isSummaryPending,
-          hasSummary: hasSummary,
-          showSummary: showSummary,
-          isFetchingReadability: isFetchingReadability,
-        );
-      }
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _Chip(
-                cs: cs,
-                icon: controller.showTranslation.value
-                    ? Icons.translate
-                    : Icons.translate_outlined,
-                label: isPending
-                    ? '翻译…'
-                    : hasTranslation
-                    ? '已译'
-                    : '翻译',
-                active: controller.showTranslation.value || isPending,
-                onTap: isPending
-                    ? null
-                    : hasTranslation
-                    ? () => controller.showTranslation.toggle()
-                    : () => controller.translateArticle(),
-              ),
-              const SizedBox(width: 8),
-              _Chip(
-                cs: cs,
-                icon: hasSummary && controller.showSummary.value
-                    ? Icons.summarize
-                    : Icons.summarize_outlined,
-                label: isSummaryPending
-                    ? '摘要…'
-                    : hasSummary
-                    ? '已摘要'
-                    : '摘要',
-                active:
-                    isSummaryPending ||
-                    (hasSummary && controller.showSummary.value),
-                onTap: isSummaryPending
-                    ? null
-                    : hasSummary
-                    ? () => controller.showSummary.toggle()
-                    : () => controller.summarizeArticle(),
-              ),
-              if (isFetchingReadability) ...[
-                const SizedBox(width: 8),
-                _Chip(
-                  cs: cs,
-                  icon: Icons.sync,
-                  label: '加载长文中…',
-                  active: true,
-                  onTap: null,
-                ),
-              ],
-            ],
-          ),
-        ),
+      return _ArticlePillToolbarRow(
+        controller: controller,
+        isPending: isPending,
+        hasTranslation: hasTranslation,
+        showTranslation: showTranslation,
+        isSummaryPending: isSummaryPending,
+        hasSummary: hasSummary,
+        showSummary: showSummary,
+        isFetchingReadability: isFetchingReadability,
       );
     });
   }
 }
 
-class _MacGlassToolbarRow extends StatelessWidget {
+class _ArticlePillToolbarRow extends StatelessWidget {
   final ArticleController controller;
-  final ColorScheme cs;
   final bool isPending;
   final bool hasTranslation;
   final bool showTranslation;
@@ -2837,9 +2929,8 @@ class _MacGlassToolbarRow extends StatelessWidget {
   final bool showSummary;
   final bool isFetchingReadability;
 
-  const _MacGlassToolbarRow({
+  const _ArticlePillToolbarRow({
     required this.controller,
-    required this.cs,
     required this.isPending,
     required this.hasTranslation,
     required this.showTranslation,
@@ -2852,7 +2943,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = <Widget>[
-      _MacPillActionChip(
+      _ArticlePillActionChip(
         icon: showTranslation ? Icons.translate : Icons.translate_outlined,
         label: isPending
             ? '翻译中...'
@@ -2868,7 +2959,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
             ? () => controller.showTranslation.toggle()
             : () => controller.translateArticle(),
       ),
-      _MacPillActionChip(
+      _ArticlePillActionChip(
         icon: hasSummary && showSummary
             ? Icons.summarize
             : Icons.summarize_outlined,
@@ -2887,7 +2978,7 @@ class _MacGlassToolbarRow extends StatelessWidget {
             : () => controller.summarizeArticle(),
       ),
       if (isFetchingReadability)
-        const _MacPillActionChip(
+        const _ArticlePillActionChip(
           icon: Icons.sync,
           label: '加载长文中...',
           active: true,
@@ -2912,13 +3003,13 @@ class _MacGlassToolbarRow extends StatelessWidget {
   }
 }
 
-class _MacPillActionChip extends StatefulWidget {
+class _ArticlePillActionChip extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback? onTap;
 
-  const _MacPillActionChip({
+  const _ArticlePillActionChip({
     required this.icon,
     required this.label,
     required this.active,
@@ -2926,10 +3017,10 @@ class _MacPillActionChip extends StatefulWidget {
   });
 
   @override
-  State<_MacPillActionChip> createState() => _MacPillActionChipState();
+  State<_ArticlePillActionChip> createState() => _ArticlePillActionChipState();
 }
 
-class _MacPillActionChipState extends State<_MacPillActionChip> {
+class _ArticlePillActionChipState extends State<_ArticlePillActionChip> {
   bool _hovered = false;
   bool _pressed = false;
 
@@ -2970,8 +3061,13 @@ class _MacPillActionChipState extends State<_MacPillActionChip> {
                   ? Duration.zero
                   : const Duration(milliseconds: 150),
               curve: Curves.easeOutCubic,
-              constraints: const BoxConstraints(minHeight: 32),
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              constraints: BoxConstraints(
+                minHeight: Platform.isMacOS ? 32 : 40,
+              ),
+              padding: EdgeInsets.symmetric(
+                horizontal: Platform.isMacOS ? 11 : 13,
+                vertical: Platform.isMacOS ? 7 : 9,
+              ),
               decoration: BoxDecoration(
                 color: background,
                 borderRadius: BorderRadius.circular(999),
@@ -2994,57 +3090,6 @@ class _MacPillActionChipState extends State<_MacPillActionChip> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final ColorScheme cs;
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback? onTap;
-  const _Chip({
-    required this.cs,
-    required this.icon,
-    required this.label,
-    required this.active,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: active
-              ? cs.primary.withValues(alpha: 0.12)
-              : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: active ? cs.primary : cs.onSurfaceVariant,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: active ? cs.primary : cs.onSurfaceVariant,
-              ),
-            ),
-          ],
         ),
       ),
     );

@@ -292,15 +292,6 @@ class AppGlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isMacOS) {
-      return _FallbackGlassSurface(
-        borderRadius: borderRadius,
-        padding: padding,
-        margin: margin,
-        child: child,
-      );
-    }
-
     if (staticMaterial) {
       return _StaticGlassSurface(
         borderRadius: borderRadius,
@@ -885,6 +876,8 @@ class AppGlassIconButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool selected;
   final bool useOwnLayer;
+  final double size;
+  final double iconSize;
 
   const AppGlassIconButton({
     super.key,
@@ -893,6 +886,8 @@ class AppGlassIconButton extends StatefulWidget {
     this.onPressed,
     this.selected = false,
     this.useOwnLayer = true,
+    this.size = 34,
+    this.iconSize = 18,
   });
 
   @override
@@ -950,6 +945,38 @@ class AppGlassRoundControlChrome extends StatelessWidget {
   }
 }
 
+class AppMobileGlassSheet extends StatelessWidget {
+  final Widget child;
+  final double? height;
+  final double borderRadius;
+  final EdgeInsetsGeometry padding;
+
+  const AppMobileGlassSheet({
+    super.key,
+    required this.child,
+    this.height,
+    this.borderRadius = 32,
+    this.padding = EdgeInsets.zero,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(8, 0, 8, bottomInset + 8),
+      child: SizedBox(
+        height: height,
+        child: AppGlassSurface(
+          borderRadius: borderRadius,
+          padding: padding,
+          tone: AppGlassTone.panel,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class _AppGlassIconButtonState extends State<AppGlassIconButton> {
   bool _hovered = false;
   bool _pressed = false;
@@ -984,9 +1011,10 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
               hovered: _hovered,
               pressed: _pressed,
               useOwnLayer: widget.useOwnLayer,
+              size: widget.size,
               child: Icon(
                 widget.icon,
-                size: 18,
+                size: widget.iconSize,
                 color: !enabled
                     ? cs.onSurfaceVariant.withValues(alpha: 0.58)
                     : widget.selected
@@ -1383,35 +1411,6 @@ class AppGlassTextField extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _FallbackGlassSurface extends StatelessWidget {
-  final Widget child;
-  final double borderRadius;
-  final EdgeInsetsGeometry? padding;
-  final EdgeInsetsGeometry? margin;
-
-  const _FallbackGlassSurface({
-    required this.child,
-    required this.borderRadius,
-    this.padding,
-    this.margin,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      margin: margin,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.28)),
-      ),
-      child: child,
     );
   }
 }

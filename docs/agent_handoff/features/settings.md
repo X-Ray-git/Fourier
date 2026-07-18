@@ -34,6 +34,13 @@ macOS UI：
 - 三选一的外观 segmented 高度和普通下拉/文本输入结构不同，应在“阅读与后台偏好”中独占完整一行；不要为了机械配对压缩其已验证的动画和玻璃规格。其余普通设置再进入响应式两列网格，窄窗口回落为单列。
 - macOS 的 Folo 与 DeepSeek 凭据位于同一个“服务认证”容器，底部右侧共用紧凑的“测试连接 + 保存认证”按钮行；Prompt 保存/重置仍位于各自容器底部右侧。不要把保存按钮挤在输入框右侧或横向撑满卡片。
 
+Android UI：
+
+- Android 设置页使用独立的移动端分组布局，但继续复用相同保存语义与业务组件。页面水平边距为 `12px`，大面板使用 `MobileSettingsPanel` 的 `24px` 连续圆角和轻量静态材质；不要把 macOS 双栏设置布局压缩后直接搬到手机。
+- 离散选择统一使用 `MobileSettingsSelectField<T>`。字段本身不裁剪 `InputDecorator` 的浮动标签；点击后打开 `AppMobileGlassSheet`，选中项显示勾选，选择后立即关闭并保存。不要恢复透明的 Material dropdown overlay。
+- 移动端服务认证、LLM 自动提交数字输入和 Prompt 行为仍与 macOS 共享语义。正文最大宽度、macOS fling 上限等桌面专属项不得出现在 Android 设置页。
+- 后台任务中心是独立二级页面，入口位于设置页。该页面有实时队列和失败记录导航，保持独立路由比把全部状态展开在设置列表中更清晰。
+
 保存语义：
 
 - 选择型控件应选择即保存，包括 dropdown、segmented、switch/checkbox 等。

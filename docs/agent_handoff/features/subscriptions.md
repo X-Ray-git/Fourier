@@ -28,7 +28,13 @@ UI 注意点：
 - macOS 订阅源专属 header 可以显示自动翻译和自动全文开关。
 - `FeedDetailPage` 仍是有效入口：订阅源页中点击某个 view/category 的“全部”会进入它。不要把该页面当作废弃代码删除。
 - macOS `FeedDetailPage` header 的阅读状态筛选必须和主时间线保持一致：复用圆形“文章范围” morph 按钮，只暴露“未读/全部”，不再显示旧的 `仅未读/全部/仅已读` 三项 PopupMenu。
-- 移动端 `FeedDetailPage` AppBar 目前仍保留三项菜单，这是移动端路径的既有行为；本轮只统一 macOS。
+- Android `FeedDetailPage` 与主时间线复用圆形“文章范围”按钮；点击后从共享玻璃底部面板选择“未读/全部”，不再维护旧 switch 或三项阅读状态菜单。订阅源级自动全文、自动翻译和静默设置也位于共享 `AppMobileGlassSheet`。
 - 清除选中订阅源时，适当情况下也应清除选中分类。
 - macOS 订阅源/侧边栏相关按钮应避免遗留 Flutter 默认 tooltip。订阅源分类展开箭头、订阅源搜索清空按钮等入口应使用 `AppGlassTooltip` 或 `AppGlassIconButton`。
 - 订阅源分类展开/折叠箭头仍保留原本紧凑尺寸和旋转动画，只把 tooltip 从默认系统样式迁移到玻璃样式；不要借 tooltip 迁移扩大行高或改变侧边栏信息密度。
+
+Android 导航与状态：
+
+- 最近阅读是不常用的二级时间线，入口位于订阅源页，不占用主底部导航；进入后使用独立 AppBar 返回。
+- 移动端订阅源详情使用紧凑 `68px` header，显示头像、标题、未读数和总数；不要恢复旧 `220px` 杂志式 hero。
+- 静默订阅源的未读数仍显示为零，但 `SubscriptionsController.unreadFor()` 必须在静默判断前读取 `_unreadCounts`，保证外层 `Obx` 始终建立 Rx 依赖。提前返回会在 Debug 触发 GetX misuse，在 Release 表现为展开 Inbox 后的灰色色块。

@@ -6,6 +6,7 @@ import '../pages/feed_detail/feed_detail_page.dart';
 import '../pages/settings/settings_page.dart';
 import '../pages/settings/task_center_page.dart';
 import '../pages/timeline/filter_review_page.dart';
+import '../pages/recent_read/recent_read_page.dart';
 
 class Routes {
   Routes._();
@@ -16,6 +17,7 @@ class Routes {
   static const String settings = '/settings';
   static const String taskCenter = '/task-center';
   static const String filterReview = '/filter-review';
+  static const String recentRead = '/recent-read';
 }
 
 List<GetPage> get appPages => [
@@ -43,6 +45,11 @@ List<GetPage> get appPages => [
   GetPage(
     name: Routes.filterReview,
     page: () => const FilterReviewPage(),
+    transition: Transition.rightToLeft,
+  ),
+  GetPage(
+    name: Routes.recentRead,
+    page: () => const RecentReadPage(),
     transition: Transition.rightToLeft,
   ),
 ];

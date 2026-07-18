@@ -33,6 +33,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
@@ -681,15 +682,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   Widget _buildMobileScaffold(BuildContext context, ColorScheme cs) {
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: cs.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(0.5),
-          child: Divider(height: 0.5, thickness: 0.5),
-        ),
+      appBar: MobileBlurAppBar(
         title: Obx(() {
           final humanCount = _articles.length;
           final q = AutoFilterWorker.queuedCount.value;
@@ -1195,12 +1188,10 @@ class _MobileReviewDismissibleState extends State<_MobileReviewDismissible> {
         _offset,
         outerPadding: EdgeInsets.zero,
         radius: ArticleCardChrome.radius,
+        roundedOuterBoundary: false,
       ),
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
-        ),
+        decoration: BoxDecoration(color: color),
         child: Align(
           alignment: alignment,
           child: Padding(
@@ -1474,11 +1465,13 @@ class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
     this.offset, {
     required this.outerPadding,
     required this.radius,
+    this.roundedOuterBoundary = true,
   });
 
   final double offset;
   final EdgeInsets outerPadding;
   final double radius;
+  final bool roundedOuterBoundary;
 
   @override
   Path getClip(Size size) {
@@ -1491,8 +1484,12 @@ class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
     if (offset == 0 || originalRect.isEmpty) return Path();
 
     final corner = Radius.circular(radius);
-    final original = Path()
-      ..addRRect(RRect.fromRectAndRadius(originalRect, corner));
+    final original = Path();
+    if (roundedOuterBoundary) {
+      original.addRRect(RRect.fromRectAndRadius(originalRect, corner));
+    } else {
+      original.addRect(originalRect);
+    }
     final translated = Path()
       ..addRRect(
         RRect.fromRectAndRadius(originalRect.shift(Offset(offset, 0)), corner),
@@ -1504,7 +1501,8 @@ class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
   bool shouldReclip(_ReviewSwipeRevealClipper oldClipper) {
     return oldClipper.offset != offset ||
         oldClipper.outerPadding != outerPadding ||
-        oldClipper.radius != radius;
+        oldClipper.radius != radius ||
+        oldClipper.roundedOuterBoundary != roundedOuterBoundary;
   }
 }
 

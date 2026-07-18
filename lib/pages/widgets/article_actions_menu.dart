@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../common/widgets/app_context_menu.dart';
+import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../models/article.dart';
 import '../../services/summary_service.dart';
@@ -17,16 +18,34 @@ abstract final class ArticleActionsMenu {
 
     showModalBottomSheet(
       context: context,
-      showDragHandle: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.30),
       builder: (context) {
-        return SafeArea(
+        return AppMobileGlassSheet(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: colorScheme.primary,
+                ),
+                title: const Text(
+                  '文章操作',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
               ListTile(
                 leading: state.isTranslationPending
                     ? SizedBox(
@@ -55,20 +74,6 @@ abstract final class ArticleActionsMenu {
                         );
                       },
               ),
-              if (state.isTranslated) ...[
-                ListTile(
-                  leading: Icon(Icons.delete_outline, color: colorScheme.error),
-                  title: Text(
-                    '删除翻译',
-                    style: TextStyle(color: colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    TranslationService.deleteTranslation(article.entryId);
-                  },
-                ),
-              ],
-              const Divider(height: 1),
               ListTile(
                 leading: state.isSummaryPending
                     ? SizedBox(
@@ -94,20 +99,39 @@ abstract final class ArticleActionsMenu {
                         summarizeArticle(article);
                       },
               ),
-              if (state.hasSummary) ...[
-                ListTile(
-                  leading: Icon(Icons.delete_outline, color: colorScheme.error),
-                  title: Text(
-                    '删除摘要',
-                    style: TextStyle(color: colorScheme.error),
+              if (state.isTranslated || state.hasSummary) ...[
+                const Divider(height: 1),
+                if (state.isTranslated)
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_outline,
+                      color: colorScheme.error,
+                    ),
+                    title: Text(
+                      '删除翻译',
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      TranslationService.deleteTranslation(article.entryId);
+                    },
                   ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    SummaryService.deleteSummary(article.entryId);
-                  },
-                ),
+                if (state.hasSummary)
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_outline,
+                      color: colorScheme.error,
+                    ),
+                    title: Text(
+                      '删除摘要',
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      SummaryService.deleteSummary(article.entryId);
+                    },
+                  ),
               ],
-              const SizedBox(height: 8),
             ],
           ),
         );

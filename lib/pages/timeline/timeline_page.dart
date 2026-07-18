@@ -17,6 +17,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_selection_button.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
 
@@ -822,15 +823,10 @@ class _TimelinePageState extends State<TimelinePage> {
       appBar: widget.showAppBar
           ? (Platform.isMacOS
                 ? null
-                : AppBar(
+                : MobileBlurAppBar(
                     title: GestureDetector(
                       onTap: _onAppBarTap,
                       child: const Text('时间线'),
-                    ),
-                    scrolledUnderElevation: 1,
-                    bottom: const PreferredSize(
-                      preferredSize: Size.fromHeight(0.5),
-                      child: Divider(height: 0.5, thickness: 0.5),
                     ),
                   ))
           : null,
@@ -1182,21 +1178,17 @@ class _LocalTimelineSkeleton extends StatelessWidget {
     return ShimmerFadeList(
       itemCount: 6,
       itemBuilder: (context, index) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: ArticleCardChrome.outerPadding,
         child: Card(
           margin: EdgeInsets.zero,
           elevation: 0,
+          color: ArticleCardChrome.fillColor(context, selected: false),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: Theme.of(
-                context,
-              ).colorScheme.outlineVariant.withValues(alpha: 0.3),
-              width: 1,
-            ),
+            borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
+            side: ArticleCardChrome.borderSide(context, selected: false),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: ArticleCardChrome.contentPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1342,54 +1334,30 @@ class _EmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.done_all_rounded,
-                size: 56,
-                color: colorScheme.primary,
-              ),
+            Icon(
+              Icons.done_all_rounded,
+              size: 44,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
             Text(
-              '一切就绪',
+              message ?? '当前没有文章',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message ?? '当前没有未读的新文章\n您可以去订阅源发现更多内容',
-              style: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
                 color: colorScheme.onSurfaceVariant,
-                height: 1.6,
               ),
               textAlign: TextAlign.center,
             ),
-            if (onRetry != null) ...[
-              const SizedBox(height: 32),
-              OutlinedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.sync, size: 18),
-                label: const Text('强制同步'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
+            const SizedBox(height: 8),
+            Text(
+              '下拉即可刷新',
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.68),
               ),
-            ],
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),

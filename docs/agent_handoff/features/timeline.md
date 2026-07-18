@@ -15,9 +15,10 @@
 
 - 模式：未读、全部、已读。
 - macOS 中间 header 的文章范围只暴露未读/全部，并使用与排序统一的圆形 morph 选择按钮，而不是完整 segment 或二态 switch。
+- Android 主时间线 header 与订阅源详情复用圆形文章范围按钮，点击后从玻璃底部面板选择 `未读/全部`；已读文章仍通过最近阅读等独立入口访问，不等于删除已读能力。
 - macOS 中间栏 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截，不要只在某个页面单独处理。
 - macOS 文章卡片普通态使用极轻中性色填充，统一由 `ArticleCardChrome` 控制；当前深色模式 alpha 为 `0.018`，浅色模式为 `0.012`。时间线、最近阅读和垃圾拦截不要分别覆盖该值。
-- macOS 普通文章卡片与垃圾拦截审核卡片的标题字号统一为 `14`，由 `ArticleCardChrome.titleFontSize` 提供；普通卡片辅助正文在 macOS 使用 `12`，由 `ArticleCardChrome.bodyFontSize` 提供。Android 保持原字号，不要在两个 macOS 卡片实现中分别硬编码标题字号。
+- macOS 与 Android 的普通文章卡片、垃圾拦截审核卡片共用标题字号 `14` 和辅助正文 `12`，统一由 `ArticleCardChrome.titleFontSize/bodyFontSize` 提供，不要在页面中分别硬编码。
 - macOS 主时间线和垃圾拦截列表共用 `MacArticleListChrome` 的两层下边距：`viewportPadding` 是滚动过程中始终存在的窗口下边界，`contentPadding` 是滚到列表末尾后出现的内容留白。不要只增加 `ListView.padding.bottom` 来替代视口边界，也不要在两个页面分别硬编码。
 - macOS 主时间线、垃圾拦截、最近阅读和订阅源详情通过 `MacHeaderPane` 共享固定 header/body 几何。内容和 scrollbar 自然从 header 下方开始；thumb 宽度及右侧 margin 继续由 `MacGlassScrollbarStyle.articlePaneTheme` 提供（`8px`、`1px`），`MacArticleListChrome.contentPadding` 另保留 `2px` 右侧内容间隔。
 - macOS 订阅源详情页的 header 筛选复用同一个文章范围 morph 组件；不要重新引入 `仅已读` 入口。
@@ -80,6 +81,8 @@ macOS 分栏选择与移除协调：
 - 不要在文章卡片上使用重型玻璃、BackdropFilter、渐变边框或阴影。用户尝试过细线边框后认为不好看，最终取舍是轻填充 + 较大的卡片间距。
 - macOS 空态占位符应在左右分栏中对齐。左侧列表有 AppBar/header 时，右侧详情空态使用 `MacSplitDetailEmptyPlaceholder` 预留对应顶部 inset；不要用临时 `Padding(top: 64)` 推动左侧空态。
 - 订阅源筛选或无文章状态下，macOS 空态应使用安静的图标占位，不要回退到移动端旧文案如“一切就绪”“没有阅读文章”“强制同步”。
+- Android 主时间线的紧凑 switch 左边界与文章卡片统一为 `12px`，其点击区可以大于可见轨道。不要根据 `Row` 的视觉尺寸推算对齐，应以最终渲染位置检查。
+- Android 卡片、骨架和空态复用 `ArticleCardChrome` 布局基线；玻璃迁移不把密集卡片变成实时模糊表面。
 
 当前文章保持可见：
 

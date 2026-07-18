@@ -25,6 +25,7 @@
 - 从具体订阅源回到完整时间线曾出现明显卡顿。原因是侧边栏连续修改多个响应式筛选字段，触发多次 `_applyFilter()`，且 `ImplicitlyAnimatedList` 试图把“小列表 -> 大列表”做大量插入动画。当前通过 `setTimelineScope()` 合并状态更新，并用 batch version 禁用这类批量 diff 动画，同时保留 `ScrollController`，避免无关更新回到顶部。
 - macOS 主时间线单篇标为已读也不能同步走完整 `_applyFilter()` 和全局 `ArticleStateNotifier` 扇出。约 `4799` 篇本地文章时，这条旧路径会在动画首帧产生约 73–90ms UI isolate 工作，导致 180ms 退场动画跳帧。当前先增量删除可见项，持久化仍立即完成；全量内存模型、角标/计数和跨页面通知在真实移除结束后维护。日志测得增量更新约 164–671 微秒。
 - macOS 正文链接 hover 不再通过共享 `_hoveredUrl` 让所有 `HtmlChunkCard` 重建。动态下划线已取消，手型光标、链接点击和底部 URL 预览保留；用户验证滚动经过链接时的瞬时卡顿消失。
+- macOS 订阅源侧边栏不使用以整个 view/category 大组为 item 的 `ListView.builder`。这类少量但高度差异巨大的懒加载 item 会让 Flutter 在滚动中持续修正总滚动范围，使 scrollbar 拇指长度和位置跳变。当前滚动区一次布局分类标题和已展开的订阅源行，以稳定 `maxScrollExtent`；折叠分类的订阅源行仍不构建。若未来同时展开大量分类后出现真实性能问题，应先测量，再考虑把每个可见行扁平化为稳定的小粒度 sliver，不能直接恢复粗粒度列表。
 
 ## 滚动惯性
 

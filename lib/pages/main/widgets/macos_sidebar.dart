@@ -102,123 +102,119 @@ class MacOSSidebar extends StatelessWidget {
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  itemCount: nodes.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == nodes.length) {
-                      return _SilentFeedsGroup(
-                        currentIndex: currentIndex,
-                        timelineController: timelineController,
-                        subController: subController,
-                        onIndexChanged: onIndexChanged,
-                      );
-                    }
-
-                    final viewNode = nodes[index];
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _ViewLabel(label: viewNode.name),
-                        ...viewNode.categories.map((category) {
-                          final categoryKey =
-                              'cat:${viewNode.name}:${category.name}';
-                          return Obx(() {
-                            final selectedFeedId =
-                                timelineController.selectedFeedId.value;
-                            final selectedCategory =
-                                timelineController.selectedCategory.value;
-                            final isSelected =
-                                currentIndex == 0 &&
-                                selectedCategory == category.name &&
-                                selectedFeedId == null;
-                            final containsSelectedFeed =
-                                selectedFeedId != null &&
-                                category.feeds.any(
-                                  (feed) => feed.feedId == selectedFeedId,
-                                );
-                            final isSearchActive =
-                                subController.searchQuery.value.isNotEmpty;
-                            final isRevealedBySelection =
-                                currentIndex == 0 && containsSelectedFeed;
-                            final isTemporarilyRevealed =
-                                isSearchActive || isRevealedBySelection;
-                            final isManuallyExpanded = subController.isExpanded(
-                              categoryKey,
-                            );
-                            final isExpanded =
-                                isTemporarilyRevealed || isManuallyExpanded;
-                            return _CategoryGroup(
-                              category: category,
-                              isExpanded: isExpanded,
-                              isSelected: isSelected,
-                              badgeCount: subController.unreadForCategory(
-                                category.name,
-                                category.feeds,
-                              ),
-                              onToggle: isTemporarilyRevealed
-                                  ? null
-                                  : () {
-                                      subController.setExpanded(
-                                        categoryKey,
-                                        !isManuallyExpanded,
-                                      );
-                                    },
-                              toggleTooltip: isRevealedBySelection
-                                  ? '当前订阅源位于此分组'
-                                  : isSearchActive
-                                  ? '搜索期间保持展开'
-                                  : null,
-                              onTap: () {
-                                timelineController.setTimelineScope(
-                                  category: category.name,
-                                );
-                                onIndexChanged(0);
-                              },
-                              feedBuilder: (feed) {
-                                return Obx(() {
-                                  final feedSelected =
-                                      currentIndex == 0 &&
-                                      timelineController.selectedFeedId.value ==
-                                          feed.feedId;
-                                  return _SidebarItem(
-                                    icon: Icons.rss_feed,
-                                    imageUrl: feed.image,
-                                    label: feed.title,
-                                    isSelected: feedSelected,
-                                    badgeCount: subController.unreadFor(
-                                      feed.feedId,
-                                    ),
-                                    indentLevel: 2,
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _FeedAutoReadabilityIcon(
-                                          feedId: feed.feedId,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        _FeedAutoTranslateIcon(
-                                          feedId: feed.feedId,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        _FeedSilentIcon(feedId: feed.feedId),
-                                      ],
-                                    ),
-                                    onTap: () {
-                                      timelineController.setTimelineScope(
-                                        feedId: feed.feedId,
-                                      );
-                                      onIndexChanged(0);
-                                    },
+                return _SidebarSubscriptionsScrollArea(
+                  children: [
+                    for (final viewNode in nodes)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ViewLabel(label: viewNode.name),
+                          ...viewNode.categories.map((category) {
+                            final categoryKey =
+                                'cat:${viewNode.name}:${category.name}';
+                            return Obx(() {
+                              final selectedFeedId =
+                                  timelineController.selectedFeedId.value;
+                              final selectedCategory =
+                                  timelineController.selectedCategory.value;
+                              final isSelected =
+                                  currentIndex == 0 &&
+                                  selectedCategory == category.name &&
+                                  selectedFeedId == null;
+                              final containsSelectedFeed =
+                                  selectedFeedId != null &&
+                                  category.feeds.any(
+                                    (feed) => feed.feedId == selectedFeedId,
                                   );
-                                });
-                              },
-                            );
-                          });
-                        }),
-                      ],
-                    );
-                  },
+                              final isSearchActive =
+                                  subController.searchQuery.value.isNotEmpty;
+                              final isRevealedBySelection =
+                                  currentIndex == 0 && containsSelectedFeed;
+                              final isTemporarilyRevealed =
+                                  isSearchActive || isRevealedBySelection;
+                              final isManuallyExpanded = subController
+                                  .isExpanded(categoryKey);
+                              final isExpanded =
+                                  isTemporarilyRevealed || isManuallyExpanded;
+                              return _CategoryGroup(
+                                category: category,
+                                isExpanded: isExpanded,
+                                isSelected: isSelected,
+                                badgeCount: subController.unreadForCategory(
+                                  category.name,
+                                  category.feeds,
+                                ),
+                                onToggle: isTemporarilyRevealed
+                                    ? null
+                                    : () {
+                                        subController.setExpanded(
+                                          categoryKey,
+                                          !isManuallyExpanded,
+                                        );
+                                      },
+                                toggleTooltip: isRevealedBySelection
+                                    ? '当前订阅源位于此分组'
+                                    : isSearchActive
+                                    ? '搜索期间保持展开'
+                                    : null,
+                                onTap: () {
+                                  timelineController.setTimelineScope(
+                                    category: category.name,
+                                  );
+                                  onIndexChanged(0);
+                                },
+                                feedBuilder: (feed) {
+                                  return Obx(() {
+                                    final feedSelected =
+                                        currentIndex == 0 &&
+                                        timelineController
+                                                .selectedFeedId
+                                                .value ==
+                                            feed.feedId;
+                                    return _SidebarItem(
+                                      icon: Icons.rss_feed,
+                                      imageUrl: feed.image,
+                                      label: feed.title,
+                                      isSelected: feedSelected,
+                                      badgeCount: subController.unreadFor(
+                                        feed.feedId,
+                                      ),
+                                      indentLevel: 2,
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _FeedAutoReadabilityIcon(
+                                            feedId: feed.feedId,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          _FeedAutoTranslateIcon(
+                                            feedId: feed.feedId,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          _FeedSilentIcon(feedId: feed.feedId),
+                                        ],
+                                      ),
+                                      onTap: () {
+                                        timelineController.setTimelineScope(
+                                          feedId: feed.feedId,
+                                        );
+                                        onIndexChanged(0);
+                                      },
+                                    );
+                                  });
+                                },
+                              );
+                            });
+                          }),
+                        ],
+                      ),
+                    _SilentFeedsGroup(
+                      currentIndex: currentIndex,
+                      timelineController: timelineController,
+                      subController: subController,
+                      onIndexChanged: onIndexChanged,
+                    ),
+                  ],
                 );
               }),
             ),
@@ -236,6 +232,46 @@ class MacOSSidebar extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarSubscriptionsScrollArea extends StatefulWidget {
+  final List<Widget> children;
+
+  const _SidebarSubscriptionsScrollArea({required this.children});
+
+  @override
+  State<_SidebarSubscriptionsScrollArea> createState() =>
+      _SidebarSubscriptionsScrollAreaState();
+}
+
+class _SidebarSubscriptionsScrollAreaState
+    extends State<_SidebarSubscriptionsScrollArea> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _scrollController,
+      notificationPredicate: (notification) => notification.depth == 0,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: widget.children,
+          ),
         ),
       ),
     );

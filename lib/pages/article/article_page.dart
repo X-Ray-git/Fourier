@@ -1366,23 +1366,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         clipBehavior: Clip.antiAlias,
         child: articleBody,
       );
-      articleBody = ScrollbarTheme(
-        data: MacGlassScrollbarStyle.theme(
-          context,
-          thickness: 8,
-          crossAxisMargin: 2,
-        ),
-        child: Scrollbar(
-          controller: _scrollController,
-          interactive: true,
-          notificationPredicate: (notification) => notification.depth == 0,
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(
-              context,
-            ).copyWith(scrollbars: false),
-            child: articleBody,
-          ),
-        ),
+      articleBody = ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: articleBody,
       );
     }
 

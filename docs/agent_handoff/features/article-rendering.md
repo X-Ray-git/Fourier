@@ -99,9 +99,9 @@ HTML 空段规范化：
 - macOS 分屏文章详情使用 `_MacSplitArticleCornerClipper` 对文章 body 做右下角圆角安全裁剪。背景原因是窗口外层圆角会向内收，普通矩形 padding 在右下角不能保持“正文到应用外框”的视觉距离。
 - 该 clip 只应用于 `Platform.isMacOS && isSplitView`，且只包裹文章 body，不包裹 AppBar、进度条、右上工具按钮或 hover 链接状态栏。用户已验证这是正确问题位置。
 - 当前参数：外层窗口半径 `24`，安全 inset `8`，内侧右下角半径 `16`。如果后续窗口圆角或外框间距改动，需要同步评估这些值。
-- `_MacSplitArticleCornerClipper` 会裁掉正文整个右边缘的 `8px`；如果依赖 Flutter 自动 scrollbar，thumb 也会位于 clip 内并几乎被完全裁掉，只剩抗锯齿细线。当前 macOS 分屏正文关闭自动 scrollbar，改用同一 `_scrollController` 的显式 `Scrollbar` 包在 clip 外层；不要把 scrollbar 再移回安全裁剪内部，也不要为修 scrollbar 删除正文圆角安全裁剪。
+- `_MacSplitArticleCornerClipper` 会裁掉正文整个右边缘的 `8px`。macOS 分屏正文当前同时关闭 Flutter 自动 scrollbar，并移除了 clip 外层的显式 scrollbar；顶部阅读进度条承担阅读位置反馈，正文圆角安全裁剪保持不变。不要因没有 scrollbar 而删除 `_scrollController`：目录定位、方向键滚动、标题折叠和阅读进度仍依赖它。
 - 分屏正文使用固定 `surface` header，正文从 header 下方开始。整块 header 不使用 `BackdropFilter`，避免左侧采样到相邻时间线按钮光效；右上角交互按钮仍保留各自玻璃材质。顶部状态不显示“文章详情”、分隔线和阅读进度；正文大标题接近完全滚出后，文章标题以单行省略形式进入 header，分隔线和进度条同步渐显。实现通过真实标题高度和滚动 offset 驱动局部 `ValueNotifier`，不使用 `SliverAppBar`，不要为该效果改动正文 sliver、scrollbar 或目录锚点结构。
-- 分屏正文 `Scrollbar` 使用 `MacGlassScrollbarStyle.theme`：宽 `8px`、距离右边界 `2px`，仍可拖动；正文基础左右 padding 为 `11px`，最大正文宽度设置仍独立生效。
+- 分屏正文不再显示或保留可拖动 scrollbar；正文基础左右 padding 仍为 `11px`，最大正文宽度设置独立生效。该取舍只应用于 macOS 分屏正文，不影响时间线、垃圾拦截、设置页、侧边栏和 Android 的 scrollbar。
 - macOS 阅读进度条位于文章 header 下边缘；正文大标题尚未离开时，`1px` 细分隔线和橙色进度都隐藏；header 标题折叠出现时，两者同步渐显，橙色进度覆盖在细线上。Android 保留原 appbar 底部行为。
 
 HTML entity 解码：

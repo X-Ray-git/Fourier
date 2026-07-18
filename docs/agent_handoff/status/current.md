@@ -42,7 +42,7 @@
 - macOS 顶部玻璃工具按钮、共享 morph 选择按钮和目录 morph 按钮均通过圆形 control chrome 接入 `MacOSWindowDragGuard`：指针按住这些控件时临时关闭 AppKit 窗口拖动，避免轻微位移把按钮点击误判为移动窗口；空白 header 区域仍可拖动窗口。
 - macOS `AppGlassTooltip` 已加入共享窗口碰撞布局：气泡按真实尺寸限制在四周 `8px` 内，并在底部/右侧空间不足时自动翻转；缩放动画锚点同步跟随最终方向，始终靠近触发控件。文章右上角长 tooltip 和其他靠边 tooltip 不再伸出窗口被裁切；三类边界/方向回归测试已覆盖，用户视觉验证通过。
 - macOS 时间线 header 现在依次使用 `34px` 文章范围按钮、`34px` 排序按钮和同步按钮；范围→排序 `8px`、排序→同步 `8px`、同步→右边界 `10px`。文章范围从旧 `58px` switch 收敛为圆形入口后，不应再按旧轨道/滑块参数调整布局。
-- macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界为 `2px`；正文基础左右 padding 为 `11px`。中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
+- macOS 右侧分屏正文已移除显式 scrollbar，并继续关闭 Flutter 自动 scrollbar；顶部阅读进度条承担位置反馈，正文基础左右 padding 保持 `11px`。中间时间线/垃圾拦截、设置页、侧边栏和 Android 的 scrollbar 均未随之改动。
 - macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。
 - macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。
 - macOS 主时间线偶发无动画和 `M` 后回到顶部已完成分层修复并由用户确认：列表实例保持稳定，`M`/双击共用 `MacSplitArticleListCoordinator`；会移除卡片时只增量删除当前可见项，完整 `_applyFilter()`、角标/计数和 `ArticleStateNotifier` 跨页面扇出延后到真实 `onRemoveEnd` 后。最终日志在约 `4799` 篇本地文章下确认两次 `M`、四次双击都完整经过 `4→3→2→1→0` 动画阶段，增量更新约 164–671 微秒，移除期间没有列表 reset。

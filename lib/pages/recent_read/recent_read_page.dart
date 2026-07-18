@@ -11,10 +11,12 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/mac_article_shortcut_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../article/article_page.dart';
+import '../main/main_controller.dart';
 import '../widgets/article_card.dart';
 import 'recent_read_controller.dart';
 import '../../utils/scroll_utils.dart';
@@ -29,6 +31,9 @@ class RecentReadPage extends StatefulWidget {
 class _RecentReadPageState extends State<RecentReadPage> {
   late final RecentReadController controller;
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _emptyDetailFocusNode = FocusNode(
+    debugLabel: 'recent-read-empty-detail',
+  );
 
   // 用于记录 Mac 分栏模式下的双击等状态
   DateTime? _lastArticleTapAt;
@@ -40,12 +45,39 @@ class _RecentReadPageState extends State<RecentReadPage> {
   void initState() {
     super.initState();
     controller = Get.put(RecentReadController());
+    if (Platform.isMacOS) {
+      MacArticleShortcutService.instance.register(
+        this,
+        isActive: () =>
+            mounted &&
+            _isActiveMacRecentRead &&
+            (ModalRoute.of(context)?.isCurrent ?? true),
+        hasSelection: () => selectedArticle.value != null,
+        selectBoundary: (direction) {
+          _selectRelativeArticle(direction);
+          return controller.articles.isNotEmpty;
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
+    if (Platform.isMacOS) {
+      MacArticleShortcutService.instance.unregister(this);
+    }
     _scrollController.dispose();
+    _emptyDetailFocusNode.dispose();
     super.dispose();
+  }
+
+  void _clearSelectionAndFocusEmptyDetail() {
+    selectedArticle.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isActiveMacRecentRead) {
+        _emptyDetailFocusNode.requestFocus();
+      }
+    });
   }
 
   void _selectRelativeArticle(int delta) {
@@ -53,13 +85,23 @@ class _RecentReadPageState extends State<RecentReadPage> {
     if (list.isEmpty) return;
 
     final selected = selectedArticle.value;
-    final currentIndex = selected == null
-        ? -1
-        : list.indexWhere((a) => a.entryId == selected.entryId);
+    if (selected == null) {
+      final next = delta < 0 ? list.last : list.first;
+      selectedArticle.value = next;
+      _scrollToArticle(next.entryId);
+      return;
+    }
+    final currentIndex = list.indexWhere((a) => a.entryId == selected.entryId);
     final nextIndex = (currentIndex + delta).clamp(0, list.length - 1);
     if (nextIndex < 0 || nextIndex >= list.length) return;
     selectedArticle.value = list[nextIndex];
     _scrollToArticle(list[nextIndex].entryId);
+  }
+
+  bool get _isActiveMacRecentRead {
+    if (!Platform.isMacOS) return false;
+    if (!Get.isRegistered<MainController>()) return true;
+    return Get.find<MainController>().currentIndex.value == 2;
   }
 
   void _scrollToArticle(String entryId) {
@@ -103,12 +145,15 @@ class _RecentReadPageState extends State<RecentReadPage> {
     if (isDoubleTap) {
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
-      _selectRelativeArticle(1);
-      _openOriginalArticle(article);
+      _openOriginalAndMarkRead(article);
+    }
+  }
 
-      if (!article.isRead) {
-        unawaited(UndoService.markAsRead(article, showSuccess: false));
-      }
+  void _openOriginalAndMarkRead(ArticleModel article) {
+    _selectRelativeArticle(1);
+    unawaited(_openOriginalArticle(article));
+    if (!article.isRead) {
+      unawaited(UndoService.markAsRead(article, showSuccess: false));
     }
   }
 
@@ -162,17 +207,23 @@ class _RecentReadPageState extends State<RecentReadPage> {
                     return MacSplitDetailEmptyPlaceholder(
                       topInset:
                           MediaQuery.paddingOf(context).top + kToolbarHeight,
+                      focusNode: _emptyDetailFocusNode,
                     );
                   }
                   return ArticlePageView(
                     key: ValueKey(selected.entryId),
                     article: selected,
                     isSplitView: true,
+                    isActive: () => _isActiveMacRecentRead,
                     isSelectedArticle: (entryId) =>
                         selectedArticle.value?.entryId == entryId,
-                    onClose: () => selectedArticle.value = null,
+                    onClose: _clearSelectionAndFocusEmptyDetail,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
+                    onOpenOriginalAndMarkRead: () {
+                      final current = selectedArticle.value;
+                      if (current != null) _openOriginalAndMarkRead(current);
+                    },
                   );
                 }),
               ),

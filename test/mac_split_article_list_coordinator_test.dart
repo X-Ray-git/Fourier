@@ -73,6 +73,22 @@ void main() {
     expect(revealed, ['a']);
   });
 
+  test('selects the first article when moving right without a selection', () {
+    selected = null;
+
+    expect(coordinator.selectRelative(1), isTrue);
+    expect(selected?.entryId, 'a');
+    expect(revealed, ['a']);
+  });
+
+  test('selects the last article when moving left without a selection', () {
+    selected = null;
+
+    expect(coordinator.selectRelative(-1), isTrue);
+    expect(selected?.entryId, 'c');
+    expect(revealed, ['c']);
+  });
+
   test('undo during removal prevents the pending successor from winning', () {
     final restored = articles[1];
     expect(coordinator.beginRemoval('b'), isTrue);

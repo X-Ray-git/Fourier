@@ -649,13 +649,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   List<Widget> _buildMacShortcutItems(BuildContext context) => [
     _buildShortcutItem(context, 'Cmd + ,', '打开设置'),
+    _buildShortcutItem(context, 'Cmd + 1', '打开全部文章'),
+    _buildShortcutItem(context, 'Cmd + 2', '打开垃圾拦截'),
+    _buildShortcutItem(context, 'Cmd + 0', '打开静默订阅源'),
     _buildShortcutItem(context, 'Cmd + Z', '撤销最近一次已读'),
     _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
     _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),
-    _buildShortcutItem(context, '← / →', '切换上一篇 / 下一篇文章'),
+    _buildShortcutItem(context, '← / →', '切换文章；未选择时定位末篇 / 首篇'),
     _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
     _buildShortcutItem(context, 'M', '时间线切换已读；垃圾拦截移除'),
     _buildShortcutItem(context, 'K', '垃圾拦截保留文章'),
+    _buildShortcutItem(context, 'B', '在浏览器中打开原文'),
+    _buildShortcutItem(context, 'Shift + B', '标为已读并打开；垃圾拦截移除并打开'),
     _buildShortcutItem(context, 'C', '复制原文全文为 Markdown'),
   ];
 

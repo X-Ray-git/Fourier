@@ -22,6 +22,7 @@ import 'pages/main/main_controller.dart';
 import 'pages/timeline/timeline_controller.dart';
 import 'services/account_service.dart';
 import 'services/app_version_service.dart';
+import 'services/mac_article_shortcut_service.dart';
 import 'utils/storage.dart';
 import 'services/undo_service.dart';
 import 'utils/macos_window_controls.dart';
@@ -36,6 +37,33 @@ class OpenSettingsIntent extends Intent {
 
 class RefreshTimelineIntent extends Intent {
   const RefreshTimelineIntent();
+}
+
+enum MacSection { allArticles, filterReview, silentFeeds }
+
+class NavigateMacSectionIntent extends Intent {
+  const NavigateMacSectionIntent(this.section);
+
+  final MacSection section;
+}
+
+class SelectUnselectedArticleBoundaryIntent extends Intent {
+  const SelectUnselectedArticleBoundaryIntent(this.direction);
+
+  final int direction;
+}
+
+class SelectUnselectedArticleBoundaryAction
+    extends Action<SelectUnselectedArticleBoundaryIntent> {
+  @override
+  bool isEnabled(SelectUnselectedArticleBoundaryIntent intent) =>
+      MacArticleShortcutService.instance.canSelectBoundary;
+
+  @override
+  Object? invoke(SelectUnselectedArticleBoundaryIntent intent) {
+    MacArticleShortcutService.instance.selectBoundary(intent.direction);
+    return null;
+  }
 }
 
 void main() async {
@@ -213,6 +241,21 @@ class AutoFoloApp extends StatelessWidget {
                 if (Platform.isMacOS)
                   SingleActivator(LogicalKeyboardKey.keyR, meta: true):
                       const RefreshTimelineIntent(),
+                if (Platform.isMacOS)
+                  SingleActivator(LogicalKeyboardKey.digit1, meta: true):
+                      const NavigateMacSectionIntent(MacSection.allArticles),
+                if (Platform.isMacOS)
+                  SingleActivator(LogicalKeyboardKey.digit2, meta: true):
+                      const NavigateMacSectionIntent(MacSection.filterReview),
+                if (Platform.isMacOS)
+                  SingleActivator(LogicalKeyboardKey.digit0, meta: true):
+                      const NavigateMacSectionIntent(MacSection.silentFeeds),
+                if (Platform.isMacOS)
+                  const SingleActivator(LogicalKeyboardKey.arrowLeft):
+                      const SelectUnselectedArticleBoundaryIntent(-1),
+                if (Platform.isMacOS)
+                  const SingleActivator(LogicalKeyboardKey.arrowRight):
+                      const SelectUnselectedArticleBoundaryIntent(1),
               },
               child: Actions(
                 actions: <Type, Action<Intent>>{
@@ -260,6 +303,40 @@ class AutoFoloApp extends StatelessWidget {
                       return null;
                     },
                   ),
+                  NavigateMacSectionIntent:
+                      CallbackAction<NavigateMacSectionIntent>(
+                        onInvoke: (intent) {
+                          if (Get.currentRoute != Routes.main) {
+                            Get.until(
+                              (route) => route.settings.name == Routes.main,
+                            );
+                          }
+                          if (!Get.isRegistered<MainController>() ||
+                              !Get.isRegistered<TimelineController>()) {
+                            return null;
+                          }
+
+                          final mainController = Get.find<MainController>();
+                          final timelineController =
+                              Get.find<TimelineController>();
+                          switch (intent.section) {
+                            case MacSection.allArticles:
+                              timelineController.setTimelineScope();
+                              mainController.selectIndex(0);
+                              break;
+                            case MacSection.filterReview:
+                              mainController.selectIndex(1);
+                              break;
+                            case MacSection.silentFeeds:
+                              timelineController.setTimelineScope(silent: true);
+                              mainController.selectIndex(0);
+                              break;
+                          }
+                          return null;
+                        },
+                      ),
+                  SelectUnselectedArticleBoundaryIntent:
+                      SelectUnselectedArticleBoundaryAction(),
                 },
                 child: smartDialogBuilder(context, child),
               ),

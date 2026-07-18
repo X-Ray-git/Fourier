@@ -26,20 +26,25 @@ class MacEmptyPlaceholder extends StatelessWidget {
 class MacSplitDetailEmptyPlaceholder extends StatelessWidget {
   final IconData icon;
   final double topInset;
+  final FocusNode? focusNode;
 
   const MacSplitDetailEmptyPlaceholder({
     super.key,
     this.icon = Icons.article_outlined,
     this.topInset = kToolbarHeight,
+    this.focusNode,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       children: [
         SizedBox(height: topInset),
         Expanded(child: MacEmptyPlaceholder(icon: icon)),
       ],
     );
+    final node = focusNode;
+    if (node == null) return content;
+    return Focus(focusNode: node, skipTraversal: true, child: content);
   }
 }

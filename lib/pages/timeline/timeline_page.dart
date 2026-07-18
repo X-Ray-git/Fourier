@@ -25,6 +25,7 @@ import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/read_sync_service.dart';
+import '../../services/mac_article_shortcut_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
@@ -150,6 +151,9 @@ class _TimelinePageState extends State<TimelinePage> {
 
   late final TimelineController controller;
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _emptyDetailFocusNode = FocusNode(
+    debugLabel: 'timeline-empty-detail',
+  );
   final _refreshKey = GlobalKey<custom_refresh.RefreshIndicatorState>();
   late final _refreshPhysics = RefreshAwareScrollPhysics(
     refreshKey: _refreshKey,
@@ -182,16 +186,43 @@ class _TimelinePageState extends State<TimelinePage> {
       _handleUndoRestoreEvent,
     );
     _scrollController.addListener(_onScroll);
+    if (Platform.isMacOS) {
+      MacArticleShortcutService.instance.register(
+        this,
+        isActive: () =>
+            mounted &&
+            _isActiveMacTimeline &&
+            (ModalRoute.of(context)?.isCurrent ?? true),
+        hasSelection: () => controller.selectedArticle.value != null,
+        selectBoundary: (direction) {
+          _selectRelativeArticle(direction);
+          return controller.articles.isNotEmpty;
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
     controller.bindScrollToTopHandler(null);
+    if (Platform.isMacOS) {
+      MacArticleShortcutService.instance.unregister(this);
+    }
     _listCoordinator.dispose();
     _undoRestoreWorker?.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _emptyDetailFocusNode.dispose();
     super.dispose();
+  }
+
+  void _clearSelectionAndFocusEmptyDetail() {
+    controller.selectedArticle.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isActiveMacTimeline) {
+        _emptyDetailFocusNode.requestFocus();
+      }
+    });
   }
 
   void _onScroll() {
@@ -230,8 +261,9 @@ class _TimelinePageState extends State<TimelinePage> {
 
     final selected = controller.selectedArticle.value;
     if (selected == null) {
-      controller.selectedArticle.value = list.first;
-      if (scrollTo) _scrollToArticle(list.first.entryId);
+      final next = delta < 0 ? list.last : list.first;
+      controller.selectedArticle.value = next;
+      if (scrollTo) _scrollToArticle(next.entryId);
       return;
     }
 
@@ -461,99 +493,101 @@ class _TimelinePageState extends State<TimelinePage> {
     _lastArticleTapAt = now;
 
     if (isDoubleTap) {
-      final expectsRemoval =
-          !article.isRead &&
-          controller.selectedMode.value == TimelineViewMode.unread;
-      _TimelineAnimationProbe.begin(
-        article.entryId,
-        source: 'doubleTap',
-        event: 'action.detected',
-        fields: _timelineProbeFields(article: article),
-      );
       _lastArticleTapEntryId = null;
       _lastArticleTapAt = null;
-      if (expectsRemoval) {
-        if (!_listCoordinator.beginRemoval(article.entryId)) {
-          _TimelineAnimationProbe.log(article.entryId, 'coordinator.rejected');
-          _TimelineAnimationProbe.finish(article.entryId);
-          return;
-        }
-      } else {
-        _selectRelativeArticle(1, scrollTo: false);
-      }
-      _TimelineAnimationProbe.log(
-        article.entryId,
-        expectsRemoval ? 'selection.held-for-removal' : 'selection.advanced',
-        _timelineProbeFields(article: article),
-      );
+      _openOriginalAndMarkRead(article, source: 'doubleTap');
+    }
+  }
 
-      // Run persistence after the current frame has fully ended. A post-frame
-      // callback still belongs to that frame and can consume the first part of
-      // the removal animation when local database writes are slow.
-      unawaited(
-        SchedulerBinding.instance.endOfFrame.then((_) {
-          if (!mounted) return;
+  void _openOriginalAndMarkRead(
+    ArticleModel article, {
+    required String source,
+  }) {
+    final expectsRemoval =
+        !article.isRead &&
+        controller.selectedMode.value == TimelineViewMode.unread;
+    _TimelineAnimationProbe.begin(
+      article.entryId,
+      source: source,
+      event: 'action.detected',
+      fields: _timelineProbeFields(article: article),
+    );
+    if (expectsRemoval) {
+      if (!_listCoordinator.beginRemoval(article.entryId)) {
+        _TimelineAnimationProbe.log(article.entryId, 'coordinator.rejected');
+        _TimelineAnimationProbe.finish(article.entryId);
+        return;
+      }
+    } else {
+      _selectRelativeArticle(1, scrollTo: false);
+    }
+    _TimelineAnimationProbe.log(
+      article.entryId,
+      expectsRemoval ? 'selection.held-for-removal' : 'selection.advanced',
+      _timelineProbeFields(article: article),
+    );
+
+    // Persistence starts after the outgoing card has rendered its first
+    // removal frame, preserving the same animation path for double-click and
+    // Shift+B.
+    unawaited(
+      SchedulerBinding.instance.endOfFrame.then((_) {
+        if (!mounted) return;
+        _TimelineAnimationProbe.log(
+          article.entryId,
+          'frame-boundary',
+          _timelineProbeFields(article: article),
+        );
+        if (!article.isRead) {
+          final before = controller.articles.length;
+          final future = UndoService.markAsRead(
+            article,
+            showSuccess: false,
+            deferTimelineVisualUpdate: true,
+          );
+          _TimelineAnimationProbe.log(article.entryId, 'mark-read.dispatched', {
+            'before': before,
+            'after': controller.articles.length,
+            'listVersion': controller.timelineListResetVersion,
+          });
+          unawaited(future);
+          unawaited(
+            SchedulerBinding.instance.endOfFrame.then((_) {
+              _TimelineAnimationProbe.log(
+                article.entryId,
+                'visual-update.frame-boundary',
+                {
+                  'count': controller.articles.length,
+                  'listVersion': controller.timelineListResetVersion,
+                },
+              );
+            }),
+          );
+        } else {
+          _TimelineAnimationProbe.log(article.entryId, 'mark-read.skipped');
+        }
+
+        if (expectsRemoval) {
+          _pendingOriginalOpenAfterRemoval[article.entryId] = article;
           _TimelineAnimationProbe.log(
             article.entryId,
-            'frame-boundary',
-            _timelineProbeFields(article: article),
+            'browser.deferred-until-remove-end',
           );
-          if (!article.isRead) {
-            final before = controller.articles.length;
-            final future = UndoService.markAsRead(
-              article,
-              showSuccess: false,
-              deferTimelineVisualUpdate: true,
-            );
-            _TimelineAnimationProbe.log(
+          Future<void>.delayed(const Duration(seconds: 2), () {
+            if (!mounted) return;
+            final pending = _pendingOriginalOpenAfterRemoval.remove(
               article.entryId,
-              'mark-read.dispatched',
-              {
-                'before': before,
-                'after': controller.articles.length,
-                'listVersion': controller.timelineListResetVersion,
-              },
             );
-            unawaited(future);
-            unawaited(
-              SchedulerBinding.instance.endOfFrame.then((_) {
-                _TimelineAnimationProbe.log(
-                  article.entryId,
-                  'visual-update.frame-boundary',
-                  {
-                    'count': controller.articles.length,
-                    'listVersion': controller.timelineListResetVersion,
-                  },
-                );
-              }),
-            );
-          } else {
-            _TimelineAnimationProbe.log(article.entryId, 'mark-read.skipped');
-          }
-
-          if (expectsRemoval) {
-            _pendingOriginalOpenAfterRemoval[article.entryId] = article;
-            _TimelineAnimationProbe.log(
-              article.entryId,
-              'browser.deferred-until-remove-end',
-            );
-            Future<void>.delayed(const Duration(seconds: 2), () {
-              if (!mounted) return;
-              final pending = _pendingOriginalOpenAfterRemoval.remove(
-                article.entryId,
-              );
-              if (pending == null) return;
-              unawaited(_openOriginalArticle(pending));
-            });
-          } else {
-            // No list removal will run, so only leave time for press feedback.
-            Future<void>.delayed(const Duration(milliseconds: 200), () {
-              if (mounted) unawaited(_openOriginalArticle(article));
-            });
-          }
-        }),
-      );
-    }
+            if (pending == null) return;
+            unawaited(_openOriginalArticle(pending));
+          });
+        } else {
+          Future<void>.delayed(const Duration(milliseconds: 200), () {
+            if (mounted) unawaited(_openOriginalArticle(article));
+          });
+        }
+      }),
+    );
   }
 
   void _handleTimelineRemoveStart(ArticleModel article) {
@@ -818,6 +852,7 @@ class _TimelinePageState extends State<TimelinePage> {
                     return MacSplitDetailEmptyPlaceholder(
                       topInset:
                           MediaQuery.paddingOf(context).top + kToolbarHeight,
+                      focusNode: _emptyDetailFocusNode,
                     );
                   }
                   return ArticlePageView(
@@ -829,10 +864,16 @@ class _TimelinePageState extends State<TimelinePage> {
                         Get.find<MainController>().currentIndex.value == 0,
                     isSelectedArticle: (entryId) =>
                         controller.selectedArticle.value?.entryId == entryId,
-                    onClose: () => controller.selectedArticle.value = null,
+                    onClose: _clearSelectionAndFocusEmptyDetail,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
                     onMKeyPressed: _handleMacReadShortcut,
+                    onOpenOriginalAndMarkRead: () {
+                      final current = controller.selectedArticle.value;
+                      if (current != null) {
+                        _openOriginalAndMarkRead(current, source: 'shiftB');
+                      }
+                    },
                   );
                 }),
               ),

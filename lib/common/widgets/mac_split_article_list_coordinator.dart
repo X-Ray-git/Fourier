@@ -120,9 +120,15 @@ class MacSplitArticleListCoordinator {
     if (articles.isEmpty) return false;
 
     final selected = _selectedArticle();
-    final currentIndex = selected == null
-        ? -1
-        : articles.indexWhere((article) => article.entryId == selected.entryId);
+    if (selected == null) {
+      final next = delta < 0 ? articles.last : articles.first;
+      _setSelectedArticle(next);
+      _revealArticle(next.entryId);
+      return true;
+    }
+    final currentIndex = articles.indexWhere(
+      (article) => article.entryId == selected.entryId,
+    );
     final nextIndex = (currentIndex + delta).clamp(0, articles.length - 1);
     final next = articles[nextIndex];
     _setSelectedArticle(next);

@@ -25,4 +25,11 @@ class MainController extends GetxController {
     currentIndex.value = index;
     _lastTimelineNavTapAt = index == 0 ? now : null;
   }
+
+  /// Selects a page without treating repeated keyboard navigation as a
+  /// sidebar double-click that scrolls the timeline to the top.
+  void selectIndex(int index) {
+    currentIndex.value = index;
+    _lastTimelineNavTapAt = null;
+  }
 }

@@ -9,9 +9,8 @@ import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'local_article_db_service.dart';
 import 'feed_readability_settings_service.dart';
+import 'auto_ai_queue_coordinator.dart';
 import 'auto_filter_worker.dart';
-import 'auto_translation_worker.dart';
-import 'auto_summary_worker.dart';
 
 abstract final class AutoReadabilityWorker {
   static final _queue = <ArticleModel>[];
@@ -159,17 +158,10 @@ abstract final class AutoReadabilityWorker {
         }
       }
 
-      // 过滤保持原有行为；翻译和摘要只接收仍为未读的文章。这里读取
-      // 最新持久化状态，避免上游队列中的旧未读快照在标记已读后重新入队。
+      // 过滤保持原有行为；自动 AI 调度统一按最新持久化状态判断，避免
+      // 上游队列中的旧未读快照在标记已读后重新入队。
       AutoFilterWorker.enqueue(processedArticle);
-      final latest = GStorage.articleDb.get(article.entryId);
-      final isCurrentlyRead = latest is Map
-          ? latest['isRead'] == true
-          : processedArticle.isRead;
-      if (!isCurrentlyRead) {
-        AutoTranslationWorker.enqueueIfEnabled(processedArticle);
-        AutoSummaryWorker.enqueueIfNeeded(processedArticle);
-      }
+      AutoAiQueueCoordinator.onArticleContentAvailable(processedArticle);
     } finally {
       _queuedIds.remove(article.entryId);
     }

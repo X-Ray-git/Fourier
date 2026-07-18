@@ -88,6 +88,7 @@ abstract final class TranslationService {
 
   static final RxMap<String, TranslationRecord> _records =
       <String, TranslationRecord>{}.obs;
+  static final recordsVersion = 0.obs;
   static final Map<String, Future<TranslationRecord>> _inFlight = {};
   static bool _hydrated = false;
   static String? _apiKey;
@@ -201,6 +202,7 @@ abstract final class TranslationService {
       status: TranslationStatus.pending,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
+    recordsVersion.value++;
     // pending 不落盘 — 瞬态，重启后无需恢复
   }
 
@@ -213,6 +215,7 @@ abstract final class TranslationService {
       status: TranslationStatus.idle,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
+    recordsVersion.value++;
   }
 
   static String displayTitleFor(ArticleModel article) {
@@ -625,6 +628,7 @@ abstract final class TranslationService {
     ensureHydrated();
     _records.remove(entryId);
     GStorage.translations.delete(entryId);
+    recordsVersion.value++;
   }
 
   static void _restoreAfterFailure(
@@ -657,6 +661,7 @@ abstract final class TranslationService {
     ensureHydrated();
     _records[entryId] = record;
     GStorage.translations.put(entryId, record.toJson());
+    recordsVersion.value++;
   }
 
   static String _cleanTranslatedContent(String raw) {

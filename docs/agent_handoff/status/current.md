@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-07-17：
+截至 2026-07-18：
 
 - `main` 是当前集成分支。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
@@ -31,17 +31,17 @@
 - macOS 中间栏 header 的底部分隔线已统一取消，覆盖最近阅读、订阅源详情和垃圾拦截。普通时间线此前已取消同类分隔线。
 - `ArticleCardChrome` 现在统一文章卡片外壳参数：外边距、内部 padding、圆角、普通态填充和边框。普通时间线 `ArticleCard` 与垃圾拦截 `_MacReviewRow` 都应从这里取值；垃圾拦截行只保留自身动作按钮和信息块结构差异。
 - macOS 圆角收敛第一阶段已完成：原生窗口圆角、Flutter 外框、红黄绿圆心、侧边栏面板、大玻璃默认半径、设置/任务中心大面板和分屏文章右下角安全裁剪已联动调整。图片、代码块、小标签、`999` 胶囊和 Android 端刻意未纳入本轮。
-- 玻璃控件颜色状态第一阶段已集中到 `AppGlassControlPalette`：通用玻璃按钮、文章目录项、文章摘要/翻译 pill、时间线排序项、主时间线/订阅源详情二态开关、设置页部分控件已改为通过 palette 取 hover/pressed/active/border/disabled 色。用户验证第一阶段体感基本和改动前一致，这是预期。
+- 玻璃控件颜色状态第一阶段已集中到 `AppGlassControlPalette`：通用玻璃按钮、文章目录项、文章摘要/翻译 pill、时间线排序/范围选项、设置页部分控件已改为通过 palette 取 hover/pressed/active/border/disabled 色。用户验证第一阶段体感基本和改动前一致，这是预期。
 - 设置页 macOS 下拉菜单 overlay 已补局部静态底色，并让底色圆角和外框圆角对齐，解决透明背景导致选项和背后内容混在一起的问题。
-- 玻璃按钮角色统一第二阶段已完成并由用户验证：`AppGlassRoundControlChrome` 统一圆形工具按钮外壳；选中、主动作和状态提示都只让图标变橙，背景与普通白色图标按钮保持相同的中性玻璃。深色模式按钮专属 control tint 在普通 control 基础上乘 `0.86`，浅色模式只应用中性背景规则。tooltip、菜单、面板以及红/绿语义操作按钮不受影响。
-- `未读/全部` 紧凑二态 switch 的 2.1 结构收敛已完成并由用户验证：主时间线与订阅源详情页现在共用 `AppGlassCompactSwitch`，点击、滑块动画、hover/press、筛选结果和性能体感保持一致。
-- `未读/全部` switch 与设置页 segmented 的 2.2 视觉收敛已完成并由用户验证。后续视觉收敛只调整 `未读/全部`：滑块使用不含主色 tint 的中性 `AppGlassSurface`，文字改为 `onSurface`，深色空余轨道为白色 `5%`；设置页 segmented 和其他语义控件不随之改变。
+- macOS 固定圆形工具按钮继续由 `AppGlassRoundControlChrome` 统一外壳。深色按钮专属 control tint 现为普通 control alpha 的 `0.52`，有效白色 tint 约 `12%`；浅色按钮采用参考工程的冷白 `12%` tint、`12` 光学厚度、`5` blur、左上高光、`0.15` 环境光、`1.2` 折射/饱和度和轻微色散，并使用只绘制在形状外部的反向裁切双层阴影。tooltip、菜单、大面板和红/绿语义按钮不随这组参数改变。
+- macOS 主时间线与订阅源详情的 `未读/全部` 已放弃紧凑 switch，改为和排序相同的 `34px` 圆形 morph 选择按钮。两者与排序统一复用 `AppGlassMorphSelectionButton`；旧 `AppGlassCompactSwitch` 和时间线私有排序 morph 代码已删除。展开菜单标题为“文章范围”，只包含“未读/全部”，不重新引入“已读”。
+- `未读/全部` 触发图标使用 `filter_alt_rounded` / `filter_alt_off_rounded`，不以橙色表达选中：深色固定白色，浅色使用主题 `onSurface` 深色前景；菜单内选项仍按通用选择项规则显示当前项。设置页 segmented 保持独立，不随本轮迁移。
 - macOS 分栏文章列表协调器已覆盖垃圾拦截和主时间线：垃圾拦截的 `M`、保留、移除以及主时间线的 `M`、双击都会在业务状态变化前登记后继项，退出动画期间保持旧详情，真实 `onRemoveEnd` 后才切换并 reveal 下一篇。最近阅读继续保留现有实现，是否迁移取决于后续是否出现同类故障。
 - 垃圾拦截审核交互已收敛：macOS 卡片改为仅触控板双指横滑（右滑保留、左滑移除），鼠标拖动不触发；`K/M` 和右键菜单作为后备入口。横滑背景使用圆角路径差集，只显示在卡片真实让出的区域，用户已确认视觉符合预期；快速 `Command-Z` 会等待旧退出动画结束后再恢复同一文章。
 - Android 垃圾拦截继续使用 `Dismissible`，但卡片外边距移到滑动组件外部，解决圆角卡片与保留/移除背景之间的空带。`ArticleCard` 的可选 `outerPadding` 默认不改变其他页面。
-- macOS 顶部玻璃工具按钮、紧凑 switch 和目录 morph 按钮已接入 `MacOSWindowDragGuard`：指针按住这些控件时临时关闭 AppKit 窗口拖动，避免轻微位移把按钮点击误判为移动窗口；空白 header 区域仍可拖动窗口。
+- macOS 顶部玻璃工具按钮、共享 morph 选择按钮和目录 morph 按钮均通过圆形 control chrome 接入 `MacOSWindowDragGuard`：指针按住这些控件时临时关闭 AppKit 窗口拖动，避免轻微位移把按钮点击误判为移动窗口；空白 header 区域仍可拖动窗口。
 - macOS `AppGlassTooltip` 已加入共享窗口碰撞布局：气泡按真实尺寸限制在四周 `8px` 内，并在底部/右侧空间不足时自动翻转；缩放动画锚点同步跟随最终方向，始终靠近触发控件。文章右上角长 tooltip 和其他靠边 tooltip 不再伸出窗口被裁切；三类边界/方向回归测试已覆盖，用户视觉验证通过。
-- macOS `未读/全部` 紧凑 switch 已按用户视觉实验收窄为 `58px` 轨道、`42px` 滑块，去掉外层内缩 padding；最外层静态 rim 当前为 `1px`、局部 opacity multiplier `1.0`。时间线 header 间距为 switch→排序 `8px`、排序→同步 `8px`、同步→右边界 `10px`。
+- macOS 时间线 header 现在依次使用 `34px` 文章范围按钮、`34px` 排序按钮和同步按钮；范围→排序 `8px`、排序→同步 `8px`、同步→右边界 `10px`。文章范围从旧 `58px` switch 收敛为圆形入口后，不应再按旧轨道/滑块参数调整布局。
 - macOS 右侧文章正文 scrollbar 保持 `8px` 宽，距离文章面板右边界为 `2px`；正文基础左右 padding 为 `11px`。中间时间线/垃圾拦截列表仍是 `8px` 宽、距离各自右边界 `1px`，不要混淆两套 margin。
 - macOS 垃圾拦截的 `M/K`、右键和触控板审核操作不再让 `ArticleStateNotifier` 提前删除列表项。页面用 pending action 隔离同步状态回调，并在帧边界只提交一次列表删除；用户连续验证 `M/K` 动画正常。
 - macOS 主时间线双击标为已读会把本地持久化与可视列表更新拆到两个帧边界，避免同步数据库写入吞掉 180ms 移除动画。需要移除卡片时，外部浏览器只在 `remove.end` 后的下一帧打开，避免动画中途失焦；用户视觉验证通过。

@@ -216,11 +216,27 @@ LiquidGlassSettings appGlassSettingsFor(
 
 LiquidGlassSettings appGlassButtonSettingsFor(BuildContext context) {
   final settings = appGlassSettingsFor(context, AppGlassTone.control);
-  if (Theme.of(context).brightness != Brightness.dark) return settings;
+  if (Theme.of(context).brightness == Brightness.dark) {
+    return settings.copyWith(
+      glassColor: settings.glassColor.withValues(
+        alpha: settings.glassColor.a * 0.52,
+      ),
+    );
+  }
+
   return settings.copyWith(
-    glassColor: settings.glassColor.withValues(
-      alpha: settings.glassColor.a * 0.86,
-    ),
+    glassColor: const Color.fromRGBO(210, 220, 240, 0.12),
+    thickness: 12,
+    blur: 5,
+    lightIntensity: 0.85,
+    ambientStrength: 0.15,
+    refractiveIndex: 1.2,
+    saturation: 1.2,
+    chromaticAberration: 0.02,
+    shadow: const [
+      BoxShadow(color: Color(0x17000000), blurRadius: 8, offset: Offset(0, 2)),
+      BoxShadow(color: Color(0x09000000), blurRadius: 2, offset: Offset(0, 1)),
+    ],
   );
 }
 
@@ -921,162 +937,6 @@ class AppGlassRoundControlChrome extends StatelessWidget {
             color: fill,
           ),
           child: child,
-        ),
-      ),
-    );
-  }
-}
-
-class AppGlassCompactSwitch extends StatefulWidget {
-  final int selectedIndex;
-  final List<String> labels;
-  final ValueChanged<int> onChanged;
-  final double trackWidth;
-  final double trackHeight;
-  final double thumbWidth;
-
-  const AppGlassCompactSwitch({
-    super.key,
-    required this.selectedIndex,
-    required this.labels,
-    required this.onChanged,
-    this.trackWidth = 58,
-    this.trackHeight = 30,
-    this.thumbWidth = 42,
-  }) : assert(labels.length == 2),
-       assert(selectedIndex == 0 || selectedIndex == 1);
-
-  @override
-  State<AppGlassCompactSwitch> createState() => _AppGlassCompactSwitchState();
-}
-
-class _AppGlassCompactSwitchState extends State<AppGlassCompactSwitch> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final controls = appGlassControlPalette(context);
-
-    return MacOSWindowDragGuard(
-      child: SelectionContainer.disabled(
-        child: AppGlassSurface(
-          borderRadius: AppGlassRadii.pill,
-          padding: EdgeInsets.zero,
-          tone: AppGlassTone.control,
-          nativeBackdrop: true,
-          staticMaterial: true,
-          staticBorderOpacity: 1,
-          staticBorderWidth: 1,
-          child: SizedBox(
-            width: widget.trackWidth,
-            height: widget.trackHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppGlassRadii.pill),
-                color: controls.compactControlTrackFill(),
-              ),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: (_) => setState(() => _hovered = true),
-                onExit: (_) => setState(() {
-                  _hovered = false;
-                  _pressed = false;
-                }),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (_) => setState(() => _pressed = true),
-                  onTapUp: (_) => setState(() => _pressed = false),
-                  onTapCancel: () => setState(() => _pressed = false),
-                  onTap: () =>
-                      widget.onChanged(widget.selectedIndex == 0 ? 1 : 0),
-                  child: AnimatedScale(
-                    scale: _pressed ? 0.975 : 1.0,
-                    duration: const Duration(milliseconds: 120),
-                    curve: Curves.easeOutCubic,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        if (_hovered)
-                          Positioned.fill(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(
-                                  AppGlassRadii.pill,
-                                ),
-                                color: controls.subtleNeutralOverlay(
-                                  hovered: true,
-                                  pressed: _pressed,
-                                ),
-                              ),
-                            ),
-                          ),
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 240),
-                          curve: Curves.easeOutBack,
-                          left: widget.selectedIndex == 0
-                              ? 0
-                              : widget.trackWidth - widget.thumbWidth,
-                          top: 0,
-                          bottom: 0,
-                          width: widget.thumbWidth,
-                          child: AppGlassSurface(
-                            borderRadius: AppGlassRadii.pill,
-                            padding: EdgeInsets.zero,
-                            tone: AppGlassTone.control,
-                            useOwnLayer: false,
-                            interactive: true,
-                            settingsOverride: appGlassButtonSettingsFor(
-                              context,
-                            ),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(
-                                  AppGlassRadii.pill,
-                                ),
-                                color: Colors.transparent,
-                              ),
-                              child: Center(
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 140),
-                                  switchInCurve: Curves.easeOutCubic,
-                                  switchOutCurve: Curves.easeOutCubic,
-                                  transitionBuilder: (child, animation) {
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: ScaleTransition(
-                                        scale: Tween<double>(
-                                          begin: 0.94,
-                                          end: 1,
-                                        ).animate(animation),
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: Text(
-                                    widget.labels[widget.selectedIndex],
-                                    key: ValueKey(widget.selectedIndex),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.clip,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: cs.onSurface,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );

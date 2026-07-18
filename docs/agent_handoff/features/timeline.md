@@ -7,19 +7,20 @@
 - `lib/pages/widgets/article_card.dart`
 - `lib/common/widgets/article_card_chrome.dart`
 - `lib/common/widgets/app_glass_sync_button.dart`
+- `lib/common/widgets/app_glass_selection_button.dart`
 - `lib/pages/widgets/article_actions_menu.dart`
 - `lib/common/widgets/mac_split_article_list_coordinator.dart`
 
 当前行为：
 
 - 模式：未读、全部、已读。
-- macOS 中间 header 快速切换只暴露未读/全部，并使用紧凑二态开关，而不是完整 segment。
+- macOS 中间 header 的文章范围只暴露未读/全部，并使用与排序统一的圆形 morph 选择按钮，而不是完整 segment 或二态 switch。
 - macOS 中间栏 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截，不要只在某个页面单独处理。
 - macOS 文章卡片普通态使用极轻中性色填充，统一由 `ArticleCardChrome` 控制；当前深色模式 alpha 为 `0.018`，浅色模式为 `0.012`。时间线、最近阅读和垃圾拦截不要分别覆盖该值。
 - macOS 普通文章卡片与垃圾拦截审核卡片的标题字号统一为 `14`，由 `ArticleCardChrome.titleFontSize` 提供；普通卡片辅助正文在 macOS 使用 `12`，由 `ArticleCardChrome.bodyFontSize` 提供。Android 保持原字号，不要在两个 macOS 卡片实现中分别硬编码标题字号。
 - macOS 主时间线和垃圾拦截列表共用 `MacArticleListChrome` 的两层下边距：`viewportPadding` 是滚动过程中始终存在的窗口下边界，`contentPadding` 是滚到列表末尾后出现的内容留白。不要只增加 `ListView.padding.bottom` 来替代视口边界，也不要在两个页面分别硬编码。
 - macOS 主时间线、垃圾拦截、最近阅读和订阅源详情通过 `MacHeaderPane` 共享固定 header/body 几何。内容和 scrollbar 自然从 header 下方开始；thumb 宽度及右侧 margin 继续由 `MacGlassScrollbarStyle.articlePaneTheme` 提供（`8px`、`1px`），`MacArticleListChrome.contentPadding` 另保留 `2px` 右侧内容间隔。
-- macOS 订阅源详情页的 header 筛选也应跟随这个二态开关语言；不要重新引入 `仅已读` 入口。
+- macOS 订阅源详情页的 header 筛选复用同一个文章范围 morph 组件；不要重新引入 `仅已读` 入口。
 - 已读模式/页面仍在其他入口存在，不应删除。
 - 过滤支持选中订阅源、分类和静默订阅源。
 - 本地文章库支撑时间线状态。
@@ -64,15 +65,13 @@ macOS 分栏选择与移除协调：
 - backing service 记录被删除后，不要回退到过期 controller 字段。
 - 即使同步在按钮订阅 controller 前已经开始，同步按钮也必须开始旋转。
 - macOS 刷新/排序/操作按钮在用户明确要求时，应对齐文章卡片边界。
-- macOS 未读/全部切换控件是二态筛选开关：只显示当前状态文字，另一侧保留很窄空隙，滑块在两端切换。用户认为完整 segment 占据太多 header 空间，所以不要回退到两个等宽文字 segment。
-- 当前视觉实验后的精确尺寸是轨道 `58`、滑块 `42`、外层 padding `0`。空余轨道因此收窄，但仍保留横向切换动势；最外层静态 rim 宽 `1px`，局部 opacity multiplier 为 `1.0`。继续缩窄会让中文文字贴边或削弱切换动势。
-- 该 switch 视觉上应接近右侧圆形玻璃工具按钮，但语义上不是主操作按钮。滑块使用不含主色 tint 的中性玻璃，文字使用自适应 `onSurface`；深色模式使用按钮专属的较低 glass tint。不要把滑块或文字重新改成橙色。
-- switch 外层轨道保留清晰的玻璃边界，用于和周围控件形成同一组控制语言；当前局部 `staticBorderWidth` 为 `1`、`staticBorderOpacity` 为 `1.0`，不要回退到视觉实验前过淡的 rim。
+- macOS 文章范围闭合态为 `34px` 圆形按钮，未读使用 `filter_alt_rounded`，全部使用 `filter_alt_off_rounded`；点击后从按钮右上角锚定展开“文章范围”面板。主时间线、订阅源详情和排序共用 `AppGlassMorphSelectionButton`，不要重新复制动画或菜单代码。
+- 文章范围触发图标在未读/全部之间只改变图形，不改变为橙色：深色固定白色，浅色使用 `onSurface`。旧 `58/42px` switch 及其轨道/rim 参数已经废弃。
 - macOS 中间时间线处于具体订阅源筛选时，header 只保留时间线级操作，例如排序和同步。
 - 不要在该 header 重复放置订阅源级设置按钮，例如自动拉取全文、自动翻译、静默等；这些入口属于左侧侧边栏订阅源项。
 - 该 header 也不显示“清除筛选”。用户通过左侧侧边栏切换范围或回到全部文章。
 - 这个取舍来自一次拥挤问题：进入某个分类下的具体订阅源后，刷新、清除筛选、拉取全文、自动翻译等按钮挤在同一行，视觉负担过重且功能重复。
-- macOS 时间线 header 的横向间距已经按文章卡片右边界校准：`未读/全部`→排序 `8px`、排序→同步 `8px`、同步→中间栏右边界 `10px`。文章卡片右边缘到时间线右边界也保持 `10px`；文章详情右上角三个按钮的既有间距不随这里联动。
+- macOS 时间线 header 的横向间距已经按文章卡片右边界校准：文章范围→排序 `8px`、排序→同步 `8px`、同步→中间栏右边界 `10px`。文章卡片右边缘到时间线右边界也保持 `10px`；文章详情右上角三个按钮的既有间距不随这里联动。
 - 同步按钮样式和旋转逻辑集中在 `AppGlassSyncButton`。普通时间线通过 `_MacSyncButton` 订阅 `TimelineController.isSyncing`，垃圾拦截页也复用同一个按钮。
 - 文章卡片的长按/右键 AI 操作集中在 `ArticleActionsMenu`。不要再把翻译/摘要菜单逻辑塞回 `article_card.dart`。
 - 文章列表卡片的基础“外壳”样式集中在 `ArticleCardChrome`：macOS 普通态使用极高透明度中性色填充，不使用普通边框；选中态仍使用主色背景和边框。外边距、内部 padding 和圆角也从这里取值，不要在普通时间线、最近阅读、垃圾拦截审核行之间复制常量。

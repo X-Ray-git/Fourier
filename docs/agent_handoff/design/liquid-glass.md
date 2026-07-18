@@ -53,18 +53,15 @@ macOS 原生侧边栏玻璃：
 
 - `AppGlassControlPalette` 是当前玻璃按钮/控件颜色状态的集中入口。
 - 第一阶段只把散落的 hover、pressed、active、border、disabled 色值收敛到 palette，刻意保持原视觉体感基本不变。
-- `AppGlassRoundControlChrome` 是固定 34px 圆形工具按钮的共享外壳。文章右上角普通按钮、时间线排序按钮和同步按钮应尽量复用它，而不是各自手写 `AppGlassSurface`。
-- `AppGlassCompactSwitch` 是紧凑二态 switch 的共享控件。主时间线和订阅源详情的 `未读/全部` 不应再分别维护两套实现。
-- `AppGlassCompactSwitch` 和设置页 segmented 的滑块已改成真正的 `AppGlassSurface` control 材质，而不是手绘渐变模拟。用户验证它比静态模拟更接近右侧圆形玻璃按钮，功能和动画没有明显掉帧。
-- `未读/全部` 紧凑 switch 的选中态不要做成橙色按钮。滑块保持纯中性玻璃，不叠主色 tint；文字使用 `onSurface`，深色模式接近白色、浅色模式为深色。设置页 segmented 保留自己的语义色规则。
-- 紧凑 switch/segmented 外层可以保留玻璃轨道。`未读/全部` switch 当前需要清晰但纤细的 rim，不要用全局修改 `AppGlassSurface` 的方式调整；设置页 segmented 仍可按自身密度使用更克制的边界。
-- `未读/全部` switch 后续视觉实验把轨道收窄到 `58`、滑块保持 `42`，外层 padding 归零；最外层 rim 使用 `1px` 和局部 opacity multiplier `1.0`。这里的目标是让外框贴合控件并保持清晰，不要套用早期 `62px + 3px padding + 0.35 rim` 的参数，也不要把该局部宽度全局应用到设置页 segmented。
-- `AppGlassCompactSwitch` 未被滑块覆盖的空余轨道需要可辨认，但不能抢过滑块。当前 `compactControlTrackFill()` 在深色模式使用白色 `5%`、浅色模式使用黑色 `5%`；外框、hover 和动画保持既有规则。
-- 紧凑 switch/segmented 的滑块有弹性 overshoot。内部 `Stack` 必须允许 `Clip.none`，让滑块越界时绘制在外层轨道之上；不要让外框裁切或遮挡滑块。
-- 圆形/header 工具按钮统一使用中性玻璃背景和中性 hover/press。选中、主动作或状态提示均只让图标变橙，背景不得叠橙色；这条规则同时适用于浅色和深色模式。红色危险操作、绿色保留操作等语义按钮不属于这一规则。
-- 深色模式下圆形工具按钮和 `未读/全部` 滑块使用按钮专属玻璃设置，control tint alpha 为普通 control 的 `0.86`；不要通过全局降低 `AppGlassTone.control` 实现，否则 tooltip、菜单和面板会被误伤。
+- `AppGlassRoundControlChrome` 是固定 `34px` 圆形工具按钮的共享外壳。文章右上角普通按钮、时间线范围/排序按钮和同步按钮应复用它，而不是各自手写 `AppGlassSurface`。
+- `AppGlassMorphSelectionButton<T>` 是低选项数量 header 选择器的共享实现：闭合时复用圆形 control chrome，展开时保持右上角锚点并使用统一的弹性 morph、选项 hover/press、关闭按钮和点击外部收回。当前排序和文章范围共用它；选项很多或需要滚动时仍使用常规菜单，不要无限扩展该组件。
+- 主时间线与 macOS 订阅源详情的文章范围只暴露“未读/全部”，使用 `filter_alt_rounded` / `filter_alt_off_rounded`。触发图标不使用橙色选中态：深色固定白色，浅色使用 `onSurface`；展开菜单中的当前项仍按通用 option palette 表达选择。
+- 旧 `AppGlassCompactSwitch` 已删除。此前 `58px` 轨道、`42px` 滑块、`1px` rim、空余轨道 `5%` 和 overshoot 裁切规则只属于已废弃视觉实验，不得作为当前实现恢复；设置页 segmented 仍有自己的组件和参数。
+- 圆形/header 工具按钮统一使用中性玻璃背景和中性 hover/press。除文章范围这个明确例外外，选中、主动作或状态提示通常只让图标变橙，背景不得叠橙色。红色危险操作、绿色保留操作等语义按钮不属于这一规则。
+- 深色模式下圆形工具按钮使用按钮专属玻璃设置，control tint alpha 为普通 control 的 `0.52`，有效白色 tint 约 `12%`；不要通过全局降低 `AppGlassTone.control` 实现，否则 tooltip、菜单和面板会被误伤。
+- 浅色圆形工具按钮对齐参考工程的静态材质：冷白 `Color.fromRGBO(210,220,240,0.12)`、厚度 `12`、blur `5`、`135°` 左上光、light intensity `0.85`、ambient `0.15`、refractive index/saturation `1.2`、chromatic aberration `0.02`。为提高本应用浅色可见性，外部主阴影使用黑 `9%`/blur `8`/y `2`，接触阴影使用黑约 `3.5%`/blur `2`/y `1`，强度高于参考默认但仍通过 `PathOperation.difference` 反向裁切，绝不能渗入按钮内部使玻璃发灰。
 - 目录按钮仍使用 morph 玻璃实现，但关闭态材质已调到更接近普通圆形 control；不要重新调回明显更深的独立玻璃按钮。
 - 目录关闭静止态现在直接复用 `AppGlassIconButton/AppGlassRoundControlChrome`；只有展开和收回期间使用 morph layer，收回越过零点后才交回普通按钮。这样目录、复制、排序、刷新在关闭态使用同一材质路径，同时保留既有完整形变动画。
 - 浅色模式下，应用设置与原生 AppKit appearance 必须同步；同时用当前主题覆盖玻璃 renderer 读取的 `MediaQuery.platformBrightness`，避免软件强制浅色而系统仍为深色时出现原生侧边栏、目录和普通控件各读一套明暗状态。
-- 浅色和深色的选中圆形按钮都沿用普通按钮的中性玻璃基底，不再增加主色 tint。普通 control 仍使用参考实现同类的外侧主阴影与接触阴影；文章复制/已读按钮不关闭 own layer，否则它们在浅色背景下会比排序/刷新缺少边界层次。
+- 浅色和深色的选中圆形按钮都沿用普通按钮的中性玻璃基底，不增加主色 tint。文章复制/已读按钮不关闭 own layer，否则它们在浅色背景下会比排序/刷新缺少边界层次。参考工程的实时背景亮度采样等高成本能力没有为这些固定 header 按钮新增；当前只使用静态、可复制且性能稳定的材质参数。
 - 真正的贴图/预绘制优化应放在角色规则稳定之后。优先候选是固定尺寸圆形按钮、固定高度 pill、badge；不要先对大面板或密集内容区做贴图化。

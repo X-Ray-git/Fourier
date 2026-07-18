@@ -24,12 +24,12 @@
 - 图标按钮在适当位置使用现有 glass/tooltip 组件。
 - macOS 上仍能看到的旧 `IconButton(tooltip: ...)` 应优先迁移为 `AppGlassIconButton` 或外包 `AppGlassTooltip`；如果底层控件必须保留，例如 `PopupMenuButton` 或尺寸很小的展开箭头，应把原生 `tooltip` 置空，避免同时出现两套 tooltip。
 - `AppGlassTooltip` 当前支持底部和右侧两种首选位置。默认底部用于普通工具栏按钮；垃圾拦截审核行这种靠右的垂直小按钮沿用右侧。共享布局会按气泡真实尺寸保留窗口四周 `8px` 安全边距：水平越界时向内收，底部空间不足时翻到上方，右侧空间不足时翻到左侧；缩放动画锚点也必须跟随最终方向，始终靠近触发控件。不要再为靠边按钮逐个手调 tooltip offset。
-- 二态且空间紧张的 header 筛选不要默认使用完整 segment。时间线“未读/全部”采用类似 switch 的紧凑滑块，只显示当前态文字；完整 segment 更适合三态以上或需要同时展示所有选项的设置项。
+- 空间紧张的 header 筛选不要默认使用完整 segment。时间线“未读/全部”现采用 `34px` 圆形范围按钮并展开二项 morph 面板；完整 segment 更适合设置页中需要同时展示所有选项的场景。
 - 翻译/摘要文字胶囊是轻量普通胶囊。
 - Hover 应微妙且稳定；避免闪烁或布局变化。
 - 密集、重复出现的列表按钮不应为了追求玻璃效果而全部改为重型 glass surface；优先使用轻量 hover/描边，并只把 tooltip 统一到玻璃语言。
 - 密集文章列表卡片不使用普通边框作为默认态。用户验证后认为细线边框不够理想，当前取舍是 macOS 普通态极高透明度白/黑中性色填充，浅色模式反向使用黑/灰透明填充。
-- full-size content view 的 header 可拖动窗口，但可点击控件不能把轻微指针位移传给 AppKit。共享圆形玻璃按钮、紧凑 switch 和目录 morph 入口使用 `MacOSWindowDragGuard`；按下期间通过原生 channel 临时设置 `NSWindow.isMovable = false`，最后一个指针释放/取消/组件销毁后恢复。不要把整个 header 禁止拖动，空白区仍是窗口拖动入口。
+- full-size content view 的 header 可拖动窗口，但可点击控件不能把轻微指针位移传给 AppKit。共享圆形玻璃按钮、范围/排序 morph 入口和目录 morph 入口使用 `MacOSWindowDragGuard`；按下期间通过原生 channel 临时设置 `NSWindow.isMovable = false`，最后一个指针释放/取消/组件销毁后恢复。不要把整个 header 禁止拖动，空白区仍是窗口拖动入口。
 
 间距：
 

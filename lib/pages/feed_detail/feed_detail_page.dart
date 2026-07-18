@@ -18,6 +18,7 @@ import '../../utils/security_utils.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
+import '../../common/widgets/app_glass_selection_button.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
@@ -980,12 +981,7 @@ class _MacFeedHeader extends StatelessWidget {
                 ],
               ),
             ),
-            Obx(
-              () => AppGlassTooltip(
-                message: '筛选文章状态',
-                child: _MacFeedReadFilterToggle(controller: controller),
-              ),
-            ),
+            _MacFeedReadFilterToggle(controller: controller),
             AppGlassIconButton(
               icon: Icons.sync,
               tooltip: '同步',
@@ -1060,18 +1056,40 @@ class _MacFeedReadFilterToggle extends StatefulWidget {
 }
 
 class _MacFeedReadFilterToggleState extends State<_MacFeedReadFilterToggle> {
+  static const _options = [
+    AppGlassSelectionOption(
+      value: 0,
+      label: '未读',
+      icon: Icons.filter_alt_rounded,
+    ),
+    AppGlassSelectionOption(
+      value: 1,
+      label: '全部',
+      icon: Icons.filter_alt_off_rounded,
+    ),
+  ];
+
   int? _visualFilter;
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
       final filter = _visualFilter ?? widget.controller.readFilter.value;
-      final selectedIndex = filter == 0 ? 0 : 1;
+      final isUnread = filter == 0;
+      final theme = Theme.of(context);
 
-      return AppGlassCompactSwitch(
-        selectedIndex: selectedIndex,
-        labels: const ['未读', '全部'],
-        onChanged: (index) => _setFilter(index == 0 ? 0 : 1),
+      return AppGlassMorphSelectionButton<int>(
+        value: isUnread ? 0 : 1,
+        options: _options,
+        title: '文章范围',
+        titleIcon: Icons.filter_alt_rounded,
+        tooltip: isUnread ? '范围：未读' : '范围：全部',
+        active: isUnread,
+        useOwnLayer: false,
+        triggerForegroundColor: theme.brightness == Brightness.dark
+            ? Colors.white
+            : theme.colorScheme.onSurface,
+        onChanged: _setFilter,
       );
     });
   }

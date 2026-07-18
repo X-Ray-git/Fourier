@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -117,14 +118,11 @@ class _RecentReadPageState extends State<RecentReadPage> {
     return Scaffold(
       appBar: Platform.isMacOS
           ? null
-          : AppBar(
-              title: const Text(
+          : const MobileBlurAppBar(
+              title: Text(
                 '最近阅读',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
               ),
-              centerTitle: true,
-              elevation: 0,
-              scrolledUnderElevation: 0,
             ),
       body: Obx(() {
         final state = controller.loadingState.value;

@@ -30,6 +30,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
@@ -646,15 +647,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   Widget _buildMobileScaffold(BuildContext context, ColorScheme cs) {
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: cs.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(0.5),
-          child: Divider(height: 0.5, thickness: 0.5),
-        ),
+      appBar: MobileBlurAppBar(
         title: Obx(() {
           final humanCount = _articles.length;
           final q = AutoFilterWorker.queuedCount.value;

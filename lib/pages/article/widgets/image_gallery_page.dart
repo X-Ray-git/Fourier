@@ -13,6 +13,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../common/widgets/app_context_menu.dart';
+import '../../../common/widgets/app_glass.dart';
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/interactiveviewer_gallery/interactive_viewer_boundary.dart';
 import '../../../services/article_image_service.dart';
@@ -163,58 +164,59 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
   void _showImageMenu(String imageUrl) {
     showModalBottomSheet(
       context: context,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => SafeArea(
-        child: Container(
-          margin: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E).withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(16),
-          ),
+      barrierColor: Colors.black.withValues(alpha: 0.30),
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return AppMobileGlassSheet(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const ListTile(
+                leading: Icon(Icons.image_outlined),
+                title: Text(
+                  '图片操作',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
               ListTile(
-                leading: const Icon(Icons.share_rounded, color: Colors.white),
+                leading: const Icon(Icons.share_rounded),
                 title: const Text(
                   '分享图片',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w500),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _shareImage(imageUrl);
                 },
               ),
-              const Divider(height: 1, color: Colors.white12),
               ListTile(
-                leading: const Icon(
-                  Icons.save_alt_rounded,
-                  color: Colors.white,
-                ),
+                leading: const Icon(Icons.save_alt_rounded),
                 title: const Text(
                   '保存到相册',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w500),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _saveImage(imageUrl);
                 },
               ),
-              const Divider(height: 1, color: Colors.white12),
               ListTile(
-                leading: const Icon(Icons.link_rounded, color: Colors.white),
+                leading: const Icon(Icons.link_rounded),
                 title: const Text(
                   '复制链接',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w500),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -224,8 +226,8 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

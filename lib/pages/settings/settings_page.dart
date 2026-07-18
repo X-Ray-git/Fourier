@@ -10,6 +10,7 @@ import '../../common/constants/constants.dart';
 import '../../common/constants/macos_layout_metrics.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../services/account_service.dart';
 import '../../services/app_version_service.dart';
@@ -23,6 +24,7 @@ import '../../utils/security_utils.dart';
 import '../../utils/storage.dart';
 import '../main/main_controller.dart';
 import 'task_center_page.dart';
+import 'widgets/mobile_settings_chrome.dart';
 
 /// 设置页 — Token 输入
 class SettingsPage extends StatefulWidget {
@@ -472,28 +474,12 @@ class _SettingsPageState extends State<SettingsPage> {
         const content =
             '导出的 JSON 会包含 Folo 登录凭据、DeepSeek API Key、Prompt 和订阅源偏好。'
             '请只保存或发送给你信任的位置。';
-        if (Platform.isMacOS) {
-          return _MacSettingsConfirmDialog(
-            title: '导出配置',
-            content: content,
-            confirmLabel: '导出到剪贴板',
-            onCancel: () => Get.back(result: false),
-            onConfirm: () => Get.back(result: true),
-          );
-        }
-        return AlertDialog(
-          title: const Text('导出配置'),
-          content: const Text(content),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(result: false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Get.back(result: true),
-              child: const Text('导出到剪贴板'),
-            ),
-          ],
+        return _SettingsConfirmDialog(
+          title: '导出配置',
+          content: content,
+          confirmLabel: '导出到剪贴板',
+          onCancel: () => Get.back(result: false),
+          onConfirm: () => Get.back(result: true),
         );
       },
     );
@@ -507,28 +493,12 @@ class _SettingsPageState extends State<SettingsPage> {
         const content =
             '将从剪贴板读取 Auto Folo 配置 JSON，并覆盖当前已保存的账号、AI、Prompt 和订阅源偏好设置。'
             '文章缓存、已读历史、摘要和翻译结果不会被导入。';
-        if (Platform.isMacOS) {
-          return _MacSettingsConfirmDialog(
-            title: '导入配置',
-            content: content,
-            confirmLabel: '从剪贴板导入',
-            onCancel: () => Get.back(result: false),
-            onConfirm: () => Get.back(result: true),
-          );
-        }
-        return AlertDialog(
-          title: const Text('导入配置'),
-          content: const Text(content),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(result: false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Get.back(result: true),
-              child: const Text('从剪贴板导入'),
-            ),
-          ],
+        return _SettingsConfirmDialog(
+          title: '导入配置',
+          content: content,
+          confirmLabel: '从剪贴板导入',
+          onCancel: () => Get.back(result: false),
+          onConfirm: () => Get.back(result: true),
         );
       },
     );
@@ -1224,12 +1194,405 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildAndroidScaffold(BuildContext context, ColorScheme colorScheme) {
+    final mediaPadding = MediaQuery.paddingOf(context);
+    final topPadding =
+        mediaPadding.top + (widget.showAppBar ? mobileAppBarToolbarHeight : 0);
+    final bottomPadding =
+        mediaPadding.bottom +
+        (widget.showAppBar ? 24 : kBottomNavigationBarHeight + 32);
+    final baseTheme = Theme.of(context);
+
+    return Theme(
+      data: baseTheme.copyWith(
+        inputDecorationTheme: mobileSettingsInputTheme(
+          context,
+          baseTheme.inputDecorationTheme,
+        ),
+        expansionTileTheme: baseTheme.expansionTileTheme.copyWith(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          childrenPadding: EdgeInsets.zero,
+          shape: const Border(),
+          collapsedShape: const Border(),
+          iconColor: colorScheme.primary,
+          collapsedIconColor: colorScheme.onSurfaceVariant,
+        ),
+      ),
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: widget.showAppBar
+            ? const MobileBlurAppBar(title: Text('设置'))
+            : null,
+        body: ListView(
+          padding: EdgeInsets.fromLTRB(12, topPadding + 12, 12, bottomPadding),
+          children: [
+            if (!widget.showAppBar) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 2, 4, 14),
+                child: Text(
+                  '设置',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+            Obx(
+              () => MobileSettingsPanel(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _accountService.isLoggedIn.value
+                          ? Icons.check_circle_rounded
+                          : Icons.error_outline_rounded,
+                      color: _accountService.isLoggedIn.value
+                          ? colorScheme.primary
+                          : colorScheme.error,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _accountService.isLoggedIn.value
+                            ? '服务认证已配置'
+                            : '服务认证尚未配置',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            MobileSettingsActionTile(
+              icon: Icons.hub_outlined,
+              title: '后台任务与同步',
+              subtitle: '同步队列、AI 任务和失败记录',
+              onTap: _openTaskCenter,
+            ),
+            const SizedBox(height: 24),
+            const MobileSettingsSectionHeader(
+              icon: Icons.key_rounded,
+              title: '服务认证',
+              subtitle: 'Folo 登录凭据与 DeepSeek API Key',
+            ),
+            MobileSettingsPanel(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _tokenController,
+                    decoration: InputDecoration(
+                      labelText: 'Session Token',
+                      hintText: 'T9VlefMC...',
+                      suffixIcon: _visibilityToggleButton(
+                        obscured: _obscureToken,
+                        onPressed: () =>
+                            setState(() => _obscureToken = !_obscureToken),
+                      ),
+                    ),
+                    obscureText: _obscureToken,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _clientIdController,
+                    decoration: InputDecoration(
+                      labelText: 'Client ID',
+                      hintText: 'YlxGJddT...',
+                      suffixIcon: _visibilityToggleButton(
+                        obscured: _obscureClientId,
+                        onPressed: () => setState(
+                          () => _obscureClientId = !_obscureClientId,
+                        ),
+                      ),
+                    ),
+                    obscureText: _obscureClientId,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _sessionIdController,
+                    decoration: InputDecoration(
+                      labelText: 'Session ID',
+                      hintText: 'TepZonTA...',
+                      suffixIcon: _visibilityToggleButton(
+                        obscured: _obscureSessionId,
+                        onPressed: () => setState(
+                          () => _obscureSessionId = !_obscureSessionId,
+                        ),
+                      ),
+                    ),
+                    obscureText: _obscureSessionId,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _deepseekApiKeyController,
+                    decoration: InputDecoration(
+                      labelText: 'DeepSeek API Key',
+                      hintText: 'sk-...',
+                      helperText: '翻译、摘要和过滤共用',
+                      suffixIcon: _visibilityToggleButton(
+                        obscured: _obscureDeepseekKey,
+                        onPressed: () => setState(
+                          () => _obscureDeepseekKey = !_obscureDeepseekKey,
+                        ),
+                      ),
+                    ),
+                    obscureText: _obscureDeepseekKey,
+                    textInputAction: TextInputAction.done,
+                  ),
+                  const SizedBox(height: 14),
+                  _CredentialActions(
+                    useGlass: false,
+                    testing: _testingCredentials,
+                    onTest: _testCredentials,
+                    onSave: _saveCredentials,
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _clear,
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 18,
+                        color: colorScheme.error,
+                      ),
+                      label: Text(
+                        '清除认证',
+                        style: TextStyle(color: colorScheme.error),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const MobileSettingsSectionHeader(
+              icon: Icons.tune_rounded,
+              title: '阅读与后台偏好',
+              subtitle: '选择立即保存；数字输入在完成编辑后保存',
+            ),
+            MobileSettingsPanel(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  MobileSettingsSelectField<String>(
+                    value: _appearanceMode,
+                    options: const ['system', 'light', 'dark'],
+                    labelFor: _appearanceModeLabel,
+                    label: '外观模式',
+                    onChanged: _setAppearanceMode,
+                  ),
+                  const SizedBox(height: 12),
+                  MobileSettingsSelectField<String>(
+                    value: _badgeStrategy,
+                    options: const ['unread_count', 'dot_only', 'off'],
+                    labelFor: (value) {
+                      return switch (value) {
+                        'unread_count' => '显示未读数量',
+                        'dot_only' => '仅显示红点',
+                        'off' => '关闭角标',
+                        _ => value,
+                      };
+                    },
+                    label: '应用角标',
+                    onChanged: _setBadgeStrategy,
+                  ),
+                  const SizedBox(height: 12),
+                  _AutoSavedSettingsTextField(
+                    controller: _readSyncWindowDaysController,
+                    focusNode: _readSyncWindowDaysFocusNode,
+                    label: '已读拉取窗口（天）',
+                    useGlass: false,
+                    hint: '2',
+                    helper: '后台静默拉取最近已读文章的范围',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onCommit: _saveReadSyncWindowDays,
+                  ),
+                  const SizedBox(height: 12),
+                  MobileSettingsSelectField<int>(
+                    value: _autoRetryMaxCount,
+                    options: const [0, 1, 3, 5],
+                    labelFor: (value) {
+                      return switch (value) {
+                        0 => '0 次（不重试）',
+                        1 => '1 次',
+                        3 => '3 次',
+                        5 => '5 次',
+                        _ => '$value 次',
+                      };
+                    },
+                    label: '自动重试次数',
+                    onChanged: _setAutoRetryMaxCount,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const MobileSettingsSectionHeader(
+              icon: Icons.swap_horiz_rounded,
+              title: '配置迁移',
+              subtitle: '通过剪贴板迁移账号、AI、Prompt 和订阅源偏好',
+            ),
+            MobileSettingsPanel(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _exportSettingsToClipboard,
+                      icon: const Icon(Icons.upload_rounded, size: 18),
+                      label: const Text('导出'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _importSettingsFromClipboard,
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: const Text('导入'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const MobileSettingsSectionHeader(
+              icon: Icons.auto_awesome_rounded,
+              title: 'AI 模型参数',
+              subtitle: '离散选择立即保存；数值在完成编辑后保存',
+            ),
+            _LlmConfigCard(
+              title: '翻译 LLM 参数',
+              defaultConfig: LlmConfig.translateDefault,
+              loadConfig: LlmConfig.loadTranslate,
+              saveConfig: LlmConfig.saveTranslate,
+              resetConfig: LlmConfig.resetTranslate,
+            ),
+            const SizedBox(height: 10),
+            _LlmConfigCard(
+              title: '摘要 LLM 参数',
+              defaultConfig: LlmConfig.summaryDefault,
+              loadConfig: LlmConfig.loadSummary,
+              saveConfig: LlmConfig.saveSummary,
+              resetConfig: LlmConfig.resetSummary,
+            ),
+            const SizedBox(height: 10),
+            _LlmConfigCard(
+              title: '过滤 LLM 参数',
+              defaultConfig: LlmConfig.filterDefault,
+              loadConfig: LlmConfig.loadFilter,
+              saveConfig: LlmConfig.saveFilter,
+              resetConfig: LlmConfig.resetFilter,
+            ),
+            const SizedBox(height: 24),
+            const MobileSettingsSectionHeader(
+              icon: Icons.notes_rounded,
+              title: 'Prompt',
+              subtitle: '大段文本保留明确的保存与重置操作',
+            ),
+            _PromptCard(
+              title: '摘要 AI Prompt',
+              subtitle: '自定义摘要规则（返回必须是特定 JSON 格式）',
+              hintText: '输入摘要规则...',
+              emptyWarning: '请保留默认的 JSON 结构指令',
+              savedMessage: '新摘要将从下次请求生效',
+              helpText: '程序会自动拼接文章标题和 HTML 正文；动态目标语言可保留 {targetLang}。',
+              loadPrompt: () => SummaryService.getPrompt('{targetLang}'),
+              savePrompt: SummaryService.setPrompt,
+              resetPrompt: SummaryService.resetPrompt,
+            ),
+            const SizedBox(height: 10),
+            _PromptCard(
+              title: '翻译 AI Prompt',
+              subtitle: '自定义翻译规则（返回必须是特定 JSON 格式）',
+              hintText: '输入翻译规则...',
+              emptyWarning: '请保留默认的 JSON 结构指令',
+              savedMessage: '新翻译将从下次请求生效',
+              helpText: '程序会自动拼接文章或分块正文；动态目标语言可保留 {targetLang}。',
+              loadPrompt: () => TranslationService.getPrompt('{targetLang}'),
+              savePrompt: TranslationService.setPrompt,
+              resetPrompt: TranslationService.resetPrompt,
+            ),
+            const SizedBox(height: 10),
+            _PromptCard(
+              title: 'AI 过滤 Prompt',
+              subtitle: '自定义文章过滤规则（LLM 判定）',
+              hintText: '输入过滤规则...',
+              emptyWarning: '请保留至少一条过滤规则',
+              savedMessage: '新过滤将从下次请求生效',
+              loadPrompt: ArticleFilterService.getPrompt,
+              savePrompt: ArticleFilterService.setPrompt,
+              resetPrompt: ArticleFilterService.resetPrompt,
+            ),
+            const SizedBox(height: 24),
+            const MobileSettingsSectionHeader(
+              icon: Icons.info_outline_rounded,
+              title: '关于',
+              subtitle: '应用身份与服务信息',
+            ),
+            MobileSettingsPanel(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Auto Folo v${AppVersionService.version}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '基于 Folo API 的非官方个人二次开发客户端，不隶属于 Folo 或 RSSNext。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Folo API: api.folo.is',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     if (Platform.isMacOS) {
       return _buildMacOSScaffold(context, colorScheme);
+    }
+
+    if (Platform.isAndroid) {
+      return _buildAndroidScaffold(context, colorScheme);
     }
 
     return Scaffold(
@@ -2188,14 +2551,14 @@ class _MacInlineExpansionState extends State<_MacInlineExpansion>
   }
 }
 
-class _MacSettingsConfirmDialog extends StatelessWidget {
+class _SettingsConfirmDialog extends StatelessWidget {
   final String title;
   final String content;
   final String confirmLabel;
   final VoidCallback onCancel;
   final VoidCallback onConfirm;
 
-  const _MacSettingsConfirmDialog({
+  const _SettingsConfirmDialog({
     required this.title,
     required this.content,
     required this.confirmLabel,
@@ -2830,21 +3193,23 @@ class _PromptCardState extends State<_PromptCard> {
       );
     }
 
-    return Card(
-      child: ExpansionTile(
-        title: Text(
-          widget.title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(widget.subtitle),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: content,
-          ),
-        ],
+    final expansion = ExpansionTile(
+      title: Text(
+        widget.title,
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
+      subtitle: Text(widget.subtitle),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: content,
+        ),
+      ],
     );
+    if (Platform.isAndroid) {
+      return MobileSettingsPanel(child: expansion);
+    }
+    return Card(child: expansion);
   }
 }
 
@@ -3126,21 +3491,23 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
       );
     }
 
-    return Card(
-      child: ExpansionTile(
-        title: Text(
-          widget.title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text('${_config.model}  |  并发 ${_config.concurrency}'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: content,
-          ),
-        ],
+    final expansion = ExpansionTile(
+      title: Text(
+        widget.title,
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
+      subtitle: Text('${_config.model}  |  并发 ${_config.concurrency}'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: content,
+        ),
+      ],
     );
+    if (Platform.isAndroid) {
+      return MobileSettingsPanel(child: expansion);
+    }
+    return Card(child: expansion);
   }
 
   Widget _buildMacContent() {
@@ -3215,65 +3582,32 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
   Widget _buildMobileContent() {
     return Column(
       children: [
-        DropdownButtonFormField<String>(
-          key: ValueKey('model:${_config.model}'),
-          initialValue: _config.model,
-          decoration: const InputDecoration(
-            labelText: '模型',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-          items: _models
-              .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              _saveImmediately(_config.copyWith(model: value));
-            }
-          },
+        MobileSettingsSelectField<String>(
+          value: _config.model,
+          options: _models,
+          labelFor: (value) => value,
+          label: '模型',
+          onChanged: (value) =>
+              _saveImmediately(_config.copyWith(model: value)),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<bool>(
-          key: ValueKey('thinking:${_config.thinking}'),
-          initialValue: _config.thinking,
-          decoration: const InputDecoration(
-            labelText: '思考模式',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-          items: const [
-            DropdownMenuItem(value: false, child: Text('关闭')),
-            DropdownMenuItem(value: true, child: Text('开启')),
-          ],
-          onChanged: (value) {
-            if (value != null) {
-              _saveImmediately(_config.copyWith(thinking: value));
-            }
-          },
+        MobileSettingsSelectField<bool>(
+          value: _config.thinking,
+          options: const [false, true],
+          labelFor: (value) => value ? '开启' : '关闭',
+          label: '思考模式',
+          onChanged: (value) =>
+              _saveImmediately(_config.copyWith(thinking: value)),
         ),
         const SizedBox(height: 12),
         if (_config.thinking)
-          DropdownButtonFormField<String>(
-            key: ValueKey('effort:${_config.reasoningEffort}'),
-            initialValue: _config.reasoningEffort,
-            decoration: const InputDecoration(
-              labelText: '思考强度',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: _efforts
-                .map(
-                  (e) => DropdownMenuItem(
-                    value: e,
-                    child: Text(e == 'high' ? '标准 (high)' : '最大 (max)'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                _saveImmediately(_config.copyWith(reasoningEffort: value));
-              }
-            },
+          MobileSettingsSelectField<String>(
+            value: _config.reasoningEffort,
+            options: _efforts,
+            labelFor: (value) => value == 'high' ? '标准 (high)' : '最大 (max)',
+            label: '思考强度',
+            onChanged: (value) =>
+                _saveImmediately(_config.copyWith(reasoningEffort: value)),
           ),
         if (_config.thinking) const SizedBox(height: 12),
         _AutoSavedSettingsTextField(
@@ -3286,27 +3620,14 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
           onCommit: _saveTemperature,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<int>(
-          key: ValueKey('maxTokens:${_config.maxTokens}'),
-          initialValue: _config.maxTokens,
-          decoration: const InputDecoration(
-            labelText: '最大输出 (max_tokens)',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-          items: _maxTokenOptions
-              .map(
-                (t) => DropdownMenuItem(
-                  value: t,
-                  child: Text(t >= 1024 ? '${t ~/ 1024}K' : t.toString()),
-                ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              _saveImmediately(_config.copyWith(maxTokens: value));
-            }
-          },
+        MobileSettingsSelectField<int>(
+          value: _config.maxTokens,
+          options: _maxTokenOptions,
+          labelFor: (value) =>
+              value >= 1024 ? '${value ~/ 1024}K' : value.toString(),
+          label: '最大输出 (max_tokens)',
+          onChanged: (value) =>
+              _saveImmediately(_config.copyWith(maxTokens: value)),
         ),
         const SizedBox(height: 12),
         _AutoSavedSettingsTextField(

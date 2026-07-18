@@ -18,6 +18,7 @@ import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 
@@ -642,15 +643,10 @@ class _TimelinePageState extends State<TimelinePage> {
       appBar: widget.showAppBar
           ? (Platform.isMacOS
                 ? null
-                : AppBar(
+                : MobileBlurAppBar(
                     title: GestureDetector(
                       onTap: _onAppBarTap,
                       child: const Text('时间线'),
-                    ),
-                    scrolledUnderElevation: 1,
-                    bottom: const PreferredSize(
-                      preferredSize: Size.fromHeight(0.5),
-                      child: Divider(height: 0.5, thickness: 0.5),
                     ),
                   ))
           : null,

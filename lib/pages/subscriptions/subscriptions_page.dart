@@ -68,9 +68,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
-                    16,
+                    12,
                     MediaQuery.paddingOf(context).top + 8,
-                    16,
+                    12,
                     8,
                   ),
                   child: TextField(
@@ -180,12 +180,14 @@ class _RecentReadEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
       child: Material(
         color: (isDark ? Colors.white : Colors.black).withValues(
           alpha: isDark ? 0.035 : 0.022,
         ),
-        borderRadius: BorderRadius.circular(16),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => Get.toNamed(Routes.recentRead),
@@ -317,20 +319,17 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: cs.errorContainer.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.cloud_off_rounded, size: 48, color: cs.error),
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 44,
+              color: cs.error.withValues(alpha: 0.72),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               '无法获取订阅数据',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: cs.onSurface,
               ),
             ),
@@ -341,7 +340,7 @@ class _ErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh, size: 18),
@@ -369,19 +368,12 @@ class _EmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.search_off_rounded,
-                size: 56,
-                color: cs.primary,
-              ),
+            Icon(
+              Icons.search_off_rounded,
+              size: 44,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.58),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               message ?? '暂无订阅源',
               style: TextStyle(
@@ -392,8 +384,8 @@ class _EmptyView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onClear != null) ...[
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
+              const SizedBox(height: 20),
+              TextButton.icon(
                 onPressed: onClear,
                 icon: const Icon(Icons.clear_all, size: 18),
                 label: const Text('清空搜索'),
@@ -463,7 +455,7 @@ class _ViewSectionState extends State<_ViewSection> {
         InkWell(
           onTap: _openAll,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             child: Row(
               children: [
                 PillTag(
@@ -734,7 +726,7 @@ class _FeedCard extends StatelessWidget {
       final hasUnread = unreadCount > 0;
 
       return Container(
-        margin: const EdgeInsets.only(left: 48, right: 16, bottom: 8),
+        margin: const EdgeInsets.only(left: 48, right: 12, bottom: 8),
         decoration: BoxDecoration(
           // 如果有未读，背景泛起柔和的 Primary 强调色；否则为安静的表面色
           color: hasUnread

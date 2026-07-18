@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,6 +6,7 @@ import 'package:get/get.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/continuous_rectangle.dart';
 import '../../common/widgets/app_glass.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../utils/move_to_background.dart';
@@ -71,7 +71,7 @@ class _MainPageState extends State<MainPage> {
       return _buildMacOSLayout(colorScheme);
     }
 
-    return _buildMobileLayout(context, colorScheme);
+    return _buildMobileLayout(context);
   }
 
   Widget _buildMacOSLayout(ColorScheme colorScheme) {
@@ -117,7 +117,7 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildMobileLayout(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -127,7 +127,7 @@ class _MainPageState extends State<MainPage> {
       child: Scaffold(
         extendBody: true,
         extendBodyBehindAppBar: true,
-        appBar: AppBar(
+        appBar: MobileBlurAppBar(
           leadingWidth: 130,
           leading: Obx(() {
             if (controller.currentIndex.value != 0) {
@@ -149,18 +149,6 @@ class _MainPageState extends State<MainPage> {
             () => Text(
               _titles[controller.currentIndex.value],
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-            ),
-          ),
-          centerTitle: true,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          flexibleSpace: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                color: colorScheme.surface.withValues(alpha: 0.50),
-              ),
             ),
           ),
           actions: [
@@ -324,15 +312,14 @@ class _MobileFloatingNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: SizedBox(
-        height: 48,
+        height: 56,
         child: CustomPaint(
           painter: _MobileNavigationShadowPainter(isDark: isDark),
           child: AppGlassSurface(
-            borderRadius: 24,
+            borderRadius: 28,
             padding: EdgeInsets.zero,
             tone: AppGlassTone.panel,
             nativeBackdrop: true,
@@ -396,7 +383,7 @@ class _MobileNavigationShadowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = continuousRectanglePath(Offset.zero & size, 24);
+    final path = continuousRectanglePath(Offset.zero & size, 28);
     final outside = Path()
       ..fillType = PathFillType.evenOdd
       ..addRect((Offset.zero & size).inflate(32))

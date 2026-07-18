@@ -568,7 +568,7 @@ class FeedDetailPage extends StatelessWidget {
             SliverAppBar(
               pinned: true,
               toolbarHeight: 68,
-              backgroundColor: cs.surface.withValues(alpha: 0.82),
+              backgroundColor: cs.surface.withValues(alpha: 0.74),
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
@@ -1278,24 +1278,17 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: colorScheme.errorContainer.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.cloud_off_rounded,
-                size: 48,
-                color: colorScheme.error,
-              ),
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 44,
+              color: colorScheme.error.withValues(alpha: 0.72),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               '数据加载异常',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: colorScheme.onSurface,
               ),
             ),
@@ -1310,7 +1303,7 @@ class _ErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh, size: 18),
@@ -1357,24 +1350,17 @@ class _EmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isUnread ? Icons.done_all_rounded : Icons.inbox_outlined,
-                size: 56,
-                color: colorScheme.primary,
-              ),
+            Icon(
+              isUnread ? Icons.done_all_rounded : Icons.inbox_outlined,
+              size: 44,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.58),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               isUnread ? '全部读完啦' : '暂无文章',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: colorScheme.onSurface,
               ),
             ),
@@ -1389,20 +1375,11 @@ class _EmptyView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 32),
-              OutlinedButton.icon(
+              const SizedBox(height: 20),
+              TextButton.icon(
                 onPressed: onRetry,
-                icon: const Icon(Icons.sync, size: 18),
-                label: const Text('强制同步'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('刷新'),
               ),
             ],
           ],

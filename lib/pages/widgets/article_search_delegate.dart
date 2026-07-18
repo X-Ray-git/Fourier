@@ -135,20 +135,17 @@ class ArticleSearchDelegate extends SearchDelegate<ArticleModel?> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: cs.primaryContainer.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 56, color: cs.primary),
+            Icon(
+              icon,
+              size: 44,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.58),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               title,
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: cs.onSurface,
               ),
             ),

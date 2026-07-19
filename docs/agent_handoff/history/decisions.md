@@ -596,7 +596,7 @@
 
 背景：旧 `release.sh` 会在当前任意分支创建版本提交和 annotated tag，但推送时固定执行 `git push origin main` 后再单独推 tag。在功能分支误运行时，tag 可能包含尚未合入主线的代码。发布脚本还会继续向已经解体完成的根 `AGENT_HANDOFF.md` 追加足迹。与此同时，工作流使用的 `actions/*@v4` 已进入 Node 20 淘汰期。
 
-决策：脚本在修改文件前强制确认当前分支精确为 `main`，非 main 和 detached HEAD 均立即失败；版本号、干净工作区、annotated tag 和 release notes 规则保持不变。发布可复现命令改为追加到 `docs/agent_handoff/history/releases.md`。GitHub-hosted workflow 更新到 Node 24 对应的 `checkout@v7`、`setup-java@v6`、`upload-artifact@v7` 和 `download-artifact@v8`，不改变 Flutter `3.41.6`、Java 17、Android 签名、`macos-26` 或 arm64 校验。
+决策：脚本在修改文件前强制确认当前分支精确为 `main`，非 main 和 detached HEAD 均立即失败；版本号、干净工作区、annotated tag 和 release notes 规则保持不变。发布可复现命令改为追加到 `docs/agent_handoff/history/releases.md`。GitHub-hosted workflow 更新到 Node 24 对应的 `checkout@v7`、`setup-java@v6`、`upload-artifact@v7` 和 `download-artifact@v8`；当时保留 Flutter `3.41.6`、Java 17、Android 签名、`macos-26` 和 arm64 校验，Flutter pin 后续由独立工具链迁移决策更新。
 
 后果：功能分支不能直接触发正式发布，根交接入口不会再次随 release 增长。Actions 升级已通过本地 YAML、脚本、analyze 和测试检查，但只有下一次用户明确允许的 tag 构建才能验证远程 action 运行时；届时必须同时确认 Android、macOS arm64 和 GitHub Release 三个阶段。
 
@@ -607,3 +607,11 @@
 决策：保留 `Dismissible` 的手势、阈值、确认回调和卡片位移，但不使用它的背景槽位。Flutter 内部会用矩形 `_DismissibleClipper` 把背景限制在已让出的矩形条带，该矩形会截掉移动卡片圆角伸向彩色区域的弧线。当前改为固定圆角 `ClipRRect > Stack`：下层根据位移方向绘制 `_ReviewSwipeRevealClipper` 的圆角路径差集，上层无背景的 `Dismissible` 只移动卡片。外层、固定路径和移动路径统一复用 `ArticleCardChrome.radius`。
 
 后果：Android 真机已确认外侧圆角与移动交界圆角同时正确，滑动阈值和保留/移除业务行为不变。以后调整审核横滑时，不要把动作背景放回 `Dismissible.background/secondaryBackground`，也不要误以为单独增加 `ClipRRect` 能修复内部交界；若升级 Flutter，应先检查 `Dismissible` 是否仍使用矩形内部 clip，再决定是否可以简化该结构。
+
+## Flutter 3.44.6 与 macOS 纯 SwiftPM 工具链
+
+背景：本机升级到 Flutter `3.44.6` 后，Flutter 自动为 macOS 工程加入 `FlutterGeneratedPluginSwiftPackage` 和 scheme prepare pre-action，同时给 Android 增加 `android.builtInKotlin=false`、`android.newDsl=false` 兼容开关。仓库 CI 仍固定 `3.41.6`，且传递依赖 `screen_retriever_macos 0.2.0` 不支持 SwiftPM，导致本机落入 SwiftPM + CocoaPods 混合模式并持续输出未来将升级为错误的兼容警告。全部插件升级兼容后，Flutter 又明确提示旧 Podfile 会继续触发无意义的 `pod install`。
+
+决策：正式采用 Flutter `3.44.6`，在 `pubspec.yaml` 声明 Flutter `>=3.44.0`、Dart `^3.12.2`，并同步更新 Android/macOS 两个 GitHub Actions job。只定向升级 `screen_retriever` 家族到 `0.2.2`；随 Flutter SDK 解析变化接受 `meta 1.18.0` 和 `test_api 0.7.11`，不扩展到其余可升级依赖。macOS 使用 `pod deintegrate` 移除 Pods frameworks、build phases、xcconfig 与 workspace 引用，删除 Podfile/lock；原 Podfile 唯一自定义的 `10.15` deployment target 已由 Xcode 工程三个配置和 Swift package manifest明确覆盖。旧 `COCOAPODS_PARALLEL_CODE_SIGN=false` 同步删除，debug library validation 与 `ENABLE_DEBUG_DYLIB=NO` 保持原样。
+
+后果：macOS 插件现在全部由 SwiftPM 生成包管理，构建不再运行 CocoaPods；本地 Android Debug、macOS Debug 和 macOS Release 均通过，Release 主程序为 arm64。以后升级 Flutter 时必须同时维护 pubspec 最低约束、lockfile 和 CI pin；若日志重新出现 `Running pod install`，应视为 CocoaPods 集成被误恢复。下一次 tag 仍需在 GitHub `macos-26` runner 上验证 SwiftPM、arm64 和 Release 上传全链路。

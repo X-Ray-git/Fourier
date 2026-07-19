@@ -58,12 +58,11 @@ macOS 是近期 UI 工作的主要验证目标。
 已知坑：
 
 - 不要重新采用“直接移动 `standardWindowButton`”方案。系统按钮的可见 frame 可以移动，但 AppKit 私有的整组 hover tracking 仍停留在默认位置，造成方向相关的提前 hover/消失；手工复制 tracking area 会丢失首次 hover 状态，移动 `NSTitlebarView` 又会破坏 hit test。当前自绘 AppKit 控件已经补齐整组 hover、非激活灰态和系统 action 转发。
-- 本地 macOS release 构建可能因为签名/framework 原因失败；本地 UI 验证使用 debug build。
+- 项目从 Flutter `3.44.6` 起使用纯 Swift Package Manager 管理 macOS 插件。`screen_retriever` 已升级到 `0.2.2`，全部插件进入生成的 `FlutterGeneratedPluginSwiftPackage`；CocoaPods 已 deintegrate，仓库不再保留 Podfile/lock、Pods xcconfig include 或 workspace Pods 引用。
+- 迁移时本地 Android Debug、macOS Debug 和 macOS Release 均已构建成功，Release 主程序确认为 arm64；UI 调试仍优先使用 debug build。
 - 如果 `flutter run -d macos` 看似卡住，先检查 debug 日志量或 foregrounding 问题，不要直接归因于应用启动失败。
 - AppKit 窗口几何变化可能被仍在运行的应用缓存。验证红黄绿按钮位置前应完全退出应用。
-- macOS/Xcode 26 环境下，`flutter run -d macos --no-pub` 曾在 `[CP] Embed Pods Frameworks` 阶段出现 `Killed: 9 "${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh"`。
-- 当前处理是：Debug 配置覆盖 `COCOAPODS_PARALLEL_CODE_SIGN=false`，并在 `DebugProfile.entitlements` 添加 `com.apple.security.cs.disable-library-validation`。前者避免 CocoaPods 并行 ad-hoc signing 被系统无诊断杀掉，后者允许 debug app 加载本地 ad-hoc framework。
-- 如果用户机器再次遇到类似问题，先用 `flutter build macos --debug --no-pub -v` 看 Xcode 实际环境中 `COCOAPODS_PARALLEL_CODE_SIGN` 是否为 `false`，再考虑 `rm -rf build/macos` 重建。
+- macOS/Xcode 26 环境下曾在 CocoaPods 的 `[CP] Embed Pods Frameworks` 阶段出现 `Killed: 9`；该路径已随纯 SwiftPM 迁移删除。不要恢复旧的 `COCOAPODS_PARALLEL_CODE_SIGN=false` 补丁。`DebugProfile.entitlements` 中的 library validation 例外仍保留，用于本地 debug framework。
 - 2026-07-08 又出现一种不同的 `flutter run -d macos --no-pub` 失败：Xcode 构建成功，Flutter 随后报 `Error waiting for a debug connection: The log reader stopped unexpectedly, or never started.`。系统日志显示 `Auto Folo -> Auto Folo.debug.dylib` 被拒载：`library load denied by system policy`。
 - 这个问题不是 Dart 业务崩溃，也不是 `[CP] Embed Pods Frameworks` 被 kill。直接 `open build/macos/Build/Products/Debug/Auto Folo.app` 可以启动应用，但 Flutter 等不到 VM Service，因为 debug dylib 没加载成功。
 - 已验证修复：Debug 配置设置 `ENABLE_DEBUG_DYLIB = NO`，避免 Xcode 把 Debug 代码拆到 `Auto Folo.debug.dylib`。修改后需要 `flutter clean && flutter pub get` 让 Xcode 重新生成产物，再运行 `flutter run -d macos --no-pub`。

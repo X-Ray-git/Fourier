@@ -13,6 +13,7 @@ flutter build macos --debug
 
 - Flutter 命令可能需要权限更新 Flutter SDK cache。
 - 完整 `dart analyze` 会很吵，因为 `reference/` 包含外部复制来的参考工程。
+- Flutter `3.44.6` 的分析器会对现有 renderer 和少量 helper 报 `prefer_initializing_formals` info；工具链迁移时共观察到 59 条，没有 warning/error。CI 使用 `flutter analyze --no-fatal-infos lib test`。不要为了消除本次升级带来的 info 顺带机械重写液态玻璃 renderer；后续可作为独立无行为重构处理。
 
 当前测试：
 

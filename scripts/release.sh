@@ -15,7 +15,8 @@ quoting mistake and the script exits before creating commits or tags.
 
 The script reads the current pubspec build number, increments it by one,
 commits the pubspec bump and documentation footprint, creates an annotated tag
-v<version>, and optionally pushes main plus the tag to origin.
+v<version>, and optionally pushes main plus the tag to origin. Releases must be
+created from the main branch.
 EOF
 }
 
@@ -77,6 +78,12 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
+current_branch="$(git branch --show-current)"
+if [[ "$current_branch" != "main" ]]; then
+  echo "Releases must be created from main, current branch: ${current_branch:-detached HEAD}" >&2
+  exit 1
+fi
+
 if [[ -n "$(git status --short)" ]]; then
   echo "Working tree is not clean. Commit or stash changes before releasing." >&2
   exit 1
@@ -104,16 +111,22 @@ fi
 
 perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml
 
-footprint_message="${message//$'\n'/\\n}"
+release_history="docs/agent_handoff/history/releases.md"
+printf -v message_arg '%q' "$message"
+release_flags=""
+if [[ "$allow_literal_backslash_n" == true ]]; then
+  release_flags+=" --allow-literal-backslash-n"
+fi
+if [[ "$push_remote" == true ]]; then
+  release_flags+=" --push"
+fi
+{
+  printf '\n## %s\n\n```bash\n' "$tag"
+  printf './scripts/release.sh %s -m %s%s\n' "$version" "$message_arg" "$release_flags"
+  printf '```\n'
+} >> "$release_history"
 
-cat <<EOF >> AGENT_HANDOFF.md
-
----
-*🤖 Automated Release Footprint:*
-*执行指令: \`./scripts/release.sh $version -m "$footprint_message"$( [[ "$push_remote" == true ]] && echo " --push" )\`*
-EOF
-
-git add pubspec.yaml AGENT_HANDOFF.md
+git add pubspec.yaml "$release_history"
 git commit -m "chore: bump version to $version+$next_build"
 git tag -a "$tag" -m "$message"
 

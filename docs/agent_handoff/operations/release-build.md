@@ -5,10 +5,12 @@
 当前发布流程：
 
 - 使用 `scripts/release.sh`。
+- 脚本只允许在 `main` 分支运行；不要从功能分支直接创建发布 tag。
 - release tag 必须是 annotated tag。
 - GitHub Actions 会从 tag 构建 Android APK 和 macOS arm64 产物。
 - macOS 发布包必须保持 arm64。
 - macOS job 固定使用 `macos-26` ARM64 runner。原生侧边栏使用了 macOS 26 SDK 的 `NSGlassEffectView`，不要改回默认仍可能选择 Xcode 16 的 `macos-latest`，否则 CI 可能在 Swift 编译阶段失败。
+- 每次发布的可复现命令追加到 `docs/agent_handoff/history/releases.md`；根 `AGENT_HANDOFF.md` 始终保持为短入口。
 
 Release notes 规则：
 

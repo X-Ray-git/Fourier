@@ -979,7 +979,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   ) {
     return SizeTransition(
       sizeFactor: animation,
-      axisAlignment: 1,
+      alignment: Alignment.bottomCenter,
       child: FadeTransition(
         opacity: animation,
         child: _MacTrackpadReviewSwipe(
@@ -1030,7 +1030,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   ) {
     final transition = SizeTransition(
       sizeFactor: animation,
-      axisAlignment: -1,
+      alignment: Alignment.topCenter,
       child: FadeTransition(
         opacity: animation,
         child: Opacity(
@@ -1188,7 +1188,6 @@ class _MobileReviewDismissibleState extends State<_MobileReviewDismissible> {
         _offset,
         outerPadding: EdgeInsets.zero,
         radius: ArticleCardChrome.radius,
-        roundedOuterBoundary: false,
       ),
       child: DecoratedBox(
         decoration: BoxDecoration(color: color),
@@ -1465,13 +1464,11 @@ class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
     this.offset, {
     required this.outerPadding,
     required this.radius,
-    this.roundedOuterBoundary = true,
   });
 
   final double offset;
   final EdgeInsets outerPadding;
   final double radius;
-  final bool roundedOuterBoundary;
 
   @override
   Path getClip(Size size) {
@@ -1484,12 +1481,8 @@ class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
     if (offset == 0 || originalRect.isEmpty) return Path();
 
     final corner = Radius.circular(radius);
-    final original = Path();
-    if (roundedOuterBoundary) {
-      original.addRRect(RRect.fromRectAndRadius(originalRect, corner));
-    } else {
-      original.addRect(originalRect);
-    }
+    final original = Path()
+      ..addRRect(RRect.fromRectAndRadius(originalRect, corner));
     final translated = Path()
       ..addRRect(
         RRect.fromRectAndRadius(originalRect.shift(Offset(offset, 0)), corner),
@@ -1501,8 +1494,7 @@ class _ReviewSwipeRevealClipper extends CustomClipper<Path> {
   bool shouldReclip(_ReviewSwipeRevealClipper oldClipper) {
     return oldClipper.offset != offset ||
         oldClipper.outerPadding != outerPadding ||
-        oldClipper.radius != radius ||
-        oldClipper.roundedOuterBoundary != roundedOuterBoundary;
+        oldClipper.radius != radius;
   }
 }
 

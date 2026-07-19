@@ -56,11 +56,12 @@
 - macOS 透明 header + soft scroll edge 实验已按用户长期视觉反馈撤销。主时间线、垃圾拦截、最近阅读和订阅源详情改用共享 `MacHeaderPane`：固定 `surface` header，内容和 scrollbar 从其下方开始，中间栏 header 仍无底部分隔线。
 - macOS 文章 header 保持固定 `surface`，且继续不使用整块 `BackdropFilter`，避免采样相邻按钮高光。顶部状态不再显示“文章详情”、分隔线和阅读进度；正文大标题接近完全滚出后，文章标题左对齐进入 header，`1px outlineVariant / alpha 0.30` 分隔线与橙色阅读进度同步渐显。用户已完成视觉验证。
 - 垃圾拦截同步按钮与主时间线共用 `AppGlassSyncButton`，右侧 inset 也统一为 `10px`。
-- Android 垃圾拦截仍由 `Dismissible` 处理手势和阈值；背景揭示使用“矩形动作区域减去平移后的圆角卡片”路径，保证卡片圆角移开后由保留/移除颜色填满，不残留页面底色。macOS 保持自己的圆角外边界和触控板手势实现。
+- Android 垃圾拦截仍由 `Dismissible` 处理手势和阈值；背景揭示与 macOS 共用“固定圆角卡片路径减去平移后的圆角卡片路径”差集，两层圆角都取 `ArticleCardChrome.radius`。这使保留/移除颜色填满卡片真实让出的区域，同时不在动作背景最外侧露出直角。两端仍分别使用 `Dismissible` 与 macOS 触控板手势。
 - 正文图片文章级预取/清理机制已覆盖 macOS 与 Android：macOS 预取全部本地未读文章，每篇最多 8 张、并发 16、当前文章优先 4 张；Android 预取前 50 篇本地未读文章，每篇最多 4 张、并发 4、当前文章优先 2 张，当前不区分 Wi-Fi 与移动网络。两端都不使用 hover，正常加载和查看器统一使用文章级缓存键；保持已读 5 分钟后串行清理该文章登记的原图/缩放缓存，恢复未读可重入队列。历史 `v2_` 缓存暂不清理。
 - 自动翻译/摘要等待队列已接入统一的已读状态入口：文章变成已读时移除尚未开始的任务，并清除自动翻译瞬态 `pending`；上游正文处理在流转前复查最新已读状态，避免旧快照重新入队。已开始请求、手动操作和垃圾拦截判定不受影响。
 - HTML 清洗修复了半透明内容被误删、顶层转义文本变成标签、同一文章正文更新命中旧缓存，以及 `<p><span><br></span></p>` 格式包装空段未被删除的问题。空段清洗保护媒体与 `id/name` 锚点，不合并正常非空段落。规范化缓存以正文 SHA-256 指纹校验变化，不额外长期保存第二份原始 HTML。没有有效地址的 iframe、video 或 audio 保留为明确的不可用提示，并提供经过 HTTP/HTTPS 校验的原文入口；video 与 audio 都支持从子级 `<source src>` 提取资源。
 - Bilibili 官方站外播放器已作为常见正文视频媒介接入：少数派最近 5 篇“本周看什么”在本地文章库中共确认 23 个标准 embed，另有少数派其他文章和小众软件使用相同结构。`BilibiliEmbedInfo` 只接受精确 `player.bilibili.com/player.html` 与有效 `bvid/aid`；readability 仅对白名单内的 YouTube/Bilibili iframe 放行。两者共用懒加载 `WebEmbedVideoPlayer`，但各自维护严格解析、导航域名和外部地址；Bilibili 未播放态不额外请求封面 API，也不解析真实媒体流。
+- 原文 Markdown 转换已从 `article_page.dart` 提取到 `ArticleMarkdownExportService`；单篇复制和批量构建共享标题去重、元数据、正文结构和转义规则。页面层只处理当前内容、剪贴板与反馈，后续静默订阅源批量功能不得再维护页面内 exporter。
 - 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。原文与已保存译文都在解析前走同一规范化路径，历史文章不需要数据库迁移。
 - Debug 与 Release 网络请求现在统一使用系统 HTTPS 证书信任链，不再通过 `badCertificateCallback` 无条件接受无效证书；自定义 `HttpClient` 的 `15s` idle timeout 保持不变。需要抓包时应安装并信任代理证书，而不是在应用内关闭校验。
 - 设置页保存语义已统一并经用户运行确认：离散选择直接保存，LLM 卡片不再保留整卡保存按钮；Temperature、并发数、正文宽度、滚动速度和已读窗口等单值数字输入按 Enter/失焦静默保存，不再排列保存按钮。Folo Session Token 与 DeepSeek API Key 已合并到“服务认证”，共用右下角“测试连接 + 保存认证”：测试使用当前输入但不保存，分别调用 Folo `/subscriptions` 与 DeepSeek `/models`；DeepSeek 留空时显示“未配置，已跳过”，不影响 Folo 测试结果。Folo 只要求 Session Token，DeepSeek 留空表示清除磁盘值和翻译/摘要服务的运行时 Key；旧备份中的 Client ID 和 Session ID 可被兼容导入但会忽略、清理且不再导出。Prompt 继续明确保存。macOS 外观 segmented 独占完整一行，重置默认立即落盘，快速离散切换按最后一次选择串行写入。

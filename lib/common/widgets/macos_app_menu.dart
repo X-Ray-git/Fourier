@@ -546,6 +546,9 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
 
   String _historyLabel(String verb, UndoAction? action) {
     if (action == null) return verb;
+    if (action.type == UndoActionType.batchRead) {
+      return '$verb“${action.actionName}” · ${action.articles.length} 篇';
+    }
     final title = _truncate(action.article.title, 18);
     return '$verb“${action.actionName}” · 《$title》';
   }

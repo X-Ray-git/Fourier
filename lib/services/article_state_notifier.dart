@@ -16,4 +16,10 @@ abstract final class ArticleStateNotifier {
     _lastEntryId = entryId;
     version.value++;
   }
+
+  /// 通知消费者重读整个可见集合，避免批量操作逐篇触发重建。
+  static void tickAll() {
+    _lastEntryId = null;
+    version.value++;
+  }
 }

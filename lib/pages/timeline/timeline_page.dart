@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -13,6 +15,7 @@ import '../../common/widgets/refresh_aware_scroll_physics.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
+import '../../common/widgets/app_context_menu.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_selection_button.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
@@ -26,6 +29,7 @@ import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/mac_article_shortcut_service.dart';
+import '../../services/article_markdown_export_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
@@ -34,6 +38,75 @@ import '../subscriptions/subscriptions_controller.dart';
 import '../widgets/article_card.dart';
 import 'timeline_controller.dart';
 import '../../utils/scroll_utils.dart';
+
+enum _SilentBatchAction { copy, save, copyAndMarkRead, saveAndMarkRead }
+
+extension on _SilentBatchAction {
+  bool get writesClipboard =>
+      this == _SilentBatchAction.copy ||
+      this == _SilentBatchAction.copyAndMarkRead;
+
+  bool get writesFile =>
+      this == _SilentBatchAction.save ||
+      this == _SilentBatchAction.saveAndMarkRead;
+
+  bool get marksRead =>
+      this == _SilentBatchAction.copyAndMarkRead ||
+      this == _SilentBatchAction.saveAndMarkRead;
+}
+
+class _SilentBatchSelectionIndicator extends StatelessWidget {
+  final bool selected;
+  final VoidCallback onPressed;
+
+  const _SilentBatchSelectionIndicator({
+    required this.selected,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      button: true,
+      checked: selected,
+      label: selected ? '取消选择文章' : '选择文章',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: SizedBox.square(
+            dimension: 26,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected
+                      ? cs.primary
+                      : cs.surface.withValues(alpha: isDark ? 0.76 : 0.88),
+                  border: Border.all(
+                    color: selected
+                        ? cs.primary
+                        : cs.onSurfaceVariant.withValues(alpha: 0.58),
+                  ),
+                ),
+                child: selected
+                    ? Icon(Icons.check_rounded, size: 13, color: cs.onPrimary)
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _TimelineAnimationProbe {
   static const bool _requested = bool.fromEnvironment(
@@ -166,8 +239,17 @@ class _TimelinePageState extends State<TimelinePage> {
   double _estimatedMacTimelineItemExtent = _defaultMacTimelineItemExtent;
   bool _isHandlingMacReadShortcut = false;
   Worker? _undoRestoreWorker;
+  Worker? _batchScopeWorker;
+  bool _isSilentBatchMode = false;
+  bool _isSilentBatchProcessing = false;
+  final Set<String> _silentBatchSelection = {};
 
   Map<String, GlobalKey> get _itemKeys => _listCoordinator.itemKeys;
+
+  bool get _isSilentAggregateScope =>
+      controller.isSilentSelected.value &&
+      controller.selectedFeedId.value == null &&
+      controller.selectedCategory.value == null;
 
   @override
   void initState() {
@@ -184,6 +266,17 @@ class _TimelinePageState extends State<TimelinePage> {
     _undoRestoreWorker = ever(
       UndoService.restoredAction,
       _handleUndoRestoreEvent,
+    );
+    _batchScopeWorker = everAll(
+      [
+        controller.isSilentSelected,
+        controller.selectedFeedId,
+        controller.selectedCategory,
+      ],
+      (_) {
+        if (_isSilentAggregateScope || !_isSilentBatchMode) return;
+        setState(_resetSilentBatchState);
+      },
     );
     _scrollController.addListener(_onScroll);
     if (Platform.isMacOS) {
@@ -219,6 +312,7 @@ class _TimelinePageState extends State<TimelinePage> {
     }
     _listCoordinator.dispose();
     _undoRestoreWorker?.dispose();
+    _batchScopeWorker?.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _emptyDetailFocusNode.dispose();
@@ -232,6 +326,136 @@ class _TimelinePageState extends State<TimelinePage> {
         _emptyDetailFocusNode.requestFocus();
       }
     });
+  }
+
+  void _enterSilentBatchMode() {
+    if (!_isSilentAggregateScope) return;
+    setState(() {
+      _isSilentBatchMode = true;
+      _silentBatchSelection.clear();
+    });
+  }
+
+  void _exitSilentBatchMode() {
+    if (_isSilentBatchProcessing) return;
+    setState(_resetSilentBatchState);
+  }
+
+  void _resetSilentBatchState() {
+    _isSilentBatchMode = false;
+    _isSilentBatchProcessing = false;
+    _silentBatchSelection.clear();
+  }
+
+  void _toggleSilentBatchArticle(String entryId) {
+    if (!_isSilentBatchMode || _isSilentBatchProcessing) return;
+    setState(() {
+      if (!_silentBatchSelection.add(entryId)) {
+        _silentBatchSelection.remove(entryId);
+      }
+    });
+  }
+
+  void _toggleAllSilentBatchArticles() {
+    if (!_isSilentBatchMode || _isSilentBatchProcessing) return;
+    final visibleIds = controller.articles
+        .map((article) => article.entryId)
+        .toSet();
+    setState(() {
+      if (visibleIds.isNotEmpty &&
+          visibleIds.every(_silentBatchSelection.contains)) {
+        _silentBatchSelection.clear();
+      } else {
+        _silentBatchSelection
+          ..clear()
+          ..addAll(visibleIds);
+      }
+    });
+  }
+
+  List<ArticleModel> get _selectedSilentBatchArticles => controller.articles
+      .where((article) => _silentBatchSelection.contains(article.entryId))
+      .toList(growable: false);
+
+  int get _activeSilentBatchSelectedCount =>
+      _selectedSilentBatchArticles.length;
+
+  Future<void> _performSilentBatchAction(_SilentBatchAction action) async {
+    if (_isSilentBatchProcessing) return;
+    final articles = _selectedSilentBatchArticles;
+    if (articles.isEmpty) {
+      AppFeedback.warning('尚未选择文章', '请先勾选要导出的静默文章');
+      return;
+    }
+
+    setState(() => _isSilentBatchProcessing = true);
+    try {
+      final markdown = await ArticleMarkdownExportService.buildBatch(articles);
+      if (markdown.trim().isEmpty) {
+        AppFeedback.warning('暂无可导出内容', '所选文章没有可用的标题、链接或正文');
+        return;
+      }
+
+      if (action.writesClipboard) {
+        await Clipboard.setData(ClipboardData(text: markdown));
+      } else if (action.writesFile) {
+        final saved = await _saveSilentBatchMarkdown(markdown);
+        if (!saved) return;
+      }
+
+      if (action.marksRead) {
+        final result = await UndoService.markBatchAsRead(articles);
+        final changedIds = result.changedArticles
+            .map((article) => article.entryId)
+            .toSet();
+        if (changedIds.contains(controller.selectedArticle.value?.entryId)) {
+          controller.selectedArticle.value = null;
+        }
+        if (!result.allApplied) {
+          if (result.changedArticles.isEmpty) {
+            AppFeedback.error('导出成功，批量已读失败', '服务端未改变任何文章状态，可以直接重试');
+          } else {
+            AppFeedback.warning(
+              '导出成功，部分标为已读',
+              '已标记 ${result.changedArticles.length} 篇；其余 ${result.unchangedArticles.length} 篇仍保持未读',
+            );
+          }
+          return;
+        }
+        controller.selectedArticle.value = null;
+        if (!mounted) return;
+        setState(_resetSilentBatchState);
+        AppFeedback.success('已导出并标记已读', '已处理 ${articles.length} 篇静默文章');
+        return;
+      }
+
+      AppFeedback.success(
+        action.writesClipboard ? '已复制 Markdown' : '已保存 Markdown',
+        '已导出 ${articles.length} 篇静默文章',
+      );
+    } catch (error) {
+      AppFeedback.error('批量导出失败', error.toString());
+    } finally {
+      if (mounted && _isSilentBatchMode) {
+        setState(() => _isSilentBatchProcessing = false);
+      }
+    }
+  }
+
+  Future<bool> _saveSilentBatchMarkdown(String markdown) async {
+    final now = DateTime.now();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    final suggestedName =
+        'auto-folo-silent-${now.year}-${twoDigits(now.month)}-${twoDigits(now.day)}.md';
+    final location = await getSaveLocation(
+      suggestedName: suggestedName,
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Markdown', extensions: ['md']),
+      ],
+    );
+    if (location == null) return false;
+    await File(location.path).writeAsString(markdown, flush: true);
+    return true;
   }
 
   void _onScroll() {
@@ -850,7 +1074,16 @@ class _TimelinePageState extends State<TimelinePage> {
                 width: 380,
                 child: MacHeaderPane(
                   headerHeight: kToolbarHeight,
-                  header: _MacTimelineAppBar(controller: controller),
+                  header: _MacTimelineAppBar(
+                    controller: controller,
+                    batchMode: _isSilentBatchMode,
+                    batchProcessing: _isSilentBatchProcessing,
+                    selectedCount: _activeSilentBatchSelectedCount,
+                    onEnterBatchMode: _enterSilentBatchMode,
+                    onExitBatchMode: _exitSilentBatchMode,
+                    onToggleAll: _toggleAllSilentBatchArticles,
+                    onBatchAction: _performSilentBatchAction,
+                  ),
                   body: content,
                 ),
               ),
@@ -1043,11 +1276,26 @@ class _TimelinePageState extends State<TimelinePage> {
         opacity: animation,
         child: Obx(() {
           final selectedId = controller.selectedArticle.value?.entryId;
-          return ArticleCard(
+          final card = ArticleCard(
             key: articleKey,
             article: article,
             isSelected: selectedId == article.entryId,
             onTap: () => _handleMacArticleTap(article),
+          );
+          if (!_isSilentBatchMode) return card;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              card,
+              Positioned(
+                top: 1,
+                right: 5,
+                child: _SilentBatchSelectionIndicator(
+                  selected: _silentBatchSelection.contains(article.entryId),
+                  onPressed: () => _toggleSilentBatchArticle(article.entryId),
+                ),
+              ),
+            ],
           );
         }),
       ),
@@ -1370,8 +1618,24 @@ class _EmptyView extends StatelessWidget {
 class _MacTimelineAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   final TimelineController controller;
+  final bool batchMode;
+  final bool batchProcessing;
+  final int selectedCount;
+  final VoidCallback onEnterBatchMode;
+  final VoidCallback onExitBatchMode;
+  final VoidCallback onToggleAll;
+  final ValueChanged<_SilentBatchAction> onBatchAction;
 
-  const _MacTimelineAppBar({required this.controller});
+  const _MacTimelineAppBar({
+    required this.controller,
+    required this.batchMode,
+    required this.batchProcessing,
+    required this.selectedCount,
+    required this.onEnterBatchMode,
+    required this.onExitBatchMode,
+    required this.onToggleAll,
+    required this.onBatchAction,
+  });
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -1383,11 +1647,24 @@ class _MacTimelineAppBar extends StatelessWidget
     return Obx(() {
       final feedId = controller.selectedFeedId.value;
       final category = controller.selectedCategory.value;
+      final isSilentAggregate =
+          controller.isSilentSelected.value &&
+          feedId == null &&
+          category == null;
+      final totalCount = controller.articles.length;
+      final allSelected = totalCount > 0 && selectedCount == totalCount;
 
-      String title = '时间线';
+      String title = isSilentAggregate ? '静默订阅源' : '时间线';
       String? subtitle;
 
-      if (feedId != null && Get.isRegistered<SubscriptionsController>()) {
+      if (batchMode) {
+        title = '批量选择';
+        subtitle = '已选择 $selectedCount 篇 · 当前列表 $totalCount 篇';
+      }
+
+      if (!batchMode &&
+          feedId != null &&
+          Get.isRegistered<SubscriptionsController>()) {
         final sub = Get.find<SubscriptionsController>();
         final feed = sub.allFeeds.firstWhereOrNull((f) => f.feedId == feedId);
         if (feed != null) {
@@ -1396,7 +1673,7 @@ class _MacTimelineAppBar extends StatelessWidget
           final total = controller.articles.length;
           subtitle = unread > 0 ? '$unread 篇未读 · $total 篇当前列表' : '$total 篇当前列表';
         }
-      } else if (category != null) {
+      } else if (!batchMode && category != null) {
         title = category;
         final unread = controller.articles.where((a) => !a.isRead).length;
         subtitle = '$unread 篇未读';
@@ -1426,16 +1703,47 @@ class _MacTimelineAppBar extends StatelessWidget
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        actions: [
-          if (controller.selectedMode.value != TimelineViewMode.read) ...[
-            _MacTimelineModeToggle(controller: controller),
-            const SizedBox(width: 8),
-          ],
-          _MacTimelineSortButton(controller: controller),
-          const SizedBox(width: 8),
-          _MacSyncButton(controller: controller, colorScheme: cs),
-          const SizedBox(width: 10),
-        ],
+        actions: batchMode
+            ? [
+                AppGlassIconButton(
+                  icon: allSelected
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
+                  tooltip: allSelected ? '全不选' : '全选当前列表',
+                  onPressed: batchProcessing ? null : onToggleAll,
+                ),
+                const SizedBox(width: 8),
+                _MacSilentBatchActionsButton(
+                  enabled: selectedCount > 0 && !batchProcessing,
+                  processing: batchProcessing,
+                  onSelected: onBatchAction,
+                ),
+                const SizedBox(width: 8),
+                AppGlassIconButton(
+                  icon: Icons.close_rounded,
+                  tooltip: '退出批量选择',
+                  onPressed: batchProcessing ? null : onExitBatchMode,
+                ),
+                const SizedBox(width: 10),
+              ]
+            : [
+                if (controller.selectedMode.value != TimelineViewMode.read) ...[
+                  _MacTimelineModeToggle(controller: controller),
+                  const SizedBox(width: 8),
+                ],
+                _MacTimelineSortButton(controller: controller),
+                const SizedBox(width: 8),
+                if (isSilentAggregate) ...[
+                  AppGlassIconButton(
+                    icon: Icons.checklist_rounded,
+                    tooltip: '批量处理静默文章',
+                    onPressed: onEnterBatchMode,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                _MacSyncButton(controller: controller, colorScheme: cs),
+                const SizedBox(width: 10),
+              ],
       );
     });
   }
@@ -1448,6 +1756,76 @@ class _MacTimelineModeToggle extends StatefulWidget {
 
   @override
   State<_MacTimelineModeToggle> createState() => _MacTimelineModeToggleState();
+}
+
+class _MacSilentBatchActionsButton extends StatefulWidget {
+  final bool enabled;
+  final bool processing;
+  final ValueChanged<_SilentBatchAction> onSelected;
+
+  const _MacSilentBatchActionsButton({
+    required this.enabled,
+    required this.processing,
+    required this.onSelected,
+  });
+
+  @override
+  State<_MacSilentBatchActionsButton> createState() =>
+      _MacSilentBatchActionsButtonState();
+}
+
+class _MacSilentBatchActionsButtonState
+    extends State<_MacSilentBatchActionsButton> {
+  final _buttonKey = GlobalKey();
+
+  Future<void> _showActions() async {
+    final renderObject = _buttonKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) return;
+    final origin = renderObject.localToGlobal(Offset.zero);
+    final selected = await AppContextMenu.show<_SilentBatchAction>(
+      context,
+      position: Offset(origin.dx, origin.dy + renderObject.size.height + 4),
+      minWidth: 190,
+      entries: const [
+        AppContextMenuAction(
+          value: _SilentBatchAction.copy,
+          icon: Icons.content_copy_rounded,
+          label: '复制 Markdown',
+        ),
+        AppContextMenuAction(
+          value: _SilentBatchAction.save,
+          icon: Icons.save_alt_rounded,
+          label: '保存 Markdown 文件',
+        ),
+        AppContextMenuDivider(),
+        AppContextMenuAction(
+          value: _SilentBatchAction.copyAndMarkRead,
+          icon: Icons.library_add_check_rounded,
+          label: '复制并标为已读',
+        ),
+        AppContextMenuAction(
+          value: _SilentBatchAction.saveAndMarkRead,
+          icon: Icons.download_done_rounded,
+          label: '保存并标为已读',
+        ),
+      ],
+    );
+    if (selected != null) widget.onSelected(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: _buttonKey,
+      child: AppGlassIconButton(
+        icon: widget.processing
+            ? Icons.hourglass_top_rounded
+            : Icons.ios_share_rounded,
+        tooltip: widget.processing ? '正在处理' : '批量导出',
+        onPressed: widget.enabled ? _showActions : null,
+      ),
+    );
+  }
 }
 
 class _MacTimelineModeToggleState extends State<_MacTimelineModeToggle> {

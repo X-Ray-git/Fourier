@@ -21,7 +21,6 @@ import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
-import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
 import '../../utils/article_length_estimator.dart';
 import '../subscriptions/subscriptions_controller.dart';
@@ -386,7 +385,6 @@ class TimelineController extends GetxController {
 
   void setViewMode(TimelineViewMode mode) {
     if (selectedMode.value == mode) return;
-    UndoService.clear();
     resetTimelineListAnimation(reason: 'viewMode.change');
     selectedMode.value = mode;
     _applyFilter();
@@ -471,6 +469,47 @@ class TimelineController extends GetxController {
     LocalArticleDbService.setReadState(entryId, false);
     _updateReadStateInMemory(entryId, false);
     ArticleStateNotifier.tick(entryId);
+  }
+
+  void setManyReadStatesLocal(
+    Iterable<ArticleModel> source, {
+    required bool isRead,
+  }) {
+    final byId = <String, ArticleModel>{
+      for (final article in source)
+        if (article.entryId.trim().isNotEmpty) article.entryId: article,
+    };
+    if (byId.isEmpty) return;
+
+    for (final entry in byId.entries) {
+      final entryId = entry.key;
+      if (isRead) {
+        GStorage.readStatus.put(entryId, true);
+      } else {
+        GStorage.readStatus.delete(entryId);
+      }
+      LocalArticleDbService.setReadState(
+        entryId,
+        isRead,
+        recordHistory: isRead,
+      );
+      _deferredReadVisualUpdates.remove(entryId);
+      _cancelDeferredArticleStateNotification(entryId);
+    }
+
+    allArticles.value = allArticles
+        .map(
+          (article) => byId.containsKey(article.entryId)
+              ? _copyArticleWithReadState(article, isRead)
+              : article,
+        )
+        .toList(growable: false);
+    resetTimelineListAnimation(
+      reason: isRead ? 'batch.markRead' : 'batch.markUnread',
+    );
+    _applyFilter();
+    _updateFilterCount();
+    ArticleStateNotifier.tickAll();
   }
 
   /// Broadcast the read-state change after the list removal has painted.
@@ -574,7 +613,6 @@ class TimelineController extends GetxController {
 
   void _handleScopeChanged() {
     _updateTimelineScopeKey();
-    UndoService.clear();
     _applyFilter();
     selectedArticle.value = null;
   }
@@ -810,25 +848,7 @@ class TimelineController extends GetxController {
     final a = allArticles[idx];
     if (a.isRead == isRead) return;
 
-    final updated = ArticleModel(
-      entryId: a.entryId,
-      feedId: a.feedId,
-      feedTitle: a.feedTitle,
-      feedImage: a.feedImage,
-      title: a.title,
-      url: a.url,
-      content: a.content,
-      publishedAt: a.publishedAt,
-      isRead: isRead,
-      category: a.category,
-      subscriptionCategory: a.subscriptionCategory,
-      author: a.author,
-      imageUrl: a.imageUrl,
-      isRejectedByAi: a.isRejectedByAi,
-      filterReason: a.filterReason,
-      filterReviewed: a.filterReviewed,
-      filteredAt: a.filteredAt,
-    );
+    final updated = _copyArticleWithReadState(a, isRead);
     if (useIncrementalUnreadRemoval &&
         isRead &&
         selectedMode.value == TimelineViewMode.unread) {
@@ -853,6 +873,28 @@ class TimelineController extends GetxController {
     if (updateSelectedArticle && selectedArticle.value?.entryId == entryId) {
       selectedArticle.value = updated;
     }
+  }
+
+  ArticleModel _copyArticleWithReadState(ArticleModel article, bool isRead) {
+    return ArticleModel(
+      entryId: article.entryId,
+      feedId: article.feedId,
+      feedTitle: article.feedTitle,
+      feedImage: article.feedImage,
+      title: article.title,
+      url: article.url,
+      content: article.content,
+      publishedAt: article.publishedAt,
+      isRead: isRead,
+      category: article.category,
+      subscriptionCategory: article.subscriptionCategory,
+      author: article.author,
+      imageUrl: article.imageUrl,
+      isRejectedByAi: article.isRejectedByAi,
+      filterReason: article.filterReason,
+      filterReviewed: article.filterReviewed,
+      filteredAt: article.filteredAt,
+    );
   }
 
   List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {

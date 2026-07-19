@@ -48,6 +48,30 @@ class BoundedHistory<T> {
     return true;
   }
 
+  bool resolvePartialUndo(
+    T original, {
+    required T undonePart,
+    required T remainingPart,
+  }) {
+    if (_redo.isEmpty || !identical(_redo.last, original)) return false;
+    _redo[_redo.length - 1] = undonePart;
+    _undo.add(remainingPart);
+    _trimUndo();
+    return true;
+  }
+
+  bool resolvePartialRedo(
+    T original, {
+    required T redonePart,
+    required T remainingPart,
+  }) {
+    if (_redo.isEmpty || !identical(_redo.last, original)) return false;
+    _redo[_redo.length - 1] = remainingPart;
+    _undo.add(redonePart);
+    _trimUndo();
+    return true;
+  }
+
   void removeWhere(bool Function(T value) predicate) {
     _undo.removeWhere(predicate);
     _redo.removeWhere(predicate);
@@ -56,5 +80,9 @@ class BoundedHistory<T> {
   void clear() {
     _undo.clear();
     _redo.clear();
+  }
+
+  void _trimUndo() {
+    if (_undo.length > limit) _undo.removeAt(0);
   }
 }

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import '../models/article.dart';
 import '../utils/storage.dart';
-import 'auto_ai_queue_coordinator.dart';
 import 'article_image_cache_service.dart';
 
 /// 本地文章库（已读/未读统一持久化）
@@ -139,7 +138,6 @@ abstract final class LocalArticleDbService {
     bool recordHistory = false,
   }) {
     if (isRead) {
-      AutoAiQueueCoordinator.onArticleMarkedRead(entryId);
       if (recordHistory) recordReadHistory(entryId);
     } else {
       GStorage.readHistory.delete(entryId);

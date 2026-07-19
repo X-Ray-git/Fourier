@@ -1207,28 +1207,40 @@ class _MobileReviewDismissibleState extends State<_MobileReviewDismissible> {
     return LayoutBuilder(
       builder: (context, constraints) {
         _width = constraints.maxWidth;
-        return Dismissible(
-          key: widget.dismissibleKey,
-          direction: DismissDirection.horizontal,
-          dismissThresholds: const {
-            DismissDirection.startToEnd: 0.35,
-            DismissDirection.endToStart: 0.35,
-          },
-          confirmDismiss: widget.confirmDismiss,
-          onUpdate: _handleUpdate,
-          background: _buildBackground(
-            color: widget.keepColor,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: 24),
-            icon: Icons.restore_rounded,
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(ArticleCardChrome.radius),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              Positioned.fill(
+                child: _offset >= 0
+                    ? _buildBackground(
+                        color: widget.keepColor,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(left: 24),
+                        icon: Icons.restore_rounded,
+                      )
+                    : _buildBackground(
+                        color: widget.rejectColor,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 24),
+                        icon: Icons.delete_sweep_rounded,
+                      ),
+              ),
+              Dismissible(
+                key: widget.dismissibleKey,
+                direction: DismissDirection.horizontal,
+                dismissThresholds: const {
+                  DismissDirection.startToEnd: 0.35,
+                  DismissDirection.endToStart: 0.35,
+                },
+                confirmDismiss: widget.confirmDismiss,
+                onUpdate: _handleUpdate,
+                child: widget.child,
+              ),
+            ],
           ),
-          secondaryBackground: _buildBackground(
-            color: widget.rejectColor,
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 24),
-            icon: Icons.delete_sweep_rounded,
-          ),
-          child: widget.child,
         );
       },
     );

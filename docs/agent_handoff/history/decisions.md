@@ -599,3 +599,11 @@
 决策：脚本在修改文件前强制确认当前分支精确为 `main`，非 main 和 detached HEAD 均立即失败；版本号、干净工作区、annotated tag 和 release notes 规则保持不变。发布可复现命令改为追加到 `docs/agent_handoff/history/releases.md`。GitHub-hosted workflow 更新到 Node 24 对应的 `checkout@v7`、`setup-java@v6`、`upload-artifact@v7` 和 `download-artifact@v8`，不改变 Flutter `3.41.6`、Java 17、Android 签名、`macos-26` 或 arm64 校验。
 
 后果：功能分支不能直接触发正式发布，根交接入口不会再次随 release 增长。Actions 升级已通过本地 YAML、脚本、analyze 和测试检查，但只有下一次用户明确允许的 tag 构建才能验证远程 action 运行时；届时必须同时确认 Android、macOS arm64 和 GitHub Release 三个阶段。
+
+## Android 审核横滑背景绕开 Dismissible 的矩形裁剪
+
+背景：Android 垃圾拦截需要让保留/移除颜色精确填充圆角卡片横移后真实让出的区域。最初把圆角路径差集作为 `Dismissible.background/secondaryBackground`，随后又给整个组件补了同半径 `ClipRRect`；两次修改都无法消除彩色背景与移动卡片交界处的直角。Debug 检查点确认组件宽高、`16px` 半径、设备像素比、滑动进度和计算位移始终同步，问题不是配置、漏合并或状态更新滞后。
+
+决策：保留 `Dismissible` 的手势、阈值、确认回调和卡片位移，但不使用它的背景槽位。Flutter 内部会用矩形 `_DismissibleClipper` 把背景限制在已让出的矩形条带，该矩形会截掉移动卡片圆角伸向彩色区域的弧线。当前改为固定圆角 `ClipRRect > Stack`：下层根据位移方向绘制 `_ReviewSwipeRevealClipper` 的圆角路径差集，上层无背景的 `Dismissible` 只移动卡片。外层、固定路径和移动路径统一复用 `ArticleCardChrome.radius`。
+
+后果：Android 真机已确认外侧圆角与移动交界圆角同时正确，滑动阈值和保留/移除业务行为不变。以后调整审核横滑时，不要把动作背景放回 `Dismissible.background/secondaryBackground`，也不要误以为单独增加 `ClipRRect` 能修复内部交界；若升级 Flutter，应先检查 `Dismissible` 是否仍使用矩形内部 clip，再决定是否可以简化该结构。

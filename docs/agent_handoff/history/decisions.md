@@ -575,3 +575,19 @@
 决策：删除 Android 对旧 switch 的依赖，主时间线和订阅源详情复用 `MobileArticleRangeButton`。触发器是 `36px` 圆形按钮，点击后由 `AppMobileGlassSheet` 明确选择“未读/全部”；组件只接收真实状态和回调，不保存延迟视觉副本。触发图标两种状态都使用主题 `onSurface`，不用橙色重复表达选中；面板内选项仍使用橙色强调当前值。主 shell 的右侧搜索入口同样改用 `36px` `AppGlassIconButton`，与左侧范围按钮分别保持 `12px` 边距。普通时间线和垃圾拦截卡片统一使用 `ArticleCardChrome` 的 `14px` 标题和 `12px` 辅助正文，先与 macOS 对齐后再根据真机视觉反馈调整。
 
 后果：文章范围的业务语义和入口外观集中维护，不再因“未读”状态单独变成橙色；已读文章仍通过最近阅读等独立页面访问。左右 header 工具保持同尺寸和对称边距，而不为搜索复制新外壳。Android 字体变得更紧凑，需要重点验证手机可读性；后续若调整字号，只改共享 token，不在普通卡片和垃圾拦截分别覆写。
+
+## Markdown 导出从文章页面提取为共享服务
+
+背景：复制原文的 HTML/chunk 到 Markdown 转换最初完整定义在 `article_page.dart` 内。静默订阅源批量复制和保存开始开发后，继续从时间线依赖文章页面内部 exporter，或再复制一份转换代码，都会让标题去重、元数据、表格、列表、代码块和转义规则发生分叉。
+
+决策：将转换集中到 `ArticleMarkdownExportService`。单篇入口接收页面已经解析的 `ArticleModel + HtmlChunk`；批量入口接收文章快照，在 isolate 中规范化并解析各篇正文，按当前顺序用 `---` 分隔。正文尚未缓存时仍输出标题、来源和原文链接，并增加明确提示。文章页面只保留剪贴板交互和用户反馈；时间线批量功能只能调用 service，不能反向 import 页面或新增另一套 exporter。
+
+后果：单篇与批量导出的 Markdown 规则只有一个维护点。批量功能合入时应把测试直接指向 service，并覆盖正文缺失、顺序、标题去重、表格、列表、代码块和链接转义；不要为了测试 exporter 而 import 整个文章页面。
+
+## 发布只允许从 main 创建并迁移到 Node 24 Actions
+
+背景：旧 `release.sh` 会在当前任意分支创建版本提交和 annotated tag，但推送时固定执行 `git push origin main` 后再单独推 tag。在功能分支误运行时，tag 可能包含尚未合入主线的代码。发布脚本还会继续向已经解体完成的根 `AGENT_HANDOFF.md` 追加足迹。与此同时，工作流使用的 `actions/*@v4` 已进入 Node 20 淘汰期。
+
+决策：脚本在修改文件前强制确认当前分支精确为 `main`，非 main 和 detached HEAD 均立即失败；版本号、干净工作区、annotated tag 和 release notes 规则保持不变。发布可复现命令改为追加到 `docs/agent_handoff/history/releases.md`。GitHub-hosted workflow 更新到 Node 24 对应的 `checkout@v7`、`setup-java@v6`、`upload-artifact@v7` 和 `download-artifact@v8`，不改变 Flutter `3.41.6`、Java 17、Android 签名、`macos-26` 或 arm64 校验。
+
+后果：功能分支不能直接触发正式发布，根交接入口不会再次随 release 增长。Actions 升级已通过本地 YAML、脚本、analyze 和测试检查，但只有下一次用户明确允许的 tag 构建才能验证远程 action 运行时；届时必须同时确认 Android、macOS arm64 和 GitHub Release 三个阶段。

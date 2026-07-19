@@ -93,21 +93,6 @@ abstract final class AutoTranslationWorker {
 
   static int get queueSize => _queue.length;
 
-  /// 仅移除尚未开始的任务；已进入当前处理批次的请求继续完成。
-  static bool removeQueued(String entryId) {
-    final previousLength = _queue.length;
-    _queue.removeWhere((article) => article.entryId == entryId);
-    final removed = _queue.length != previousLength;
-    if (!removed) return false;
-
-    TranslationService.clearPending(entryId);
-    if (_queue.isEmpty && !_isProcessing) {
-      _processingTimer?.cancel();
-      _processingTimer = null;
-    }
-    return true;
-  }
-
   static void cancelProcessing() {
     _processingTimer?.cancel();
     _processingTimer = null;

@@ -155,12 +155,14 @@ class _MainPageState extends State<MainPage> {
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.search_rounded),
+            AppGlassIconButton(
+              icon: Icons.search_rounded,
               tooltip: '搜索',
+              size: 36,
+              iconSize: 19,
               onPressed: () => _openTimelineSearch(context),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 12),
           ],
         ),
         body: Obx(

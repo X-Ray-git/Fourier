@@ -1,9 +1,9 @@
 # 当前状态
 
-截至 2026-07-18：
+截至 2026-07-19：
 
 - `main` 是当前集成分支。
-- 当前 Android 设计迁移工作位于 `android` 分支；合入前不要把 `main` 描述为已经包含本轮移动端全量重构。
+- Android 设计迁移已通过 merge commit `bd8c1b8` 合入 `main`；新代理应以 `main` 中的移动端实现为当前事实，不再等待旧 `android` 分支。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
 - 最近一批 worktree 功能已经用 merge commit 合入 `main`，保留了分支历史。
 - 除非用户明确要求，否则不要创建 release/tag。

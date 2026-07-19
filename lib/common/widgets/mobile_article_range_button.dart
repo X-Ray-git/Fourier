@@ -71,7 +71,6 @@ class MobileArticleRangeButton extends StatelessWidget {
           ? Icons.filter_alt_rounded
           : Icons.filter_alt_off_rounded,
       tooltip: unreadOnly ? '范围：未读' : '范围：全部',
-      selected: unreadOnly,
       size: size,
       iconSize: 19,
       onPressed: () => _showPicker(context),

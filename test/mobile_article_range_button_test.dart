@@ -3,6 +3,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('uses the neutral foreground for both article ranges', (
+    tester,
+  ) async {
+    const onSurface = Color(0xffd5d7dc);
+
+    Future<Color?> pumpButton({required bool unreadOnly}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark().copyWith(
+            colorScheme: ThemeData.dark().colorScheme.copyWith(
+              primary: const Color(0xffff6d00),
+              onSurface: onSurface,
+            ),
+          ),
+          home: Scaffold(
+            body: MobileArticleRangeButton(
+              unreadOnly: unreadOnly,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      return tester.widget<Icon>(find.byType(Icon).first).color;
+    }
+
+    expect(await pumpButton(unreadOnly: true), onSurface);
+    expect(await pumpButton(unreadOnly: false), onSurface);
+  });
+
   testWidgets('selects the article range from the mobile sheet', (
     tester,
   ) async {

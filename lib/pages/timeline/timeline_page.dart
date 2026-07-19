@@ -1038,7 +1038,7 @@ class _TimelinePageState extends State<TimelinePage> {
     );
     return SizeTransition(
       sizeFactor: animation,
-      axisAlignment: 1,
+      alignment: Alignment.bottomCenter,
       child: FadeTransition(
         opacity: animation,
         child: Obx(() {
@@ -1063,7 +1063,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final articleKey = _listCoordinator.removedItemKeyFor(article.entryId);
     final transition = SizeTransition(
       sizeFactor: animation,
-      axisAlignment: -1,
+      alignment: Alignment.topCenter,
       child: FadeTransition(
         opacity: animation,
         child: ArticleCard(

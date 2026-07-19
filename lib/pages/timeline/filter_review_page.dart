@@ -979,7 +979,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   ) {
     return SizeTransition(
       sizeFactor: animation,
-      axisAlignment: 1,
+      alignment: Alignment.bottomCenter,
       child: FadeTransition(
         opacity: animation,
         child: _MacTrackpadReviewSwipe(
@@ -1030,7 +1030,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   ) {
     final transition = SizeTransition(
       sizeFactor: animation,
-      axisAlignment: -1,
+      alignment: Alignment.topCenter,
       child: FadeTransition(
         opacity: animation,
         child: Opacity(

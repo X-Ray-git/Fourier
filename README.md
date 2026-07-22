@@ -55,3 +55,8 @@ flutter test --no-pub
 
 - 交接入口：[`AGENT_HANDOFF.md`](AGENT_HANDOFF.md)
 - 专题知识库：[`docs/agent_handoff/README.md`](docs/agent_handoff/README.md)
+
+## 许可证
+
+Auto Folo 按照 [`AGPL-3.0-only`](LICENSE) 授权。第三方版权与许可证见
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

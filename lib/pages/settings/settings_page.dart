@@ -61,6 +61,15 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
 
+  void _showOpenSourceLicenses() {
+    showLicensePage(
+      context: context,
+      applicationName: 'Auto Folo',
+      applicationVersion: AppVersionService.version,
+      applicationLegalese: 'Licensed under AGPL-3.0-only.',
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1118,6 +1127,12 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 12),
         _MacSettingsMetadataRow(label: 'Folo API', value: 'api.folo.is'),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _showOpenSourceLicenses,
+          icon: const Icon(Icons.description_outlined, size: 17),
+          label: const Text('开源许可证'),
+        ),
       ],
     );
   }
@@ -1469,6 +1484,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       fontSize: 12,
                       color: colorScheme.onSurfaceVariant,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _showOpenSourceLicenses,
+                    icon: const Icon(Icons.description_outlined, size: 17),
+                    label: const Text('开源许可证'),
                   ),
                 ],
               ),
@@ -1997,6 +2018,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         alpha: 0.7,
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _showOpenSourceLicenses,
+                    icon: const Icon(Icons.description_outlined, size: 17),
+                    label: const Text('开源许可证'),
                   ),
                 ],
               ),

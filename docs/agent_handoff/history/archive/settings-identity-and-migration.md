@@ -176,7 +176,7 @@ macOS：
 
 - `macos/Runner/Configs/AppInfo.xcconfig`
   - `PRODUCT_BUNDLE_IDENTIFIER = io.github.xraygit.autofolo`
-  - `PRODUCT_COPYRIGHT = Copyright © 2026 X-Ray. All rights reserved.`
+  - 不设置个人 `PRODUCT_COPYRIGHT`；项目许可证与必要的上游版权声明统一从应用内“开源许可证”入口查看。
 - `macos/Runner.xcodeproj/project.pbxproj`
   - RunnerTests bundle id 改为 `io.github.xraygit.autofolo.RunnerTests`
 - `macos/Runner/AppDelegate.swift`

@@ -9,6 +9,3 @@ PRODUCT_NAME = Auto Folo
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = io.github.xraygit.autofolo
-
-// The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 X-Ray. All rights reserved.

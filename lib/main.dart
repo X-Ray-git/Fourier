@@ -22,6 +22,7 @@ import 'router/app_pages.dart';
 import 'pages/main/main_controller.dart';
 import 'pages/timeline/timeline_controller.dart';
 import 'services/account_service.dart';
+import 'services/app_license_service.dart';
 import 'services/app_version_service.dart';
 import 'services/mac_article_shortcut_service.dart';
 import 'utils/storage.dart';
@@ -73,6 +74,7 @@ class SelectUnselectedArticleBoundaryAction
 
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
+  AppLicenseService.register();
 
   // 扩大全局图片内存缓存池到 300MB，解决长列表大图滚动时由于频繁换入换出导致的解码掉帧问题
   PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 300;

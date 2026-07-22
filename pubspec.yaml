@@ -84,6 +84,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - LICENSE
+    - THIRD_PARTY_NOTICES.md
+    - third_party/licenses/
   shaders:
     - shaders/liquid_glass/lightweight_glass.frag
     - shaders/liquid_glass/interactive_indicator.frag

@@ -33,6 +33,9 @@ class AppGlassMorphSelectionButton<T> extends StatefulWidget {
   final bool useOwnLayer;
   final double panelWidth;
   final Color? triggerForegroundColor;
+  final IconData? triggerIcon;
+  final bool enabled;
+  final bool showSelectionIndicator;
 
   const AppGlassMorphSelectionButton({
     super.key,
@@ -46,6 +49,9 @@ class AppGlassMorphSelectionButton<T> extends StatefulWidget {
     this.useOwnLayer = true,
     this.panelWidth = 188,
     this.triggerForegroundColor,
+    this.triggerIcon,
+    this.enabled = true,
+    this.showSelectionIndicator = true,
   }) : assert(options.length >= 2);
 
   @override
@@ -104,6 +110,16 @@ class _AppGlassMorphSelectionButtonState<T>
   }
 
   @override
+  void didUpdateWidget(covariant AppGlassMorphSelectionButton<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.enabled && !widget.enabled) {
+      _hovered = false;
+      _pressed = false;
+      _removeOverlay(immediate: true);
+    }
+  }
+
+  @override
   void dispose() {
     _removeOverlay(immediate: true);
     _morphController.dispose();
@@ -137,8 +153,12 @@ class _AppGlassMorphSelectionButtonState<T>
     return AppGlassTooltip(
       message: widget.tooltip,
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
+        cursor: widget.enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        onEnter: widget.enabled
+            ? (_) => setState(() => _hovered = true)
+            : null,
         onExit: (_) => setState(() {
           _hovered = false;
           _pressed = false;
@@ -146,22 +166,28 @@ class _AppGlassMorphSelectionButtonState<T>
         child: GestureDetector(
           key: _buttonKey,
           behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => setState(() => _pressed = true),
-          onTapUp: (_) => setState(() => _pressed = false),
-          onTapCancel: () => setState(() => _pressed = false),
-          onTap: _toggleOverlay,
+          onTapDown: widget.enabled
+              ? (_) => setState(() => _pressed = true)
+              : null,
+          onTapUp: widget.enabled
+              ? (_) => setState(() => _pressed = false)
+              : null,
+          onTapCancel: widget.enabled
+              ? () => setState(() => _pressed = false)
+              : null,
+          onTap: widget.enabled ? _toggleOverlay : null,
           child: AnimatedScale(
             scale: _pressed ? 0.96 : 1.0,
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOutCubic,
             child: AppGlassRoundControlChrome(
-              enabled: true,
+              enabled: widget.enabled,
               hovered: _hovered,
               pressed: _pressed,
               useOwnLayer: widget.useOwnLayer,
               size: _buttonSize,
               child: Icon(
-                option.icon,
+                widget.triggerIcon ?? option.icon,
                 size: 18,
                 color:
                     widget.triggerForegroundColor ??
@@ -183,6 +209,7 @@ class _AppGlassMorphSelectionButtonState<T>
   }
 
   void _showOverlay() {
+    if (!widget.enabled) return;
     final renderObject = _buttonKey.currentContext?.findRenderObject();
     final overlayState = Overlay.of(context);
     final overlayBox = overlayState.context.findRenderObject() as RenderBox?;
@@ -219,6 +246,7 @@ class _AppGlassMorphSelectionButtonState<T>
               child: _AppGlassMorphSelectionOverlay<T>(
                 morphController: _morphController,
                 selected: widget.value,
+                showSelectionIndicator: widget.showSelectionIndicator,
                 options: widget.options,
                 title: widget.title,
                 titleIcon: widget.titleIcon,
@@ -230,6 +258,7 @@ class _AppGlassMorphSelectionButtonState<T>
                   _removeOverlay();
                 },
                 collapsedIconColor: widget.triggerForegroundColor,
+                collapsedIcon: widget.triggerIcon ?? _selectedOption.icon,
                 glassSettings: _panelGlassSettings,
               ),
             ),
@@ -257,9 +286,58 @@ class _AppGlassMorphSelectionButtonState<T>
   }
 }
 
+/// A command menu that shares the same anchored liquid-glass morph as the
+/// low-cardinality selection controls, without presenting any command as a
+/// persistent selected value.
+class AppGlassMorphActionButton<T> extends StatelessWidget {
+  final List<AppGlassSelectionOption<T>> actions;
+  final String title;
+  final IconData titleIcon;
+  final IconData triggerIcon;
+  final String tooltip;
+  final ValueChanged<T> onSelected;
+  final bool enabled;
+  final bool useOwnLayer;
+  final double panelWidth;
+  final Color? triggerForegroundColor;
+
+  const AppGlassMorphActionButton({
+    super.key,
+    required this.actions,
+    required this.title,
+    required this.titleIcon,
+    required this.triggerIcon,
+    required this.tooltip,
+    required this.onSelected,
+    this.enabled = true,
+    this.useOwnLayer = true,
+    this.panelWidth = 188,
+    this.triggerForegroundColor,
+  }) : assert(actions.length >= 2);
+
+  @override
+  Widget build(BuildContext context) {
+    return AppGlassMorphSelectionButton<T>(
+      value: actions.first.value,
+      options: actions,
+      title: title,
+      titleIcon: titleIcon,
+      tooltip: tooltip,
+      onChanged: onSelected,
+      triggerIcon: triggerIcon,
+      enabled: enabled,
+      useOwnLayer: useOwnLayer,
+      panelWidth: panelWidth,
+      triggerForegroundColor: triggerForegroundColor,
+      showSelectionIndicator: false,
+    );
+  }
+}
+
 class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
   final glass.GlassMorphController morphController;
   final T selected;
+  final bool showSelectionIndicator;
   final List<AppGlassSelectionOption<T>> options;
   final String title;
   final IconData titleIcon;
@@ -268,11 +346,13 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
   final double panelWidth;
   final double panelHeight;
   final Color? collapsedIconColor;
+  final IconData collapsedIcon;
   final glass.LiquidGlassSettings glassSettings;
 
   const _AppGlassMorphSelectionOverlay({
     required this.morphController,
     required this.selected,
+    required this.showSelectionIndicator,
     required this.options,
     required this.title,
     required this.titleIcon,
@@ -281,15 +361,11 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
     required this.panelWidth,
     required this.panelHeight,
     required this.collapsedIconColor,
+    required this.collapsedIcon,
     required this.glassSettings,
   });
 
   static const double _buttonSize = 34;
-
-  AppGlassSelectionOption<T> get _selectedOption => options.firstWhere(
-    (option) => option.value == selected,
-    orElse: () => options.first,
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +428,7 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
                             width: _buttonSize,
                             height: _buttonSize,
                             child: Icon(
-                              _selectedOption.icon,
+                              collapsedIcon,
                               size: 18,
                               color: collapsedIconColor ?? cs.onSurfaceVariant,
                             ),
@@ -365,6 +441,7 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
                             ignoring: contentOpacity < 0.95,
                             child: _AppGlassSelectionPanelContent<T>(
                               selected: selected,
+                              showSelectionIndicator: showSelectionIndicator,
                               options: options,
                               title: title,
                               titleIcon: titleIcon,
@@ -412,6 +489,7 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
 
 class _AppGlassSelectionPanelContent<T> extends StatelessWidget {
   final T selected;
+  final bool showSelectionIndicator;
   final List<AppGlassSelectionOption<T>> options;
   final String title;
   final IconData titleIcon;
@@ -422,6 +500,7 @@ class _AppGlassSelectionPanelContent<T> extends StatelessWidget {
 
   const _AppGlassSelectionPanelContent({
     required this.selected,
+    required this.showSelectionIndicator,
     required this.options,
     required this.title,
     required this.titleIcon,
@@ -468,7 +547,8 @@ class _AppGlassSelectionPanelContent<T> extends StatelessWidget {
                   for (final option in options)
                     _AppGlassSelectionOptionRow<T>(
                       option: option,
-                      selected: option.value == selected,
+                      selected:
+                          showSelectionIndicator && option.value == selected,
                       onTap: () => onSelected(option.value),
                     ),
                 ],

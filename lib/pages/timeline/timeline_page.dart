@@ -15,7 +15,6 @@ import '../../common/widgets/refresh_aware_scroll_physics.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
-import '../../common/widgets/app_context_menu.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_selection_button.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
@@ -275,6 +274,7 @@ class _TimelinePageState extends State<TimelinePage> {
     );
     _scrollController.addListener(_onScroll);
     if (Platform.isMacOS) {
+      HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
       MacArticleShortcutService.instance.register(
         this,
         isActive: () =>
@@ -302,6 +302,7 @@ class _TimelinePageState extends State<TimelinePage> {
   void dispose() {
     controller.bindScrollToTopHandler(null);
     if (Platform.isMacOS) {
+      HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
       MacArticleShortcutService.instance.unregister(this);
       UndoService.unregisterRedoPreparation(this);
     }
@@ -321,6 +322,16 @@ class _TimelinePageState extends State<TimelinePage> {
         _emptyDetailFocusNode.requestFocus();
       }
     });
+  }
+
+  bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (!mounted || event is! KeyDownEvent) return false;
+    if (!_isSilentBatchMode || !_isActiveMacTimeline) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+
+    _exitSilentBatchMode();
+    return true;
   }
 
   void _enterSilentBatchMode() {
@@ -1675,7 +1686,7 @@ class _MacTimelineModeToggle extends StatefulWidget {
   State<_MacTimelineModeToggle> createState() => _MacTimelineModeToggleState();
 }
 
-class _MacSilentBatchActionsButton extends StatefulWidget {
+class _MacSilentBatchActionsButton extends StatelessWidget {
   final bool enabled;
   final bool processing;
   final ValueChanged<_SilentBatchAction> onSelected;
@@ -1686,61 +1697,42 @@ class _MacSilentBatchActionsButton extends StatefulWidget {
     required this.onSelected,
   });
 
-  @override
-  State<_MacSilentBatchActionsButton> createState() =>
-      _MacSilentBatchActionsButtonState();
-}
-
-class _MacSilentBatchActionsButtonState
-    extends State<_MacSilentBatchActionsButton> {
-  final _buttonKey = GlobalKey();
-
-  Future<void> _showActions() async {
-    final renderObject = _buttonKey.currentContext?.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached) return;
-    final origin = renderObject.localToGlobal(Offset.zero);
-    final selected = await AppContextMenu.show<_SilentBatchAction>(
-      context,
-      position: Offset(origin.dx, origin.dy + renderObject.size.height + 4),
-      minWidth: 190,
-      entries: const [
-        AppContextMenuAction(
-          value: _SilentBatchAction.copy,
-          icon: Icons.content_copy_rounded,
-          label: '复制 Markdown',
-        ),
-        AppContextMenuAction(
-          value: _SilentBatchAction.save,
-          icon: Icons.save_alt_rounded,
-          label: '保存 Markdown 文件',
-        ),
-        AppContextMenuDivider(),
-        AppContextMenuAction(
-          value: _SilentBatchAction.copyAndMarkRead,
-          icon: Icons.library_add_check_rounded,
-          label: '复制并标为已读',
-        ),
-        AppContextMenuAction(
-          value: _SilentBatchAction.saveAndMarkRead,
-          icon: Icons.download_done_rounded,
-          label: '保存并标为已读',
-        ),
-      ],
-    );
-    if (selected != null) widget.onSelected(selected);
-  }
+  static const _actions = [
+    AppGlassSelectionOption(
+      value: _SilentBatchAction.copy,
+      icon: Icons.content_copy_rounded,
+      label: '复制 Markdown',
+    ),
+    AppGlassSelectionOption(
+      value: _SilentBatchAction.save,
+      icon: Icons.save_alt_rounded,
+      label: '保存 Markdown 文件',
+    ),
+    AppGlassSelectionOption(
+      value: _SilentBatchAction.copyAndMarkRead,
+      icon: Icons.library_add_check_rounded,
+      label: '复制并标为已读',
+    ),
+    AppGlassSelectionOption(
+      value: _SilentBatchAction.saveAndMarkRead,
+      icon: Icons.download_done_rounded,
+      label: '保存并标为已读',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return KeyedSubtree(
-      key: _buttonKey,
-      child: AppGlassIconButton(
-        icon: widget.processing
-            ? Icons.hourglass_top_rounded
-            : Icons.ios_share_rounded,
-        tooltip: widget.processing ? '正在处理' : '批量导出',
-        onPressed: widget.enabled ? _showActions : null,
-      ),
+    return AppGlassMorphActionButton<_SilentBatchAction>(
+      actions: _actions,
+      title: '批量导出',
+      titleIcon: Icons.ios_share_rounded,
+      triggerIcon: processing
+          ? Icons.hourglass_top_rounded
+          : Icons.ios_share_rounded,
+      tooltip: processing ? '正在处理' : '批量导出',
+      enabled: enabled,
+      panelWidth: 210,
+      onSelected: onSelected,
     );
   }
 }

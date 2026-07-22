@@ -615,3 +615,19 @@
 决策：正式采用 Flutter `3.44.6`，在 `pubspec.yaml` 声明 Flutter `>=3.44.0`、Dart `^3.12.2`，并同步更新 Android/macOS 两个 GitHub Actions job。只定向升级 `screen_retriever` 家族到 `0.2.2`；随 Flutter SDK 解析变化接受 `meta 1.18.0` 和 `test_api 0.7.11`，不扩展到其余可升级依赖。macOS 使用 `pod deintegrate` 移除 Pods frameworks、build phases、xcconfig 与 workspace 引用，删除 Podfile/lock；原 Podfile 唯一自定义的 `10.15` deployment target 已由 Xcode 工程三个配置和 Swift package manifest明确覆盖。旧 `COCOAPODS_PARALLEL_CODE_SIGN=false` 同步删除，debug library validation 与 `ENABLE_DEBUG_DYLIB=NO` 保持原样。
 
 后果：macOS 插件现在全部由 SwiftPM 生成包管理，构建不再运行 CocoaPods；本地 Android Debug、macOS Debug 和 macOS Release 均通过，Release 主程序为 arm64。以后升级 Flutter 时必须同时维护 pubspec 最低约束、lockfile 和 CI pin；若日志重新出现 `Running pod install`，应视为 CocoaPods 集成被误恢复。下一次 tag 仍需在 GitHub `macos-26` runner 上验证 SwiftPM、arm64 和 Release 上传全链路。
+
+## Android 垃圾拦截进入主导航并保留重叠计数
+
+背景：Android 垃圾拦截长期通过主时间线顶部“AI 智能过滤”卡片或后台任务二级入口打开，和 macOS 的一级导航地位不一致。用户认为手机端把审核作为底部导航入口更符合直觉，并希望时间线和垃圾拦截图标分别显示数字角标。
+
+决策：Android 主导航扩展为时间线、垃圾拦截、订阅源、设置四项，继续使用同一个悬浮玻璃胶囊和淡入淡出常驻页面。垃圾拦截增加嵌入模式，复用主 shell 的 `MobileBlurAppBar`，列表顶部显式避让 AppBar 且底部避让导航；独立路由继续保留。删除时间线顶部重复审核卡片，后台任务“去审核”返回主 shell 后切换到索引 `1`。时间线角标使用非静默订阅源未读总数，垃圾拦截角标使用 `isRejectedByAi && !isRead`，零值隐藏且超过 `99` 显示 `99+`。
+
+边界：用户明确要求保留既有文章流转。被 AI 拒绝、尚未人工处理的未读文章仍留在普通时间线，同时出现在垃圾拦截，因此同一文章可以同时计入两个角标。这不是统计错误，也不要擅自改成互斥队列。Android 索引 `2` 现在是订阅源，而 macOS 索引 `2` 仍是最近阅读；跨平台导航代码不得假定两端页面数组完全相同。
+
+## Android 文章悬浮工具使用局部可变字重图标
+
+背景：Android 文章页右下角 `48px` 玻璃按钮中的目录、标为已读和恢复未读图标原为 `22px` 固定字重 Material Icons。图标颜色已经完全不透明，可见性不足来自笔画偏细；只放大图标不能真正解决字重问题，而为少数按钮更换实心图标又会破坏三种状态的一致性。
+
+决策：加入 `material_symbols_icons 4.2951.0`，这三个状态统一使用 Rounded Material Symbols、`24px` 和最大标准字重 `700`。`AppGlassIconButton` 只新增默认空值的 `iconWeight` 参数，文章页 Android 悬浮按钮显式传入，其他按钮和 macOS 不变。定向 widget 测试验证可变字重透传。
+
+后果：右下角图标在保持 `48px` 外壳、原位置、颜色和点击范围的前提下更清晰。不要把 `700` 设为 `AppGlassIconButton` 全局默认值，也不要用重复叠画或阴影模拟粗体；后续若替换图标依赖，应继续保证目录、已读和恢复未读属于同一 Rounded 字体体系。

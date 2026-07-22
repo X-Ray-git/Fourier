@@ -878,6 +878,7 @@ class AppGlassIconButton extends StatefulWidget {
   final bool useOwnLayer;
   final double size;
   final double iconSize;
+  final double? iconWeight;
 
   const AppGlassIconButton({
     super.key,
@@ -888,6 +889,7 @@ class AppGlassIconButton extends StatefulWidget {
     this.useOwnLayer = true,
     this.size = 34,
     this.iconSize = 18,
+    this.iconWeight,
   });
 
   @override
@@ -1015,6 +1017,7 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
               child: Icon(
                 widget.icon,
                 size: widget.iconSize,
+                weight: widget.iconWeight,
                 color: !enabled
                     ? cs.onSurfaceVariant.withValues(alpha: 0.58)
                     : widget.selected

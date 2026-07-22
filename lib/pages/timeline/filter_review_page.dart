@@ -141,7 +141,9 @@ class _ReviewAnimProbeSession {
 }
 
 class FilterReviewPage extends StatefulWidget {
-  const FilterReviewPage({super.key});
+  final bool embeddedInMainNavigation;
+
+  const FilterReviewPage({super.key, this.embeddedInMainNavigation = false});
 
   @override
   State<FilterReviewPage> createState() => _FilterReviewPageState();
@@ -681,157 +683,92 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   Widget _buildMobileScaffold(BuildContext context, ColorScheme cs) {
+    final body = Obx(() {
+      final q = AutoFilterWorker.queuedCount.value;
+      final p = AutoFilterWorker.processingCount.value;
+      final llmActive = q > 0 || p > 0;
+
+      return Column(
+        children: [
+          Expanded(
+            child: _articles.isEmpty
+                ? _buildEmptyState(cs, llmActive: llmActive, llmCount: q + p)
+                : ListView.builder(
+                    padding: EdgeInsets.only(
+                      top:
+                          6 +
+                          (widget.embeddedInMainNavigation
+                              ? MediaQuery.paddingOf(context).top
+                              : 0),
+                      bottom:
+                          16 +
+                          MediaQuery.of(context).padding.bottom +
+                          (widget.embeddedInMainNavigation
+                              ? kBottomNavigationBarHeight
+                              : 0),
+                    ),
+                    itemCount: _articles.length,
+                    itemBuilder: (context, index) {
+                      final article = _articles[index];
+                      return Padding(
+                        padding: ArticleCardChrome.outerPadding,
+                        child: _MobileReviewDismissible(
+                          key: ValueKey('mobile-swipe-${article.entryId}'),
+                          dismissibleKey: ValueKey(article.entryId),
+                          confirmDismiss: (direction) async {
+                            if (direction == DismissDirection.startToEnd) {
+                              _keep(article);
+                            } else {
+                              _reject(article);
+                            }
+                            return false;
+                          },
+                          keepColor: const Color(0xFF10B981),
+                          rejectColor: cs.error,
+                          child: Obx(() {
+                            final selectedId = _selectedArticle.value?.entryId;
+                            return ArticleCard(
+                              article: article,
+                              isSelected:
+                                  Platform.isMacOS &&
+                                  selectedId == article.entryId,
+                              showFeedTitle: true,
+                              showSummary: true,
+                              outerPadding: EdgeInsets.zero,
+                              onTap: () {
+                                if (Platform.isMacOS) {
+                                  _selectedArticle.value = article;
+                                } else {
+                                  Get.toNamed(
+                                    Routes.article,
+                                    arguments: {
+                                      'article': article,
+                                      'sequence': _articles,
+                                      'index': index,
+                                    },
+                                  );
+                                }
+                              },
+                            );
+                          }),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      );
+    });
+
+    if (widget.embeddedInMainNavigation) {
+      return body;
+    }
+
     return Scaffold(
       appBar: MobileBlurAppBar(
-        title: Obx(() {
-          final humanCount = _articles.length;
-          final q = AutoFilterWorker.queuedCount.value;
-          final p = AutoFilterWorker.processingCount.value;
-          final llmActive = q > 0 || p > 0;
-          final llmCount = q + p;
-
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '垃圾拦截',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (humanCount == 0 && !llmActive) ...[
-                      Icon(
-                        Icons.check_circle,
-                        size: 12,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '全部处理完毕',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ] else ...[
-                      if (humanCount > 0) ...[
-                        Icon(Icons.touch_app, size: 12, color: cs.primary),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$humanCount 篇待处理',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: cs.primary,
-                          ),
-                        ),
-                      ],
-                      if (humanCount > 0 && llmActive)
-                        Text(
-                          '  ·  ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      if (llmActive) ...[
-                        SizedBox(
-                          width: 10,
-                          height: 10,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$llmCount 篇判定中',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          );
-        }),
+        title: Obx(() => FilterReviewStatusTitle(humanCount: _articles.length)),
       ),
-      body: Obx(() {
-        final q = AutoFilterWorker.queuedCount.value;
-        final p = AutoFilterWorker.processingCount.value;
-        final llmActive = q > 0 || p > 0;
-
-        return Column(
-          children: [
-            Expanded(
-              child: _articles.isEmpty
-                  ? _buildEmptyState(cs, llmActive: llmActive, llmCount: q + p)
-                  : ListView.builder(
-                      padding: EdgeInsets.only(
-                        top: 6,
-                        bottom: 16 + MediaQuery.of(context).padding.bottom,
-                      ),
-                      itemCount: _articles.length,
-                      itemBuilder: (context, index) {
-                        final article = _articles[index];
-                        return Padding(
-                          padding: ArticleCardChrome.outerPadding,
-                          child: _MobileReviewDismissible(
-                            key: ValueKey('mobile-swipe-${article.entryId}'),
-                            dismissibleKey: ValueKey(article.entryId),
-                            confirmDismiss: (direction) async {
-                              if (direction == DismissDirection.startToEnd) {
-                                _keep(article);
-                              } else {
-                                _reject(article);
-                              }
-                              return false;
-                            },
-                            keepColor: const Color(0xFF10B981),
-                            rejectColor: cs.error,
-                            child: Obx(() {
-                              final selectedId =
-                                  _selectedArticle.value?.entryId;
-                              return ArticleCard(
-                                article: article,
-                                isSelected:
-                                    Platform.isMacOS &&
-                                    selectedId == article.entryId,
-                                showFeedTitle: true,
-                                showSummary: true,
-                                outerPadding: EdgeInsets.zero,
-                                onTap: () {
-                                  if (Platform.isMacOS) {
-                                    _selectedArticle.value = article;
-                                  } else {
-                                    Get.toNamed(
-                                      Routes.article,
-                                      arguments: {
-                                        'article': article,
-                                        'sequence': _articles,
-                                        'index': index,
-                                      },
-                                    );
-                                  }
-                                },
-                              );
-                            }),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        );
-      }),
+      body: body,
     );
   }
 
@@ -1052,6 +989,96 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       animation: animation,
       child: transition,
     );
+  }
+}
+
+class FilterReviewStatusTitle extends StatelessWidget {
+  final int humanCount;
+
+  const FilterReviewStatusTitle({super.key, required this.humanCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Obx(() {
+      final q = AutoFilterWorker.queuedCount.value;
+      final p = AutoFilterWorker.processingCount.value;
+      final llmActive = q > 0 || p > 0;
+      final llmCount = q + p;
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            '垃圾拦截',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (humanCount == 0 && !llmActive) ...[
+                  Icon(
+                    Icons.check_circle,
+                    size: 12,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '全部处理完毕',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ] else ...[
+                  if (humanCount > 0) ...[
+                    Icon(Icons.touch_app, size: 12, color: cs.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$humanCount 篇待处理',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ],
+                  if (humanCount > 0 && llmActive)
+                    Text(
+                      '  ·  ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  if (llmActive) ...[
+                    SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$llmCount 篇判定中',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+    });
   }
 }
 

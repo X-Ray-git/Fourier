@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:html/parser.dart' as html_parser;
 
@@ -1732,20 +1733,22 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 children: [
                   if (entries.isNotEmpty) ...[
                     AppGlassIconButton(
-                      icon: Icons.format_list_bulleted_rounded,
+                      icon: Symbols.format_list_bulleted_rounded,
                       tooltip: '目录',
                       size: 48,
-                      iconSize: 22,
+                      iconSize: 24,
+                      iconWeight: 700,
                       onPressed: () => _showMobileToc(entries),
                     ),
                     const SizedBox(height: 8),
                   ],
                   AppGlassIconButton(
-                    icon: isRead ? Icons.undo_rounded : Icons.check_rounded,
+                    icon: isRead ? Symbols.undo_rounded : Symbols.check_rounded,
                     tooltip: isRead ? '恢复未读' : '标为已读',
                     selected: !isRead,
                     size: 48,
-                    iconSize: 22,
+                    iconSize: 24,
+                    iconWeight: 700,
                     onPressed: isUpdating
                         ? null
                         : () {

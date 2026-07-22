@@ -68,10 +68,13 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
   }
 
   void _openFilterReview() {
-    if (Platform.isMacOS && Get.isRegistered<MainController>()) {
-      if (widget.embedded) Get.back();
+    if (Get.isRegistered<MainController>()) {
+      final shouldCloseCurrentSurface = Platform.isMacOS
+          ? widget.embedded
+          : true;
+      if (shouldCloseCurrentSurface) Get.back();
       Future<void>.delayed(
-        Duration(milliseconds: widget.embedded ? 120 : 0),
+        Duration(milliseconds: shouldCloseCurrentSurface ? 120 : 0),
         () {
           Get.find<MainController>().changeIndex(1);
         },

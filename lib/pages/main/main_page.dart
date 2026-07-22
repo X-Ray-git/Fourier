@@ -10,6 +10,7 @@ import '../../common/widgets/mobile_article_range_button.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
+import '../../services/feed_silent_settings_service.dart';
 import '../../utils/move_to_background.dart';
 import '../settings/settings_page.dart';
 import '../subscriptions/subscriptions_controller.dart';
@@ -36,19 +37,17 @@ class _MainPageState extends State<MainPage> {
   late final MainController controller;
   late final TimelineController _timelineController;
 
-  static const _titles = ['时间线', '订阅源', '设置'];
+  static const _mobileTitles = ['时间线', '垃圾拦截', '订阅源', '设置'];
 
   static const _mobilePages = <Widget>[
     TimelinePage(showAppBar: false),
+    FilterReviewPage(embeddedInMainNavigation: true),
     SubscriptionsPage(),
     SettingsPage(showAppBar: false),
   ];
 
   List<Widget> get _macPages => [
-    TimelinePage(
-      showAppBar: false,
-      onOpenFilterReview: () => controller.changeIndex(1),
-    ),
+    const TimelinePage(showAppBar: false),
     const FilterReviewPage(),
     const RecentReadPage(),
     const SettingsPage(showAppBar: false),
@@ -148,21 +147,37 @@ class _MainPageState extends State<MainPage> {
               ),
             );
           }),
-          title: Obx(
-            () => Text(
-              _titles[controller.currentIndex.value],
+          title: Obx(() {
+            final index = controller.currentIndex.value;
+            if (index == 1) {
+              return FilterReviewStatusTitle(
+                humanCount: _timelineController.filterCount.value,
+              );
+            }
+            return Text(
+              _mobileTitles[index],
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-            ),
-          ),
+            );
+          }),
           actions: [
-            AppGlassIconButton(
-              icon: Icons.search_rounded,
-              tooltip: '搜索',
-              size: 36,
-              iconSize: 19,
-              onPressed: () => _openTimelineSearch(context),
-            ),
-            const SizedBox(width: 12),
+            Obx(() {
+              if (controller.currentIndex.value != 0) {
+                return const SizedBox.shrink();
+              }
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppGlassIconButton(
+                    icon: Icons.search_rounded,
+                    tooltip: '搜索',
+                    size: 36,
+                    iconSize: 19,
+                    onPressed: () => _openTimelineSearch(context),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              );
+            }),
           ],
         ),
         body: Obx(
@@ -171,12 +186,15 @@ class _MainPageState extends State<MainPage> {
             children: _mobilePages,
           ),
         ),
-        bottomNavigationBar: Obx(
-          () => _MobileFloatingNavigation(
+        bottomNavigationBar: Obx(() {
+          final _ = FeedSilentSettingsService.version.value;
+          return _MobileFloatingNavigation(
             selectedIndex: controller.currentIndex.value,
+            timelineUnreadCount: _timelineController.unreadCount,
+            filterReviewCount: _timelineController.filterCount.value,
             onSelected: controller.changeIndex,
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
@@ -241,10 +259,14 @@ class _FadeIndexedStack extends StatelessWidget {
 
 class _MobileFloatingNavigation extends StatelessWidget {
   final int selectedIndex;
+  final int timelineUnreadCount;
+  final int filterReviewCount;
   final ValueChanged<int> onSelected;
 
   const _MobileFloatingNavigation({
     required this.selectedIndex,
+    required this.timelineUnreadCount,
+    required this.filterReviewCount,
     required this.onSelected,
   });
 
@@ -254,6 +276,11 @@ class _MobileFloatingNavigation extends StatelessWidget {
           icon: Icons.article_outlined,
           selectedIcon: Icons.article_rounded,
           label: '时间线',
+        ),
+        (
+          icon: Icons.shield_outlined,
+          selectedIcon: Icons.shield_rounded,
+          label: '垃圾拦截',
         ),
         (
           icon: Icons.rss_feed_outlined,
@@ -286,11 +313,18 @@ class _MobileFloatingNavigation extends StatelessWidget {
               children: List.generate(_items.length, (index) {
                 final item = _items[index];
                 final selected = selectedIndex == index;
+                final badgeCount = switch (index) {
+                  0 => timelineUnreadCount,
+                  1 => filterReviewCount,
+                  _ => 0,
+                };
                 return Expanded(
                   child: Semantics(
                     selected: selected,
                     button: true,
-                    label: item.label,
+                    label: badgeCount > 0
+                        ? '${item.label}，$badgeCount 篇未读'
+                        : item.label,
                     child: Tooltip(
                       message: item.label,
                       child: InkWell(
@@ -312,12 +346,26 @@ class _MobileFloatingNavigation extends StatelessWidget {
                               scale: selected ? 1 : 0.96,
                               duration: const Duration(milliseconds: 220),
                               curve: Curves.easeOutBack,
-                              child: Icon(
-                                selected ? item.selectedIcon : item.icon,
-                                size: 24,
-                                color: selected
-                                    ? cs.onPrimary
-                                    : cs.onSurfaceVariant,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                alignment: Alignment.center,
+                                children: [
+                                  Icon(
+                                    selected ? item.selectedIcon : item.icon,
+                                    size: 24,
+                                    color: selected
+                                        ? cs.onPrimary
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                  if (badgeCount > 0)
+                                    Positioned(
+                                      top: 1,
+                                      left: 28,
+                                      child: _NavigationBadge(
+                                        count: badgeCount,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -329,6 +377,37 @@ class _MobileFloatingNavigation extends StatelessWidget {
               }),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationBadge extends StatelessWidget {
+  final int count;
+
+  const _NavigationBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final label = count > 99 ? '99+' : '$count';
+    return Container(
+      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: cs.error,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.surface, width: 1),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: cs.onError,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          height: 1,
         ),
       ),
     );

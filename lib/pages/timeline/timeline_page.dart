@@ -207,13 +207,8 @@ class _TimelineAnimationProbe {
 /// 时间线页 — 本地文章库（未读/全部/已读）
 class TimelinePage extends StatefulWidget {
   final bool showAppBar;
-  final VoidCallback? onOpenFilterReview;
 
-  const TimelinePage({
-    super.key,
-    this.showAppBar = true,
-    this.onOpenFilterReview,
-  });
+  const TimelinePage({super.key, this.showAppBar = true});
 
   @override
   State<TimelinePage> createState() => _TimelinePageState();
@@ -969,78 +964,6 @@ class _TimelinePageState extends State<TimelinePage> {
     return true;
   }
 
-  Widget _buildFilterBar(int count) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: InkWell(
-        onTap: () {
-          if (Platform.isMacOS && widget.onOpenFilterReview != null) {
-            widget.onOpenFilterReview!();
-            return;
-          }
-          Get.toNamed(Routes.filterReview);
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.auto_awesome,
-                  size: 16,
-                  color: Color(0xFFD97706),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'AI 智能过滤',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFB45309),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '拦截了 $count 篇低质量或无关内容',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: const Color(0xFFB45309).withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: Color(0xFFD97706),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1151,8 +1074,6 @@ class _TimelinePageState extends State<TimelinePage> {
 
   Widget _buildListView(BuildContext context) {
     return Obx(() {
-      final filterCount = controller.filterCount.value;
-      final filterBarCount = Platform.isMacOS ? 0 : 1;
       Widget content;
       if (Platform.isMacOS) {
         content = ScrollbarTheme(
@@ -1204,7 +1125,6 @@ class _TimelinePageState extends State<TimelinePage> {
                 MediaQuery.of(context).padding.bottom,
           ),
           children: [
-            _buildFilterBar(filterCount),
             Padding(
               padding: const EdgeInsets.only(top: 64),
               child: _EmptyView(
@@ -1225,12 +1145,9 @@ class _TimelinePageState extends State<TimelinePage> {
                 kBottomNavigationBarHeight +
                 MediaQuery.of(context).padding.bottom,
           ),
-          itemCount: controller.articles.length + filterBarCount,
+          itemCount: controller.articles.length,
           itemBuilder: (context, index) {
-            if (index == 0) {
-              return _buildFilterBar(filterCount);
-            }
-            final articleIndex = index - filterBarCount;
+            final articleIndex = index;
             final article = controller.articles[articleIndex];
             final articleKey = _itemKeys.putIfAbsent(
               article.entryId,

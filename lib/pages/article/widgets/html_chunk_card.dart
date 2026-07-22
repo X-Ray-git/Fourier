@@ -14,6 +14,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/app_context_menu.dart';
+import '../../../common/widgets/app_glass.dart';
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/bilibili_embed_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
@@ -25,6 +26,7 @@ import '../../../utils/security_utils.dart';
 import '../../../services/article_image_service.dart';
 import '../../../services/article_image_cache_service.dart';
 import 'bilibili_embed_player.dart';
+import 'article_svg_image.dart';
 import 'inline_video_player.dart';
 import 'youtube_embed_player.dart';
 
@@ -140,6 +142,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   // 同一篇文章内 chunk 内容不变、主题不变 → 缓存 hit，build 耗时从 ms 级降到 ns 级。
   Widget? _cachedWidget;
   Brightness? _cachedBrightness;
+  bool _codeCopied = false;
 
   HtmlExtension? _getLinkExtension(BuildContext context) {
     if (widget.hoveredUrl == null) return null;
@@ -450,25 +453,73 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   Widget _buildCodeBlock(BuildContext context, ColorScheme cs) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Text(
-          widget.chunk.content,
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            color: cs.onSurface,
-            height: 1.5,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 42, 12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Text(
+                widget.chunk.content,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  color: cs.onSurface,
+                  height: 1.5,
+                ),
+              ),
+            ),
           ),
-        ),
+          Positioned(
+            top: 5,
+            right: 5,
+            child: AppGlassTooltip(
+              message: _codeCopied ? '已复制' : '复制代码',
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: InkResponse(
+                  radius: 18,
+                  onTap: _copyCodeBlock,
+                  child: Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Icon(
+                      _codeCopied ? Icons.check_rounded : Icons.copy_rounded,
+                      size: 16,
+                      color: _codeCopied ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _copyCodeBlock() async {
+    try {
+      await Clipboard.setData(ClipboardData(text: widget.chunk.content));
+    } catch (error) {
+      AppFeedback.error('复制失败', error.toString());
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _codeCopied = true;
+      _cachedWidget = null;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    setState(() {
+      _codeCopied = false;
+      _cachedWidget = null;
+    });
   }
 
   // ── 引用 ──
@@ -1001,60 +1052,100 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
 
         final imageWidget = ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            cacheKey: ArticleImageCacheService.displayCacheKey(
-              widget.articleId,
-              imageUrl,
-            ),
-            httpHeaders: ArticleImageService.httpHeaders,
-            fit: BoxFit.contain,
-            width: renderWidth,
-            memCacheWidth: cacheWidth,
-            maxWidthDiskCache: diskCacheWidth,
-            fadeInDuration: const Duration(milliseconds: 80),
-            fadeOutDuration: const Duration(milliseconds: 80),
-            placeholder: (context, url) => SizedBox(
-              width: renderWidth,
-              height: renderHeight,
-              child: const Center(
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
-              width: renderWidth,
-              height: renderHeight,
-              color: Theme.of(
-                context,
-              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
-              child: const Center(
-                child: Icon(Icons.broken_image_outlined, size: 20),
-              ),
-            ),
-            imageBuilder: (ctx, imageProvider) {
-              final gesture = GestureDetector(
-                onTap: widget.onImageTap != null
-                    ? () => widget.onImageTap!(imageUrl)
-                    : null,
-                onSecondaryTapDown: Platform.isMacOS
-                    ? (details) => showInlineImageContextMenu(
-                        ctx,
-                        details.globalPosition,
-                        imageUrl,
-                      )
-                    : null,
-                child: SizedBox(
+          child: ArticleImageService.isSvg(imageUrl)
+              ? GestureDetector(
+                  onTap: widget.onImageTap != null
+                      ? () => widget.onImageTap!(imageUrl)
+                      : null,
+                  onSecondaryTapDown: Platform.isMacOS
+                      ? (details) => showInlineImageContextMenu(
+                          context,
+                          details.globalPosition,
+                          imageUrl,
+                        )
+                      : null,
+                  child: ArticleSvgImage(
+                    articleId: widget.articleId,
+                    imageUrl: imageUrl,
+                    width: renderWidth,
+                    fit: BoxFit.contain,
+                    placeholder: SizedBox(
+                      width: renderWidth,
+                      height: renderHeight,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                    errorWidget: Container(
+                      width: renderWidth,
+                      height: renderHeight,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.2),
+                      child: const Center(
+                        child: Icon(Icons.broken_image_outlined, size: 20),
+                      ),
+                    ),
+                  ),
+                )
+              : CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  cacheKey: ArticleImageCacheService.displayCacheKey(
+                    widget.articleId,
+                    imageUrl,
+                  ),
+                  httpHeaders: ArticleImageService.httpHeaders,
+                  fit: BoxFit.contain,
                   width: renderWidth,
-                  child: Image(image: imageProvider, fit: BoxFit.contain),
+                  memCacheWidth: cacheWidth,
+                  maxWidthDiskCache: diskCacheWidth,
+                  fadeInDuration: const Duration(milliseconds: 80),
+                  fadeOutDuration: const Duration(milliseconds: 80),
+                  placeholder: (context, url) => SizedBox(
+                    width: renderWidth,
+                    height: renderHeight,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    width: renderWidth,
+                    height: renderHeight,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.2),
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined, size: 20),
+                    ),
+                  ),
+                  imageBuilder: (ctx, imageProvider) {
+                    final gesture = GestureDetector(
+                      onTap: widget.onImageTap != null
+                          ? () => widget.onImageTap!(imageUrl)
+                          : null,
+                      onSecondaryTapDown: Platform.isMacOS
+                          ? (details) => showInlineImageContextMenu(
+                              ctx,
+                              details.globalPosition,
+                              imageUrl,
+                            )
+                          : null,
+                      child: SizedBox(
+                        width: renderWidth,
+                        child: Image(image: imageProvider, fit: BoxFit.contain),
+                      ),
+                    );
+                    return gesture;
+                  },
                 ),
-              );
-              return gesture;
-            },
-          ),
         );
 
         if (isInlineEmoji) return imageWidget;
@@ -1130,39 +1221,65 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
 
     Widget image = Hero(
       tag: widget.imageUrl,
-      child: CachedNetworkImage(
-        imageUrl: imageUrl,
-        cacheKey: ArticleImageCacheService.displayCacheKey(
-          widget.articleId,
-          imageUrl,
-        ),
-        httpHeaders: ArticleImageService.httpHeaders,
-        fit: BoxFit.contain,
-        width: displayWidth,
-        memCacheWidth: cacheWidth,
-        maxWidthDiskCache: diskCacheWidth,
-        fadeInDuration: const Duration(milliseconds: 250),
-        fadeOutDuration: const Duration(milliseconds: 80),
-        placeholder: (context, url) => SizedBox(
-          width: displayWidth,
-          height: displayHeight,
-          child: const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
+      child: ArticleImageService.isSvg(imageUrl)
+          ? ArticleSvgImage(
+              articleId: widget.articleId,
+              imageUrl: imageUrl,
+              width: displayWidth,
+              fit: BoxFit.contain,
+              placeholder: SizedBox(
+                width: displayWidth,
+                height: displayHeight,
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+              errorWidget: SizedBox(
+                width: displayWidth,
+                height: displayHeight,
+                child: _ImageErrorWidget(
+                  cs: cs,
+                  onRetry: () => setState(() => _retryCount++),
+                ),
+              ),
+            )
+          : CachedNetworkImage(
+              imageUrl: imageUrl,
+              cacheKey: ArticleImageCacheService.displayCacheKey(
+                widget.articleId,
+                imageUrl,
+              ),
+              httpHeaders: ArticleImageService.httpHeaders,
+              fit: BoxFit.contain,
+              width: displayWidth,
+              memCacheWidth: cacheWidth,
+              maxWidthDiskCache: diskCacheWidth,
+              fadeInDuration: const Duration(milliseconds: 250),
+              fadeOutDuration: const Duration(milliseconds: 80),
+              placeholder: (context, url) => SizedBox(
+                width: displayWidth,
+                height: displayHeight,
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+              errorWidget: (context, url, error) => SizedBox(
+                width: displayWidth,
+                height: displayHeight,
+                child: _ImageErrorWidget(
+                  cs: cs,
+                  onRetry: () => setState(() => _retryCount++),
+                ),
+              ),
             ),
-          ),
-        ),
-        errorWidget: (context, url, error) => SizedBox(
-          width: displayWidth,
-          height: displayHeight,
-          child: _ImageErrorWidget(
-            cs: cs,
-            onRetry: () => setState(() => _retryCount++),
-          ),
-        ),
-      ),
     );
 
     if (canTap) {

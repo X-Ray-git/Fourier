@@ -106,17 +106,24 @@ class ArticleController extends GetxController {
     final tContent = hasTranslation
         ? (TranslationService.translatedContentFor(entryId) ?? '')
         : '';
+    final sourceUrl = article.url;
 
     try {
       final result = await Isolate.run(() {
-        final normalized = ArticleContentUtils.normalizeHtml(rawHtml);
+        final normalized = ArticleContentUtils.normalizeHtml(
+          rawHtml,
+          sourceUrl: sourceUrl,
+        );
         final urls = ArticleContentUtils.extractImageUrls(normalized);
         final parsedChunks = HtmlChunkParser.parseSync(normalized);
 
         var normalizedTranslation = '';
         List<HtmlChunk> tParsedChunks = const [];
         if (hasTranslation && tContent.isNotEmpty) {
-          normalizedTranslation = ArticleContentUtils.normalizeHtml(tContent);
+          normalizedTranslation = ArticleContentUtils.normalizeHtml(
+            tContent,
+            sourceUrl: sourceUrl,
+          );
           tParsedChunks = HtmlChunkParser.parseSync(normalizedTranslation);
         }
 
@@ -174,8 +181,12 @@ class ArticleController extends GetxController {
     }
 
     final shouldReveal = !isTranslated.value;
+    final sourceUrl = article.url;
     final result = await Isolate.run(() {
-      final normalized = ArticleContentUtils.normalizeHtml(sourceContent);
+      final normalized = ArticleContentUtils.normalizeHtml(
+        sourceContent,
+        sourceUrl: sourceUrl,
+      );
       return (
         normalized: normalized,
         chunks: HtmlChunkParser.parseSync(normalized),
@@ -381,6 +392,7 @@ class ArticleController extends GetxController {
         _translationSourceContent = record.translatedContent!.trim();
         final normalizedTranslation = ArticleContentUtils.normalizeHtml(
           record.translatedContent!,
+          sourceUrl: article.url,
         );
         translationContent.value = normalizedTranslation;
         isTranslated.value = true;
@@ -532,6 +544,20 @@ class _ArticleRouteRequest {
   }
 }
 
+class ArticleSourceOpenRequest {
+  final ArticleModel article;
+  final double articleScrollOffset;
+  final bool showTranslation;
+  final bool showSummary;
+
+  const ArticleSourceOpenRequest({
+    required this.article,
+    required this.articleScrollOffset,
+    required this.showTranslation,
+    required this.showSummary,
+  });
+}
+
 // ─── 入口页（处理分页器） ───────────────────────
 
 class ArticlePage extends StatelessWidget {
@@ -608,6 +634,10 @@ class ArticlePageView extends StatefulWidget {
   final bool Function(String entryId)? isSelectedArticle;
   final bool isReviewContext;
   final VoidCallback? onKeepReviewArticle;
+  final ValueChanged<ArticleSourceOpenRequest>? onOpenSource;
+  final double? initialScrollOffset;
+  final bool? initialShowTranslation;
+  final bool? initialShowSummary;
 
   const ArticlePageView({
     super.key,
@@ -623,6 +653,10 @@ class ArticlePageView extends StatefulWidget {
     this.isSelectedArticle,
     this.isReviewContext = false,
     this.onKeepReviewArticle,
+    this.onOpenSource,
+    this.initialScrollOffset,
+    this.initialShowTranslation,
+    this.initialShowSummary,
   });
 
   @override
@@ -650,11 +684,16 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   bool _articleTitleMeasurementScheduled = false;
   bool _allowBodyBuild = Platform.isMacOS;
   bool _isTocOpen = false;
+  bool _isCopyingMarkdown = false;
   bool _activeTocUpdateScheduled = false;
   final Map<String, GlobalKey> _headingKeys = {};
   final Map<String, String> _headingTextCache = {};
   final Map<String, List<_ArticleTocEntry>> _tocEntriesCache = {};
   Worker? _menuStateWorker;
+  Worker? _initialViewRestoreWorker;
+  double? _pendingInitialScrollOffset;
+  late final bool? _initialShowTranslation;
+  late final bool? _initialShowSummary;
 
   @override
   void initState() {
@@ -674,6 +713,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       ], (_) => MacOSAppMenuService.instance.notifyChanged());
     }
     _scrollController = ScrollController();
+    _pendingInitialScrollOffset = widget.initialScrollOffset;
+    _initialShowTranslation = widget.initialShowTranslation;
+    _initialShowSummary = widget.initialShowSummary;
     _scrollController.addListener(_handleArticleScroll);
     _focusNode = FocusNode();
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
@@ -692,8 +734,17 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusNode.requestFocus();
+        _restoreInitialViewState();
       }
     });
+    if (_pendingInitialScrollOffset != null ||
+        _initialShowTranslation != null ||
+        _initialShowSummary != null) {
+      _initialViewRestoreWorker = ever(
+        controller.isParsingContent,
+        (_) => _restoreInitialViewState(),
+      );
+    }
   }
 
   @override
@@ -728,6 +779,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       MacOSAppMenuService.instance.unregisterArticleTarget(this);
       _menuStateWorker?.dispose();
     }
+    _initialViewRestoreWorker?.dispose();
     _scrollController.dispose();
     _scrollProgress.dispose();
     _headerCollapseProgress.dispose();
@@ -742,6 +794,52 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   }
 
   bool get _usesGlobalShortcuts => Platform.isMacOS && widget.isSplitView;
+
+  void _restoreInitialViewState() {
+    if (!mounted || controller.isParsingContent.value) return;
+
+    final showTranslation = _initialShowTranslation;
+    if (showTranslation != null && controller.isTranslated.value) {
+      controller.showTranslation.value = showTranslation;
+    }
+    final showSummary = _initialShowSummary;
+    if (showSummary != null && controller.isSummarized.value) {
+      controller.showSummary.value = showSummary;
+    }
+
+    final targetOffset = _pendingInitialScrollOffset;
+    if (targetOffset == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      final target = targetOffset.clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      _scrollController.jumpTo(target.toDouble());
+      _pendingInitialScrollOffset = null;
+      _initialViewRestoreWorker?.dispose();
+      _initialViewRestoreWorker = null;
+    });
+  }
+
+  void _openSource() {
+    final callback = widget.onOpenSource;
+    if (callback == null) {
+      unawaited(controller.openSource());
+      return;
+    }
+    callback(
+      ArticleSourceOpenRequest(
+        article: controller.article,
+        articleScrollOffset: _scrollController.hasClients
+            ? _scrollController.offset
+            : 0,
+        showTranslation: controller.showTranslation.value,
+        showSummary: controller.showSummary.value,
+      ),
+    );
+  }
 
   void _registerMacOSMenuTarget() {
     MacOSAppMenuService.instance.registerArticleTarget(
@@ -1196,27 +1294,29 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   }
 
   Future<void> _copyOriginalArticleMarkdown() async {
+    if (_isCopyingMarkdown) return;
     final chunks = controller.chunks.toList(growable: false);
     if (chunks.isEmpty) {
       AppFeedback.warning('暂无可复制正文', '当前文章还没有已加载的原文内容');
       return;
     }
 
-    final markdown = ArticleMarkdownExportService.buildArticle(
-      article: controller.article,
-      chunks: chunks,
-    );
-
-    if (markdown.trim().isEmpty) {
-      AppFeedback.warning('暂无可复制正文', '当前文章还没有可复制的原文内容');
-      return;
-    }
-
+    _isCopyingMarkdown = true;
     try {
+      final markdown = await ArticleMarkdownExportService.buildArticleAsync(
+        article: controller.article,
+        chunks: chunks,
+      );
+      if (markdown.trim().isEmpty) {
+        AppFeedback.warning('暂无可复制正文', '当前文章还没有可复制的原文内容');
+        return;
+      }
       await Clipboard.setData(ClipboardData(text: markdown));
       AppFeedback.success('已复制原文', 'Markdown 已复制到剪贴板');
     } catch (e) {
       AppFeedback.error('复制失败', e.toString());
+    } finally {
+      _isCopyingMarkdown = false;
     }
   }
 
@@ -1380,6 +1480,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                           _MetadataSection(
                             controller: controller,
                             cs: colorScheme,
+                            onOpenSource: _openSource,
                           ),
                           const SizedBox(height: 8),
 
@@ -2545,13 +2646,20 @@ class _TocIconButtonChrome extends StatelessWidget {
 class _MetadataSection extends StatelessWidget {
   final ArticleController controller;
   final ColorScheme cs;
-  const _MetadataSection({required this.controller, required this.cs});
+  final VoidCallback? onOpenSource;
+  const _MetadataSection({
+    required this.controller,
+    required this.cs,
+    this.onOpenSource,
+  });
 
   @override
   Widget build(BuildContext context) {
     final imageUrl = controller.article.feedImage;
     return InkWell(
-      onTap: controller.article.feedId.isEmpty ? null : controller.openSource,
+      onTap: controller.article.feedId.isEmpty
+          ? null
+          : onOpenSource ?? controller.openSource,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

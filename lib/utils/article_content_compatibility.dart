@@ -5,9 +5,64 @@ import 'package:html/dom.dart' as dom;
 abstract final class ArticleContentCompatibility {
   static const Set<String> _emptyWrapperTags = {'a', 'span', 'li', 'ul', 'ol'};
 
-  static void apply(dom.DocumentFragment fragment) {
+  static void apply(dom.DocumentFragment fragment, {String? sourceUrl}) {
     _normalizeHuggingFaceAuthorBylines(fragment);
     _removeHuggingFaceAvatars(fragment);
+
+    final host = Uri.tryParse(sourceUrl?.trim() ?? '')?.host.toLowerCase();
+    if (host == 'marktechpost.com' || host == 'www.marktechpost.com') {
+      _removeMarkTechPostCodeControls(fragment);
+      _replaceBrokenMarkTechPostExplainers(fragment, sourceUrl!);
+    }
+  }
+
+  static void _removeMarkTechPostCodeControls(dom.DocumentFragment fragment) {
+    final controls = fragment
+        .querySelectorAll(
+          '[id="dm-copy-raw-code"], [id="user-content-dm-copy-raw-code"]',
+        )
+        .toList();
+    for (final control in controls) {
+      final parent = control.parent;
+      control.remove();
+      _removeEmptyWrappers(parent);
+    }
+  }
+
+  static void _replaceBrokenMarkTechPostExplainers(
+    dom.DocumentFragment fragment,
+    String sourceUrl,
+  ) {
+    final headings = fragment.querySelectorAll('h1, h2, h3').where((heading) {
+      return heading.text.trim().toLowerCase() == 'interactive explainer';
+    }).toList();
+
+    for (final heading in headings) {
+      final parent = heading.parentNode;
+      if (parent == null) continue;
+      final headingIndex = parent.nodes.indexOf(heading);
+      if (headingIndex < 0) continue;
+      final following = parent.nodes
+          .skip(headingIndex + 1)
+          .toList(growable: false);
+      final hasInjectedDocument = following.any(
+        (node) => node is dom.Element && node.localName == 'title',
+      );
+      if (!hasInjectedDocument) continue;
+
+      for (final trailingNode in following) {
+        trailingNode.remove();
+      }
+      final notice = dom.Element.tag('p')
+        ..append(dom.Element.tag('em')..text = '交互内容仅在原文网页中可用。')
+        ..append(dom.Text(' '))
+        ..append(
+          dom.Element.tag('a')
+            ..attributes['href'] = sourceUrl
+            ..text = '打开原文',
+        );
+      parent.append(notice);
+    }
   }
 
   static void _normalizeHuggingFaceAuthorBylines(

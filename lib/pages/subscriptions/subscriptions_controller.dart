@@ -1,6 +1,5 @@
 import 'package:get/get.dart';
 
-import '../../http/feed_http.dart';
 import '../../http/init.dart';
 import '../../models/feed.dart';
 import '../../services/account_service.dart';
@@ -8,6 +7,7 @@ import '../../services/article_state_notifier.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/feed_silent_settings_service.dart';
+import '../../services/subscription_catalog_service.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../utils/storage.dart';
 
@@ -41,10 +41,15 @@ class SubscriptionsController extends GetxController {
   final searchQuery = ''.obs;
   final viewNodes = <SourceViewNode>[].obs;
   final expandedState = <String, bool>{}.obs;
+  Worker? _catalogWorker;
 
   @override
   void onInit() {
     super.onInit();
+    _catalogWorker = ever(
+      SubscriptionCatalogService.version,
+      (_) => _applyFeeds(SubscriptionCatalogService.feeds),
+    );
     refreshUnreadCounts();
     loadData();
     ever(ArticleStateNotifier.version, (_) => refreshUnreadCounts());
@@ -52,6 +57,12 @@ class SubscriptionsController extends GetxController {
       refreshUnreadCounts();
       viewNodes.refresh();
     });
+  }
+
+  @override
+  void onClose() {
+    _catalogWorker?.dispose();
+    super.onClose();
   }
 
   Future<void> loadData() async {
@@ -62,47 +73,31 @@ class SubscriptionsController extends GetxController {
       return;
     }
 
-    final cached = ContentCacheService.readSubscriptions();
+    final cached = SubscriptionCatalogService.feeds.isNotEmpty
+        ? SubscriptionCatalogService.feeds
+        : ContentCacheService.readSubscriptions();
     if (cached.isNotEmpty) {
-      allFeeds.value = cached;
-      final cachedNodes = _buildViewNodes(cached);
-      viewNodes.value = cachedNodes;
-      _syncExpandedState(cachedNodes);
-      loadingState.value = Success(cachedNodes);
+      _applyFeeds(cached);
     } else {
       loadingState.value = const Loading();
     }
 
-    final feedsResult = await FeedHttp.getSubscriptions();
-    final inboxesResult = await FeedHttp.getInboxes();
-
-    final sources = <FeedModel>[];
-    if (feedsResult is Success<List<FeedModel>>) {
-      sources.addAll(feedsResult.response);
-    }
-    if (inboxesResult is Success<List<Map<String, dynamic>>>) {
-      sources.addAll(inboxesResult.response.map(FeedModel.fromInboxJson));
-    }
-
-    if (sources.isNotEmpty) {
-      final combined = _mergeSources(cached, sources);
-      allFeeds.value = combined;
-      final nodes = _buildViewNodes(combined);
-      viewNodes.value = nodes;
-      _syncExpandedState(nodes);
-      loadingState.value = Success(nodes);
-      ContentCacheService.saveSubscriptions(combined);
+    final result = await SubscriptionCatalogService.sync();
+    if (result.feeds.isNotEmpty || result.anySucceeded) {
+      _applyFeeds(result.feeds);
     } else if (cached.isEmpty) {
-      final feedErr = feedsResult is LoadError<List<FeedModel>>
-          ? feedsResult.errMsg
-          : null;
-      final inboxErr = inboxesResult is LoadError<List<Map<String, dynamic>>>
-          ? inboxesResult.errMsg
-          : null;
       loadingState.value = LoadError<List<SourceViewNode>>(
-        feedErr ?? inboxErr ?? '加载失败',
+        result.subscriptionsError ?? result.inboxesError ?? '加载失败',
       );
     }
+  }
+
+  void _applyFeeds(List<FeedModel> feeds) {
+    allFeeds.value = feeds;
+    final nodes = _buildViewNodes(feeds);
+    viewNodes.value = nodes;
+    _syncExpandedState(nodes);
+    loadingState.value = Success(nodes);
   }
 
   void updateSearchQuery(String value) {
@@ -289,21 +284,6 @@ class SubscriptionsController extends GetxController {
             ).compareTo(SourceTaxonomy.viewOrderFromInt(b.view)),
           );
     return nodes;
-  }
-
-  List<FeedModel> _mergeSources(List<FeedModel> cached, List<FeedModel> fresh) {
-    final byId = <String, FeedModel>{};
-    for (final item in cached) {
-      if (item.feedId.isNotEmpty) {
-        byId[item.feedId] = item;
-      }
-    }
-    for (final item in fresh) {
-      if (item.feedId.isNotEmpty) {
-        byId[item.feedId] = item;
-      }
-    }
-    return byId.values.toList()..sort(_compareFeeds);
   }
 
   int _compareFeeds(FeedModel a, FeedModel b) {

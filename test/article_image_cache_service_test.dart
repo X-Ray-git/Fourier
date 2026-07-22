@@ -42,6 +42,23 @@ void main() {
       ]);
     });
 
+    test('resolves relative images before building the prefetch plan', () {
+      final plan = ArticleImageCacheService.buildPrefetchPlan([
+        {
+          'articleId': 'entry',
+          'sourceUrl': 'https://addyosmani.com/blog/software-factories/',
+          'content': '<img src="/assets/diagram.svg">',
+        },
+      ]);
+
+      expect(plan, [
+        {
+          'articleId': 'entry',
+          'imageUrl': 'https://addyosmani.com/assets/diagram.svg',
+        },
+      ]);
+    });
+
     test('limits Android-style background plans by article count', () {
       final articles = List.generate(
         60,

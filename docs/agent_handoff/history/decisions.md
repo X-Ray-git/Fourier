@@ -631,3 +631,19 @@
 决策：加入 `material_symbols_icons 4.2951.0`，这三个状态统一使用 Rounded Material Symbols、`24px` 和最大标准字重 `700`。`AppGlassIconButton` 只新增默认空值的 `iconWeight` 参数，文章页 Android 悬浮按钮显式传入，其他按钮和 macOS 不变。定向 widget 测试验证可变字重透传。
 
 后果：右下角图标在保持 `48px` 外壳、原位置、颜色和点击范围的前提下更清晰。不要把 `700` 设为 `AppGlassIconButton` 全局默认值，也不要用重复叠画或阴影模拟粗体；后续若替换图标依赖，应继续保证目录、已读和恢复未读属于同一 Rounded 字体体系。
+
+## 来源上下文进入正文规范化，窄兼容与通用渲染分层
+
+背景：AddyOsmani.com 的文章正文包含相对 SVG 地址，旧规范化没有原文 URL，因此解析器把图片视为无效地址；MarkTechPost 大量文章残留依赖网页 JavaScript 的 `Copy Code` 控件，少量交互式 explainer 还会因 Folo 丢失 `srcdoc` 边界而把整份内嵌文档展开成正文。与此同时，阿里技术超长文章中的畸形列表能让 Markdown 转换把同一列表 HTML 反复递归，最终阻塞 UI 并栈溢出。
+
+决策：`ArticleContentUtils.normalizeHtml()` 显式接收文章原文 URL，先按 URL 解析相对图片，再交给原有安全校验和代理规则；正文、翻译/摘要输入、过滤、后台预取和批量导出都传递同一上下文。SVG 使用 `ArticleSvgImage` 从文章级磁盘缓存加载并由 `flutter_svg` 渲染。来源兼容继续集中在 `ArticleContentCompatibility`：Hugging Face 规则保持原行为；MarkTechPost 只按明确 host 移除稳定 ID 的失效复制控件，并且只有在 `Interactive Explainer` 后检测到残留 `<title>` 时才替换泄漏尾部。代码块由通用 renderer 提供轻量复制按钮。Markdown 单篇转换移入 isolate，畸形列表无直属项时退化为文本而不递归。
+
+后果：相对图片和 SVG 的修复不需要站点专属 URL 拼接，MarkTechPost 的兼容不会污染其他来源，普通代码块在所有来源都得到一致复制能力。OpenAI News 无资源地址的动态音频仍无法从当前数据恢复，继续作为已接受源内容边界；不得把本决策扩展为执行任意 srcdoc/脚本、按标题硬编码或引入 JSON/YAML 动态 DOM 规则语言。
+
+## 共享权威订阅目录与单层来源返回
+
+背景：运行期间在 Folo 官方客户端新增订阅后，Auto Folo 刷新能拉到新文章，却无法在侧边栏看到新订阅。时间线只在首次加载时建立 feed mapping，侧边栏则独立请求并把新结果与旧缓存永久合并，因此刷新链路不统一，取消订阅也会残留。另一方面，macOS 从文章来源进入具体订阅源会直接清空当前文章，`Esc` 无法回到跳转前的阅读位置。
+
+决策：引入 `SubscriptionCatalogService`，由时间线和侧边栏消费同一份目录及同一个并发合并的同步任务。普通订阅与 Inbox 各自把成功响应视为分区权威快照，失败分区保留缓存；目录变化不删除历史文章和 feed 级设置。来源跳转由时间线页面保存一层临时导航上下文，包括原 scope、文章、两栏滚动位置和正文显隐状态；`Esc` 按既有交互优先级恢复，手动切换其他 scope 时作废。
+
+后果：跨客户端增删订阅在下一次启动或手动刷新后同步到侧边栏和文章 feed mapping，不再依赖重启，也不会因单个接口失败误删另一类来源。来源返回不是通用导航栈，也不进入业务 Undo/Redo；当前只服务 macOS 分栏中的文章来源跳转，避免把一次轻量返回扩展成难以维护的任意历史导航。

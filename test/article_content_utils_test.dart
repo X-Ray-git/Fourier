@@ -19,6 +19,89 @@ void main() {
     expect(normalized.contains('https://cdn.example.com/a.png'), isTrue);
   });
 
+  test('normalizeHtml resolves relative images against the article URL', () {
+    const raw = '''
+<img src="/assets/diagram.svg" alt="Diagram">
+<img src="../shared/photo.webp" alt="Photo">
+''';
+
+    final fragment = html_parser.parseFragment(
+      ArticleContentUtils.normalizeHtml(
+        raw,
+        sourceUrl: 'https://addyosmani.com/blog/software-factories/',
+      ),
+    );
+
+    expect(
+      fragment.querySelectorAll('img').map((image) => image.attributes['src']),
+      [
+        'https://addyosmani.com/assets/diagram.svg',
+        'https://addyosmani.com/blog/shared/photo.webp',
+      ],
+    );
+  });
+
+  test('normalizeHtml keeps unresolved relative images without a base URL', () {
+    const raw = '<img src="/assets/diagram.svg" alt="Diagram">';
+
+    final normalized = ArticleContentUtils.normalizeHtml(raw);
+
+    expect(normalized, contains('src="/assets/diagram.svg"'));
+    expect(ArticleContentUtils.extractImageUrls(normalized), isEmpty);
+  });
+
+  test('MarkTechPost compatibility removes inert code-copy controls', () {
+    const raw = '''
+<div>
+  <a id="user-content-dm-copy-raw-code"><span>Copy Code</span></a>
+  <pre><code>print('hello')</code></pre>
+</div>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://www.marktechpost.com/example/',
+    );
+
+    expect(normalized, isNot(contains('Copy Code')));
+    expect(normalized, contains("print('hello')"));
+  });
+
+  test('MarkTechPost compatibility replaces a leaked interactive document', () {
+    const raw = '''
+<p>Article body</p>
+<h2>Interactive Explainer</h2>
+<title>Demo — Interactive Explainer</title>
+<div><h1>Leaked app title</h1><p>Leaked controls</p></div>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://www.marktechpost.com/example/',
+    );
+
+    expect(normalized, contains('Article body'));
+    expect(normalized, contains('交互内容仅在原文网页中可用'));
+    expect(normalized, contains('https://www.marktechpost.com/example/'));
+    expect(normalized, isNot(contains('Leaked app title')));
+    expect(normalized, isNot(contains('Leaked controls')));
+  });
+
+  test('MarkTechPost rules do not affect another source', () {
+    const raw = '''
+<a id="user-content-dm-copy-raw-code">Copy Code</a>
+<h2>Interactive Explainer</h2><title>Embedded demo</title><p>Demo</p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://example.com/article',
+    );
+
+    expect(normalized, contains('Copy Code'));
+    expect(normalized, contains('Demo'));
+  });
+
   test('normalizeHtml removes nested formatting-only spacer paragraphs', () {
     const raw = '''
 <p><span>第一句话。</span></p>

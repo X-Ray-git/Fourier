@@ -19,9 +19,15 @@ abstract final class ArticleContentUtils {
       LinkedHashMap();
 
   /// 带缓存的 HTML 规范化，避免同一篇被翻译/摘要各解析一次
-  static String normalizeHtmlForEntry(String entryId, String rawHtml) {
+  static String normalizeHtmlForEntry(
+    String entryId,
+    String rawHtml, {
+    String? sourceUrl,
+  }) {
     final cached = _cache[entryId];
-    final sourceDigest = sha256.convert(utf8.encode(rawHtml));
+    final sourceDigest = sha256.convert(
+      utf8.encode('${sourceUrl ?? ''}\u0000$rawHtml'),
+    );
     if (cached != null && cached.sourceDigest == sourceDigest) {
       return cached.normalizedHtml;
     }
@@ -29,7 +35,7 @@ abstract final class ArticleContentUtils {
     if (cached == null && _cache.length >= _cacheMax) {
       _cache.remove(_cache.keys.first);
     }
-    final normalized = normalizeHtml(rawHtml);
+    final normalized = normalizeHtml(rawHtml, sourceUrl: sourceUrl);
     _cache[entryId] = _NormalizedHtmlCacheEntry(sourceDigest, normalized);
     return normalized;
   }
@@ -68,7 +74,7 @@ abstract final class ArticleContentUtils {
     caseSensitive: false,
   );
 
-  static String normalizeHtml(String rawHtml) {
+  static String normalizeHtml(String rawHtml, {String? sourceUrl}) {
     final normalized = rawHtml.trim();
     if (normalized.isEmpty) return '';
 
@@ -76,8 +82,8 @@ abstract final class ArticleContentUtils {
     _removeUnsafeTags(fragment);
     _removeTrackingPixels(fragment);
     _removeHiddenElements(fragment);
-    ArticleContentCompatibility.apply(fragment);
-    _normalizeImages(fragment);
+    ArticleContentCompatibility.apply(fragment, sourceUrl: sourceUrl);
+    _normalizeImages(fragment, sourceUrl: sourceUrl);
     _trimSpacingStyles(fragment);
     _removeEmptyBlocks(fragment);
     _flattenLayoutTables(fragment);
@@ -89,14 +95,14 @@ abstract final class ArticleContentUtils {
     return html.trim();
   }
 
-  static List<String> extractImageUrls(String html) {
+  static List<String> extractImageUrls(String html, {String? sourceUrl}) {
     if (html.trim().isEmpty) return const [];
     final fragment = html_parser.parseFragment(html);
     final result = <String>[];
     final seen = <String>{};
 
     for (final img in fragment.querySelectorAll('img')) {
-      final url = imageUrlFromAttributes(img.attributes);
+      final url = imageUrlFromAttributes(img.attributes, sourceUrl: sourceUrl);
       if (url == null || seen.contains(url)) continue;
       seen.add(url);
       result.add(url);
@@ -104,7 +110,10 @@ abstract final class ArticleContentUtils {
     return result;
   }
 
-  static String? imageUrlFromAttributes(Map<dynamic, dynamic> attributes) {
+  static String? imageUrlFromAttributes(
+    Map<dynamic, dynamic> attributes, {
+    String? sourceUrl,
+  }) {
     String? pickFirstSrcsetUrl(String? raw) {
       if (raw == null) return null;
       final first = raw.split(',').first.trim();
@@ -123,8 +132,29 @@ abstract final class ArticleContentUtils {
 
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return null;
-    final normalized = trimmed.startsWith('//') ? 'https:$trimmed' : trimmed;
+    final normalized = _resolveResourceUrl(trimmed, sourceUrl: sourceUrl);
+    if (normalized == null) return null;
     return ArticleImageService.toProxiedUrl(normalized);
+  }
+
+  static String? _resolveResourceUrl(String raw, {String? sourceUrl}) {
+    if (raw.startsWith('//')) return 'https:$raw';
+
+    final parsed = Uri.tryParse(raw);
+    if (parsed == null) return null;
+    if (parsed.hasScheme) {
+      final scheme = parsed.scheme.toLowerCase();
+      return scheme == 'http' || scheme == 'https' ? parsed.toString() : null;
+    }
+
+    final base = Uri.tryParse(sourceUrl?.trim() ?? '');
+    if (base == null ||
+        (base.scheme.toLowerCase() != 'http' &&
+            base.scheme.toLowerCase() != 'https') ||
+        base.host.isEmpty) {
+      return null;
+    }
+    return base.resolveUri(parsed).toString();
   }
 
   static String _fragmentToHtml(dom.DocumentFragment fragment) {
@@ -148,9 +178,15 @@ abstract final class ArticleContentUtils {
     }
   }
 
-  static void _normalizeImages(dom.DocumentFragment fragment) {
+  static void _normalizeImages(
+    dom.DocumentFragment fragment, {
+    String? sourceUrl,
+  }) {
     for (final image in fragment.querySelectorAll('img')) {
-      final url = imageUrlFromAttributes(image.attributes);
+      final url = imageUrlFromAttributes(
+        image.attributes,
+        sourceUrl: sourceUrl,
+      );
       if (url == null) continue;
       image.attributes['src'] = url;
     }

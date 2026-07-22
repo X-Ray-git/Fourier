@@ -61,7 +61,9 @@
 - HTML 清洗修复了半透明内容被误删、顶层转义文本变成标签、同一文章正文更新命中旧缓存，以及 `<p><span><br></span></p>` 格式包装空段未被删除的问题。空段清洗保护媒体与 `id/name` 锚点，不合并正常非空段落。规范化缓存以正文 SHA-256 指纹校验变化，不额外长期保存第二份原始 HTML。没有有效地址的 iframe、video 或 audio 保留为明确的不可用提示，并提供经过 HTTP/HTTPS 校验的原文入口；video 与 audio 都支持从子级 `<source src>` 提取资源。
 - Bilibili 官方站外播放器已作为常见正文视频媒介接入：少数派最近 5 篇“本周看什么”在本地文章库中共确认 23 个标准 embed，另有少数派其他文章和小众软件使用相同结构。`BilibiliEmbedInfo` 只接受精确 `player.bilibili.com/player.html` 与有效 `bvid/aid`；readability 仅对白名单内的 YouTube/Bilibili iframe 放行。两者共用懒加载 `WebEmbedVideoPlayer`，但各自维护严格解析、导航域名和外部地址；Bilibili 未播放态不额外请求封面 API，也不解析真实媒体流。
 - 原文 Markdown 转换已从 `article_page.dart` 提取到 `ArticleMarkdownExportService`；单篇复制和批量构建共享标题去重、元数据、正文结构和转义规则。页面层只处理当前内容、剪贴板与反馈，后续静默订阅源批量功能不得再维护页面内 exporter。
+- 单篇 Markdown 转换现与批量导出一样运行在 isolate，并有连续触发保护；畸形嵌套列表不再递归回同一 HTML。真实阿里技术 568KB 级缓存样本已验证能完成导出，不再阻塞 UI 或栈溢出。
 - 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。原文与已保存译文都在解析前走同一规范化路径，历史文章不需要数据库迁移。
+- 规范化现携带文章原文 URL：相对图片可按页面地址解析，正文、预取、图片查看器和 Markdown 使用一致的绝对地址；SVG 复用文章级磁盘缓存并由 `flutter_svg` 渲染。MarkTechPost 来源规则会移除失效的网页复制控件和确定泄漏的交互文档，代码块由阅读器提供统一轻量复制按钮。OpenAI News 缺少真实音频地址的问题仍不在本轮恢复。
 - Debug 与 Release 网络请求现在统一使用系统 HTTPS 证书信任链，不再通过 `badCertificateCallback` 无条件接受无效证书；自定义 `HttpClient` 的 `15s` idle timeout 保持不变。需要抓包时应安装并信任代理证书，而不是在应用内关闭校验。
 - 设置页保存语义已统一并经用户运行确认：离散选择直接保存，LLM 卡片不再保留整卡保存按钮；Temperature、并发数、正文宽度、滚动速度和已读窗口等单值数字输入按 Enter/失焦静默保存，不再排列保存按钮。Folo Session Token 与 DeepSeek API Key 已合并到“服务认证”，共用右下角“测试连接 + 保存认证”：测试使用当前输入但不保存，分别调用 Folo `/subscriptions` 与 DeepSeek `/models`；DeepSeek 留空时显示“未配置，已跳过”，不影响 Folo 测试结果。Folo 只要求 Session Token，DeepSeek 留空表示清除磁盘值和翻译/摘要服务的运行时 Key；旧备份中的 Client ID 和 Session ID 可被兼容导入但会忽略、清理且不再导出。Prompt 继续明确保存。macOS 外观 segmented 独占完整一行，重置默认立即落盘，快速离散切换按最后一次选择串行写入。
 - macOS 红黄绿按钮已从“不受支持地移动系统标准按钮”切回可控的 AppKit 自绘 `NSControl` 容器。用户已验证 hover 和点击符合预期：任一圆形按钮触发三颗同步显示符号，按钮间空隙不触发，命中范围和视觉一致；动作仍转发给隐藏系统按钮的 target/action。
@@ -69,6 +71,8 @@
 - 侧边栏原生 backdrop 向 Flutter 连续曲率开口后方外扩 `1px`，堵住系统圆角与 Flutter 抗锯齿不一致造成的漏底细缝。最终轮廓为 `0.5px` 环境描边（浅色黑 `12%`、深色白 `12%`），浅色另加轻微外侧阴影；用户明确不增加原生玻璃之外的二次模糊。
 - 浅色玻璃控件已补齐明暗同步和材质一致性：原生 AppKit appearance、Flutter theme 和 renderer platform brightness 同步；浅色选中控件使用稳定冷白基底；文章目录关闭态复用普通圆形玻璃按钮，只有形变期间使用 morph layer；复制/已读按钮恢复 own layer 边界层次。
 - macOS 文章目录展开态已增加浮动玻璃可读性遮罩：深色模式黑色 `32%`、浅色模式白色 `18%`，在 morph 后半段平滑渐入并先于目录文字到位。它避免目录覆盖白色图片等高亮正文时浅色文字完全消失；关闭态圆形按钮、玻璃折射、边缘和既有展开/收起动画不变。用户已完成视觉检查并确认效果良好。
+- 时间线与订阅源侧边栏现共用 `SubscriptionCatalogService`。启动和手动刷新都会同步普通订阅与 Inbox；成功分区按远端快照新增/移除，失败分区保留旧缓存，从其他客户端新增订阅后无需重启即可出现在侧边栏，同时不会删除历史文章或 feed 级本地设置。
+- macOS 从文章元数据点击来源进入订阅源后保留一层返回上下文；在目标列表详情为空时按 `Esc` 可恢复原 scope、文章、时间线/正文位置和摘要/译文显隐。目标源内先打开文章时，第一次 `Esc` 仍关闭详情；手动切换其他 scope 会使返回点失效。
 - macOS 正文链接 hover 的瞬时卡顿已修复并经用户验证。根因是所有 `HtmlChunkCard` 监听共享 `_hoveredUrl`，任意链接进入/离开都会让全篇 HTML 缓存失效并重新解析。当前取消动态下划线和 chunk 监听，只保留主题色、手型光标、点击及底部 URL 预览。
 - 详情页补抓普通全文或 Inbox 正文成功后，现已和后台 Readability 共用 `AutoAiQueueCoordinator.onArticleContentAvailable()`：只给最新状态仍为未读的文章排摘要，并按订阅源开关排翻译。打开页面期间后台译文完成后，`ArticleController` 会解析并刷新当前译文，不再要求切走后重开。已读取消策略、已开始请求和手动 AI 操作保持原语义。
 - macOS 阅读快捷键已扩展：`B` 打开原文，`Shift+B` 确保已读并打开（垃圾拦截为移除并打开），`Cmd+1/2/0` 分别导航到全部文章、垃圾拦截和静默订阅源。无选择时 `Right/Left` 分别选择当前列表首篇/末篇；应用级快捷键注册器先于默认焦点移动处理，`Esc` 后使用空详情中立焦点节点，避免侧边栏“全部文章”残留灰色焦点高亮。设置页说明和回归测试已同步。

@@ -78,6 +78,15 @@ abstract final class ArticleImageCacheService {
         !lowerQuery.contains('format=apng');
   }
 
+  static Future<File> getImageFile(String articleId, String imageUrl) {
+    registerImage(articleId, imageUrl);
+    return _cacheManager.getSingleFile(
+      imageUrl,
+      key: cacheKey(articleId, imageUrl),
+      headers: ArticleImageService.httpHeaders,
+    );
+  }
+
   /// Registers the keys created by CachedNetworkImage so article cleanup can
   /// remove both the original object and any disk-resized variant.
   static void registerImage(
@@ -179,7 +188,11 @@ abstract final class ArticleImageCacheService {
     final generation = _prefetchGeneration;
     final plan = await Isolate.run(
       () => buildPrefetchPlan([
-        {'articleId': article.entryId, 'content': content},
+        {
+          'articleId': article.entryId,
+          'content': content,
+          'sourceUrl': article.url,
+        },
       ], maxImages: _profile.imagesPerArticle),
     );
     for (final item in plan) {
@@ -211,6 +224,7 @@ abstract final class ArticleImageCacheService {
           (article) => <String, String>{
             'articleId': article.entryId,
             'content': article.content!,
+            'sourceUrl': article.url,
           },
         );
     final articleLimit = _profile.backgroundArticleLimit;
@@ -249,9 +263,13 @@ abstract final class ArticleImageCacheService {
     for (final article in source) {
       final articleId = article['articleId'] ?? '';
       final content = article['content'] ?? '';
+      final sourceUrl = article['sourceUrl'];
       if (articleId.isEmpty || content.trim().isEmpty) continue;
 
-      final normalized = ArticleContentUtils.normalizeHtml(content);
+      final normalized = ArticleContentUtils.normalizeHtml(
+        content,
+        sourceUrl: sourceUrl,
+      );
       final urls = ArticleContentUtils.extractImageUrls(
         normalized,
       ).where(isBackgroundPrefetchable).take(maxImages);

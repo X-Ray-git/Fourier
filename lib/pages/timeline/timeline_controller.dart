@@ -21,6 +21,7 @@ import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/read_sync_service.dart';
+import '../../services/subscription_catalog_service.dart';
 import '../../utils/storage.dart';
 import '../../utils/article_length_estimator.dart';
 import '../subscriptions/subscriptions_controller.dart';
@@ -61,7 +62,6 @@ class TimelineController extends GetxController {
   final Set<String> _probeReportedReappearedIds = {};
 
   final Map<String, FeedModel> _feedMap = {};
-  bool _feedsLoaded = false;
   Future<void> Function()? _scrollToTopHandler;
 
   @override
@@ -98,32 +98,12 @@ class TimelineController extends GetxController {
 
     isSyncing.value = true;
     try {
-      if (!_feedsLoaded) {
-        final cachedFeeds = ContentCacheService.readSubscriptions();
-        final cachedInboxFeeds = cachedFeeds
-            .where((feed) => feed.isInbox)
-            .toList();
-        for (final feed in cachedFeeds) {
-          _feedMap[feed.feedId] = feed;
-        }
-
-        final needRefresh =
-            _feedMap.isEmpty || !ContentCacheService.isSubscriptionsFresh();
-        if (needRefresh) {
-          final feedResult = await FeedHttp.getSubscriptions();
-          if (feedResult is Success<List<FeedModel>>) {
-            final merged = <FeedModel>[
-              ...feedResult.response,
-              ...cachedInboxFeeds,
-            ];
-            for (final f in merged) {
-              _feedMap[f.feedId] = f;
-            }
-            ContentCacheService.saveSubscriptions(merged);
-          }
-        }
-        _feedsLoaded = true;
-      }
+      final catalogResult = await SubscriptionCatalogService.sync();
+      _feedMap
+        ..clear()
+        ..addEntries(
+          catalogResult.feeds.map((feed) => MapEntry(feed.feedId, feed)),
+        );
 
       final dataFuture = loadData();
       final minDuration = Future<void>.delayed(

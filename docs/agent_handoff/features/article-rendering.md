@@ -31,6 +31,7 @@ HTML 空段规范化：
 - 官方作者区有稳定的 `data-target="BlogAuthorsByline"`。兼容层将其转换为内部 `auto-folo-author-list/auto-folo-author` 语义结构，`HtmlChunkParser` 生成单个 `authorList` chunk，`HtmlChunkCard` 以 `36px` 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。
 - 作者区之外的 Hugging Face 头像堆叠属于站点装饰信息，仍按明确的 `cdn-avatars.huggingface.co` 或 `/avatars/` 头像语义移除；普通正文图片和其他来源即使带有 `avatar`/圆形类名也不能被误删。
 - 已保存译文此前直接进入 `HtmlChunkParser`，会绕过正文规范化。当前原文、历史译文和新生成译文在展示前都统一经过 `normalizeHtml()`；历史数据不需要批量迁移，重新构建文章 Controller 即可生效。
+- `normalizeHtml()` 接受文章原文 URL 作为来源上下文；来源规则按 URL host 分派，不依赖可变的订阅源标题或 feed ID。MarkTechPost 会移除上游依赖网页脚本的 `dm-copy-raw-code` 控件；若 `Interactive Explainer` 后出现被 Folo 展开到正文中的完整内嵌文档（以残留 `<title>` 为确定边界），则把该尾部替换为“交互内容仅在原文网页中可用”及原文链接。不要据此放宽到任意 iframe、任意 `Interactive` 文本或其他来源。
 - 来源规则必须依赖稳定的来源标记、域名或明确语义，并配正向/反向最小 HTML 测试。不要按文章标题、订阅源 ID、图片是否圆形或图片固有尺寸做宽泛判断。
 
 超链接：
@@ -43,6 +44,8 @@ HTML 空段规范化：
 图片：
 
 - 使用 `ArticleImageService` 处理代理/请求头。
+- 图片规范化会用文章原文 URL 解析 `/path`、`./path` 和 `../path` 相对地址，再进行 HTTP/HTTPS 校验。没有可靠来源 URL 时继续保留原属性但不加载，不猜测站点域名。AddyOsmani.com 的 `Software Factories, Light and Dark` 已用真实缓存样本确认可解析出 4 个绝对 SVG 地址。
+- 正文与图片查看器支持 SVG；SVG 通过 `ArticleSvgImage` 读取 `ArticleImageCacheService` 的文章级磁盘缓存后交给 `flutter_svg`，不能改回独立网络加载，否则后台预取会对 SVG 失效。普通位图仍走 `CachedNetworkImage`。
 - macOS 与 Android 正文图片都使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；历史 `v2_` 缓存暂不迁移。
 - macOS 刷新完成后预取全部本地未读文章的正文静态图片：按文章顺序、每篇最多 8 张、总调度并发 16；当前文章前 4 张提升到队首。
 - Android 使用保守参数：刷新时预取前 50 篇本地未读文章、每篇最多 4 张、总调度并发 4；当前文章前 2 张提升到队首。当前不区分 Wi-Fi 与移动网络。不要加入 hover 触发，也不要把预取改成批量 `precacheImage()` 常驻内存。
@@ -81,6 +84,7 @@ HTML 空段规范化：
 
 - OpenAI News 的 `Improving health intelligence in ChatGPT`：Folo 条目只有短摘要，没有 media、attachments、video 或 iframe。全文 readability 会从 OpenAI 动态页面留下一个无 `src`/`source` 的 `<audio preload="none">`；它原本属于依赖网页 JavaScript 后续注入资源的“朗读文章”控件，不是视频。不要尝试猜测 OpenAI 的动态音频地址，也不要静默删除该节点；当前把它显示为明确的“音频不可用”状态。
 - MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“受支持官方视频 iframe”白名单。
+- MarkTechPost 的失效代码复制控件和确定泄漏到正文的 explainer 文档现由来源兼容层清理；代码块统一由 `HtmlChunkCard` 提供轻量原生复制按钮。该处理只改善退化呈现，不恢复原交互组件，也不执行上游 HTML/CSS/JavaScript。
 - 无有效 `src/source` 的 audio、video、iframe 不得静默删除，也不得继续伪装成可播放的空播放器。当前保留媒体 chunk，并明确显示“源内容未提供可用的媒体地址”；文章有原始链接时提供“打开原文”。这既暴露源内容/解析问题，又避免误导用户。
 
 表格：
@@ -130,6 +134,7 @@ HTML entity 解码：
 
 - macOS 文章详情右上角有“复制原文全文”按钮，位置在已读/未读按钮附近；无修饰键 `C` 与按钮调用同一复制逻辑。`Command-C` 仍交给系统处理正文选区复制，不得被全局快捷键吞掉。
 - Markdown 结构转换集中在 `ArticleMarkdownExportService`；页面只负责读取当前文章/chunk、写入剪贴板和反馈。该 service 同时提供按文章顺序构建批量 Markdown 的入口，后续批量复制/保存必须复用它，不要在时间线或 `article_page.dart` 中复制另一套 exporter。
+- 单篇复制也必须调用 `buildArticleAsync()` 在 isolate 中转换；页面用重入保护避免连续按 `C` 并发转换同一篇文章。阿里技术的超长文章曾因畸形列表触发 `_listToMarkdown()` 自递归并栈溢出；列表无有效直属项时现在只退化为纯文本，不能再把同一段列表 HTML 递归交回 `_htmlToMarkdown()`。
 - 复制对象是正文区当前已经加载并解析出的原文 `controller.chunks`，不是译文、摘要、目录或 UI 文案。
 - 点击复制不应触发网络请求，也不应临时拉取 readability/full content；如果正文尚未加载完成，只提示暂无可复制正文。
 - 输出格式为 Markdown。开头包含标题、来源、作者、发布时间、原文链接；正文保留基础结构：标题、段落、链接、图片链接、代码块、引用、列表和表格。

@@ -59,6 +59,7 @@ abstract final class ArticleFilterService {
 
     final htmlContent = ArticleContentUtils.normalizeHtml(
       article.content ?? '',
+      sourceUrl: article.url,
     );
     final textContent = htmlContent
         .replaceAll(RegExp(r'<[^>]*>'), ' ')

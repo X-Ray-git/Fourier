@@ -218,6 +218,7 @@ abstract final class SummaryService {
     final htmlContent = ArticleContentUtils.normalizeHtmlForEntry(
       article.entryId,
       overrideContent ?? article.content ?? '',
+      sourceUrl: article.url,
     );
     if (htmlContent.isEmpty) {
       final record = SummaryRecord(

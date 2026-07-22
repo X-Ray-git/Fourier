@@ -40,6 +40,58 @@ import '../../utils/scroll_utils.dart';
 
 enum _SilentBatchAction { copy, save, copyAndMarkRead, saveAndMarkRead }
 
+class _TimelineScopeSnapshot {
+  final bool silent;
+  final String? feedId;
+  final String? category;
+
+  const _TimelineScopeSnapshot({
+    required this.silent,
+    required this.feedId,
+    required this.category,
+  });
+}
+
+class _SourceReturnContext {
+  final _TimelineScopeSnapshot previousScope;
+  final String destinationFeedId;
+  final String articleEntryId;
+  final double timelineScrollOffset;
+  final double articleScrollOffset;
+  final bool showTranslation;
+  final bool showSummary;
+
+  const _SourceReturnContext({
+    required this.previousScope,
+    required this.destinationFeedId,
+    required this.articleEntryId,
+    required this.timelineScrollOffset,
+    required this.articleScrollOffset,
+    required this.showTranslation,
+    required this.showSummary,
+  });
+
+  bool matchesDestination(TimelineController controller) {
+    return !controller.isSilentSelected.value &&
+        controller.selectedFeedId.value == destinationFeedId &&
+        controller.selectedCategory.value == null;
+  }
+}
+
+class _PendingArticleRestore {
+  final String entryId;
+  final double scrollOffset;
+  final bool showTranslation;
+  final bool showSummary;
+
+  const _PendingArticleRestore({
+    required this.entryId,
+    required this.scrollOffset,
+    required this.showTranslation,
+    required this.showSummary,
+  });
+}
+
 extension on _SilentBatchAction {
   bool get writesClipboard =>
       this == _SilentBatchAction.copy ||
@@ -237,6 +289,10 @@ class _TimelinePageState extends State<TimelinePage> {
   bool _isSilentBatchMode = false;
   bool _isSilentBatchProcessing = false;
   final Set<String> _silentBatchSelection = {};
+  _SourceReturnContext? _sourceReturnContext;
+  _PendingArticleRestore? _pendingArticleRestore;
+  bool _isRestoringSourceContext = false;
+  int _sourceScopeValidationGeneration = 0;
 
   Map<String, GlobalKey> get _itemKeys => _listCoordinator.itemKeys;
 
@@ -268,8 +324,10 @@ class _TimelinePageState extends State<TimelinePage> {
         controller.selectedCategory,
       ],
       (_) {
-        if (_isSilentAggregateScope || !_isSilentBatchMode) return;
-        setState(_resetSilentBatchState);
+        if (!_isSilentAggregateScope && _isSilentBatchMode) {
+          setState(_resetSilentBatchState);
+        }
+        _scheduleSourceReturnValidation();
       },
     );
     _scrollController.addListener(_onScroll);
@@ -326,12 +384,116 @@ class _TimelinePageState extends State<TimelinePage> {
 
   bool _handleHardwareKeyEvent(KeyEvent event) {
     if (!mounted || event is! KeyDownEvent) return false;
-    if (!_isSilentBatchMode || !_isActiveMacTimeline) return false;
+    if (!_isActiveMacTimeline) return false;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
 
-    _exitSilentBatchMode();
+    if (_isSilentBatchMode) {
+      _exitSilentBatchMode();
+      return true;
+    }
+    // The article view owns the first Esc while a destination article is open.
+    if (controller.selectedArticle.value != null) return false;
+    if (_sourceReturnContext == null) return false;
+
+    _restoreSourceContext();
     return true;
+  }
+
+  void _scheduleSourceReturnValidation() {
+    final generation = ++_sourceScopeValidationGeneration;
+    Future<void>.microtask(() {
+      if (!mounted || generation != _sourceScopeValidationGeneration) return;
+      final returnContext = _sourceReturnContext;
+      if (returnContext == null || _isRestoringSourceContext) return;
+      if (!returnContext.matchesDestination(controller)) {
+        _sourceReturnContext = null;
+        _pendingArticleRestore = null;
+      }
+    });
+  }
+
+  void _openArticleSource(ArticleSourceOpenRequest request) {
+    final feedId = request.article.feedId.trim();
+    if (feedId.isEmpty) return;
+
+    final alreadyInDestination =
+        !controller.isSilentSelected.value &&
+        controller.selectedFeedId.value == feedId &&
+        controller.selectedCategory.value == null;
+    if (alreadyInDestination) return;
+
+    _sourceReturnContext = _SourceReturnContext(
+      previousScope: _TimelineScopeSnapshot(
+        silent: controller.isSilentSelected.value,
+        feedId: controller.selectedFeedId.value,
+        category: controller.selectedCategory.value,
+      ),
+      destinationFeedId: feedId,
+      articleEntryId: request.article.entryId,
+      timelineScrollOffset: _scrollController.hasClients
+          ? _scrollController.offset
+          : 0,
+      articleScrollOffset: request.articleScrollOffset,
+      showTranslation: request.showTranslation,
+      showSummary: request.showSummary,
+    );
+    _pendingArticleRestore = null;
+    controller.setTimelineScope(feedId: feedId);
+  }
+
+  void _restoreSourceContext() {
+    final returnContext = _sourceReturnContext;
+    if (returnContext == null) return;
+
+    _isRestoringSourceContext = true;
+    _sourceReturnContext = null;
+    _pendingArticleRestore = _PendingArticleRestore(
+      entryId: returnContext.articleEntryId,
+      scrollOffset: returnContext.articleScrollOffset,
+      showTranslation: returnContext.showTranslation,
+      showSummary: returnContext.showSummary,
+    );
+
+    final scope = returnContext.previousScope;
+    controller.setTimelineScope(
+      silent: scope.silent,
+      feedId: scope.feedId,
+      category: scope.category,
+    );
+
+    ArticleModel? article;
+    for (final candidate in controller.allArticles) {
+      if (candidate.entryId == returnContext.articleEntryId) {
+        article = candidate;
+        break;
+      }
+    }
+    if (article != null) {
+      controller.selectedArticle.value = article;
+    } else {
+      _pendingArticleRestore = null;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        final position = _scrollController.position;
+        final target = returnContext.timelineScrollOffset.clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        );
+        _scrollController.jumpTo(target.toDouble());
+      }
+      _isRestoringSourceContext = false;
+    });
+  }
+
+  _PendingArticleRestore? _takeArticleRestore(String entryId) {
+    final restore = _pendingArticleRestore;
+    if (restore == null || restore.entryId != entryId) return null;
+    _pendingArticleRestore = null;
+    return restore;
   }
 
   void _enterSilentBatchMode() {
@@ -1038,6 +1200,7 @@ class _TimelinePageState extends State<TimelinePage> {
                       focusNode: _emptyDetailFocusNode,
                     );
                   }
+                  final restore = _takeArticleRestore(selected.entryId);
                   return ArticlePageView(
                     key: ValueKey(selected.entryId),
                     article: selected,
@@ -1048,6 +1211,10 @@ class _TimelinePageState extends State<TimelinePage> {
                     isSelectedArticle: (entryId) =>
                         controller.selectedArticle.value?.entryId == entryId,
                     onClose: _clearSelectionAndFocusEmptyDetail,
+                    onOpenSource: _openArticleSource,
+                    initialScrollOffset: restore?.scrollOffset,
+                    initialShowTranslation: restore?.showTranslation,
+                    initialShowSummary: restore?.showSummary,
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
                     onMKeyPressed: _handleMacReadShortcut,

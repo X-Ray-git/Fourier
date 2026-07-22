@@ -19,6 +19,7 @@ import '../../../common/widgets/interactiveviewer_gallery/interactive_viewer_bou
 import '../../../services/article_image_service.dart';
 import '../../../services/article_image_cache_service.dart';
 import '../../../utils/image_clipboard.dart';
+import 'article_svg_image.dart';
 
 /// PiliPlus 架构图片查看器 — 基于 vendored InteractiveViewerBoundary
 /// 实现单指下拉退出 + 双指缩放的零冲突手势交互。
@@ -441,42 +442,73 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                       child: Hero(
                         tag: url,
                         child: SizedBox.expand(
-                          child: CachedNetworkImage(
-                            cacheKey: ArticleImageCacheService.displayCacheKey(
-                              widget.articleId,
-                              url,
-                            ),
-                            imageUrl: url,
-                            fit: BoxFit.contain,
-                            httpHeaders: ArticleImageService.httpHeaders,
-                            memCacheWidth: cacheWidth,
-                            maxWidthDiskCache: diskCacheWidth,
-                            fadeInDuration: const Duration(milliseconds: 250),
-                            fadeOutDuration: const Duration(milliseconds: 80),
-                            placeholder: (context, url) => const SizedBox(
-                              width: 40,
-                              height: 40,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.broken_image_rounded,
-                                  color: Colors.white70,
-                                  size: 42,
+                          child: ArticleImageService.isSvg(url)
+                              ? ArticleSvgImage(
+                                  articleId: widget.articleId,
+                                  imageUrl: url,
+                                  fit: BoxFit.contain,
+                                  placeholder: const Center(
+                                    child: SizedBox(
+                                      width: 40,
+                                      height: 40,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ),
+                                  errorWidget: const Center(
+                                    child: Icon(
+                                      Icons.broken_image_rounded,
+                                      color: Colors.white70,
+                                      size: 42,
+                                    ),
+                                  ),
+                                )
+                              : CachedNetworkImage(
+                                  cacheKey:
+                                      ArticleImageCacheService.displayCacheKey(
+                                        widget.articleId,
+                                        url,
+                                      ),
+                                  imageUrl: url,
+                                  fit: BoxFit.contain,
+                                  httpHeaders: ArticleImageService.httpHeaders,
+                                  memCacheWidth: cacheWidth,
+                                  maxWidthDiskCache: diskCacheWidth,
+                                  fadeInDuration: const Duration(
+                                    milliseconds: 250,
+                                  ),
+                                  fadeOutDuration: const Duration(
+                                    milliseconds: 80,
+                                  ),
+                                  placeholder: (context, url) => const SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) =>
+                                      const Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.broken_image_rounded,
+                                            color: Colors.white70,
+                                            size: 42,
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            '加载失败',
+                                            style: TextStyle(
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                 ),
-                                SizedBox(height: 8),
-                                Text(
-                                  '加载失败',
-                                  style: TextStyle(color: Colors.white70),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
                     ),

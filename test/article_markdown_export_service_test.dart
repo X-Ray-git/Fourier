@@ -104,4 +104,35 @@ void main() {
     expect(markdown, contains('> 原文：https://example.com/1'));
     expect(markdown, contains('> 正文尚未缓存'));
   });
+
+  test('malformed wrapped lists do not recurse indefinitely', () {
+    final markdown = ArticleMarkdownExportService.buildArticle(
+      article: article(),
+      chunks: const [
+        HtmlChunk(
+          type: HtmlChunkType.list,
+          content: '<ul><div><li>Wrapped item</li></div></ul>',
+        ),
+        HtmlChunk(
+          type: HtmlChunkType.list,
+          content: '<ul><div>Text without a list item</div></ul>',
+        ),
+      ],
+    );
+
+    expect(markdown, contains('- Wrapped item'));
+    expect(markdown, contains('Text without a list item'));
+  });
+
+  test('single article export can run off the UI isolate', () async {
+    final markdown = await ArticleMarkdownExportService.buildArticleAsync(
+      article: article(title: 'Async export'),
+      chunks: const [
+        HtmlChunk(type: HtmlChunkType.paragraph, content: '<p>Body</p>'),
+      ],
+    );
+
+    expect(markdown, contains('# Async export'));
+    expect(markdown, contains('Body'));
+  });
 }

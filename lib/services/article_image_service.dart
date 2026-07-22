@@ -83,6 +83,11 @@ abstract final class ArticleImageService {
     final sep = imageUrl.contains('?') ? '&' : '?';
     return '$imageUrl${sep}retry=$retryCount';
   }
+
+  static bool isSvg(String imageUrl) {
+    final path = Uri.tryParse(imageUrl)?.path.toLowerCase() ?? '';
+    return path.endsWith('.svg');
+  }
 }
 
 class _ProxyRule {

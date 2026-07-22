@@ -16,6 +16,17 @@ abstract final class ArticleMarkdownExportService {
     return _ArticleMarkdownExporter(article: article, chunks: chunks).build();
   }
 
+  static Future<String> buildArticleAsync({
+    required ArticleModel article,
+    required List<HtmlChunk> chunks,
+  }) {
+    final snapshot = chunks.toList(growable: false);
+    return Isolate.run(
+      () =>
+          _ArticleMarkdownExporter(article: article, chunks: snapshot).build(),
+    );
+  }
+
   static Future<String> buildBatch(List<ArticleModel> articles) {
     final snapshot = articles.toList(growable: false);
     return Isolate.run(() {
@@ -25,7 +36,10 @@ abstract final class ArticleMarkdownExportService {
             final chunks = rawHtml.isEmpty
                 ? const <HtmlChunk>[]
                 : HtmlChunkParser.parseSync(
-                    ArticleContentUtils.normalizeHtml(rawHtml),
+                    ArticleContentUtils.normalizeHtml(
+                      rawHtml,
+                      sourceUrl: article.url,
+                    ),
                   );
             return _ArticleMarkdownExporter(
               article: article,
@@ -164,12 +178,22 @@ class _ArticleMarkdownExporter {
     final fragment = html_parser.parseFragment(html);
     final rootList =
         fragment.querySelector('ol') ?? fragment.querySelector('ul');
-    final items = (rootList ?? fragment).children
-        .where((element) => element.localName == 'li')
-        .toList();
-    if (items.isEmpty) return _htmlToMarkdown(html);
+    if (rootList == null) {
+      return _normalizeInlineSpacing(fragment.text ?? '');
+    }
 
-    final ordered = rootList?.localName == 'ol';
+    final items = rootList.querySelectorAll('li').where((item) {
+      html_dom.Element? ancestor = item.parent;
+      while (ancestor != null &&
+          ancestor.localName != 'ul' &&
+          ancestor.localName != 'ol') {
+        ancestor = ancestor.parent;
+      }
+      return identical(ancestor, rootList);
+    }).toList();
+    if (items.isEmpty) return _normalizeInlineSpacing(rootList.text);
+
+    final ordered = rootList.localName == 'ol';
     return items
         .asMap()
         .entries

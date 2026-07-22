@@ -268,6 +268,7 @@ abstract final class TranslationService {
     final htmlContent = ArticleContentUtils.normalizeHtmlForEntry(
       article.entryId,
       overrideContent ?? article.content ?? '',
+      sourceUrl: article.url,
     );
     // 正文过大时分块翻译，避免 LLM 输出畸形 JSON
     const chunkThreshold = 35 * 1024;

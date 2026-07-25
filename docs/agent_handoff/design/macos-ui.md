@@ -29,7 +29,7 @@
 - Hover 应微妙且稳定；避免闪烁或布局变化。
 - 密集、重复出现的列表按钮不应为了追求玻璃效果而全部改为重型 glass surface；优先使用轻量 hover/描边，并只把 tooltip 统一到玻璃语言。
 - 密集文章列表卡片不使用普通边框作为默认态。用户验证后认为细线边框不够理想，当前取舍是 macOS 普通态极高透明度白/黑中性色填充，浅色模式反向使用黑/灰透明填充。
-- full-size content view 的 header 可拖动窗口，但可点击控件不能把轻微指针位移传给 AppKit。共享圆形玻璃按钮、范围/排序 morph 入口和目录 morph 入口使用 `MacOSWindowDragGuard`；按下期间通过原生 channel 临时设置 `NSWindow.isMovable = false`，最后一个指针释放/取消/组件销毁后恢复。不要把整个 header 禁止拖动，空白区仍是窗口拖动入口。
+- full-size content view 不再依赖 AppKit 隐式标题栏拖动：启动时固定 `NSWindow.isMovable = false`，仅标题文字和明确的空白标题区使用 `MacOSWindowDragArea` 调用应用控制的窗口拖动。按钮、输入框、菜单和其他交互控件必须作为拖动区域的同级节点，不能放进其子树。旧 `MacOSWindowDragGuard` 通过异步 channel 临时切换整个窗口，存在按下与 AppKit 开始拖动之间的竞态，已删除；以后新增 macOS header 时应增加明确拖动区，不能重新采用按钮逐个临时禁用窗口的方式。
 
 间距：
 

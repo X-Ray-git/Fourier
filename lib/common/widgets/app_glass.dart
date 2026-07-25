@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 
 import '../liquid_glass/liquid_glass.dart';
 import 'continuous_rectangle.dart';
-import 'macos_window_drag_guard.dart';
 
 enum AppGlassTone { surface, panel, control }
 
@@ -923,25 +922,23 @@ class AppGlassRoundControlChrome extends StatelessWidget {
       hoverAlpha: 0.06,
     );
 
-    return MacOSWindowDragGuard(
-      child: AppGlassSurface(
-        borderRadius: 999,
-        padding: EdgeInsets.zero,
-        tone: AppGlassTone.control,
-        interactive: enabled,
-        useOwnLayer: useOwnLayer,
-        settingsOverride: appGlassButtonSettingsFor(context),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOutCubic,
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: fill,
-          ),
-          child: child,
+    return AppGlassSurface(
+      borderRadius: 999,
+      padding: EdgeInsets.zero,
+      tone: AppGlassTone.control,
+      interactive: enabled,
+      useOwnLayer: useOwnLayer,
+      settingsOverride: appGlassButtonSettingsFor(context),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: fill,
         ),
+        child: child,
       ),
     );
   }

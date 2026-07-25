@@ -33,6 +33,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
@@ -1576,34 +1577,36 @@ class _MacReviewHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '垃圾拦截',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface,
+                    child: MacOSWindowDragArea(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '垃圾拦截',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface,
+                            ),
                           ),
-                        ),
-                        Text(
-                          llmActive
-                              ? '$humanCount 篇待处理 · $llmCount 篇判定中'
-                              : humanCount == 0
-                              ? '全部处理完毕'
-                              : '$humanCount 篇待处理',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colorScheme.onSurfaceVariant,
+                          Text(
+                            llmActive
+                                ? '$humanCount 篇待处理 · $llmCount 篇判定中'
+                                : humanCount == 0
+                                ? '全部处理完毕'
+                                : '$humanCount 篇待处理',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                   if (llmActive)

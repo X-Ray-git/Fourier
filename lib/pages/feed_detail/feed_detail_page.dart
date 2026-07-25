@@ -26,6 +26,7 @@ import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/macos_window_drag_area.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_service.dart';
 import '../../services/content_cache_service.dart';
@@ -803,40 +804,42 @@ class _MacFeedHeader extends StatelessWidget {
             _MacFeedAvatar(imageUrl: imageUrl, colorScheme: colorScheme),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    controller.feedTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Obx(() {
-                    final unread = controller.articles
-                        .where((a) => !a.isRead)
-                        .length;
-                    final total = controller.articles.length;
-                    return Text(
-                      unread > 0
-                          ? '$unread 篇未读 · $total 篇当前列表'
-                          : '$total 篇当前列表',
+              child: MacOSWindowDragArea(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      controller.feedTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 14,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
                       ),
-                    );
-                  }),
-                ],
+                    ),
+                    const SizedBox(height: 3),
+                    Obx(() {
+                      final unread = controller.articles
+                          .where((a) => !a.isRead)
+                          .length;
+                      final total = controller.articles.length;
+                      return Text(
+                        unread > 0
+                            ? '$unread 篇未读 · $total 篇当前列表'
+                            : '$total 篇当前列表',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
               ),
             ),
             _MacFeedReadFilterToggle(controller: controller),

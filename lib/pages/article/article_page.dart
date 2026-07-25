@@ -19,7 +19,7 @@ import '../../router/app_pages.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
-import '../../common/widgets/macos_window_drag_guard.dart';
+import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/article_image_cache_service.dart';
@@ -1707,44 +1707,46 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
     Widget scaffold = Scaffold(
       appBar: AppBar(
-        title: usesCollapsibleMacHeader
-            ? ValueListenableBuilder<double>(
-                valueListenable: _headerCollapseProgress,
-                builder: (context, progress, child) {
-                  final eased = Curves.easeOutCubic.transform(progress);
-                  return Opacity(
-                    opacity: eased,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - eased) * 6),
-                      child: child,
+        title: MacOSWindowDragArea(
+          child: usesCollapsibleMacHeader
+              ? ValueListenableBuilder<double>(
+                  valueListenable: _headerCollapseProgress,
+                  builder: (context, progress, child) {
+                    final eased = Curves.easeOutCubic.transform(progress);
+                    return Opacity(
+                      opacity: eased,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - eased) * 6),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      right: _macToolbarButtonSize + _macToolbarButtonGap,
                     ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    right: _macToolbarButtonSize + _macToolbarButtonGap,
+                    child: Text(
+                      controller.article.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
                   ),
-                  child: Text(
-                    controller.article.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
+                )
+              : Text(
+                  widget.pageLabel ?? '文章详情',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 2.0,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                   ),
                 ),
-              )
-            : Text(
-                widget.pageLabel ?? '文章详情',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 2.0,
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                ),
-              ),
+        ),
         centerTitle: !usesCollapsibleMacHeader,
         titleSpacing: usesCollapsibleMacHeader ? 11 : null,
         backgroundColor: colorScheme.surface,
@@ -2263,98 +2265,96 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
           Positioned(
             top: 0,
             right: 0,
-            child: MacOSWindowDragGuard(
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: (_) => setState(() => _isHovered = true),
-                onExit: (_) => setState(() {
-                  _isHovered = false;
-                  _isPressed = false;
-                }),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: clampedValue < 0.86
-                      ? (_) => setState(() => _isPressed = true)
-                      : null,
-                  onTapUp: clampedValue < 0.86
-                      ? (_) => setState(() => _isPressed = false)
-                      : null,
-                  onTapCancel: clampedValue < 0.86
-                      ? () => setState(() => _isPressed = false)
-                      : null,
-                  onTap: clampedValue < 0.86 ? widget.onToggle : null,
-                  child: AnimatedScale(
-                    scale: isIdle ? idleScale : 1.0,
-                    duration: const Duration(milliseconds: 120),
-                    curve: Curves.easeOutCubic,
-                    child: glass.GlassContainer(
-                      width: currentWidth,
-                      height: currentHeight,
-                      useOwnLayer: false,
-                      settings: widget.glassSettings,
-                      quality: glass.GlassQuality.standard,
-                      allowElevation: false,
-                      glowIntensity: isIdle && _isHovered ? 0.14 : 0.0,
-                      clipBehavior: Clip.antiAlias,
-                      shape: glass.LiquidRoundedSuperellipse(
-                        borderRadius: currentRadius,
-                      ),
-                      child: DecoratedBox(
-                        position: DecorationPosition.foreground,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(currentRadius),
-                          border: Border.all(
-                            color: appGlassBorderColor(
-                              context,
-                              AppGlassTone.control,
-                            ),
-                            width: 0.5,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _isHovered = true),
+              onExit: (_) => setState(() {
+                _isHovered = false;
+                _isPressed = false;
+              }),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: clampedValue < 0.86
+                    ? (_) => setState(() => _isPressed = true)
+                    : null,
+                onTapUp: clampedValue < 0.86
+                    ? (_) => setState(() => _isPressed = false)
+                    : null,
+                onTapCancel: clampedValue < 0.86
+                    ? () => setState(() => _isPressed = false)
+                    : null,
+                onTap: clampedValue < 0.86 ? widget.onToggle : null,
+                child: AnimatedScale(
+                  scale: isIdle ? idleScale : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOutCubic,
+                  child: glass.GlassContainer(
+                    width: currentWidth,
+                    height: currentHeight,
+                    useOwnLayer: false,
+                    settings: widget.glassSettings,
+                    quality: glass.GlassQuality.standard,
+                    allowElevation: false,
+                    glowIntensity: isIdle && _isHovered ? 0.14 : 0.0,
+                    clipBehavior: Clip.antiAlias,
+                    shape: glass.LiquidRoundedSuperellipse(
+                      borderRadius: currentRadius,
+                    ),
+                    child: DecoratedBox(
+                      position: DecorationPosition.foreground,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(currentRadius),
+                        border: Border.all(
+                          color: appGlassBorderColor(
+                            context,
+                            AppGlassTone.control,
                           ),
+                          width: 0.5,
                         ),
-                        child: Stack(
-                          alignment: Alignment.topRight,
-                          children: [
-                            if (panelScrimOpacity > 0)
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: ColoredBox(
-                                    color: panelScrim.withValues(
-                                      alpha: panelScrim.a * panelScrimOpacity,
-                                    ),
+                      ),
+                      child: Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          if (panelScrimOpacity > 0)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: ColoredBox(
+                                  color: panelScrim.withValues(
+                                    alpha: panelScrim.a * panelScrimOpacity,
                                   ),
                                 ),
                               ),
-                            if (showTriggerIcon)
-                              Opacity(
-                                opacity: triggerIconOpacity,
+                            ),
+                          if (showTriggerIcon)
+                            Opacity(
+                              opacity: triggerIconOpacity,
+                              child: SizedBox(
+                                width: widget.buttonSize,
+                                height: widget.buttonSize,
+                                child: _TocIconButtonChrome(
+                                  icon: Icons.format_list_bulleted_rounded,
+                                  color: cs.onSurface,
+                                ),
+                              ),
+                            ),
+                          if (showContent)
+                            Opacity(
+                              opacity: contentOpacity,
+                              child: IgnorePointer(
+                                ignoring: contentOpacity < 0.95,
                                 child: SizedBox(
-                                  width: widget.buttonSize,
-                                  height: widget.buttonSize,
-                                  child: _TocIconButtonChrome(
-                                    icon: Icons.format_list_bulleted_rounded,
-                                    color: cs.onSurface,
+                                  width: widget.panelWidth,
+                                  height: widget.panelHeight,
+                                  child: _ArticleTocPanelContent(
+                                    entries: widget.entries,
+                                    activeTocId: widget.activeTocId,
+                                    onToggle: widget.onToggle,
+                                    onEntryTap: widget.onEntryTap,
                                   ),
                                 ),
                               ),
-                            if (showContent)
-                              Opacity(
-                                opacity: contentOpacity,
-                                child: IgnorePointer(
-                                  ignoring: contentOpacity < 0.95,
-                                  child: SizedBox(
-                                    width: widget.panelWidth,
-                                    height: widget.panelHeight,
-                                    child: _ArticleTocPanelContent(
-                                      entries: widget.entries,
-                                      activeTocId: widget.activeTocId,
-                                      onToggle: widget.onToggle,
-                                      onEntryTap: widget.onEntryTap,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
                     ),
                   ),

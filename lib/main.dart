@@ -126,6 +126,7 @@ void main() async {
       titleBarStyle: TitleBarStyle.hidden,
     );
     await windowManager.waitUntilReadyToShow(windowOptions);
+    await windowManager.setMovable(false);
     shouldShowMacWindow = true;
   }
 

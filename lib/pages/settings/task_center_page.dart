@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/macos_window_drag_area.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/auto_filter_worker.dart';
@@ -227,25 +228,11 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
               const SizedBox(width: 12),
             ],
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '后台任务与同步',
-                    style: TextStyle(
-                      fontSize: widget.embedded ? 22 : 28,
-                      height: 1.1,
-                      fontWeight: FontWeight.w800,
-                      color: cs.onSurface,
+              child: widget.embedded
+                  ? _TaskCenterTitle(colorScheme: cs, embedded: true)
+                  : MacOSWindowDragArea(
+                      child: _TaskCenterTitle(colorScheme: cs, embedded: false),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '查看已读同步、AI 过滤、翻译和摘要任务状态。',
-                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-                  ),
-                ],
-              ),
             ),
             if (widget.embedded) const SizedBox(width: 46),
           ],
@@ -352,6 +339,36 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
   }
 }
 
+class _TaskCenterTitle extends StatelessWidget {
+  const _TaskCenterTitle({required this.colorScheme, required this.embedded});
+
+  final ColorScheme colorScheme;
+  final bool embedded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '后台任务与同步',
+          style: TextStyle(
+            fontSize: embedded ? 22 : 28,
+            height: 1.1,
+            fontWeight: FontWeight.w800,
+            color: colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '查看已读同步、AI 过滤、翻译和摘要任务状态。',
+          style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
 class _AiFailureListPage extends StatefulWidget {
   final _AiTaskType type;
 
@@ -397,27 +414,29 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _isTranslation ? '翻译失败文章' : '摘要失败文章',
-                            style: TextStyle(
-                              fontSize: 28,
-                              height: 1.1,
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface,
+                      child: MacOSWindowDragArea(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isTranslation ? '翻译失败文章' : '摘要失败文章',
+                              style: TextStyle(
+                                fontSize: 28,
+                                height: 1.1,
+                                fontWeight: FontWeight.w800,
+                                color: cs.onSurface,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '按文章排查失败原因，并支持单篇重试。',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: cs.onSurfaceVariant,
+                            const SizedBox(height: 6),
+                            Text(
+                              '按文章排查失败原因，并支持单篇重试。',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: cs.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],

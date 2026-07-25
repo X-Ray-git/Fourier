@@ -19,6 +19,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_selection_button.dart';
 import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
@@ -1775,24 +1776,29 @@ class _MacTimelineAppBar extends StatelessWidget
       }
 
       return AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (subtitle != null)
+        title: MacOSWindowDragArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Text(
-                subtitle,
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-          ],
+              if (subtitle != null)
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
+          ),
         ),
         backgroundColor: Colors.transparent,
         centerTitle: false,

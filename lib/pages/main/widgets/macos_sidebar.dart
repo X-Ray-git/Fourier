@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../../../common/constants/macos_layout_metrics.dart';
 import '../../../common/widgets/app_glass.dart';
 import '../../../common/widgets/continuous_rectangle.dart';
+import '../../../common/widgets/macos_window_drag_area.dart';
 import '../../../http/init.dart';
 import '../../../models/feed.dart';
 import '../../../services/feed_readability_settings_service.dart';
@@ -530,15 +531,17 @@ class _SidebarHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 38,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 10, top: 10),
-        child: Align(
-          alignment: Alignment.centerRight,
-          // 实验性 UI 精简：暂时取消“收起”按钮以避开 macOS 红绿灯，
-          // 但保留原有对齐逻辑和 SizedBox 高度占位，以便需要时随时恢复为 IconButton。
-          child: const SizedBox.shrink(),
+    return MacOSWindowDragArea(
+      child: SizedBox(
+        height: 38,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 10, top: 10),
+          child: Align(
+            alignment: Alignment.centerRight,
+            // 实验性 UI 精简：暂时取消“收起”按钮以避开 macOS 红绿灯，
+            // 但保留原有对齐逻辑和 SizedBox 高度占位，以便需要时随时恢复为 IconButton。
+            child: const SizedBox.shrink(),
+          ),
         ),
       ),
     );

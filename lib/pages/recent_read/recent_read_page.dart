@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
+import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
@@ -187,11 +188,13 @@ class _RecentReadPageState extends State<RecentReadPage> {
                 child: MacHeaderPane(
                   headerHeight: kToolbarHeight,
                   header: AppBar(
-                    title: const Text(
-                      '最近阅读',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                    title: const MacOSWindowDragArea(
+                      child: Text(
+                        '最近阅读',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     backgroundColor: Colors.transparent,

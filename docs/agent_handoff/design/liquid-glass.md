@@ -26,6 +26,7 @@ macOS 原生侧边栏玻璃：
 - 当前 macOS 26 使用只覆盖侧边栏面板的 `NSGlassEffectView(style: .regular)`，不设置 `tintColor`，Flutter 不再为侧边栏叠加白色或二次模糊。浅色和深色共用同一原生组件，由同步后的 `.aqua/.darkAqua` 外观驱动。macOS 10.15～15 保留 `.sidebar + .behindWindow` 的 `NSVisualEffectView` 回退。
 - `NSGlassEffectView` 公开可调项主要是 `style`（`regular/clear`）、`tintColor`、`cornerRadius` 和原生几何；它没有模糊半径、折射、饱和度、高光、阴影或边框强度参数。侧边栏应保持 `.regular`；`.clear` 更适合媒体背景并常需额外 dimming，不适合当前导航侧边栏。
 - 侧边栏 Flutter 开口使用连续曲率，而 AppKit 玻璃使用系统轮廓。为避免两套抗锯齿边缘不完全重合而露出未处理背景，原生 backdrop 在 Flutter 遮罩后方向四周扩展 `1px`；最终可见轮廓仍由 Flutter 的 `8px` margin、`18px` 连续曲率裁剪决定。
+- 原生玻璃是 Flutter 视图下方的 AppKit 兄弟节点，Flutter 最外层 `ClipPath` 无法裁剪它。玻璃直接挂在透明窗口下方时，窗口获得焦点后增强的折射和高光会越过应用外框，在左上、左下圆角表现为透明穿透或不规则锯齿。Runner 现在用覆盖整个内容区的透明 `sidebarBackdropHost` 承载玻璃，并以 `24px` AppKit 连续圆角做最终外框裁剪；只裁剪这个原生宿主，不裁剪整个 `contentView`、Flutter 页面或红黄绿按钮。侧边栏自身的 `1px` bleed 继续保留，用途与外框裁剪不同。
 - 原生组件没有可调 border。当前 Flutter 在最终轮廓上补 `0.5px` 环境描边：浅色为黑色 `12%`，深色为白色 `12%`；浅色另有克制的外侧主阴影和接触阴影，深色不额外加阴影。描边只用于白色/深色背景下的边界识别，不应重新演变为厚重模拟玻璃。
 - 不要为了“略微增加模糊”给侧边栏重新叠 `BackdropFilter`。用户了解原生 API 不支持调模糊半径后，明确选择保持系统模糊。
 

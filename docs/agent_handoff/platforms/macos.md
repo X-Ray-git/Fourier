@@ -6,6 +6,7 @@ macOS 是近期 UI 工作的主要验证目标。
 
 - 分栏：左侧应用侧边栏，中间时间线列表，右侧文章详情。
 - macOS 窗口使用透明/full-size content view。macOS 26 的侧边栏局部使用原生 `NSGlassEffectView(.regular)`；旧系统回退到局部 `NSVisualEffectView(.sidebar, .behindWindow)`。
+- 局部原生侧边栏玻璃必须放在 `sidebarBackdropHost` 内，由该宿主使用与 Flutter 应用外框一致的 `24px` 连续圆角裁剪。不能把玻璃再次直接作为未裁剪的 `contentView` 子节点：Flutter 的外框 `ClipPath` 无法约束 AppKit 兄弟节点，窗口聚焦时会在最外侧左上、左下圆角产生透明穿透和不规则锯齿。宿主只负责原生玻璃的最外层裁剪，不能改成裁剪整个 `contentView`，否则可能影响 Flutter、窗口按钮和阴影。
 - 红黄绿按钮使用 AppKit `NSControl` 自绘容器，位置和命中范围匹配自定义窗口/侧边栏几何；系统标准按钮保持隐藏，自绘按钮通过它们现有的 target/action 转发关闭、最小化和绿色按钮行为。
 - 全屏视频是唯一会临时隐藏红黄绿按钮的页面：视频会延伸到 full-size content view 的标题栏区域，保留按钮会遮挡画面。退出视频页面必须恢复按钮；普通文章、图片预览和其他页面仍遵循标准按钮定位。
 - YouTube 使用 WKWebView 自带播放器；其全屏是网页元素触发的 macOS 系统全屏，不经过普通视频的 `FullscreenVideoPage`。Runner 只对对应 WKWebView 开启 `isElementFullscreenEnabled`，不要把这一配置误当成整个应用窗口的全屏开关。
@@ -54,6 +55,7 @@ macOS 是近期 UI 工作的主要验证目标。
 - 设置/任务中心：滚动行为、轻量面板、没有重复 scrollbar。
 - 冷启动：完全退出进程后双击应用，确认不会先出现灰色空壳、标题或尺寸连续跳变，首个可见画面应已经是 Flutter 正式界面。
 - 冷启动同步：刷新按钮旋转期间，刷新、排序和 `未读 / 全部` 三个控件应从首次可见画面起就具有玻璃材质，刷新完成时不应发生材质突变。
+- 外框圆角：窗口聚焦和失焦时分别检查左上、左下最外侧圆角，不能出现透明穿透、焦点相关锯齿或轮廓跳变；侧边栏内侧边缘同时不能重新出现漏底细缝。当前宿主裁剪方案已由用户完成视觉验证。
 
 已知坑：
 

@@ -4,6 +4,7 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   private var trafficLightsHidden = false
   private var trafficLightContainer: TrafficLightContainer?
+  private var sidebarBackdropHost: NSView?
   private var sidebarBackdrop: NSView?
   private var sidebarWidth = Metrics.defaultSidebarWidth
   private var sidebarMargin = Metrics.defaultSidebarMargin
@@ -33,19 +34,36 @@ class MainFlutterWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.styleMask.insert(.fullSizeContentView)
 
-    let sidebarBackdrop = makeSidebarBackdrop(in: flutterViewController.view.bounds)
+    let sidebarBackdropHost = makeSidebarBackdropHost(in: flutterViewController.view.bounds)
+    let sidebarBackdrop = makeSidebarBackdrop(in: sidebarBackdropHost.bounds)
+    sidebarBackdropHost.addSubview(sidebarBackdrop)
+    self.sidebarBackdropHost = sidebarBackdropHost
     self.sidebarBackdrop = sidebarBackdrop
 
     flutterViewController.view.wantsLayer = true
     flutterViewController.view.layer?.backgroundColor = NSColor.clear.cgColor
     if let contentView = self.contentView {
-      contentView.addSubview(sidebarBackdrop, positioned: .below, relativeTo: flutterViewController.view)
+      contentView.addSubview(
+        sidebarBackdropHost,
+        positioned: .below,
+        relativeTo: flutterViewController.view
+      )
     }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
     scheduleTrafficLightPositioning()
+  }
+
+  private func makeSidebarBackdropHost(in bounds: NSRect) -> NSView {
+    let host = NSView(frame: bounds)
+    host.autoresizingMask = [.width, .height]
+    host.wantsLayer = true
+    host.layer?.cornerRadius = Metrics.windowRadius
+    host.layer?.cornerCurve = .continuous
+    host.layer?.masksToBounds = true
+    return host
   }
 
   private func makeSidebarBackdrop(in bounds: NSRect) -> NSView {
@@ -106,7 +124,9 @@ class MainFlutterWindow: NSWindow {
   }
 
   private func updateSidebarBackdropGeometry() {
-    guard let sidebarBackdrop, let contentView else { return }
+    guard let sidebarBackdropHost, let sidebarBackdrop, let contentView else { return }
+    sidebarBackdropHost.frame = contentView.bounds
+    sidebarBackdropHost.layer?.cornerRadius = Metrics.windowRadius
     let bleed = Metrics.sidebarBackdropBleed
     sidebarBackdrop.frame = NSRect(
       x: sidebarMargin - bleed,

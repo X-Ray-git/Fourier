@@ -663,3 +663,11 @@
 决策：Auto Folo 项目整体采用 `AGPL-3.0-only`，根目录保留标准 `LICENSE`；`THIRD_PARTY_NOTICES.md` 只列实际进入仓库且需要保留授权声明的第三方项目，完整许可证文本集中在 `third_party/licenses/`。许可证文件作为 Flutter asset 注册，Android 和 macOS 设置页的“关于”区域提供统一的“开源许可证”入口。README 只保留主许可证和第三方声明链接，不强调个人原创代码或个人版权，不公开 AI 辅助开发过程，也不维护泛化的参考工程致谢清单。
 
 后果：发布的 APK 和 macOS 应用可直接查看主许可证、第三方声明及 Flutter 依赖许可证；源码仓库和二进制分发使用同一套声明。后续复制或移植新的第三方源码时必须同步补充许可证；仅参考交互思路而没有采用源码时不要随意增加声明，避免错误归因。
+
+## 版本号从连续 Patch 调整为阶段化语义
+
+背景：`v1.1.1` 到 `v1.1.28` 几乎每次发布都只增加 Patch，但其中已经包含 Liquid Glass、Android 设计迁移、包名迁移、Undo/Redo、批量导出和媒体能力等明显的新功能或阶段性重构。旧编号能够区分安装包，却不能继续准确表达改动规模。Flutter 当前通过 `pubspec.yaml` 的 `X.Y.Z+N` 同时驱动应用显示版本、Android `versionName/versionCode`、macOS bundle 版本和 release tag，其中构建号已经保持单调递增。
+
+决策：保留 `pubspec.yaml` 为唯一版本来源和 `vX.Y.Z` annotated tag，不改写历史版本。以后 Major 只用于无法平滑迁移的产品、数据或核心工作流不兼容；Minor 用于新功能、新工作流或兼容的阶段性重构；Patch 只用于修复、性能与小范围体验完善；构建号每次发布加一且永不因 Major/Minor/Patch 变化而重置。当前先保持 `1.1.28+30` 观察稳定性，若没有插入其他发布，下一次进入 `1.2.0+31`。
+
+后果：版本号不再等同于单纯的发布次数，功能阶段可以从 Minor 直接识别。当前 release 脚本和 CI 仍只支持纯 `X.Y.Z`，因此暂不使用 `-beta.N`；未来若启用预发布版本，必须先完整更新脚本、pubspec/tag 校验、Actions 和 GitHub Release 标记，不能临时手写一个带后缀的 tag。

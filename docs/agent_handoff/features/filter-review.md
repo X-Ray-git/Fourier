@@ -26,6 +26,7 @@
 - 同步按钮使用 `AppGlassSyncButton`，避免时间线和垃圾拦截页各维护一套旋转、tooltip、hover 和玻璃样式。
 - 右键/长按文章 AI 操作使用 `ArticleActionsMenu`，普通时间线卡片和垃圾拦截审核行共享翻译、删除翻译、生成摘要、删除摘要等入口。
 - macOS 垃圾拦截左栏审核行也应复用 `ArticleCardChrome` 的基础卡片外壳样式，保持和普通时间线卡片一致的轻填充、选中态和无普通边框。不要再在 `_MacReviewRow` 里单独手写透明/选中背景。
+- macOS `_MacReviewRow` 保留拒绝理由和摘要等独立结构，但订阅源行右侧的预计内容高度必须复用 `ArticleLengthLabel`；Android 审核卡片通过共享 `ArticleCard` 自动获得同一标签。不要复制估算或格式化规则。
 - 垃圾拦截页同步时可以复用 `TimelineController.loadFeedsThenArticles()`，然后刷新本页本地审核列表。
 - 垃圾拦截页仍保留自己的审核业务布局，例如保留/移除、拒绝理由、审核状态和下一篇选择逻辑。
 - 已读/未读切换不需要同步到垃圾拦截页；这是普通时间线的阅读状态筛选，不是审核页核心任务。

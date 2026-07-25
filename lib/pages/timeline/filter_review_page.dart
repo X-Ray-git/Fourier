@@ -26,6 +26,7 @@ import '../main/main_controller.dart';
 import '../timeline/timeline_controller.dart';
 import '../widgets/article_card.dart';
 import '../../common/widgets/article_card_chrome.dart';
+import '../../common/widgets/article_length_label.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/implicitly_animated_list.dart';
 import '../../common/widgets/card_press_effect.dart';
@@ -1703,14 +1704,22 @@ class _MacReviewRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 5),
-                      Text(
-                        feedTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              feedTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ArticleLengthLabel(article: article),
+                        ],
                       ),
                       Obx(() {
                         final summaryRecord = SummaryService.recordOf(

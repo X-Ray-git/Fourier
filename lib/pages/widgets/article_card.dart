@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/article_card_chrome.dart';
+import '../../common/widgets/article_length_label.dart';
 import '../../common/widgets/pill_tag.dart';
 import '../../common/widgets/card_press_effect.dart';
 import '../../models/article.dart';
@@ -428,6 +429,8 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          ArticleLengthLabel(article: article),
                         ],
                       ),
                     ],

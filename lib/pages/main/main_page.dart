@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../common/constants/app_semantic_colors.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/continuous_rectangle.dart';
 import '../../common/widgets/app_glass.dart';
@@ -338,9 +339,7 @@ class _MobileFloatingNavigation extends StatelessWidget {
                             height: 36,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(999),
-                              color: selected
-                                  ? cs.primary.withValues(alpha: 0.80)
-                                  : Colors.transparent,
+                              color: Colors.transparent,
                             ),
                             child: AnimatedScale(
                               scale: selected ? 1 : 0.96,
@@ -354,7 +353,7 @@ class _MobileFloatingNavigation extends StatelessWidget {
                                     selected ? item.selectedIcon : item.icon,
                                     size: 24,
                                     color: selected
-                                        ? cs.onPrimary
+                                        ? cs.primary
                                         : cs.onSurfaceVariant,
                                   ),
                                   if (badgeCount > 0)
@@ -390,21 +389,19 @@ class _NavigationBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final label = count > 99 ? '99+' : '$count';
     return Container(
       constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: cs.error,
+        color: AppSemanticColors.unreadBadge,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cs.surface, width: 1),
       ),
       alignment: Alignment.center,
       child: Text(
         label,
         style: TextStyle(
-          color: cs.onError,
+          color: AppSemanticColors.onUnreadBadge,
           fontSize: 9,
           fontWeight: FontWeight.w700,
           height: 1,

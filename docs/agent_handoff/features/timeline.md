@@ -6,6 +6,8 @@
 - `lib/pages/timeline/timeline_page.dart`
 - `lib/pages/widgets/article_card.dart`
 - `lib/common/widgets/article_card_chrome.dart`
+- `lib/common/widgets/article_length_label.dart`
+- `lib/utils/article_length_estimator.dart`
 - `lib/common/widgets/app_glass_sync_button.dart`
 - `lib/common/widgets/app_glass_selection_button.dart`
 - `lib/pages/widgets/article_actions_menu.dart`
@@ -19,6 +21,7 @@
 - macOS 中间栏 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截，不要只在某个页面单独处理。
 - macOS 文章卡片普通态使用极轻中性色填充，统一由 `ArticleCardChrome` 控制；当前深色模式 alpha 为 `0.018`，浅色模式为 `0.012`。时间线、最近阅读和垃圾拦截不要分别覆盖该值。
 - macOS 与 Android 的普通文章卡片、垃圾拦截审核卡片共用标题字号 `14` 和辅助正文 `12`，统一由 `ArticleCardChrome.titleFontSize/bodyFontSize` 提供，不要在页面中分别硬编码。
+- 普通文章卡片在最下方订阅源行右侧显示预计内容高度；共享 `ArticleLengthLabel` 使用弱化 `12px` 文字，不增加卡片高度、胶囊、图标或平台分支。macOS 垃圾拦截虽然保留独立 `_MacReviewRow`，也必须调用同一个标签组件。后台任务失败卡片不属于正常阅读列表，不显示长度。
 - macOS 主时间线和垃圾拦截列表共用 `MacArticleListChrome` 的两层下边距：`viewportPadding` 是滚动过程中始终存在的窗口下边界，`contentPadding` 是滚到列表末尾后出现的内容留白。不要只增加 `ListView.padding.bottom` 来替代视口边界，也不要在两个页面分别硬编码。
 - macOS 主时间线、垃圾拦截、最近阅读和订阅源详情通过 `MacHeaderPane` 共享固定 header/body 几何。内容和 scrollbar 自然从 header 下方开始；thumb 宽度及右侧 margin 继续由 `MacGlassScrollbarStyle.articlePaneTheme` 提供（`8px`、`1px`），`MacArticleListChrome.contentPadding` 另保留 `2px` 右侧内容间隔。
 - macOS 订阅源详情页的 header 筛选复用同一个文章范围 morph 组件；不要重新引入 `仅已读` 入口。
@@ -54,7 +57,8 @@ macOS 分栏选择与移除协调：
 - `TimelineSortMode.longest`：估算长文优先。
 - `TimelineSortMode.shortest`：估算短文优先。
 - 排序只作用于当前本地/已加载文章集合，不是远端全历史。
-- 长度估算使用 `ArticleLengthEstimator`、规范化 HTML、解析后的 chunk 和缓存签名。
+- 长度排序与卡片数值共用 `ArticleLengthEstimator`、规范化 HTML、解析后的 chunk 和内容签名缓存。估算固定使用 `340 logical px` 阅读宽度，标题、段落、图片、代码、表格、列表和视频等渲染块按既有规则计入，不读取当前窗口、平台或设备像素比。
+- 卡片格式小于 `1000` 时显示整数 `px`，更长时显示一位小数的 `k px`，例如 `860 px`、`4.3k px`。这里是稳定的预计逻辑像素高度，不是当前窗口完成布局后的实测物理像素；正文补全导致实际内容变化时，内容签名会使缓存重新计算。相同文章数据在 Android 与 macOS 应显示相同结果。
 - 排序刻意保持本地化。UI 文案不能让用户误以为是远端/全历史排序。
 
 性能决策：

@@ -33,6 +33,107 @@ class FeedHttp {
     }
   }
 
+  /// 通过 RSS URL 新增订阅。
+  static Future<LoadingState<FeedModel?>> createSubscription({
+    required String url,
+    required int view,
+    String? title,
+    String? category,
+  }) async {
+    try {
+      final response = await Request().post(
+        ApiConstants.subscriptions,
+        data: {
+          'type': 'feed',
+          'url': url,
+          'view': view,
+          'title': _nullableText(title),
+          'category': _nullableText(category),
+          'isPrivate': false,
+        },
+      );
+      final body = _responseMap(response);
+      if (_isSuccessfulResponse(response, body)) {
+        final data = body?['data'];
+        final dataMap = data is Map
+            ? Map<String, dynamic>.from(data)
+            : const <String, dynamic>{};
+        final rawFeed = dataMap['feed'];
+        final feed = rawFeed is Map
+            ? FeedModel.fromSubscriptionMutation(
+                Map<String, dynamic>.from(rawFeed),
+                customTitle: _nullableText(title),
+                category: _nullableText(category),
+                view: view,
+                fallbackUrl: url,
+              )
+            : null;
+        return Success(feed);
+      }
+      return LoadError(
+        body == null
+            ? '添加订阅失败: ${response.statusCode}'
+            : _messageOf(body, fallback: '添加订阅失败'),
+      );
+    } on DioException catch (e) {
+      return LoadError(_dioMessage(e, fallback: '添加订阅失败'));
+    }
+  }
+
+  /// 修改用户侧订阅元数据；RSS URL 本身不可修改。
+  static Future<LoadingState<void>> updateSubscription({
+    required String feedId,
+    required int view,
+    String? title,
+    String? category,
+  }) async {
+    try {
+      final response = await Request().patch(
+        ApiConstants.subscriptions,
+        data: {
+          'feedId': feedId,
+          'view': view,
+          'title': _nullableText(title),
+          'category': _nullableText(category),
+        },
+      );
+      final body = _responseMap(response);
+      if (_isSuccessfulResponse(response, body)) {
+        return const Success(null);
+      }
+      return LoadError(
+        body == null
+            ? '更新订阅失败: ${response.statusCode}'
+            : _messageOf(body, fallback: '更新订阅失败'),
+      );
+    } on DioException catch (e) {
+      return LoadError(_dioMessage(e, fallback: '更新订阅失败'));
+    }
+  }
+
+  /// 取消一个普通 RSS 订阅。
+  static Future<LoadingState<void>> deleteSubscription({
+    required String feedId,
+  }) async {
+    try {
+      final response = await Request().delete(
+        ApiConstants.subscriptions,
+        data: {'feedId': feedId},
+      );
+      final body = _responseMap(response);
+      if (_isSuccessfulResponse(response, body)) {
+        return const Success(null);
+      }
+      return LoadError(
+        body == null
+            ? '取消订阅失败: ${response.statusCode}'
+            : _messageOf(body, fallback: '取消订阅失败'),
+      );
+    } on DioException catch (e) {
+      return LoadError(_dioMessage(e, fallback: '取消订阅失败'));
+    }
+  }
+
   // ─── 文章条目 ────────────────────────────────
 
   /// 获取条目（view: 0=feeds, 1=social）。read=false=未读。
@@ -355,6 +456,31 @@ class FeedHttp {
 
   static bool _isSuccess(Map<String, dynamic> body) =>
       body['code'] == 0 || body['code'] == '0';
+
+  static bool _isSuccessfulResponse(
+    Response response,
+    Map<String, dynamic>? body,
+  ) {
+    final status = response.statusCode ?? 0;
+    if (status < 200 || status >= 300) return false;
+    if (body == null || !body.containsKey('code')) return true;
+    return _isSuccess(body);
+  }
+
+  static String? _nullableText(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String _dioMessage(DioException error, {required String fallback}) {
+    final data = error.response?.data;
+    if (data is Map) {
+      return _messageOf(Map<String, dynamic>.from(data), fallback: fallback);
+    }
+    return error.message?.trim().isNotEmpty == true
+        ? '$fallback: ${error.message}'
+        : fallback;
+  }
 
   static String _messageOf(
     Map<String, dynamic> body, {

@@ -549,6 +549,12 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
     if (action.type == UndoActionType.batchRead) {
       return '$verb“${action.actionName}” · ${action.articles.length} 篇';
     }
+    if (action.type == UndoActionType.custom) {
+      final target = action.customTargetLabel;
+      return target == null || target.isEmpty
+          ? '$verb“${action.actionName}”'
+          : '$verb“${action.actionName}” · 《${_truncate(target, 18)}》';
+    }
     final title = _truncate(action.article.title, 18);
     return '$verb“${action.actionName}” · 《$title》';
   }

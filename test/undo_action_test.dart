@@ -66,4 +66,32 @@ void main() {
     expect(history.nextUndo?.article.entryId, '1');
     expect(history.nextRedo?.article.entryId, '2');
   });
+
+  test('custom action keeps callbacks and readable menu metadata', () async {
+    var undoCalls = 0;
+    var redoCalls = 0;
+    final action = UndoAction.custom(
+      sequence: 1,
+      customActionName: '取消订阅',
+      customDescription: '取消订阅《Example》',
+      customTargetLabel: 'Example',
+      customUndo: () async {
+        undoCalls++;
+        return true;
+      },
+      customRedo: () async {
+        redoCalls++;
+        return true;
+      },
+    );
+
+    expect(action.type, UndoActionType.custom);
+    expect(action.actionName, '取消订阅');
+    expect(action.description, '取消订阅《Example》');
+    expect(action.customTargetLabel, 'Example');
+    expect(await action.customUndo!(), isTrue);
+    expect(await action.customRedo!(), isTrue);
+    expect(undoCalls, 1);
+    expect(redoCalls, 1);
+  });
 }

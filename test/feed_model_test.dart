@@ -18,6 +18,42 @@ void main() {
     expect(feed.url, 'https://example.com?a=1&amp;b=2');
   });
 
+  test('fromJson should prefer the subscription title over source title', () {
+    final feed = FeedModel.fromJson({
+      'feedId': 'f-custom',
+      'title': 'My AI Feed',
+      'category': 'AI',
+      'view': 0,
+      'feeds': {
+        'title': 'Original Feed Title',
+        'url': 'https://example.com/feed.xml',
+      },
+    });
+
+    expect(feed.title, 'My AI Feed');
+    expect(feed.customTitle, 'My AI Feed');
+    expect(feed.sourceTitle, 'Original Feed Title');
+  });
+
+  test('copyWith can clear subscription title and category', () {
+    final feed = FeedModel(
+      feedId: 'f-copy',
+      title: 'Custom',
+      sourceTitle: 'Source',
+      customTitle: 'Custom',
+      category: 'AI',
+    );
+
+    final updated = feed.copyWith(
+      clearCustomTitle: true,
+      clearCategory: true,
+    );
+
+    expect(updated.title, 'Source');
+    expect(updated.customTitle, isNull);
+    expect(updated.category, isNull);
+  });
+
   test('fromCache should decode legacy text entities', () {
     final feed = FeedModel.fromCache({
       'feedId': 'f-cache',

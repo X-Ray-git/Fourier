@@ -1290,6 +1290,8 @@ class AppGlassTextField extends StatelessWidget {
   final String? helper;
   final Widget? suffixIcon;
   final bool obscureText;
+  final bool enabled;
+  final bool readOnly;
   final int maxLines;
   final TextInputAction? textInputAction;
   final TextInputType? keyboardType;
@@ -1309,6 +1311,8 @@ class AppGlassTextField extends StatelessWidget {
     this.helper,
     this.suffixIcon,
     this.obscureText = false,
+    this.enabled = true,
+    this.readOnly = false,
     this.maxLines = 1,
     this.textInputAction,
     this.keyboardType,
@@ -1366,6 +1370,8 @@ class AppGlassTextField extends StatelessWidget {
                       controller: controller,
                       focusNode: focusNode,
                       initialValue: initialValue,
+                      enabled: enabled,
+                      readOnly: readOnly,
                       obscureText: obscureText,
                       maxLines: obscureText ? 1 : maxLines,
                       minLines: maxLines > 1 ? math.min(5, maxLines) : null,

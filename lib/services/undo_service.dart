@@ -17,26 +17,53 @@ import 'bounded_history.dart';
 import 'local_article_db_service.dart';
 import 'read_sync_service.dart';
 
-enum UndoActionType { read, batchRead, filterReject, filterKeep }
+enum UndoActionType { read, batchRead, filterReject, filterKeep, custom }
+
+typedef UndoCommandCallback = Future<bool> Function();
 
 class UndoAction {
   UndoAction({
     required this.sequence,
     required this.type,
     required ArticleModel article,
-  }) : articles = List.unmodifiable([article]);
+  }) : articles = List.unmodifiable([article]),
+       customActionName = null,
+       customDescription = null,
+       customTargetLabel = null,
+       customUndo = null,
+       customRedo = null;
 
   UndoAction.batchRead({
     required this.sequence,
     required List<ArticleModel> articles,
   }) : type = UndoActionType.batchRead,
-       articles = List.unmodifiable(articles) {
+       articles = List.unmodifiable(articles),
+       customActionName = null,
+       customDescription = null,
+       customTargetLabel = null,
+       customUndo = null,
+       customRedo = null {
     assert(articles.isNotEmpty);
   }
+
+  UndoAction.custom({
+    required this.sequence,
+    required this.customActionName,
+    required this.customDescription,
+    this.customTargetLabel,
+    required this.customUndo,
+    required this.customRedo,
+  }) : type = UndoActionType.custom,
+       articles = const [];
 
   final int sequence;
   final UndoActionType type;
   final List<ArticleModel> articles;
+  final String? customActionName;
+  final String? customDescription;
+  final String? customTargetLabel;
+  final UndoCommandCallback? customUndo;
+  final UndoCommandCallback? customRedo;
 
   ArticleModel get article => articles.first;
 
@@ -45,6 +72,7 @@ class UndoAction {
     UndoActionType.batchRead => '批量标为已读',
     UndoActionType.filterReject => '从垃圾拦截移除',
     UndoActionType.filterKeep => '在垃圾拦截中保留',
+    UndoActionType.custom => customActionName!,
   };
 
   String get description => switch (type) {
@@ -52,6 +80,7 @@ class UndoAction {
     UndoActionType.batchRead => '将 ${articles.length} 篇静默文章标为已读',
     UndoActionType.filterReject => '从垃圾拦截移除《${article.title}》',
     UndoActionType.filterKeep => '在垃圾拦截中保留《${article.title}》',
+    UndoActionType.custom => customDescription!,
   };
 }
 
@@ -120,8 +149,30 @@ class UndoService {
   }
 
   static void recordFilterAction(ArticleModel article, UndoActionType type) {
-    assert(type != UndoActionType.read);
+    assert(
+      type == UndoActionType.filterReject || type == UndoActionType.filterKeep,
+    );
     _record(type, article);
+  }
+
+  static void recordCustom({
+    required String actionName,
+    required String description,
+    String? targetLabel,
+    required UndoCommandCallback undo,
+    required UndoCommandCallback redo,
+  }) {
+    _history.push(
+      UndoAction.custom(
+        sequence: ++_actionSequence,
+        customActionName: actionName,
+        customDescription: description,
+        customTargetLabel: targetLabel,
+        customUndo: undo,
+        customRedo: redo,
+      ),
+    );
+    _notifyHistoryChanged();
   }
 
   static void _record(UndoActionType type, ArticleModel article) {
@@ -354,6 +405,17 @@ class UndoService {
     if (action == null) return null;
     _notifyHistoryChanged();
 
+    if (action.type == UndoActionType.custom) {
+      final succeeded = await action.customUndo!();
+      if (!succeeded) {
+        _rollbackUndo(action);
+        AppFeedback.error('撤销失败', action.description);
+        return null;
+      }
+      AppFeedback.success('已撤销', action.description);
+      return null;
+    }
+
     if (action.type == UndoActionType.batchRead) {
       final result = await _syncBatchReadState(action.articles, isRead: false);
       final restored = result.changedArticles;
@@ -485,6 +547,19 @@ class UndoService {
       return redoneArticles.first;
     }
 
+    if (action.type == UndoActionType.custom) {
+      final succeeded = await action.customRedo!();
+      if (!succeeded) {
+        AppFeedback.error('重做失败', action.description);
+        return null;
+      }
+      final redone = _history.takeRedo();
+      if (!identical(redone, action)) return null;
+      _notifyHistoryChanged();
+      AppFeedback.success('已重做', action.description);
+      return null;
+    }
+
     switch (action.type) {
       case UndoActionType.read:
         applyReadLocally(
@@ -501,6 +576,8 @@ class UndoService {
       case UndoActionType.filterKeep:
         applyFilterKeep(action.article, recordHistory: false);
         break;
+      case UndoActionType.custom:
+        throw StateError('自定义重做应在 switch 前处理');
     }
 
     final redone = _history.takeRedo();

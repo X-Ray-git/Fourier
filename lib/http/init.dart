@@ -89,6 +89,22 @@ class Request {
     );
   }
 
+  Future<Response> patch(
+    String url, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+  }) async {
+    return dio.patch(
+      url,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+      cancelToken: cancelToken,
+    );
+  }
+
   Future<Response> delete(
     String url, {
     dynamic data,

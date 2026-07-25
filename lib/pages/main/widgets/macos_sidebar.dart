@@ -3,18 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../common/constants/macos_layout_metrics.dart';
+import '../../../common/widgets/app_context_menu.dart';
 import '../../../common/widgets/app_glass.dart';
 import '../../../common/widgets/continuous_rectangle.dart';
+import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/macos_window_drag_area.dart';
 import '../../../http/init.dart';
 import '../../../models/feed.dart';
 import '../../../services/feed_readability_settings_service.dart';
 import '../../../services/feed_silent_settings_service.dart';
 import '../../../services/feed_translation_settings_service.dart';
+import '../../../services/subscription_management_service.dart';
 import '../../subscriptions/subscriptions_controller.dart';
+import '../../subscriptions/macos_subscription_dialog.dart';
 import '../../timeline/timeline_controller.dart';
 
 const macOSSidebarExpandedWidth = MacOSLayoutMetrics.sidebarExpandedWidth;
+
+enum _FeedManagementAction { edit, unsubscribe }
+
+enum _CategoryManagementAction { rename, ungroup }
 
 class MacOSSidebar extends StatelessWidget {
   final int currentIndex;
@@ -76,7 +84,18 @@ class MacOSSidebar extends StatelessWidget {
               onTap: () => onIndexChanged(2),
             ),
             const SizedBox(height: 10),
-            const _SectionLabel(label: '订阅源'),
+            _SectionLabel(
+              label: '订阅源',
+              action: _SidebarSectionAction(
+                icon: Icons.add_rounded,
+                tooltip: '添加 RSS 订阅',
+                onPressed: () => _showAddSubscription(
+                  context,
+                  timelineController: timelineController,
+                  subController: subController,
+                ),
+              ),
+            ),
             Expanded(
               child: Obx(() {
                 final state = subController.loadingState.value;
@@ -164,6 +183,15 @@ class MacOSSidebar extends StatelessWidget {
                                   );
                                   onIndexChanged(0);
                                 },
+                                onSecondaryTapDown: (details) =>
+                                    _showCategoryMenu(
+                                      context,
+                                      details.globalPosition,
+                                      category: category,
+                                      view: viewNode.view,
+                                      timelineController: timelineController,
+                                      subController: subController,
+                                    ),
                                 feedBuilder: (feed) {
                                   return Obx(() {
                                     final feedSelected =
@@ -201,6 +229,15 @@ class MacOSSidebar extends StatelessWidget {
                                         );
                                         onIndexChanged(0);
                                       },
+                                      onSecondaryTapDown: (details) =>
+                                          _showFeedMenu(
+                                            context,
+                                            details.globalPosition,
+                                            feed: feed,
+                                            timelineController:
+                                                timelineController,
+                                            subController: subController,
+                                          ),
                                     );
                                   });
                                 },
@@ -214,6 +251,13 @@ class MacOSSidebar extends StatelessWidget {
                       timelineController: timelineController,
                       subController: subController,
                       onIndexChanged: onIndexChanged,
+                      onFeedSecondaryTapDown: (feed, details) => _showFeedMenu(
+                        context,
+                        details.globalPosition,
+                        feed: feed,
+                        timelineController: timelineController,
+                        subController: subController,
+                      ),
                     ),
                   ],
                 );
@@ -235,6 +279,150 @@ class MacOSSidebar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  List<String> _categories(SubscriptionsController controller) {
+    final categories = controller.allFeeds
+        .where((feed) => !feed.isInbox)
+        .map((feed) => feed.category?.trim())
+        .whereType<String>()
+        .where((category) => category.isNotEmpty)
+        .toSet()
+        .toList();
+    categories.sort();
+    return categories;
+  }
+
+  Future<void> _showAddSubscription(
+    BuildContext context, {
+    required TimelineController timelineController,
+    required SubscriptionsController subController,
+  }) async {
+    final feed = await showMacSubscriptionEditor(
+      context,
+      categories: _categories(subController),
+    );
+    if (feed == null) return;
+    timelineController.setTimelineScope(feedId: feed.feedId);
+    onIndexChanged(0);
+  }
+
+  Future<void> _showFeedMenu(
+    BuildContext context,
+    Offset position, {
+    required FeedModel feed,
+    required TimelineController timelineController,
+    required SubscriptionsController subController,
+  }) async {
+    if (feed.isInbox) return;
+    final action = await AppContextMenu.show<_FeedManagementAction>(
+      context,
+      position: position,
+      entries: const [
+        AppContextMenuAction(
+          value: _FeedManagementAction.edit,
+          icon: Icons.edit_outlined,
+          label: '编辑订阅',
+        ),
+        AppContextMenuDivider(),
+        AppContextMenuAction(
+          value: _FeedManagementAction.unsubscribe,
+          icon: Icons.remove_circle_outline_rounded,
+          label: '取消订阅',
+          destructive: true,
+        ),
+      ],
+    );
+    if (!context.mounted || action == null) return;
+
+    switch (action) {
+      case _FeedManagementAction.edit:
+        await showMacSubscriptionEditor(
+          context,
+          feed: feed,
+          categories: _categories(subController),
+        );
+        return;
+      case _FeedManagementAction.unsubscribe:
+        if (!await showMacUnsubscribeConfirmation(context, feed: feed) ||
+            !context.mounted) {
+          return;
+        }
+        final result = await SubscriptionManagementService.unsubscribe(feed);
+        if (result is LoadError<void>) {
+          AppFeedback.error('取消订阅失败', result.errMsg ?? '请稍后重试');
+          return;
+        }
+        if (timelineController.selectedFeedId.value == feed.feedId) {
+          timelineController.setTimelineScope();
+        }
+        AppFeedback.success('已取消订阅', '可使用 Command + Z 撤销');
+        return;
+    }
+  }
+
+  Future<void> _showCategoryMenu(
+    BuildContext context,
+    Offset position, {
+    required SourceCategoryNode category,
+    required int view,
+    required TimelineController timelineController,
+    required SubscriptionsController subController,
+  }) async {
+    if (category.name == '未分类') return;
+    final action = await AppContextMenu.show<_CategoryManagementAction>(
+      context,
+      position: position,
+      entries: const [
+        AppContextMenuAction(
+          value: _CategoryManagementAction.rename,
+          icon: Icons.drive_file_rename_outline_rounded,
+          label: '重命名分类',
+        ),
+        AppContextMenuAction(
+          value: _CategoryManagementAction.ungroup,
+          icon: Icons.folder_off_outlined,
+          label: '取消分组',
+        ),
+      ],
+    );
+    if (!context.mounted || action == null) return;
+
+    var newCategory = '';
+    if (action == _CategoryManagementAction.rename) {
+      final renamed = await showMacCategoryRenameDialog(
+        context,
+        category: category.name,
+      );
+      if (renamed == null) return;
+      newCategory = renamed;
+    }
+
+    final affectedFeeds = subController.allFeeds
+        .where(
+          (feed) =>
+              !feed.isInbox &&
+              (feed.view ?? 0) == view &&
+              feed.displayCategory == category.name,
+        )
+        .toList(growable: false);
+    final result = await SubscriptionManagementService.renameCategory(
+      feeds: affectedFeeds,
+      newCategory: newCategory,
+    );
+    if (result is LoadError<int>) {
+      AppFeedback.error('分类更新不完整', result.errMsg ?? '请稍后重试');
+      return;
+    }
+    if (timelineController.selectedCategory.value == category.name) {
+      timelineController.setTimelineScope(
+        category: newCategory.isEmpty ? '未分类' : newCategory,
+      );
+    }
+    AppFeedback.success(
+      action == _CategoryManagementAction.rename ? '分类已重命名' : '已取消分组',
+      '${affectedFeeds.length} 个订阅源已更新',
     );
   }
 }
@@ -284,12 +472,15 @@ class _SilentFeedsGroup extends StatelessWidget {
   final TimelineController timelineController;
   final SubscriptionsController subController;
   final ValueChanged<int> onIndexChanged;
+  final void Function(FeedModel feed, TapDownDetails details)
+  onFeedSecondaryTapDown;
 
   const _SilentFeedsGroup({
     required this.currentIndex,
     required this.timelineController,
     required this.subController,
     required this.onIndexChanged,
+    required this.onFeedSecondaryTapDown,
   });
 
   @override
@@ -364,6 +555,8 @@ class _SilentFeedsGroup extends StatelessWidget {
                               );
                               onIndexChanged(0);
                             },
+                            onSecondaryTapDown: (details) =>
+                                onFeedSecondaryTapDown(feed, details),
                           );
                         });
                       }).toList(),
@@ -531,42 +724,101 @@ class _SidebarHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MacOSWindowDragArea(
-      child: SizedBox(
-        height: 38,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 10, top: 10),
-          child: Align(
-            alignment: Alignment.centerRight,
-            // 实验性 UI 精简：暂时取消“收起”按钮以避开 macOS 红绿灯，
-            // 但保留原有对齐逻辑和 SizedBox 高度占位，以便需要时随时恢复为 IconButton。
-            child: const SizedBox.shrink(),
-          ),
-        ),
-      ),
-    );
+    return const MacOSWindowDragArea(child: SizedBox(height: 38));
   }
 }
 
 class _SectionLabel extends StatelessWidget {
   final String label;
+  final Widget? action;
 
-  const _SectionLabel({required this.label});
+  const _SectionLabel({required this.label, this.action});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: cs.onSurfaceVariant.withValues(alpha: 0.72),
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.72),
+            ),
+          ),
+        ),
+        if (action != null) Positioned(right: 24, top: 4, child: action!),
+      ],
+    );
+  }
+}
+
+class _SidebarSectionAction extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _SidebarSectionAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  State<_SidebarSectionAction> createState() => _SidebarSectionActionState();
+}
+
+class _SidebarSectionActionState extends State<_SidebarSectionAction> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillAlpha = _pressed
+        ? (isDark ? 0.11 : 0.08)
+        : _hovered
+        ? (isDark ? 0.06 : 0.045)
+        : 0.0;
+
+    final button = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOutCubic,
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: cs.onSurface.withValues(alpha: fillAlpha),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            widget.icon,
+            size: 18,
+            color: cs.onSurfaceVariant.withValues(
+              alpha: _hovered || _pressed ? 0.92 : 0.72,
+            ),
+          ),
         ),
       ),
     );
+
+    return AppGlassTooltip(message: widget.tooltip, child: button);
   }
 }
 
@@ -600,6 +852,7 @@ class _CategoryGroup extends StatelessWidget {
   final VoidCallback? onToggle;
   final String? toggleTooltip;
   final VoidCallback onTap;
+  final void Function(TapDownDetails details)? onSecondaryTapDown;
   final Widget Function(FeedModel feed) feedBuilder;
 
   const _CategoryGroup({
@@ -610,6 +863,7 @@ class _CategoryGroup extends StatelessWidget {
     required this.onToggle,
     this.toggleTooltip,
     required this.onTap,
+    this.onSecondaryTapDown,
     required this.feedBuilder,
   });
 
@@ -624,6 +878,7 @@ class _CategoryGroup extends StatelessWidget {
           isSelected: isSelected,
           badgeCount: badgeCount,
           onTap: onTap,
+          onSecondaryTapDown: onSecondaryTapDown,
           onToggle: onToggle,
           toggleTooltip: toggleTooltip,
         ),
@@ -653,6 +908,7 @@ class _CategoryItem extends StatelessWidget {
   final bool isSelected;
   final int badgeCount;
   final VoidCallback onTap;
+  final void Function(TapDownDetails details)? onSecondaryTapDown;
   final VoidCallback? onToggle;
   final String? toggleTooltip;
 
@@ -664,6 +920,7 @@ class _CategoryItem extends StatelessWidget {
     required this.isSelected,
     required this.badgeCount,
     required this.onTap,
+    this.onSecondaryTapDown,
     required this.onToggle,
     this.toggleTooltip,
   });
@@ -680,6 +937,7 @@ class _CategoryItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
+          onSecondaryTapDown: onSecondaryTapDown,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.only(left: 2),
@@ -749,6 +1007,7 @@ class _SidebarItem extends StatelessWidget {
   final int indentLevel;
   final Widget? trailing;
   final VoidCallback onTap;
+  final void Function(TapDownDetails details)? onSecondaryTapDown;
 
   const _SidebarItem({
     required this.icon,
@@ -759,6 +1018,7 @@ class _SidebarItem extends StatelessWidget {
     this.indentLevel = 0,
     this.trailing,
     required this.onTap,
+    this.onSecondaryTapDown,
   });
 
   @override
@@ -779,6 +1039,7 @@ class _SidebarItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
+          onSecondaryTapDown: onSecondaryTapDown,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

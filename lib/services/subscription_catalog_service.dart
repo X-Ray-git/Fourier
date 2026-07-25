@@ -32,6 +32,25 @@ abstract final class SubscriptionCatalogService {
 
   static List<FeedModel> get feeds => List.unmodifiable(_feeds);
 
+  static void upsertLocal(FeedModel feed) {
+    if (feed.feedId.isEmpty) return;
+    final next = <FeedModel>[
+      for (final current in _feeds)
+        if (current.feedId != feed.feedId) current,
+      feed,
+    ]..sort(_compareFeeds);
+    _replaceLocal(next);
+  }
+
+  static void removeLocal(String feedId) {
+    if (feedId.isEmpty) return;
+    final next = _feeds
+        .where((feed) => feed.feedId != feedId)
+        .toList(growable: false);
+    if (next.length == _feeds.length) return;
+    _replaceLocal(next);
+  }
+
   static Future<SubscriptionCatalogSyncResult> sync() {
     final existing = _syncInFlight;
     if (existing != null) return existing;
@@ -110,5 +129,11 @@ abstract final class SubscriptionCatalogService {
     final categoryCompare = a.displayCategory.compareTo(b.displayCategory);
     if (categoryCompare != 0) return categoryCompare;
     return a.title.compareTo(b.title);
+  }
+
+  static void _replaceLocal(List<FeedModel> feeds) {
+    _feeds = feeds;
+    ContentCacheService.saveSubscriptions(_feeds);
+    version.value++;
   }
 }

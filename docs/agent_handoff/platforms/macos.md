@@ -9,14 +9,17 @@ macOS 是近期 UI 工作的主要验证目标。
 - 局部原生侧边栏玻璃必须放在 `sidebarBackdropHost` 内，由该宿主使用与 Flutter 应用外框一致的 `24px` 连续圆角裁剪。不能把玻璃再次直接作为未裁剪的 `contentView` 子节点：Flutter 的外框 `ClipPath` 无法约束 AppKit 兄弟节点，窗口聚焦时会在最外侧左上、左下圆角产生透明穿透和不规则锯齿。宿主只负责原生玻璃的最外层裁剪，不能改成裁剪整个 `contentView`，否则可能影响 Flutter、窗口按钮和阴影。
 - 红黄绿按钮使用 AppKit `NSControl` 自绘容器，位置和命中范围匹配自定义窗口/侧边栏几何；系统标准按钮保持隐藏，自绘按钮通过它们现有的 target/action 转发关闭、最小化和绿色按钮行为。
 - 全屏视频是唯一会临时隐藏红黄绿按钮的页面：视频会延伸到 full-size content view 的标题栏区域，保留按钮会遮挡画面。退出视频页面必须恢复按钮；普通文章、图片预览和其他页面仍遵循标准按钮定位。
-- YouTube 首选本地打包的 SABR/Shaka WKWebView 播放器，失败时自动回退到
-  YouTube 官方 iframe；两者的全屏都是网页元素触发的 macOS 系统全屏，
+- YouTube 与 Bilibili 首选本地打包的 Shaka WKWebView 播放器，失败时自动
+  回退各自官方 iframe；网页视频全屏都是网页元素触发的 macOS 系统全屏，
   不经过普通视频的 `FullscreenVideoPage`。Runner 只对对应 WKWebView
   开启 `isElementFullscreenEnabled`，不要把这一配置误当成整个应用窗口的
   全屏开关。
-- YouTube SABR 页面由应用内 `127.0.0.1` 服务提供，因此 Debug/Profile 与
-  Release 都需要 network server entitlement，ATS 只放行 local networking。
-  服务不得监听 `0.0.0.0` 或局域网地址。
+- Bilibili 弹幕画在 Shaka 页面内部的 Canvas，而不是用 Flutter widget
+  覆盖 WKWebView。这样系统元素全屏仍保留弹幕，也避免 AppKit platform view
+  与 Flutter overlay 的层级、命中和性能问题。
+- 两个平台的首选页面由应用内 `127.0.0.1` 服务提供，因此 Debug/Profile
+  与 Release 都需要 network server entitlement，ATS 只放行 local
+  networking。服务不得监听 `0.0.0.0` 或局域网地址。
 - 红色关闭应隐藏窗口，而不是退出应用。
 - 侧边栏是悬浮圆角面板；它的间距和外侧圆角关系会影响其他 macOS 边缘间距决策。
 - 软件内选择浅色/深色时，Flutter 主题、玻璃 renderer 读取的 `MediaQuery.platformBrightness`、`NSApp.appearance` 和主窗口 appearance 必须同步；否则系统模式与应用模式不同时，原生玻璃会使用错误明暗外观。

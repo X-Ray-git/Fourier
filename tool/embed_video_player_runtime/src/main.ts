@@ -6,6 +6,7 @@ import { buildSabrFormat } from 'googlevideo/utils';
 import { ShakaPlayerAdapter } from './ShakaPlayerAdapter.js';
 import { fetchFunction } from './helpers.js';
 import { botguardService } from './BotguardService.js';
+import { BilibiliDanmaku } from './bilibiliDanmaku.js';
 import 'shaka-player/dist/controls.css';
 import './player.css';
 
@@ -20,14 +21,15 @@ let playbackWebPoTokenContentBinding: string | undefined;
 let playbackWebPoTokenCreationLock = false;
 let playbackWebPoToken: string | undefined;
 let coldStartToken: string | undefined;
+let bilibiliDanmaku: BilibiliDanmaku | undefined;
 
 function notify(
   type: 'ready' | 'playing' | 'error' | 'scroll' | 'activated' | 'togglePlayback',
   detail?: string | number
 ) {
   const channel = (globalThis as typeof globalThis & {
-    AutoFoloYouTubePlayer?: { postMessage(message: string): void }
-  }).AutoFoloYouTubePlayer;
+    AutoFoloVideoPlayer?: { postMessage(message: string): void }
+  }).AutoFoloVideoPlayer;
   channel?.postMessage(JSON.stringify({ type, detail }));
 }
 
@@ -133,7 +135,7 @@ Platform.shim.eval = async (data: Types.BuildScriptResult, env: Record<string, T
   return new Function(code)();
 };
 
-async function main() {
+async function main(provider: string) {
   shaka.polyfill.installAll();
   console.log('[Main]', 'Shaka polyfills installed');
 
@@ -141,17 +143,19 @@ async function main() {
     throw new Error('Shaka Player is not supported on this browser.');
   console.log('[Main]', 'Browser support confirmed');
 
-  innertube = await Innertube.create({
-    cache: new UniversalCache(true),
-    fetch: fetchFunction,
-    generate_session_locally: true
-  });
+  if (provider === 'youtube') {
+    innertube = await Innertube.create({
+      cache: new UniversalCache(true),
+      fetch: fetchFunction,
+      generate_session_locally: true
+    });
 
-  botguardService.init()
-    .then(() => console.info('[Main]', 'BotGuard client initialized'))
-    .catch((error) => console.warn('[Main]', 'BotGuard initialization deferred:', error));
+    botguardService.init()
+      .then(() => console.info('[Main]', 'BotGuard client initialized'))
+      .catch((error) => console.warn('[Main]', 'BotGuard initialization deferred:', error));
 
-  console.log('[Main] Innertube initialized');
+    console.log('[Main] Innertube initialized');
+  }
 
   // Now init the player.
   player = new shaka.Player();
@@ -218,11 +222,74 @@ async function main() {
     capture: true
   });
   (globalThis as typeof globalThis & {
-    AutoFoloYouTubeControls?: { togglePlayPause(): void }
-  }).AutoFoloYouTubeControls = { togglePlayPause };
+    AutoFoloVideoControls?: { togglePlayPause(): void }
+  }).AutoFoloVideoControls = { togglePlayPause };
 
   console.log('[Main] Shaka Player initialized');
   notify('ready');
+}
+
+interface BilibiliSubtitle {
+  url: string;
+  language: string;
+  label: string;
+}
+
+interface BilibiliBootstrap {
+  danmakuBaseUrl?: string;
+  manifestUrl: string;
+  title: string;
+  subtitles: BilibiliSubtitle[];
+}
+
+async function loadBilibili(session: string) {
+  if (!session) throw new Error('Missing Bilibili playback session.');
+
+  console.log('[Bilibili]', 'Requesting playback bootstrap');
+  const bootstrapUrl = new URL(
+    `./bilibili/bootstrap/${encodeURIComponent(session)}`,
+    globalThis.location.href
+  );
+  const response = await fetch(bootstrapUrl);
+  if (!response.ok) {
+    throw new Error(`Bilibili bootstrap failed with HTTP ${response.status}`);
+  }
+  const bootstrap = await response.json() as BilibiliBootstrap;
+  if (!bootstrap.manifestUrl) {
+    throw new Error('Bilibili bootstrap has no DASH manifest.');
+  }
+  if (bootstrap.danmakuBaseUrl) {
+    bilibiliDanmaku?.dispose();
+    bilibiliDanmaku = new BilibiliDanmaku(
+      videoElement,
+      videoContainer,
+      bootstrap.danmakuBaseUrl
+    );
+  }
+
+  console.log('[Bilibili]', 'Loading DASH manifest');
+  await player.load(bootstrap.manifestUrl);
+  for (const subtitle of bootstrap.subtitles ?? []) {
+    try {
+      await player.addTextTrackAsync(
+        subtitle.url,
+        subtitle.language || 'und',
+        'subtitles',
+        'text/vtt',
+        undefined,
+        subtitle.label || subtitle.language || '字幕'
+      );
+    } catch (error) {
+      console.warn(
+        '[Bilibili]',
+        `Skipping subtitle ${subtitle.label}:`,
+        describePlayerError(error)
+      );
+    }
+  }
+  await videoElement.play();
+  notify('playing', bootstrap.title || 'Bilibili');
+  console.log('[Bilibili]', `Now playing: ${bootstrap.title || 'Bilibili'}`);
 }
 
 async function loadVideo(videoId: string) {
@@ -403,13 +470,14 @@ async function mintContentWebPO() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const videoId = new URL(globalThis.location.href).searchParams.get('videoId');
-  if (!videoId) {
-    notify('error', 'Missing video ID.');
-    return;
-  }
-  main()
-    .then(() => loadVideo(videoId))
+  const query = new URL(globalThis.location.href).searchParams;
+  const provider = query.get('provider') ?? 'youtube';
+  const load = provider === 'bilibili'
+    ? () => loadBilibili(query.get('session') ?? '')
+    : () => loadVideo(query.get('videoId') ?? '');
+
+  main(provider)
+    .then(load)
     .catch((err) => {
       const detail = describePlayerError(err);
       console.error('Initialization failed:', detail);

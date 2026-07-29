@@ -755,7 +755,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     if (bilibili != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: BilibiliEmbedPlayer(info: bilibili),
+        child: BilibiliEmbedPlayer(
+          info: bilibili,
+          onArticleScroll: widget.onEmbeddedPointerScroll,
+        ),
       );
     }
 

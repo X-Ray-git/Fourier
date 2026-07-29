@@ -85,8 +85,8 @@ HTML 空段规范化：
 - `YouTubeSabrPlayer` 只在用户点击后启动进程内 loopback 服务并创建 WebView。
   本地页面打包 YouTube.js 17.2.0、googlevideo 4.0.4、bgutils-js 3.2.0
   和 Shaka Player 4.16.2；依赖锁定、构建说明和完整许可见
-  `tool/youtube_player_runtime/` 与 `THIRD_PARTY_NOTICES.md`。不要在 Dart 中
-  Base64 搬运媒体数据；GoogleVideo 响应必须从 loopback 代理流式送入
+  `tool/embed_video_player_runtime/` 与 `THIRD_PARTY_NOTICES.md`。不要在 Dart
+  中 Base64 搬运媒体数据；GoogleVideo 响应必须从 loopback 代理流式送入
   WebView。
 - SABR 播放器的控制语义要尽量对齐 `InlineVideoPlayer`：单击画面只显隐
   控制栏，不直接切换播放；控制栏播放时 3 秒后淡出、暂停时保持可见；
@@ -95,7 +95,7 @@ HTML 空段规范化：
   循环、画中画或保存帧等入口。WebView 内双击全屏已关闭，避免和应用现有
   点击语义分叉。
 - macOS 的 WKWebView 会吞掉指针滚轮事件，因此 SABR 本地页面会把菜单外的
-  纵向 wheel delta 按动画帧合并，经 `AutoFoloYouTubePlayer` 通道交回文章
+  纵向 wheel delta 按动画帧合并，经 `AutoFoloVideoPlayer` 通道交回文章
   `_scrollController.position.pointerScroll()`。该路径不做滤波或补间，确保
   触控板仍然跟手；分辨率/字幕菜单内部滚动不外传。官方跨域 iframe 回退
   无法可靠桥接其内部滚轮，这是兼容兜底的已知边界。
@@ -105,9 +105,22 @@ HTML 空段规范化：
   DASH 都失败、直播失败、35 秒内未进入 playing，或收到主 frame 错误时，
   才重建为 `WebEmbedVideoPlayer(startOnMount: true)`。官方回退不是临时
   调试代码：YouTube 内部接口和 BotGuard 会变化，必须长期保留。
-- Bilibili 与 YouTube 官方回退共用 `WebEmbedVideoPlayer` 的创建、导航、
-  全屏、加载与错误处理；YouTube SABR 自己维护更严格的同源能力路径导航。
-  各平台仍提供独立解析器和白名单，不要下沉成宽泛的“网页播放器”判断。
+- YouTube 与 Bilibili 的首选链路共用 `ShakaEmbedPlayer`：创建 WebView、
+  35 秒超时、系统全屏、当前播放器快捷键归属、macOS 触控板文章滚动桥、
+  loading 和错误回退都只维护一份。平台 wrapper 只负责生成各自 loopback
+  URI、缩略图/占位和切回官方播放器；不要再复制一份平台 WebView 控制器。
+- Bilibili 点击后按需补 `cid`，用匿名 `x/player/playurl` 返回的 DASH 轨
+  生成本地 MPD；每种画质选 AVC，音频选最高普通码率，可用字幕转为 VTT。
+  Shaka 控件与 YouTube 一致，额外画质和字幕留在设置菜单。Bilibili 还会
+  在同一个 WebView 内用 Canvas 显示滚动、顶部和底部弹幕；控制栏“弹”按钮
+  只切换本次播放的显示状态。画布直接使用 `<video>.currentTime`，因此暂停、
+  seek、倍速、内嵌和元素全屏共享时间基准；最多保留 80 条活动弹幕并限制
+  DPR，避免高密度弹幕拖慢文章滚动。特殊高级弹幕（mode 7）和发送弹幕不在
+  当前范围。匿名接口或媒体失败时回退官方 `player.bilibili.com` iframe；
+  单段弹幕失败不得触发回退。
+- YouTube/Bilibili 官方回退仍共用 `WebEmbedVideoPlayer` 的创建、导航、
+  全屏、加载与错误处理。各平台提供独立解析器、API 和媒体白名单，不要
+  下沉成宽泛的“网页播放器”判断。
 - WebView 必须懒加载：用户点击后才创建原生 WebView，避免长文章一次创建
   多个 platform view。YouTube 初始显示固定 `16:9` 缩略图；Bilibili 未播放
   态使用轻量来源占位，不额外请求 API 获取封面。
@@ -119,8 +132,8 @@ HTML 空段规范化：
   base URL 打开到默认浏览器并留下白屏转圈。
 - readability 仅保留能被 `YouTubeEmbedInfo` 或 `BilibiliEmbedInfo` 识别的 iframe，仍删除其他 iframe。这个白名单是安全与复杂度边界；新增平台必须使用同样严格的 provider parser，不能直接取消 iframe 清理。
 - macOS 网页元素系统全屏需要
-  `WKPreferences.isElementFullscreenEnabled`（macOS 12.3+）。SABR、
-  YouTube 官方回退和 Bilibili 都通过
+  `WKPreferences.isElementFullscreenEnabled`（macOS 12.3+）。两个 Shaka
+  首选播放器及 YouTube/Bilibili 官方回退都通过
   `WebKitWebViewController.webViewIdentifier` 与
   `MacOSWebViewControls` 通道启用；不要修改 pub cache 或 fork 插件。
 

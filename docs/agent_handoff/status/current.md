@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-07-25：
+截至 2026-07-29：
 
 - `main` 是当前集成分支。
 - Android 设计迁移已通过 merge commit `bd8c1b8` 合入 `main`；新代理应以 `main` 中的移动端实现为当前事实，不再等待旧 `android` 分支。
@@ -69,9 +69,19 @@
   音量、设置和全屏，橙色进度条支持拖动；macOS 视频区域的触控板纵向滚动
   会直接转交文章滚动，设置菜单内部除外。普通视频与 YouTube 共用当前
   播放器快捷键协调器，播放后不需要继续聚焦视频即可用 `Space`/媒体键；
-  同篇多个播放器会按最近开始播放或点击者转移归属。本轮尚待用户做
-  macOS/Android 视觉与真实播放验证。
-- Bilibili 官方站外播放器已作为常见正文视频媒介接入：少数派最近 5 篇“本周看什么”在本地文章库中共确认 23 个标准 embed，另有少数派其他文章和小众软件使用相同结构。`BilibiliEmbedInfo` 只接受精确 `player.bilibili.com/player.html` 与有效 `bvid/aid`；readability 仅对白名单内的 YouTube/Bilibili iframe 放行。Bilibili 与 YouTube 官方回退共用懒加载 `WebEmbedVideoPlayer`，但各自维护严格解析、导航域名和外部地址；Bilibili 未播放态不额外请求封面 API，也不解析真实媒体流。
+  同篇多个播放器会按最近开始播放或点击者转移归属。macOS 已由用户验证
+  真实播放、控制栏、空格快捷键、文章触控板滚动和网页元素全屏，基础体验
+  符合预期；Android 仍待真实播放与视觉验证。
+- Bilibili 在 macOS/Android 已改为首选匿名 API + 本地 DASH + Shaka：
+  点击后才补 `cid`、取播放地址和字幕，每种实际可用画质选 AVC 轨，搭配一条
+  最佳普通音轨；字幕可用时转换为 VTT。它与 YouTube 共用
+  `ShakaEmbedPlayer` 的控制栏、空格快捷键、文章滚动桥、loading、系统全屏
+  和回退状态，失败后自动切回原有官方 iframe。弹幕按 6 分钟分段懒加载，
+  用 Protobuf-ES 解析并在同一 WebView Canvas 内按视频时间显示，支持滚动、
+  顶部、底部、颜色、描边和本次播放开关；单段失败不影响视频。少数派最近
+  5 篇“本周看什么”在本地文章库中共确认 23 个标准 embed；严格 URL
+  parser/readability 白名单保持不变。当前尚待用户做 macOS/Android 真实
+  播放和视觉验证。
 - 原文 Markdown 转换已从 `article_page.dart` 提取到 `ArticleMarkdownExportService`；单篇复制和批量构建共享标题去重、元数据、正文结构和转义规则。页面层只处理当前内容、剪贴板与反馈，后续静默订阅源批量功能不得再维护页面内 exporter。
 - 单篇 Markdown 转换现与批量导出一样运行在 isolate，并有连续触发保护；畸形嵌套列表不再递归回同一 HTML。真实阿里技术 568KB 级缓存样本已验证能完成导出，不再阻塞 UI 或栈溢出。
 - 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。原文与已保存译文都在解析前走同一规范化路径，历史文章不需要数据库迁移。

@@ -689,3 +689,11 @@
 决策：排序和卡片显示继续共用 `ArticleLengthEstimator`。估算固定使用 `340 logical px` 阅读宽度，计入标题、正文、图片和其他既有渲染块，不读取设备、窗口或像素比；内容签名缓存保证重复构建不重复解析，正文变化时自动失效。小于 `1000` 显示整数 `px`，更长显示一位小数 `k px`。共享 `ArticleLengthLabel` 放在订阅源行右侧；普通 `ArticleCard` 同时覆盖 Android/macOS 的时间线、订阅源、最近阅读、静默、搜索和 Android 审核，macOS `_MacReviewRow` 单独接入同一组件，后台任务卡片不显示。
 
 后果：相同文章数据在两端得到相同可比较数值，窗口缩放不会改变标签或排序；某端完成 Readability 全文补抓而另一端尚未完成时，数值不同是实际正文不同的合理结果。不要改为真实布局测量，也不要在平台页面复制估算、格式化或缓存逻辑。
+
+## YouTube 与 Bilibili 共用自定义播放壳并保留官方回退
+
+背景：官方 YouTube/Bilibili iframe 可以降低取流实现成本，但控制栏、空格快捷键、触控板文章滚动、全屏和视觉风格无法与 Auto Folo 的普通视频稳定对齐；YouTube 还出现过 embed 错误和全屏命中分叉。用户引入自定义播放器的目标不是单纯“能播放”，而是让 macOS 与 Android 的基础播放体验尽可能一致，同时保留分辨率、字幕和 Bilibili 弹幕等来源能力。直接为两个来源各复制一套 WebView 控制器会让快捷键、loading、滚动桥和回退语义再次分叉。
+
+决策：两个来源首选仓库内可复现构建的 Shaka 网页运行时，并共用 Flutter `ShakaEmbedPlayer` 负责懒加载 WebView、35 秒超时、播放快捷键归属、macOS 触控板文章滚动桥、系统元素全屏、loading 和失败回退。YouTube 继续使用 YouTube.js + googlevideo SABR，并在 SABR 失败后先尝试普通自适应 DASH；Bilibili 只在用户点击后调用匿名详情/播放/字幕/弹幕接口，生成本地 DASH/VTT，每种实际可用画质选择 AVC 轨和一条普通音轨，弹幕在同一页面 Canvas 中按视频时间绘制。两个平台分别使用严格的 loopback 能力路径、目标域名/session 白名单和流式媒体代理，不能合并成任意 URL 代理。任一首选链失败时自动重建为对应官方 iframe，不把内部接口视为稳定公开 SDK。
+
+后果：播放、暂停、进度、音量、设置、全屏、空格/媒体键和文章滚动只维护一套基础交互；平台 wrapper 仅准备 URI、缩略图/占位和官方回退。应用运行不依赖 Node.js，生产资产固定在 `assets/embed_video_player/`，可复现源码和锁文件在 `tool/embed_video_player_runtime/`。YouTube macOS 基础体验已由用户验证；Bilibili 以及 Android 两个平台仍需真实视频、画质、字幕、弹幕、滚动和全屏检查。以后调整共同控制体验应优先修改共享运行时/`ShakaEmbedPlayer`，但 API、解析器、代理白名单和官方回退必须继续按来源隔离；不要删除懒加载或在文章初始渲染时预取媒体。

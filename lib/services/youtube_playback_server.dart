@@ -6,7 +6,7 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 
 abstract final class YouTubePlaybackServer {
-  static const _assetRoot = 'assets/youtube_player';
+  static const _assetRoot = 'assets/embed_video_player';
   static const _maxProxyRequestBytes = 2 * 1024 * 1024;
   static const _browserUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
@@ -90,16 +90,16 @@ abstract final class YouTubePlaybackServer {
             '$_assetRoot/index.html',
             ContentType.html,
           );
-        case 'youtube_player.js':
+        case 'embed_video_player.js':
           await _serveAsset(
             request,
-            '$_assetRoot/youtube_player.js',
+            '$_assetRoot/embed_video_player.js',
             ContentType('application', 'javascript', charset: 'utf-8'),
           );
-        case 'youtube_player.css':
+        case 'embed_video_player.css':
           await _serveAsset(
             request,
-            '$_assetRoot/youtube_player.css',
+            '$_assetRoot/embed_video_player.css',
             ContentType('text', 'css', charset: 'utf-8'),
           );
         case 'proxy':

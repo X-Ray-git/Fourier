@@ -1,5 +1,5 @@
 {
-  "name": "auto-folo-youtube-player-runtime",
+  "name": "auto-folo-embed-video-player-runtime",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "2.8.0",
     "bgutils-js": "3.2.0",
     "googlevideo": "4.0.4",
     "shaka-player": "4.16.2",

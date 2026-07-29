@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../services/article_image_service.dart';
 import '../../../utils/duration_extension.dart';
+import 'article_video_playback_shortcut.dart';
 import 'fullscreen_video_page.dart';
 import 'media_play_button.dart';
 
@@ -28,20 +28,9 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   Timer? _hideTimer;
   final FocusNode _focusNode = FocusNode();
 
-  static _InlineVideoPlayerState? activePlayer;
-
-  @override
-  void initState() {
-    super.initState();
-    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
-  }
-
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
-    if (activePlayer == this) {
-      activePlayer = null;
-    }
+    ArticleVideoPlaybackShortcut.deactivate(this);
     _focusNode.dispose();
     _hideTimer?.cancel();
     _controller
@@ -51,20 +40,6 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   }
 
   void _onControllerUpdate() => setState(() {});
-
-  bool _handleGlobalKey(KeyEvent event) {
-    if (event is KeyDownEvent &&
-        (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
-            event.logicalKey == LogicalKeyboardKey.space)) {
-      if (activePlayer == this) {
-        if (_controller != null && _controller!.value.isInitialized) {
-          _togglePlayPause();
-          return true; // 拦截事件
-        }
-      }
-    }
-    return false;
-  }
 
   void _startHideTimer() {
     _hideTimer?.cancel();
@@ -81,9 +56,11 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
 
   Future<void> _enterFullscreen() async {
     if (_controller == null) return;
-    final shouldRestoreActivePlayer = activePlayer == this;
+    final shouldRestoreActivePlayer = ArticleVideoPlaybackShortcut.isActive(
+      this,
+    );
     if (shouldRestoreActivePlayer) {
-      activePlayer = null;
+      ArticleVideoPlaybackShortcut.deactivate(this);
     }
 
     await Navigator.push(
@@ -97,9 +74,13 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
         shouldRestoreActivePlayer &&
         _controller != null &&
         _controller!.value.isInitialized) {
-      activePlayer = this;
+      _activatePlaybackShortcut();
       _focusNode.requestFocus();
     }
+  }
+
+  void _activatePlaybackShortcut() {
+    ArticleVideoPlaybackShortcut.activate(this, _togglePlayPause);
   }
 
   Future<void> _initAndPlay() async {
@@ -122,7 +103,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       await controller.setLooping(false);
       controller.addListener(_onControllerUpdate);
       await controller.play();
-      activePlayer = this;
+      _activatePlaybackShortcut();
       if (mounted) _focusNode.requestFocus();
       setState(() {});
       _startHideTimer();
@@ -135,7 +116,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
 
   Future<void> _togglePlayPause() async {
     if (_controller == null) return;
-    activePlayer = this;
+    _activatePlaybackShortcut();
     if (mounted) _focusNode.requestFocus();
     if (_controller!.value.isPlaying) {
       await _controller!.pause();
@@ -153,7 +134,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   }
 
   void _toggleControls() {
-    activePlayer = this;
+    _activatePlaybackShortcut();
     if (mounted) _focusNode.requestFocus();
     setState(() => _showControls = !_showControls);
     _startHideTimer();

@@ -59,7 +59,19 @@
 - 正文图片文章级预取/清理机制已覆盖 macOS 与 Android：macOS 预取全部本地未读文章，每篇最多 8 张、并发 16、当前文章优先 4 张；Android 预取前 50 篇本地未读文章，每篇最多 4 张、并发 4、当前文章优先 2 张，当前不区分 Wi-Fi 与移动网络。两端都不使用 hover，正常加载和查看器统一使用文章级缓存键；保持已读 5 分钟后串行清理该文章登记的原图/缩放缓存，恢复未读可重入队列。历史 `v2_` 缓存暂不清理。
 - 自动翻译/摘要只在正文持久化后、准备入队时读取最新本地已读状态：当时已读则不入队，当时未读则正常入队且后续不因标记已读而取消。这取代了长期使用中效果很有限的“已读后移出等待队列”机制；手动操作和垃圾拦截判定不受影响。
 - HTML 清洗修复了半透明内容被误删、顶层转义文本变成标签、同一文章正文更新命中旧缓存，以及 `<p><span><br></span></p>` 格式包装空段未被删除的问题。空段清洗保护媒体与 `id/name` 锚点，不合并正常非空段落。规范化缓存以正文 SHA-256 指纹校验变化，不额外长期保存第二份原始 HTML。没有有效地址的 iframe、video 或 audio 保留为明确的不可用提示，并提供经过 HTTP/HTTPS 校验的原文入口；video 与 audio 都支持从子级 `<source src>` 提取资源。
-- Bilibili 官方站外播放器已作为常见正文视频媒介接入：少数派最近 5 篇“本周看什么”在本地文章库中共确认 23 个标准 embed，另有少数派其他文章和小众软件使用相同结构。`BilibiliEmbedInfo` 只接受精确 `player.bilibili.com/player.html` 与有效 `bvid/aid`；readability 仅对白名单内的 YouTube/Bilibili iframe 放行。两者共用懒加载 `WebEmbedVideoPlayer`，但各自维护严格解析、导航域名和外部地址；Bilibili 未播放态不额外请求封面 API，也不解析真实媒体流。
+- YouTube 在 macOS/Android 已接入可复现构建的 YouTube.js +
+  googlevideo SABR + Shaka 首选播放器：点击后才启动带随机能力路径的
+  `127.0.0.1` 服务，API/媒体走严格 HTTPS 域名白名单代理，媒体流不经过
+  Dart Base64 搬运；VOD 的 SABR UMP 无有效媒体段时先在同一 Shaka 控件
+  内回退普通自适应 DASH，两条自定义链都失败后才回退官方 iframe。
+  Node 只用于构建，应用打包固定静态产物；许可和传递依赖已写入
+  `THIRD_PARTY_NOTICES.md`。SABR 控制栏已按本地播放器收敛为播放、时间、
+  音量、设置和全屏，橙色进度条支持拖动；macOS 视频区域的触控板纵向滚动
+  会直接转交文章滚动，设置菜单内部除外。普通视频与 YouTube 共用当前
+  播放器快捷键协调器，播放后不需要继续聚焦视频即可用 `Space`/媒体键；
+  同篇多个播放器会按最近开始播放或点击者转移归属。本轮尚待用户做
+  macOS/Android 视觉与真实播放验证。
+- Bilibili 官方站外播放器已作为常见正文视频媒介接入：少数派最近 5 篇“本周看什么”在本地文章库中共确认 23 个标准 embed，另有少数派其他文章和小众软件使用相同结构。`BilibiliEmbedInfo` 只接受精确 `player.bilibili.com/player.html` 与有效 `bvid/aid`；readability 仅对白名单内的 YouTube/Bilibili iframe 放行。Bilibili 与 YouTube 官方回退共用懒加载 `WebEmbedVideoPlayer`，但各自维护严格解析、导航域名和外部地址；Bilibili 未播放态不额外请求封面 API，也不解析真实媒体流。
 - 原文 Markdown 转换已从 `article_page.dart` 提取到 `ArticleMarkdownExportService`；单篇复制和批量构建共享标题去重、元数据、正文结构和转义规则。页面层只处理当前内容、剪贴板与反馈，后续静默订阅源批量功能不得再维护页面内 exporter。
 - 单篇 Markdown 转换现与批量导出一样运行在 isolate，并有连续触发保护；畸形嵌套列表不再递归回同一 HTML。真实阿里技术 568KB 级缓存样本已验证能完成导出，不再阻塞 UI 或栈溢出。
 - 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。原文与已保存译文都在解析前走同一规范化路径，历史文章不需要数据库迁移。

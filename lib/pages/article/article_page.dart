@@ -1060,6 +1060,13 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _updateHeaderCollapseProgress();
   }
 
+  void _handleEmbeddedPointerScroll(double deltaY) {
+    if (!_scrollController.hasClients || !deltaY.isFinite || deltaY == 0) {
+      return;
+    }
+    _scrollController.position.pointerScroll(deltaY);
+  }
+
   void _updateHeaderCollapseProgress() {
     if (!Platform.isMacOS || !widget.isSplitView) return;
 
@@ -1640,6 +1647,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                                   : null,
                               onImageTap: (url) =>
                                   controller.openImagePreview(url, context),
+                              onEmbeddedPointerScroll:
+                                  _handleEmbeddedPointerScroll,
                             );
                             return card;
                           }),

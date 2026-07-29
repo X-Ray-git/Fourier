@@ -9,7 +9,14 @@ macOS 是近期 UI 工作的主要验证目标。
 - 局部原生侧边栏玻璃必须放在 `sidebarBackdropHost` 内，由该宿主使用与 Flutter 应用外框一致的 `24px` 连续圆角裁剪。不能把玻璃再次直接作为未裁剪的 `contentView` 子节点：Flutter 的外框 `ClipPath` 无法约束 AppKit 兄弟节点，窗口聚焦时会在最外侧左上、左下圆角产生透明穿透和不规则锯齿。宿主只负责原生玻璃的最外层裁剪，不能改成裁剪整个 `contentView`，否则可能影响 Flutter、窗口按钮和阴影。
 - 红黄绿按钮使用 AppKit `NSControl` 自绘容器，位置和命中范围匹配自定义窗口/侧边栏几何；系统标准按钮保持隐藏，自绘按钮通过它们现有的 target/action 转发关闭、最小化和绿色按钮行为。
 - 全屏视频是唯一会临时隐藏红黄绿按钮的页面：视频会延伸到 full-size content view 的标题栏区域，保留按钮会遮挡画面。退出视频页面必须恢复按钮；普通文章、图片预览和其他页面仍遵循标准按钮定位。
-- YouTube 使用 WKWebView 自带播放器；其全屏是网页元素触发的 macOS 系统全屏，不经过普通视频的 `FullscreenVideoPage`。Runner 只对对应 WKWebView 开启 `isElementFullscreenEnabled`，不要把这一配置误当成整个应用窗口的全屏开关。
+- YouTube 首选本地打包的 SABR/Shaka WKWebView 播放器，失败时自动回退到
+  YouTube 官方 iframe；两者的全屏都是网页元素触发的 macOS 系统全屏，
+  不经过普通视频的 `FullscreenVideoPage`。Runner 只对对应 WKWebView
+  开启 `isElementFullscreenEnabled`，不要把这一配置误当成整个应用窗口的
+  全屏开关。
+- YouTube SABR 页面由应用内 `127.0.0.1` 服务提供，因此 Debug/Profile 与
+  Release 都需要 network server entitlement，ATS 只放行 local networking。
+  服务不得监听 `0.0.0.0` 或局域网地址。
 - 红色关闭应隐藏窗口，而不是退出应用。
 - 侧边栏是悬浮圆角面板；它的间距和外侧圆角关系会影响其他 macOS 边缘间距决策。
 - 软件内选择浅色/深色时，Flutter 主题、玻璃 renderer 读取的 `MediaQuery.platformBrightness`、`NSApp.appearance` 和主窗口 appearance 必须同步；否则系统模式与应用模式不同时，原生玻璃会使用错误明暗外观。
@@ -52,7 +59,9 @@ macOS 是近期 UI 工作的主要验证目标。
 - 时间线：未读/全部切换、排序菜单、同步旋转。
 - 文章详情：工具栏 hover、图片光标、表格渲染、目录行为。
 - 全屏视频：顶部无桌面冗余按钮，红黄绿进入时隐藏/退出时恢复，`Space`、左右 5 秒和 `Esc` 正确，播放结束停在最后一帧。
-- YouTube：缩略图与加载反馈、内联播放、右下角系统全屏和 `Esc` 返回文章均可用；用户已完成本轮验证，未决视觉细节以后按具体反馈处理。
+- YouTube：旧官方 iframe 的缩略图、加载反馈、内联播放、右下角系统全屏和
+  `Esc` 返回文章曾完成验证；2026-07-29 新增的 SABR 首选链路仍需重新做
+  实机验证，检查项见 `status/verification.md`。
 - 设置/任务中心：滚动行为、轻量面板、没有重复 scrollbar。
 - 冷启动：完全退出进程后双击应用，确认不会先出现灰色空壳、标题或尺寸连续跳变，首个可见画面应已经是 Flutter 正式界面。
 - 冷启动同步：刷新按钮旋转期间，刷新、排序和 `未读 / 全部` 三个控件应从首次可见画面起就具有玻璃材质，刷新完成时不应发生材质突变。

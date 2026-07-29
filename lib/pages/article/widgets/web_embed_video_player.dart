@@ -23,6 +23,7 @@ class WebEmbedVideoPlayer extends StatefulWidget {
     required this.isAllowedMainFrameUri,
     this.thumbnailUri,
     this.idleBackground,
+    this.startOnMount = false,
   });
 
   final String providerName;
@@ -32,6 +33,7 @@ class WebEmbedVideoPlayer extends StatefulWidget {
   final EmbedNavigationPredicate isAllowedMainFrameUri;
   final Uri? thumbnailUri;
   final Widget? idleBackground;
+  final bool startOnMount;
 
   @override
   State<WebEmbedVideoPlayer> createState() => _WebEmbedVideoPlayerState();
@@ -41,6 +43,16 @@ class _WebEmbedVideoPlayerState extends State<WebEmbedVideoPlayer> {
   WebViewController? _controller;
   bool _isLoading = false;
   bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startOnMount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startPlayback();
+      });
+    }
+  }
 
   Future<void> _startPlayback() async {
     if (_isLoading) return;

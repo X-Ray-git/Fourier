@@ -1,0 +1,112 @@
+.shaka-video-container .shaka-controls-container {
+  transition: opacity 250ms ease;
+}
+
+.shaka-video-container .shaka-scrim-container {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.6),
+    transparent 30%
+  );
+}
+
+.shaka-video-container .shaka-bottom-controls {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 12px 8px;
+}
+
+.shaka-video-container .shaka-controls-button-panel {
+  align-items: center;
+  min-height: 34px;
+}
+
+.shaka-video-container .shaka-controls-button-panel > * {
+  box-sizing: border-box;
+  height: 34px;
+  margin: 0;
+  padding: 5px 7px;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+}
+
+.shaka-video-container .shaka-controls-button-panel > *:hover {
+  color: #fff;
+}
+
+.shaka-video-container .shaka-current-time {
+  padding: 0 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.shaka-video-container .shaka-seek-bar-container {
+  height: 4px;
+  margin: 0 0 6px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.shaka-video-container .shaka-seek-bar-container .shaka-range-element {
+  cursor: pointer;
+}
+
+.shaka-video-container
+  .shaka-seek-bar-container
+  input[type="range"]::-webkit-slider-thumb {
+  background: #ff5c00;
+  cursor: pointer;
+}
+
+.shaka-video-container .shaka-volume-bar-container {
+  align-self: center;
+  box-sizing: content-box;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.shaka-video-container .shaka-overflow-menu,
+.shaka-video-container .shaka-settings-menu {
+  right: 10px;
+  bottom: 52px;
+  min-width: 200px;
+  max-height: calc(100% - 64px);
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(28, 28, 30, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  animation: auto-folo-menu-in 140ms ease-out;
+}
+
+.shaka-video-container .shaka-overflow-menu button,
+.shaka-video-container .shaka-settings-menu button {
+  min-height: 38px;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.shaka-video-container .shaka-overflow-menu button:hover,
+.shaka-video-container .shaka-settings-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes auto-folo-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

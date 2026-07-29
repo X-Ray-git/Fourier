@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>YouTube</title>
+    <style>
+      html,
+      body,
+      #video-container,
+      video {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+      }
+
+      #video-container {
+        position: relative;
+      }
+
+      .shaka-video-container,
+      .shaka-controls-container {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      }
+
+      video {
+        object-fit: contain;
+      }
+
+      .shaka-spinner-container,
+      .shaka-spinner {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="video-container">
+      <video id="video" autoplay playsinline></video>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

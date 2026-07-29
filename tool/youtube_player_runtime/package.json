@@ -1,0 +1,19 @@
+{
+  "name": "auto-folo-youtube-player-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bgutils-js": "3.2.0",
+    "googlevideo": "4.0.4",
+    "shaka-player": "4.16.2",
+    "youtubei.js": "17.2.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2",
+    "vite": "8.1.5"
+  }
+}

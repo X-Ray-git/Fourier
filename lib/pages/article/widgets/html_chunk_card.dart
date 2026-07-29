@@ -115,6 +115,7 @@ class HtmlChunkCard extends StatefulWidget {
   final bool keepAlive;
   final ValueNotifier<String?>? hoveredUrl;
   final Key? contentAnchorKey;
+  final ValueChanged<double>? onEmbeddedPointerScroll;
 
   const HtmlChunkCard({
     super.key,
@@ -126,6 +127,7 @@ class HtmlChunkCard extends StatefulWidget {
     this.keepAlive = true,
     this.hoveredUrl,
     this.contentAnchorKey,
+    this.onEmbeddedPointerScroll,
   });
 
   @override
@@ -742,7 +744,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     if (youtube != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: YouTubeEmbedPlayer(info: youtube),
+        child: YouTubeEmbedPlayer(
+          info: youtube,
+          onArticleScroll: widget.onEmbeddedPointerScroll,
+        ),
       );
     }
 

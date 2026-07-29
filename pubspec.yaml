@@ -88,6 +88,7 @@ flutter:
     - LICENSE
     - THIRD_PARTY_NOTICES.md
     - third_party/licenses/
+    - assets/youtube_player/
   shaders:
     - shaders/liquid_glass/lightweight_glass.frag
     - shaders/liquid_glass/interactive_indicator.frag

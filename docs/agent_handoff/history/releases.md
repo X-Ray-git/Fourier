@@ -15,3 +15,9 @@
 ```
 
 这些命令只作为历史证据，不应直接复制执行。创建新版本前必须重新确认版本号、提交状态和 release notes。
+
+## v1.2.0
+
+```bash
+./scripts/release.sh 1.2.0 -m $'- feat: add macOS subscription management with undoable changes\n- feat: add unified YouTube and Bilibili playback with quality, subtitles and danmaku\n- fix: align embedded video controls, shortcuts, scrolling and fullscreen across platforms' --push
+```

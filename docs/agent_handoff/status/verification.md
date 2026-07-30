@@ -16,7 +16,7 @@
   macOS Release 还需确认 sandbox 下 loopback server 可以绑定；Android
   需确认只放行 localhost 明文而外部 HTTPS 行为不变。
 - macOS 静默订阅源批量导出的入口、勾选、四类动作、morph 展开和 `Esc` 退出已完成用户运行确认。仍需在真实网络偶发部分成功时观察：本地列表、菜单篇数、刷新后的远端状态与 Undo/Redo 历史必须只反映最终确认改变的子集；保存取消或失败不能标为已读。
-- GitHub 发布 Actions 已迁移到 Node 24 对应的 `checkout@v7`、`setup-java@v6`、`upload-artifact@v7` 和 `download-artifact@v8`，Flutter pin 也从 `3.41.6` 对齐为 `3.44.6`。macOS 已改为纯 SwiftPM，本地 Android Debug、macOS Debug/Release 和 arm64 检查通过，但尚未触发真实 tag 构建。下一次用户明确允许发布时，应确认 Android、macOS arm64 和 GitHub Release 三段均成功，不再出现 Node 20、SwiftPM 插件兼容或 `pod install` 警告。
+- GitHub 发布 Actions 已迁移到 Node 24 对应的 `checkout@v7`、`setup-java@v5`、`upload-artifact@v7` 和 `download-artifact@v8`，Flutter pin 也从 `3.41.6` 对齐为 `3.44.6`。`v1.2.0` 首次触发确认版本校验和 macOS arm64 全部成功，但 Android 因不存在的 `setup-java@v6` 在 job 初始化阶段失败，GitHub Release 因依赖关系被跳过；旧 tag 未产生 Release 后已删除，workflow 修正为实际使用 Node 24 的 `@v5`，等待重建同名 tag。重新触发后应确认 Android、macOS arm64 和 GitHub Release 三段均成功。
 - macOS 圆形工具按钮和文章范围 morph 已完成用户视觉检查后进入提交：深色按钮应比旧版更通透；浅色按钮应通过冷白材质、左上高光和仅位于外部的双层阴影保持可见，内部不能因阴影发灰。文章范围在主时间线与订阅源详情都应只显示“未读/全部”，深色触发图标为白色、浅色为 `onSurface`，展开/收回和筛选结果应与排序共用的 morph 行为一致。后续如调整共享组件，要同时检查排序与两处范围入口。
 - macOS 主时间线动画与滚动已完成日志和视觉验证：在约 `4799` 篇本地文章下，两次 `M`、四次双击都完整经过 `4→3→2→1→0`，没有列表 reset；用户确认实际动画正常。后续普通使用中仍应留意 `Command-Z`、同步刷新、排序和范围变化不能重新引入回顶或大规模列表动画，但不再把本次故障视为未验证修复。
 - 已读文章偶发重新出现：并发旧快照竞态已修复，仍需在刷新与连续标记已读交叠时持续观察。正常日志中，旧未读快照不应触发重新出现；服务端快照不再包含文章时可见 `snapshot.confirms-local-read`。若再次出现，保留 `snapshot.missing-local-read-override`、`unread-list.reappeared` 及相邻动画日志。

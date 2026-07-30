@@ -598,7 +598,7 @@
 
 背景：旧 `release.sh` 会在当前任意分支创建版本提交和 annotated tag，但推送时固定执行 `git push origin main` 后再单独推 tag。在功能分支误运行时，tag 可能包含尚未合入主线的代码。发布脚本还会继续向已经解体完成的根 `AGENT_HANDOFF.md` 追加足迹。与此同时，工作流使用的 `actions/*@v4` 已进入 Node 20 淘汰期。
 
-决策：脚本在修改文件前强制确认当前分支精确为 `main`，非 main 和 detached HEAD 均立即失败；版本号、干净工作区、annotated tag 和 release notes 规则保持不变。发布可复现命令改为追加到 `docs/agent_handoff/history/releases.md`。GitHub-hosted workflow 更新到 Node 24 对应的 `checkout@v7`、`setup-java@v6`、`upload-artifact@v7` 和 `download-artifact@v8`；当时保留 Flutter `3.41.6`、Java 17、Android 签名、`macos-26` 和 arm64 校验，Flutter pin 后续由独立工具链迁移决策更新。
+决策：脚本在修改文件前强制确认当前分支精确为 `main`，非 main 和 detached HEAD 均立即失败；版本号、干净工作区、annotated tag 和 release notes 规则保持不变。发布可复现命令改为追加到 `docs/agent_handoff/history/releases.md`。GitHub-hosted workflow 更新到 Node 24 对应的 `checkout@v7`、`setup-java@v5`、`upload-artifact@v7` 和 `download-artifact@v8`；当时保留 Flutter `3.41.6`、Java 17、Android 签名、`macos-26` 和 arm64 校验，Flutter pin 后续由独立工具链迁移决策更新。`setup-java@v5` 自身使用 Node 24；不存在的 `@v6` 曾导致 `v1.2.0` 首次触发时 Android 在 job 初始化阶段失败，因此不要根据其他 actions 的主版本机械推导该 action 的版本号。
 
 后果：功能分支不能直接触发正式发布，根交接入口不会再次随 release 增长。Actions 升级已通过本地 YAML、脚本、analyze 和测试检查，但只有下一次用户明确允许的 tag 构建才能验证远程 action 运行时；届时必须同时确认 Android、macOS arm64 和 GitHub Release 三个阶段。
 

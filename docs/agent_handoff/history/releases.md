@@ -21,3 +21,9 @@
 ```bash
 ./scripts/release.sh 1.2.0 -m $'- feat: add macOS subscription management with undoable changes\n- feat: add unified YouTube and Bilibili playback with quality, subtitles and danmaku\n- fix: align embedded video controls, shortcuts, scrolling and fullscreen across platforms' --push
 ```
+
+首次 tag 触发时，Android 因 workflow 引用了不存在的
+`actions/setup-java@v6` 而在 job 初始化阶段失败，未创建 GitHub Release。
+确认没有正式发布产物后删除该 tag；workflow 改为使用 Node 24 的
+`actions/setup-java@v5`，随后在保持 `1.2.0+31` 和原 release notes 不变的
+前提下，于修复提交上重建 annotated `v1.2.0`。

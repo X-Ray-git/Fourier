@@ -713,3 +713,24 @@
 - 不要把 `_LlmConfigCard` 的 children padding 顶部改回 `0` 或任何 `< 9` 的值。
 - 不要为了“统一”给 `MobileSettingsSelectField` 或 `InputDecorator` 本身加 `clipBehavior`，那会重新引入已修复的字段层裁切。
 - 以后在安卓端新增带 `labelText` + `OutlineInputBorder` 的控件时，若它会被放进 `ExpansionTile` 或其他 `Clip.antiAlias` 容器，必须确保控件上方有 `≥ 9px` 的非裁切缓冲；放进普通滚动列表或 padding `≥ 16` 的面板则不受影响。
+
+## 图片加载失败的重试统一收敛到 ArticleImageCacheService
+
+背景：正文独立块级图片失败时，旧实现只有 `_ArticleInlineImage` 里 `_retryCount++` 加 `?retry=N` 的手动点击重试，没有上限、没有退避、没有自动重试；后台预取 `_download` 失败则直接 `catch (_) {}` 静默吞掉。用户反馈"点一下重试就能加载出来"，说明失败多为偶发临时错误，但用户必须手动点。同时全局刷新只重新解析未读文章抽图，完全不重扫之前失败的图片。
+
+前期调查曾误判"独立图片块没走 `toProxiedUrl` 代理"，经验证 `HtmlChunk.normalizedImageUrl`（`html_chunk_parser.dart:63-66`）已经调用了 `toProxiedUrl`，`_ArticleInlineImage` 用的正是该值，代理 URL 问题不存在，无需修复。
+
+决策：把重试调度统一收敛到 `ArticleImageCacheService`，正文渲染和后台预取两条路径的失败都经 `recordFailure` 登记。service 在后台用一次性 `Timer` 带指数退避自动重试，`maxAutoRetries=3`，间隔 `1s/2s/4s`，无轮询。成功后 `recordSuccess` 清除失败标记，并仅在文章处于前台活跃时 `ArticleStateNotifier.tick(entryId)` 触发正文刷新，让失败占位自动变成图片。自动重试计数 `_autoRetryAttempt` 只在内存存活；失败记录 `_failedImageUrls`（articleId → 失败 imageUrl 集合）落盘到 `localCache`（`articleImageFailedKeys:<id>`），与 `registerImage` 的落盘机制对称。`TimelineController.loadData` 在 `refresh` 之后调 `retryFailedPrefetches`，重新排查所有失败记录（含重启后从落盘恢复的）并清零计数再试一轮。`_runCleanup` 清理某文章时一并取消其退避 `Timer` 并删除失败记录。
+
+前台与后台的交互设计（关键）：前台 `_ArticleInlineImage` 不持有任何重试状态，占位文案实时查询 `ArticleImageCacheService.isRetrying`（有退避 Timer 在等或正在下载即为 true）——这样占位始终精确反映后台真实进度，不会与后台脱节或卡死。前台 errorWidget 失败时调 `scheduleRetryFromUi`（登记 + 安排退避）；后台 `_download` catch 直接调 `recordFailure` + `_scheduleAutoRetry`。`_scheduleAutoRetry` 内部用 `isRetrying` 做幂等保护，保证前台 errorWidget 每次 build 调用（可能多次）不会重复推进退避计数。`tick` 严格只在两处触发：`recordSuccess`（成功出图）和退避耗尽时（`_scheduleAutoRetry` 内 `attempt >= maxAutoRetries`），**绝不在 errorWidget build 路径里触发**，因此不会因 build 重复而形成刷新循环。失败占位文案状态化：`isRetrying` 为 true 时显示「重新加载中…」且不可点击，false 时显示「图片加载失败，点击重试」，手动点击调 `retryManually`（清零自动重试计数立即重新入队）并保留 `_retryCount++` 改 URL 强制 `CachedNetworkImage` 重建重发（绕过其可能缓存的失败态）。完整闭环：失败→`isRetrying=true`→后台退避重试→成功 `tick` 出图，或 3 次后失败→`tick`→`isRetrying=false`→显示点击重试。
+
+边界：不依赖错误类型区分永久/临时失败，因为 `flutter_cache_manager` 抛出的异常类型不稳定；统一用退避次数控制，3 次后停并保留失败记录等待刷新或手动重试。本次只覆盖独立块级图片（`HtmlChunkType.image`）；行内图片（`_imageExtension`）和图片画廊仍无重试，是明确的范围边界。退避计数不落盘，进程重启后回到 0，但失败记录仍在，下次刷新仍会重扫。
+
+不要回退：
+
+- 不要让正文渲染层自己维护退避/计数逻辑；失败登记和重试调度都走 service 的 `scheduleRetryFromUi` / `retryManually`。
+- 不要给前台占位引入自持的 `_retrying` 字段；它一旦与后台脱节就无法翻回，必须实时查 `isRetrying`。
+- 不要在 errorWidget build 路径里调 `tick`；`tick` 只在 `recordSuccess` 和退避耗尽两处触发，否则 build→tick→重建→build 会循环。
+- 不要把自动重试计数落盘；它只是当前会话的瞬时退避进度，落盘会让重启后立即跑满 3 次重试，反而绕过"刷新时重扫一轮"的节奏。
+- 不要给 `ArticleImageCacheService` 加 `ChangeNotifier`/轮询；成功后用已有的 `ArticleStateNotifier.tick` 通知，无新增通知基础设施。
+- 不要在行内图片和画廊上复用本次重试，除非单独验证其 `errorWidget` 改造；本次范围明确不含。

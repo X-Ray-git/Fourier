@@ -2,6 +2,7 @@
 
 ## 仍需持续观察
 
+- 2026-07-31 图片加载失败重试机制已收敛到 `ArticleImageCacheService`（自动指数退避 `1s/2s/4s` 共 3 次、失败状态落盘、全局刷新 `retryFailedPrefetches` 重扫、成功后 `tick` 通知正文刷新）。需在 macOS/Android 真机验证：打开含失败图片的文章，确认失败占位先显示“重新加载中…”、后台自动重试成功后占位自动变成图片（无需手动点）；自动重试耗尽后占位文案变为“图片加载失败，点击重试”，手动点击可重新触发；切到时间线做一次全局刷新，确认之前失败的图片会被重新排查重试一轮；进程重启后刷新仍能重扫上次失败记录。行内图片和图片画廊本次未纳入重试，属预期范围边界。决策与边界见 `history/decisions.md`“图片加载失败的重试统一收敛到 ArticleImageCacheService”。
 - 2026-07-31 Android 设置页 `_LlmConfigCard`（翻译/摘要/过滤 LLM 参数卡片）展开后第一个下拉框“模型”的浮动 label 上半部分被裁切。根因是 `ExpansionTile` children padding 顶部为 `0`，浮动 label 向上越出 `OutlineInputBorder` 约 `8.6px` 的部分被 `ExpansionTile` 内部 `ClipRect` 和外层 `MobileSettingsPanel` 的 `Clip.antiAlias` 切掉；已把该 padding 顶部改为 `10`。需在真机分别展开翻译、摘要、过滤三个 LLM 参数卡片，确认“模型”及其他首项浮动标签完整显示，且展开动画和卡片整体布局无异常。静态分析与排查结论见 `history/decisions.md`“带浮动标签的设置输入控件上方必须为裁切容器预留缓冲”。
 - 2026-07-29 YouTube SABR 首选播放器尚待用户实机验证。macOS 与 Android
   分别打开真实 YouTube 文章，检查首次点击有即时 loading、能够开始播放、

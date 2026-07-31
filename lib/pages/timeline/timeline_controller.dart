@@ -182,6 +182,9 @@ class TimelineController extends GetxController {
     unawaited(
       ArticleImageCacheService.refresh(LocalArticleDbService.readAllArticles()),
     );
+    // 全量刷新后重新排查失败图片：上一轮刷新/阅读期间加载失败的图片会
+    // 在此重新入队，带指数退避再试一轮。失败记录落盘，重启后仍可重扫。
+    unawaited(ArticleImageCacheService.retryFailedPrefetches());
     // 全量同步完成后，强制通知订阅列表做全量重新计数
     if (Get.isRegistered<SubscriptionsController>()) {
       Get.find<SubscriptionsController>().refreshUnreadCounts();

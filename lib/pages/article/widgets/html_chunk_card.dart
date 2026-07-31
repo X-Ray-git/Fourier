@@ -1191,10 +1191,21 @@ class _ArticleInlineImage extends StatefulWidget {
 
 class _ArticleInlineImageState extends State<_ArticleInlineImage>
     with AutomaticKeepAliveClientMixin {
+  // 手动重试次数：驱动 appendRetryStamp 改 URL，强制 CachedNetworkImage
+  // 重建重发，绕过其可能缓存的失败态。后台自动重试进度不在这里维护——
+  // 占位文案实时查询 ArticleImageCacheService.isRetrying，避免与后台脱节。
   int _retryCount = 0;
 
   @override
   bool get wantKeepAlive => true; // 告诉 ListView 不要在滑出屏幕时销毁该组件
+
+  /// 手动重试兜底：让 service 清零自动重试计数并立即重新入队，同时
+  /// _retryCount++ 改 URL 强制本 widget 重建重发，绕过 CachedNetworkImage
+  /// 可能缓存的失败态。
+  void _retryManually() {
+    ArticleImageCacheService.retryManually(widget.articleId, widget.imageUrl);
+    setState(() => _retryCount++);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1251,7 +1262,11 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                 height: displayHeight,
                 child: _ImageErrorWidget(
                   cs: cs,
-                  onRetry: () => setState(() => _retryCount++),
+                  retrying: ArticleImageCacheService.isRetrying(
+                    widget.articleId,
+                    widget.imageUrl,
+                  ),
+                  onRetry: () => _retryManually(),
                 ),
               ),
             )
@@ -1279,14 +1294,27 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                   ),
                 ),
               ),
-              errorWidget: (context, url, error) => SizedBox(
-                width: displayWidth,
-                height: displayHeight,
-                child: _ImageErrorWidget(
-                  cs: cs,
-                  onRetry: () => setState(() => _retryCount++),
-                ),
-              ),
+              errorWidget: (context, url, error) {
+                // 失败统一收敛到 service：登记 + 安排后台指数退避自动重试
+                //（不阻塞阅读）。重复调用幂等，errorWidget 每次 build 都安全。
+                // 文案实时查询 isRetrying，成功后 tick 会触发本页重建出图。
+                ArticleImageCacheService.scheduleRetryFromUi(
+                  widget.articleId,
+                  widget.imageUrl,
+                );
+                return SizedBox(
+                  width: displayWidth,
+                  height: displayHeight,
+                  child: _ImageErrorWidget(
+                    cs: cs,
+                    retrying: ArticleImageCacheService.isRetrying(
+                      widget.articleId,
+                      widget.imageUrl,
+                    ),
+                    onRetry: () => _retryManually(),
+                  ),
+                );
+              },
             ),
     );
 
@@ -1384,10 +1412,36 @@ void showInlineImageContextMenu(
 class _ImageErrorWidget extends StatelessWidget {
   final ColorScheme cs;
   final VoidCallback onRetry;
-  const _ImageErrorWidget({required this.cs, required this.onRetry});
+  final bool retrying;
+
+  /// [retrying] 为 true 时表示后台自动重试进行中，占位显示「重新加载中…」
+  /// 且不可点击；为 false 时表示自动重试已耗尽，显示「图片加载失败，点击重试」
+  /// 并允许用户手动触发兜底重试。
+  const _ImageErrorWidget({
+    required this.cs,
+    required this.onRetry,
+    this.retrying = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (retrying) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.image_outlined,
+            color: cs.onSurfaceVariant,
+            size: 36,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '重新加载中…',
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+          ),
+        ],
+      );
+    }
     return InkWell(
       onTap: onRetry,
       child: Column(
@@ -1400,7 +1454,7 @@ class _ImageErrorWidget extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '图片加载失败',
+            '图片加载失败，点击重试',
             style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
           ),
         ],

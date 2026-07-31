@@ -8,6 +8,7 @@ import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'article_image_service.dart';
+import 'article_state_notifier.dart';
 
 /// Article-body image prefetching and article-scoped cache cleanup.
 abstract final class ArticleImageCacheService {
@@ -20,8 +21,21 @@ abstract final class ArticleImageCacheService {
   static const int androidBackgroundArticleLimit = 50;
   static const Duration readCacheRetention = Duration(minutes: 5);
 
+  /// 失败图片自动重试次数上限。达到上限后停止自动重试，失败记录保留，
+  /// 等待全局刷新时由 [retryFailedPrefetches] 重新排查，或用户手动点击重试。
+  static const int maxAutoRetries = 3;
+
+  /// 指数退避间隔：第 1/2/3 次自动重试前分别等待 1s/2s/4s。
+  /// 用一次性 [Timer] 调度，无后台轮询。
+  static const List<Duration> _autoRetryBackoff = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+  ];
+
   static const String _cacheKeyPrefix = 'article_body_v1';
   static const String _registryPrefix = 'articleImageKeys:';
+  static const String _failedRegistryPrefix = 'articleImageFailedKeys:';
 
   static final List<_ImageDownloadTask> _foregroundQueue = [];
   static final List<_ImageDownloadTask> _backgroundQueue = [];
@@ -30,6 +44,17 @@ abstract final class ArticleImageCacheService {
   static final Map<String, Set<String>> _registeredKeys = {};
   static final Map<String, DateTime> _cleanupDueAt = {};
   static final Set<String> _activeArticleIds = {};
+
+  /// 失败图片登记：articleId → 失败的 imageUrl 集合（已规范化、含代理）。
+  /// 落盘到 [GStorage.localCache]，进程重启后 [retryFailedPrefetches] 仍可重扫。
+  static final Map<String, Set<String>> _failedImageUrls = {};
+
+  /// 自动重试计数：cacheKey → 已尝试的自动重试次数。
+  /// 仅在内存中存活，进程重启后回到 0（失败记录仍在 [_failedImageUrls]）。
+  static final Map<String, int> _autoRetryAttempt = {};
+
+  /// 进行中的退避 [Timer]，避免同一 cacheKey 被重复调度。
+  static final Map<String, Timer> _autoRetryTimers = {};
 
   static Timer? _cleanupTimer;
   static int _runningDownloads = 0;
@@ -351,8 +376,17 @@ abstract final class ArticleImageCacheService {
           headers: ArticleImageService.httpHeaders,
         );
       }
+      recordSuccess(task.articleId, task.imageUrl);
+      _autoRetryAttempt.remove(key);
     } catch (_) {
-      // Prefetching is opportunistic; normal article rendering owns retries.
+      // 失败统一收敛到 service：登记失败状态、推进退避计数。每次真实下载
+      // 失败都推进一次（前台 errorWidget 经 scheduleRetryFromUi，后台直接
+      // 这里），[_scheduleAutoRetry] 的 isRetrying 保护防止前台 build 重复
+      // 推进。不依赖错误类型区分永久/临时失败（flutter_cache_manager 抛出
+      // 类型不稳定），改用退避次数控制：达到 maxAutoRetries 后停止自动重试，
+      // 失败记录保留，等待全局刷新重扫或用户手动点击重试。
+      recordFailure(task.articleId, task.imageUrl);
+      _scheduleAutoRetry(task);
     } finally {
       _runningKeys.remove(key);
       _runningDownloads--;
@@ -372,6 +406,198 @@ abstract final class ArticleImageCacheService {
     final keys = raw is List ? raw.whereType<String>().toSet() : <String>{};
     _registeredKeys[articleId] = keys;
     return keys;
+  }
+
+  // ── 失败图片状态 ────────────────────────────────────────────────────
+  //
+  // 重试职责统一收敛到本 service：正文渲染和后台预取两条路径的失败都经
+  // [recordFailure] 登记，由 [_scheduleAutoRetry] 在后台带指数退避重试，
+  // 成功后经 [recordSuccess] 清除失败标记并通知正文刷新。失败记录落盘，
+  // 进程重启后仍可由 [retryFailedPrefetches] 在全局刷新时重新排查。
+
+  static Set<String> _failedUrlsFor(String articleId) {
+    final cached = _failedImageUrls[articleId];
+    if (cached != null) return cached;
+
+    final raw = GStorage.localCache.get('$_failedRegistryPrefix$articleId');
+    final urls = raw is List ? raw.whereType<String>().toSet() : <String>{};
+    _failedImageUrls[articleId] = urls;
+    return urls;
+  }
+
+  static void _persistFailedUrls(String articleId) {
+    final urls = _failedImageUrls[articleId];
+    if (urls == null || urls.isEmpty) {
+      unawaited(
+        GStorage.localCache.delete('$_failedRegistryPrefix$articleId'),
+      );
+      return;
+    }
+    unawaited(
+      GStorage.localCache.put(
+        '$_failedRegistryPrefix$articleId',
+        urls.toList(growable: false),
+      ),
+    );
+  }
+
+  /// 登记一次图片加载失败。供正文渲染层与 [_download] 共用。同一 url 重复
+  /// 登记幂等，只在状态变化时落盘。是否安排退避重试由调用方按需触发
+  /// （前台 errorWidget 经 [scheduleRetryFromUi]，后台 _download 直接调
+  /// [_scheduleAutoRetry]）。
+  static void recordFailure(String articleId, String imageUrl) {
+    if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
+    final urls = _failedUrlsFor(articleId);
+    if (urls.add(imageUrl)) {
+      _persistFailedUrls(articleId);
+    }
+  }
+
+  /// 查询某张图片当前是否正在后台自动重试中（有退避 Timer 在等，或正在
+  /// 下载）。供前台占位实时决定文案：true 显示「重新加载中…」，false 显示
+  /// 「点击重试」。前台不持有自己的重试状态，避免与后台退避进度脱节。
+  static bool isRetrying(String articleId, String imageUrl) {
+    if (!_enabled) return false;
+    final key = cacheKey(articleId, imageUrl);
+    return _autoRetryTimers.containsKey(key) || _runningKeys.contains(key);
+  }
+
+  /// 清除一次图片的失败标记。成功后若文章在前台，通知正文刷新以让占位
+  /// 自动变成图片。
+  static void recordSuccess(String articleId, String imageUrl) {
+    if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
+    final urls = _failedImageUrls[articleId];
+    if (urls == null || urls.isEmpty) return;
+    if (urls.remove(imageUrl)) {
+      if (urls.isEmpty) {
+        _failedImageUrls.remove(articleId);
+      }
+      _persistFailedUrls(articleId);
+      // 仅在文章前台活跃时通知，避免对未打开文章做无谓的全局刷新。
+      if (_activeArticleIds.contains(articleId)) {
+        ArticleStateNotifier.tick(articleId);
+      }
+    }
+  }
+
+  /// 安排一次带指数退避的自动重试。达到 [maxAutoRetries] 后停止，失败
+  /// 记录保留，等待全局刷新或手动重试。用一次性 [Timer]，无后台轮询。
+  /// 已有退避 Timer 在等或正在下载时（[isRetrying]）直接跳过，保证前台
+  /// errorWidget 每次 build 调用 [scheduleRetryFromUi] 不会重复推进计数。
+  /// 耗尽时若文章在前台，[tick] 通知占位从「重新加载中…」翻回「点击重试」。
+  static void _scheduleAutoRetry(_ImageDownloadTask task) {
+    final key = cacheKey(task.articleId, task.imageUrl);
+    // 幂等保护：该图已在退避中或正在下载，不要重复安排（前台 errorWidget
+    // 每次 build 都可能调到这里）。
+    if (_autoRetryTimers.containsKey(key) || _runningKeys.contains(key)) {
+      return;
+    }
+    final attempt = _autoRetryAttempt[key] ?? 0;
+    if (attempt >= maxAutoRetries) {
+      _autoRetryAttempt.remove(key);
+      // 自动重试耗尽：保留失败记录等刷新重扫或手动重试，并通知前台占位
+      // 更新文案。tick 只在此处（真实下载失败耗尽）触发，绝不在 errorWidget
+      // build 里触发，因此不会因 build 重复而循环。
+      if (_activeArticleIds.contains(task.articleId)) {
+        ArticleStateNotifier.tick(task.articleId);
+      }
+      return;
+    }
+    final delay = _autoRetryBackoff[attempt.clamp(0, _autoRetryBackoff.length - 1)];
+    _autoRetryAttempt[key] = attempt + 1;
+    _autoRetryTimers[key]?.cancel();
+    _autoRetryTimers[key] = Timer(delay, () {
+      _autoRetryTimers.remove(key);
+      // 重新入队时打上当前 generation 快照，避免被新一轮 refresh 作废的任务
+      // 仍在旧的 cleanup/队列上下文中执行。
+      final retried = _ImageDownloadTask(
+        articleId: task.articleId,
+        imageUrl: task.imageUrl,
+        generation: _prefetchGeneration,
+      );
+      final foreground = _activeArticleIds.contains(task.articleId);
+      _enqueue(retried, foreground: foreground, atFront: foreground);
+      _pumpQueue();
+    });
+  }
+
+  /// 供前台 errorWidget 失败时调用：登记失败并安排退避重试。重复调用幂等
+  ///（[recordFailure] 去重 + [_scheduleAutoRetry] 的 isRetrying 保护），
+  /// 因此 errorWidget 每次 build 调用都是安全的。
+  static void scheduleRetryFromUi(String articleId, String imageUrl) {
+    if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
+    recordFailure(articleId, imageUrl);
+    _scheduleAutoRetry(
+      _ImageDownloadTask(
+        articleId: articleId,
+        imageUrl: imageUrl,
+        generation: _prefetchGeneration,
+      ),
+    );
+  }
+
+  /// 取消某篇自动重试中（等待退避 Timer）的任务，用于清理时停止退避。
+  static void _cancelAutoRetryForArticle(String articleId) {
+    final prefix = '$_cacheKeyPrefix:$articleId:';
+    final keys = _autoRetryTimers.keys
+        .where((key) => key.startsWith(prefix))
+        .toList(growable: false);
+    for (final key in keys) {
+      _autoRetryTimers[key]?.cancel();
+      _autoRetryTimers.remove(key);
+      _autoRetryAttempt.remove(key);
+    }
+  }
+
+  /// 供正文渲染层手动重试兜底调用：重置该图自动重试计数并立即重新入队。
+  static void retryManually(String articleId, String imageUrl) {
+    if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
+    final key = cacheKey(articleId, imageUrl);
+    _autoRetryAttempt.remove(key);
+    _autoRetryTimers[key]?.cancel();
+    _autoRetryTimers.remove(key);
+    final foreground = _activeArticleIds.contains(articleId);
+    _enqueue(
+      _ImageDownloadTask(
+        articleId: articleId,
+        imageUrl: imageUrl,
+        generation: _prefetchGeneration,
+      ),
+      foreground: foreground,
+      atFront: foreground,
+    );
+    _pumpQueue();
+  }
+
+  /// 全局刷新时重新排查所有失败图片，重新发起一轮（自动重试计数清零）。
+  /// 由 [TimelineController] 在 [refresh] 之后调用。
+  static Future<void> retryFailedPrefetches() async {
+    if (!_enabled) return;
+
+    // 收集当前内存 + 落盘的所有失败记录（重启后内存为空，需扫描落盘）。
+    final articleIds = <String>{
+      ..._failedImageUrls.keys,
+      ...GStorage.localCache.keys.where(
+        (k) => k.startsWith(_failedRegistryPrefix),
+      ).map((k) => k.substring(_failedRegistryPrefix.length)),
+    };
+
+    for (final articleId in articleIds) {
+      final urls = _failedUrlsFor(articleId).toList(growable: false);
+      for (final imageUrl in urls) {
+        final key = cacheKey(articleId, imageUrl);
+        _autoRetryAttempt.remove(key);
+        _enqueue(
+          _ImageDownloadTask(
+            articleId: articleId,
+            imageUrl: imageUrl,
+            generation: _prefetchGeneration,
+          ),
+          foreground: _activeArticleIds.contains(articleId),
+        );
+      }
+    }
+    _pumpQueue();
   }
 
   static Future<void> _reconcileCleanupSchedule(
@@ -448,6 +674,10 @@ abstract final class ArticleImageCacheService {
         }
         _registeredKeys.remove(articleId);
         await GStorage.localCache.delete('$_registryPrefix$articleId');
+        // 同步清理失败图片状态与进行中的退避 Timer，避免清理后留死标记。
+        _cancelAutoRetryForArticle(articleId);
+        _failedImageUrls.remove(articleId);
+        await GStorage.localCache.delete('$_failedRegistryPrefix$articleId');
         _cleanupDueAt.remove(articleId);
       }
     } finally {

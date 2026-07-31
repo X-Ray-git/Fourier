@@ -54,6 +54,8 @@ HTML 空段规范化：
 - 可点击图片在 macOS 通过 `MacOSZoomInCursor` 使用 zoom-in 光标。
 - 避免会改变图片布局尺寸的 hover 效果；哪怕很小的尺寸变化也会移动后续文字，在桌面端显得不稳定。
 - 很小的分隔符类图片不应被拉伸成大占位。
+- 图片加载失败的重试职责统一收敛在 `ArticleImageCacheService`：正文渲染层（经 `scheduleRetryFromUi`）和后台预取（经 `_download` catch）两条路径的失败都经 `recordFailure` 登记，由 service 在后台带指数退避自动重试（`maxAutoRetries=3`，间隔 `1s/2s/4s`，用一次性 `Timer` 无轮询），成功后经 `recordSuccess` 清除失败标记并 `ArticleStateNotifier.tick` 通知正文刷新；前台占位文案实时查询 `isRetrying`（有退避 Timer 在等或正在下载即为 true）决定显示「重新加载中…」还是「图片加载失败，点击重试」，不持有自有的重试状态，避免与后台脱节。自动重试耗尽后用户点击调用 `retryManually`（清零自动重试计数立即重新入队）并 `_retryCount++` 改 URL 强制 `CachedNetworkImage` 重建重发。`tick` 严格只在 `recordSuccess` 和退避耗尽两处触发，绝不在 errorWidget build 路径里触发，避免刷新循环。失败状态落盘到 `localCache`（`articleImageFailedKeys:<id>`），全局刷新时 `TimelineController` 调 `retryFailedPrefetches` 重新排查并再试一轮。不依赖错误类型区分永久/临时失败（`flutter_cache_manager` 抛出类型不稳定）。本次只覆盖独立块级图片；行内图片和图片画廊仍无重试，是明确的范围边界。
+- 代理 URL 问题不存在，无需修复：`HtmlChunk.normalizedImageUrl` 已经调用 `toProxiedUrl`，`_ArticleInlineImage` 用的就是该值。`appendRetryStamp` 的 `?retry=N` 加在代理后的 URL 上，仍命中同一缓存键族。
 
 视频：
 

@@ -38,6 +38,7 @@ Android UI：
 
 - Android 设置页使用独立的移动端分组布局，但继续复用相同保存语义与业务组件。页面水平边距为 `12px`，大面板使用 `MobileSettingsPanel` 的 `24px` 连续圆角和轻量静态材质；不要把 macOS 双栏设置布局压缩后直接搬到手机。
 - 离散选择统一使用 `MobileSettingsSelectField<T>`。字段本身不裁剪 `InputDecorator` 的浮动标签；点击后打开 `AppMobileGlassSheet`，选中项显示勾选，选择后立即关闭并保存。不要恢复透明的 Material dropdown overlay。
+- `OutlineInputBorder` 的浮动 label 会向上越出输入框布局框约 `8.6px`。字段自身已经不裁剪它，但放进 `ExpansionTile`（内部对 body 用 `ClipRect`）或 `MobileSettingsPanel`（`Clip.antiAlias`）时，若控件上方紧贴容器顶部且缓冲 `< ~9px`，上溢部分仍会被上层容器切掉。`_LlmConfigCard` 的 `ExpansionTile` children padding 顶部因此从 `0` 改为 `10`；以后在裁切容器顶部紧跟带 `labelText` 的 outline 输入控件时，必须同样预留 `≥ 9px` 顶部缓冲。`AppGlassTextField` 用独立 `Text` 标题 + `InputBorder.none`，无浮动 label，不受此约束。
 - 移动端服务认证、LLM 自动提交数字输入和 Prompt 行为仍与 macOS 共享语义。正文最大宽度、macOS fling 上限等桌面专属项不得出现在 Android 设置页。
 - 后台任务中心是独立二级页面，入口位于设置页。该页面有实时队列和失败记录导航，保持独立路由比把全部状态展开在设置列表中更清晰。
 

@@ -697,3 +697,19 @@
 决策：两个来源首选仓库内可复现构建的 Shaka 网页运行时，并共用 Flutter `ShakaEmbedPlayer` 负责懒加载 WebView、35 秒超时、播放快捷键归属、macOS 触控板文章滚动桥、系统元素全屏、loading 和失败回退。YouTube 继续使用 YouTube.js + googlevideo SABR，并在 SABR 失败后先尝试普通自适应 DASH；Bilibili 只在用户点击后调用匿名详情/播放/字幕/弹幕接口，生成本地 DASH/VTT，每种实际可用画质选择 AVC 轨和一条普通音轨，弹幕在同一页面 Canvas 中按视频时间绘制。两个平台分别使用严格的 loopback 能力路径、目标域名/session 白名单和流式媒体代理，不能合并成任意 URL 代理。任一首选链失败时自动重建为对应官方 iframe，不把内部接口视为稳定公开 SDK。
 
 后果：播放、暂停、进度、音量、设置、全屏、空格/媒体键和文章滚动只维护一套基础交互；平台 wrapper 仅准备 URI、缩略图/占位和官方回退。应用运行不依赖 Node.js，生产资产固定在 `assets/embed_video_player/`，可复现源码和锁文件在 `tool/embed_video_player_runtime/`。YouTube macOS 基础体验已由用户验证；Bilibili 以及 Android 两个平台仍需真实视频、画质、字幕、弹幕、滚动和全屏检查。以后调整共同控制体验应优先修改共享运行时/`ShakaEmbedPlayer`，但 API、解析器、代理白名单和官方回退必须继续按来源隔离；不要删除懒加载或在文章初始渲染时预取媒体。
+
+## 带浮动标签的设置输入控件上方必须为裁切容器预留缓冲
+
+背景：Android 设置页 `MobileSettingsSelectField<T>` 用 `InputDecorator` + `OutlineInputBorder` + `labelText`（如 LLM 卡片里的“模型”）。`OutlineInputBorder` 的浮动 label 中心对齐顶部边框线，上半部分会向上越出输入框自身布局框约 `labelHeight/2 × 0.75`（默认 16sp titleMedium 下约 `8.6px`）。之前已经修过一轮字段自身的裁切：`MobileSettingsSelectField` 本身不再用 `clipBehavior` 包裹 `InputDecorator`，外层只约束点击形状（见“Android 次级页面与目标设备圆角收敛”的边界说明）。那一轮没有覆盖字段被放进 `ExpansionTile` 后由上层容器引入的新裁切点。
+
+用户反馈“翻译 LLM 参数”展开后第一个下拉框左上角“模型”两字的上半部分被切掉。根因不在字段本身，而在 `_LlmConfigCard` 的展开容器：`ExpansionTile` 内部（`widgets/expansible.dart`）对 body 用 `ClipRect` 包裹，外层 `MobileSettingsPanel` 又是 `clipBehavior: Clip.antiAlias`，而原 `children` 的 `Padding` 是 `fromLTRB(16, 0, 16, 16)`，顶部为 `0`，浮动 label 向上越出的约 `8.6px` 直接被这两层裁切。
+
+决策：`_LlmConfigCard` 的 `ExpansionTile` children padding 顶部从 `0` 改为 `10`，给浮动 label 预留显示空间。这是卡片布局层的调整，不触碰已经稳定的字段层实现。
+
+排查结论（供后续判断同类风险）：同类裁切必须同时满足三个条件——控件用 `OutlineInputBorder` + `labelText`；外层是会裁切的容器（`ExpansionTile` 内部 `ClipRect`、`MobileSettingsPanel` 的 `Clip.antiAlias` 等）；控件上方紧贴容器顶部且缓冲 `< ~9px`。全工程排查后，满足这三个条件的只有 `_LlmConfigCard`（翻译/摘要/过滤三卡复用同一组件，一并修复）。`AppGlassTextField` 用独立 `Text(label)` 作为固定标题且输入框为 `InputBorder.none`，没有浮动 label 机制，macOS 端从根本上免疫。`_PromptConfigCard` 虽有同样的 `top=0` padding，但其 `TextField` 只有 `hintText` 无 `labelText`，不产生浮动 label。其他安卓 `MobileSettingsPanel` 调用点 padding 均为 `EdgeInsets.all(16)`，顶部有 `16px` 足够容纳 `8.6px` 上溢。
+
+不要回退：
+
+- 不要把 `_LlmConfigCard` 的 children padding 顶部改回 `0` 或任何 `< 9` 的值。
+- 不要为了“统一”给 `MobileSettingsSelectField` 或 `InputDecorator` 本身加 `clipBehavior`，那会重新引入已修复的字段层裁切。
+- 以后在安卓端新增带 `labelText` + `OutlineInputBorder` 的控件时，若它会被放进 `ExpansionTile` 或其他 `Clip.antiAlias` 容器，必须确保控件上方有 `≥ 9px` 的非裁切缓冲；放进普通滚动列表或 padding `≥ 16` 的面板则不受影响。

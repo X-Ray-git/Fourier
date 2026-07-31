@@ -2,6 +2,7 @@
 
 ## 仍需持续观察
 
+- 2026-07-31 Android 设置页 `_LlmConfigCard`（翻译/摘要/过滤 LLM 参数卡片）展开后第一个下拉框“模型”的浮动 label 上半部分被裁切。根因是 `ExpansionTile` children padding 顶部为 `0`，浮动 label 向上越出 `OutlineInputBorder` 约 `8.6px` 的部分被 `ExpansionTile` 内部 `ClipRect` 和外层 `MobileSettingsPanel` 的 `Clip.antiAlias` 切掉；已把该 padding 顶部改为 `10`。需在真机分别展开翻译、摘要、过滤三个 LLM 参数卡片，确认“模型”及其他首项浮动标签完整显示，且展开动画和卡片整体布局无异常。静态分析与排查结论见 `history/decisions.md`“带浮动标签的设置输入控件上方必须为裁切容器预留缓冲”。
 - 2026-07-29 YouTube SABR 首选播放器尚待用户实机验证。macOS 与 Android
   分别打开真实 YouTube 文章，检查首次点击有即时 loading、能够开始播放、
   播放/暂停、拖动橙色进度条、清晰度/字幕/语言/倍速切换和系统全屏可用；

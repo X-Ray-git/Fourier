@@ -180,13 +180,24 @@ class TimelineController extends GetxController {
 
     loadingState.value = Success(articles.toList());
     unawaited(
-      ArticleImageCacheService.refresh(LocalArticleDbService.readAllArticles()),
+      _refreshArticleImageCache(LocalArticleDbService.readAllArticles()),
     );
     // 全量同步完成后，强制通知订阅列表做全量重新计数
     if (Get.isRegistered<SubscriptionsController>()) {
       Get.find<SubscriptionsController>().refreshUnreadCounts();
     }
     unawaited(_refreshRecentReadWindow());
+  }
+
+  Future<void> _refreshArticleImageCache(List<ArticleModel> articles) async {
+    try {
+      // refresh also reconciles expired read-image cleanup. Finish it before
+      // re-enqueuing persisted failures so cleanup and retries cannot race.
+      await ArticleImageCacheService.refresh(articles);
+      await ArticleImageCacheService.retryFailedPrefetches();
+    } catch (_) {
+      // Image prefetch is best-effort and must not fail the timeline refresh.
+    }
   }
 
   int get _readSyncWindowDays {

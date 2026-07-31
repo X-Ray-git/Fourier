@@ -78,12 +78,6 @@ abstract final class ArticleImageService {
     return normalized;
   }
 
-  static String appendRetryStamp(String imageUrl, int retryCount) {
-    if (retryCount <= 0) return imageUrl;
-    final sep = imageUrl.contains('?') ? '&' : '?';
-    return '$imageUrl${sep}retry=$retryCount';
-  }
-
   static bool isSvg(String imageUrl) {
     final path = Uri.tryParse(imageUrl)?.path.toLowerCase() ?? '';
     return path.endsWith('.svg');

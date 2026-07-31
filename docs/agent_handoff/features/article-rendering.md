@@ -54,6 +54,8 @@ HTML 空段规范化：
 - 可点击图片在 macOS 通过 `MacOSZoomInCursor` 使用 zoom-in 光标。
 - 避免会改变图片布局尺寸的 hover 效果；哪怕很小的尺寸变化也会移动后续文字，在桌面端显得不稳定。
 - 很小的分隔符类图片不应被拉伸成大占位。
+- 图片加载失败的重试职责统一收敛在 `ArticleImageCacheService`：正文独立块级图片和后台预取的失败均登记并按 `1s/2s/4s` 退避重试，失败记录落盘到 `localCache`，全局刷新会在缓存清理完成后串行重扫。service 是唯一下载方；正文不再用 `?retry=N` 同时发起第二次请求，而是通过图片级 `ArticleImageRetryState` 显示「重新加载中…」或手动重试入口。service 成功后只递增该图片的 `successRevision`，精确重建这一张图片并从已填充缓存读取，不使用会连带刷新时间线的 `ArticleStateNotifier`。退避计数与计时器由可独立测试的 `ArticleImageRetryScheduler` 管理，清理文章缓存前会同步取消其排队任务和退避计时器。独立块级 SVG 同样进入此闭环；HTML 行内图片扩展和图片画廊仍不自动重试。
+- 代理 URL 问题不存在，无需修复：`HtmlChunk.normalizedImageUrl` 已经调用 `toProxiedUrl`，`_ArticleInlineImage` 使用的就是该值；重试始终沿用同一个规范化 URL 和文章级 cache key。
 
 视频：
 

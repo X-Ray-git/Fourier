@@ -3379,7 +3379,11 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
       subtitle: Text('${_config.model}  |  并发 ${_config.concurrency}'),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          // 顶部预留 10px：第一个子项是带浮动 label 的下拉框（InputDecorator +
+          // OutlineInputBorder），浮动起来的 label 会向上突出到自身布局框之外，
+          // 而 ExpansionTile 内部对 body 用 ClipRect 裁切、外层 MobileSettingsPanel
+          // 又是 Clip.antiAlias，top=0 会把 "模型" 等浮动文字的上半部分切掉。
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
           child: content,
         ),
       ],

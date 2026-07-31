@@ -697,3 +697,43 @@
 决策：两个来源首选仓库内可复现构建的 Shaka 网页运行时，并共用 Flutter `ShakaEmbedPlayer` 负责懒加载 WebView、35 秒超时、播放快捷键归属、macOS 触控板文章滚动桥、系统元素全屏、loading 和失败回退。YouTube 继续使用 YouTube.js + googlevideo SABR，并在 SABR 失败后先尝试普通自适应 DASH；Bilibili 只在用户点击后调用匿名详情/播放/字幕/弹幕接口，生成本地 DASH/VTT，每种实际可用画质选择 AVC 轨和一条普通音轨，弹幕在同一页面 Canvas 中按视频时间绘制。两个平台分别使用严格的 loopback 能力路径、目标域名/session 白名单和流式媒体代理，不能合并成任意 URL 代理。任一首选链失败时自动重建为对应官方 iframe，不把内部接口视为稳定公开 SDK。
 
 后果：播放、暂停、进度、音量、设置、全屏、空格/媒体键和文章滚动只维护一套基础交互；平台 wrapper 仅准备 URI、缩略图/占位和官方回退。应用运行不依赖 Node.js，生产资产固定在 `assets/embed_video_player/`，可复现源码和锁文件在 `tool/embed_video_player_runtime/`。YouTube macOS 基础体验已由用户验证；Bilibili 以及 Android 两个平台仍需真实视频、画质、字幕、弹幕、滚动和全屏检查。以后调整共同控制体验应优先修改共享运行时/`ShakaEmbedPlayer`，但 API、解析器、代理白名单和官方回退必须继续按来源隔离；不要删除懒加载或在文章初始渲染时预取媒体。
+
+## 带浮动标签的设置输入控件上方必须为裁切容器预留缓冲
+
+背景：Android 设置页 `MobileSettingsSelectField<T>` 用 `InputDecorator` + `OutlineInputBorder` + `labelText`（如 LLM 卡片里的“模型”）。`OutlineInputBorder` 的浮动 label 中心对齐顶部边框线，上半部分会向上越出输入框自身布局框约 `labelHeight/2 × 0.75`（默认 16sp titleMedium 下约 `8.6px`）。之前已经修过一轮字段自身的裁切：`MobileSettingsSelectField` 本身不再用 `clipBehavior` 包裹 `InputDecorator`，外层只约束点击形状（见“Android 次级页面与目标设备圆角收敛”的边界说明）。那一轮没有覆盖字段被放进 `ExpansionTile` 后由上层容器引入的新裁切点。
+
+用户反馈“翻译 LLM 参数”展开后第一个下拉框左上角“模型”两字的上半部分被切掉。根因不在字段本身，而在 `_LlmConfigCard` 的展开容器：`ExpansionTile` 内部（`widgets/expansible.dart`）对 body 用 `ClipRect` 包裹，外层 `MobileSettingsPanel` 又是 `clipBehavior: Clip.antiAlias`，而原 `children` 的 `Padding` 是 `fromLTRB(16, 0, 16, 16)`，顶部为 `0`，浮动 label 向上越出的约 `8.6px` 直接被这两层裁切。
+
+决策：`_LlmConfigCard` 的 `ExpansionTile` children padding 顶部从 `0` 改为 `10`，给浮动 label 预留显示空间。这是卡片布局层的调整，不触碰已经稳定的字段层实现。
+
+排查结论（供后续判断同类风险）：同类裁切必须同时满足三个条件——控件用 `OutlineInputBorder` + `labelText`；外层是会裁切的容器（`ExpansionTile` 内部 `ClipRect`、`MobileSettingsPanel` 的 `Clip.antiAlias` 等）；控件上方紧贴容器顶部且缓冲 `< ~9px`。全工程排查后，满足这三个条件的只有 `_LlmConfigCard`（翻译/摘要/过滤三卡复用同一组件，一并修复）。`AppGlassTextField` 用独立 `Text(label)` 作为固定标题且输入框为 `InputBorder.none`，没有浮动 label 机制，macOS 端从根本上免疫。`_PromptConfigCard` 虽有同样的 `top=0` padding，但其 `TextField` 只有 `hintText` 无 `labelText`，不产生浮动 label。其他安卓 `MobileSettingsPanel` 调用点 padding 均为 `EdgeInsets.all(16)`，顶部有 `16px` 足够容纳 `8.6px` 上溢。
+
+不要回退：
+
+- 不要把 `_LlmConfigCard` 的 children padding 顶部改回 `0` 或任何 `< 9` 的值。
+- 不要为了“统一”给 `MobileSettingsSelectField` 或 `InputDecorator` 本身加 `clipBehavior`，那会重新引入已修复的字段层裁切。
+- 以后在安卓端新增带 `labelText` + `OutlineInputBorder` 的控件时，若它会被放进 `ExpansionTile` 或其他 `Clip.antiAlias` 容器，必须确保控件上方有 `≥ 9px` 的非裁切缓冲；放进普通滚动列表或 padding `≥ 16` 的面板则不受影响。
+
+## 图片加载失败的重试统一收敛到 ArticleImageCacheService
+
+背景：正文独立块级图片失败时，旧实现只有 `_ArticleInlineImage` 里 `_retryCount++` 加 `?retry=N` 的手动点击重试，没有上限、没有退避、没有自动重试；后台预取 `_download` 失败则直接 `catch (_) {}` 静默吞掉。用户反馈"点一下重试就能加载出来"，说明失败多为偶发临时错误，但用户必须手动点。同时全局刷新只重新解析未读文章抽图，完全不重扫之前失败的图片。
+
+前期调查曾误判"独立图片块没走 `toProxiedUrl` 代理"，经验证 `HtmlChunk.normalizedImageUrl`（`html_chunk_parser.dart:63-66`）已经调用了 `toProxiedUrl`，`_ArticleInlineImage` 用的正是该值，代理 URL 问题不存在，无需修复。
+
+决策：把下载和重试的唯一所有权收敛到 `ArticleImageCacheService`。正文独立块级图片和后台预取的失败都经 `recordFailure` 登记；`ArticleImageRetryScheduler` 只负责按 cache key 管理 `1s/2s/4s` 三次一次性退避计时器、次数上限和取消操作，真实下载仍由 service 队列执行。下载失败后必须先从 `_runningKeys` 释放，再安排下一次退避，否则幂等保护会把合法的后续重试误判为重复任务。重试任务使用 `forceNetwork` 清除失败缓存后重新请求；若同一图片已在普通预取队列中，重试任务会升级已有任务而不是再插入一份。
+
+前台与后台的交互设计（关键）：正文通过每张图片自己的 `ValueListenable<ArticleImageRetryState>` 观察 `retrying` 和 `successRevision`。错误 builder 只在当前 frame 结束后向 service 报告一次失败，不在 build 期间修改通知器。service 退避等待、排队或下载时占位显示「重新加载中…」且不可点击；三次耗尽后显示「图片加载失败，点击重试」。成功后 service 清除失败记录并只递增该图片的 `successRevision`，用新的 widget key 精确重建这一张图片并读取已经填充的缓存，不调用会刷新时间线等无关消费者的 `ArticleStateNotifier`。手动重试也只调用 service，不再同时给 URL 加 `?retry=N` 让 `CachedNetworkImage` 发起第二条请求，从而避免双下载及两条结果互相矛盾。独立块级 SVG 通过 `ArticleSvgImage.onError` 进入同一状态闭环。
+
+持久化与清理：失败 URL 集合落盘到 `localCache`（`articleImageFailedKeys:<id>`），退避次数只在内存存活。`TimelineController` 必须先 `await ArticleImageCacheService.refresh` 完成已读缓存核对与清理，再调用 `retryFailedPrefetches` 重扫落盘失败，不能并行 `unawaited` 两条链。全局重扫会取消旧计时器、清零本轮次数并去重入队。文章缓存正式删除前，必须同步移除其排队任务并取消所有退避状态，防止清理期间计时器再次把同一图片放回队列。
+
+边界：不依赖错误类型区分永久/临时失败，因为 `flutter_cache_manager` 抛出的异常类型不稳定；统一用退避次数控制，三次后停止并保留失败记录等待刷新或手动重试。本次覆盖独立块级普通图片和 SVG；HTML 行内图片扩展（`_imageExtension`）与图片画廊仍无自动重试。进程重启后退避次数回到 0，但失败记录仍在，下次刷新会重扫。
+
+不要回退：
+
+- 不要让正文渲染层自己维护退避/计数或直接下载；失败登记和重试调度都走 service 的 `scheduleRetryFromUi` / `retryManually`。
+- 不要恢复 `_retryCount++` + `appendRetryStamp` 与 service 并行下载的旧路径；一张图片一次只能有一条下载链。
+- 不要用全局文章状态通知刷新正文图片；只通过图片级 `ArticleImageRetryState.successRevision` 精确重建失败图片。
+- 不要在 errorWidget build 路径里同步修改通知器；失败上报必须延后到当前 frame 结束。
+- 不要把自动重试计数落盘；它只是当前会话的瞬时退避进度，落盘会让重启后立即跑满 3 次重试，反而绕过"刷新时重扫一轮"的节奏。
+- 不要把缓存清理和失败重扫并行启动；清理完成后才能重新入队失败图片。
+- 不要在行内图片和画廊上复用本次重试，除非单独验证其 `errorWidget` 改造；本次范围明确不含。

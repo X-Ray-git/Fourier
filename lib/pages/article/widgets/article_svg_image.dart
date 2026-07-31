@@ -13,6 +13,7 @@ class ArticleSvgImage extends StatefulWidget {
   final BoxFit fit;
   final Widget placeholder;
   final Widget errorWidget;
+  final VoidCallback? onError;
 
   const ArticleSvgImage({
     super.key,
@@ -20,6 +21,7 @@ class ArticleSvgImage extends StatefulWidget {
     required this.imageUrl,
     required this.placeholder,
     required this.errorWidget,
+    this.onError,
     this.width,
     this.height,
     this.fit = BoxFit.contain,
@@ -31,6 +33,7 @@ class ArticleSvgImage extends StatefulWidget {
 
 class _ArticleSvgImageState extends State<ArticleSvgImage> {
   late Future<File> _file;
+  bool _reportedError = false;
 
   @override
   void initState() {
@@ -48,10 +51,19 @@ class _ArticleSvgImageState extends State<ArticleSvgImage> {
   }
 
   void _load() {
+    _reportedError = false;
     _file = ArticleImageCacheService.getImageFile(
       widget.articleId,
       widget.imageUrl,
     );
+  }
+
+  void _reportError() {
+    if (_reportedError || widget.onError == null) return;
+    _reportedError = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onError?.call();
+    });
   }
 
   @override
@@ -59,7 +71,10 @@ class _ArticleSvgImageState extends State<ArticleSvgImage> {
     return FutureBuilder<File>(
       future: _file,
       builder: (context, snapshot) {
-        if (snapshot.hasError) return widget.errorWidget;
+        if (snapshot.hasError) {
+          _reportError();
+          return widget.errorWidget;
+        }
         final file = snapshot.data;
         if (file == null) return widget.placeholder;
         return SvgPicture.file(
@@ -67,7 +82,10 @@ class _ArticleSvgImageState extends State<ArticleSvgImage> {
           width: widget.width,
           height: widget.height,
           fit: widget.fit,
-          errorBuilder: (context, error, stackTrace) => widget.errorWidget,
+          errorBuilder: (context, error, stackTrace) {
+            _reportError();
+            return widget.errorWidget;
+          },
         );
       },
     );

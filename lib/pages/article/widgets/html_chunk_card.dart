@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1191,20 +1192,66 @@ class _ArticleInlineImage extends StatefulWidget {
 
 class _ArticleInlineImageState extends State<_ArticleInlineImage>
     with AutomaticKeepAliveClientMixin {
-  // 手动重试次数：驱动 appendRetryStamp 改 URL，强制 CachedNetworkImage
-  // 重建重发，绕过其可能缓存的失败态。后台自动重试进度不在这里维护——
-  // 占位文案实时查询 ArticleImageCacheService.isRetrying，避免与后台脱节。
-  int _retryCount = 0;
+  late ValueListenable<ArticleImageRetryState> _retryState;
+  bool _reportedFailure = false;
+  int _lastSuccessRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _retryState = ArticleImageCacheService.acquireRetryState(
+      widget.articleId,
+      widget.imageUrl,
+    );
+  }
 
   @override
   bool get wantKeepAlive => true; // 告诉 ListView 不要在滑出屏幕时销毁该组件
 
-  /// 手动重试兜底：让 service 清零自动重试计数并立即重新入队，同时
-  /// _retryCount++ 改 URL 强制本 widget 重建重发，绕过 CachedNetworkImage
-  /// 可能缓存的失败态。
+  @override
+  void didUpdateWidget(covariant _ArticleInlineImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.articleId != widget.articleId ||
+        oldWidget.imageUrl != widget.imageUrl) {
+      ArticleImageCacheService.releaseRetryState(
+        oldWidget.articleId,
+        oldWidget.imageUrl,
+      );
+      _retryState = ArticleImageCacheService.acquireRetryState(
+        widget.articleId,
+        widget.imageUrl,
+      );
+      _reportedFailure = false;
+      _lastSuccessRevision = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    ArticleImageCacheService.releaseRetryState(
+      widget.articleId,
+      widget.imageUrl,
+    );
+    super.dispose();
+  }
+
+  void _reportFailure() {
+    if (_reportedFailure) return;
+    _reportedFailure = true;
+    final articleId = widget.articleId;
+    final imageUrl = widget.imageUrl;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.articleId != articleId ||
+          widget.imageUrl != imageUrl) {
+        return;
+      }
+      ArticleImageCacheService.scheduleRetryFromUi(articleId, imageUrl);
+    });
+  }
+
   void _retryManually() {
     ArticleImageCacheService.retryManually(widget.articleId, widget.imageUrl);
-    setState(() => _retryCount++);
   }
 
   @override
@@ -1227,95 +1274,89 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
     );
 
     final canTap = widget.onTap != null;
-    final imageUrl = ArticleImageService.appendRetryStamp(
-      widget.imageUrl,
-      _retryCount,
-    );
     final diskCacheWidth = cacheWidth * 2;
     ArticleImageCacheService.registerImage(
       widget.articleId,
-      imageUrl,
+      widget.imageUrl,
       maxWidth: diskCacheWidth,
     );
 
-    Widget image = Hero(
-      tag: widget.imageUrl,
-      child: ArticleImageService.isSvg(imageUrl)
-          ? ArticleSvgImage(
-              articleId: widget.articleId,
-              imageUrl: imageUrl,
-              width: displayWidth,
-              fit: BoxFit.contain,
-              placeholder: SizedBox(
-                width: displayWidth,
-                height: displayHeight,
-                child: const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+    Widget image = ValueListenableBuilder<ArticleImageRetryState>(
+      valueListenable: _retryState,
+      builder: (context, retryState, child) {
+        if (retryState.successRevision != _lastSuccessRevision) {
+          _lastSuccessRevision = retryState.successRevision;
+          _reportedFailure = false;
+        }
+        final retryKey = ValueKey(
+          '${widget.articleId}:${widget.imageUrl}:'
+          '${retryState.successRevision}',
+        );
+        final errorWidget = SizedBox(
+          width: displayWidth,
+          height: displayHeight,
+          child: _ImageErrorWidget(
+            cs: cs,
+            retrying: retryState.retrying,
+            onRetry: _retryManually,
+          ),
+        );
+
+        return Hero(
+          tag: widget.imageUrl,
+          child: ArticleImageService.isSvg(widget.imageUrl)
+              ? ArticleSvgImage(
+                  key: retryKey,
+                  articleId: widget.articleId,
+                  imageUrl: widget.imageUrl,
+                  width: displayWidth,
+                  fit: BoxFit.contain,
+                  onError: _reportFailure,
+                  placeholder: SizedBox(
+                    width: displayWidth,
+                    height: displayHeight,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              errorWidget: SizedBox(
-                width: displayWidth,
-                height: displayHeight,
-                child: _ImageErrorWidget(
-                  cs: cs,
-                  retrying: ArticleImageCacheService.isRetrying(
+                  errorWidget: errorWidget,
+                )
+              : CachedNetworkImage(
+                  key: retryKey,
+                  imageUrl: widget.imageUrl,
+                  cacheKey: ArticleImageCacheService.displayCacheKey(
                     widget.articleId,
                     widget.imageUrl,
                   ),
-                  onRetry: () => _retryManually(),
-                ),
-              ),
-            )
-          : CachedNetworkImage(
-              imageUrl: imageUrl,
-              cacheKey: ArticleImageCacheService.displayCacheKey(
-                widget.articleId,
-                imageUrl,
-              ),
-              httpHeaders: ArticleImageService.httpHeaders,
-              fit: BoxFit.contain,
-              width: displayWidth,
-              memCacheWidth: cacheWidth,
-              maxWidthDiskCache: diskCacheWidth,
-              fadeInDuration: const Duration(milliseconds: 250),
-              fadeOutDuration: const Duration(milliseconds: 80),
-              placeholder: (context, url) => SizedBox(
-                width: displayWidth,
-                height: displayHeight,
-                child: const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              ),
-              errorWidget: (context, url, error) {
-                // 失败统一收敛到 service：登记 + 安排后台指数退避自动重试
-                //（不阻塞阅读）。重复调用幂等，errorWidget 每次 build 都安全。
-                // 文案实时查询 isRetrying，成功后 tick 会触发本页重建出图。
-                ArticleImageCacheService.scheduleRetryFromUi(
-                  widget.articleId,
-                  widget.imageUrl,
-                );
-                return SizedBox(
+                  httpHeaders: ArticleImageService.httpHeaders,
+                  fit: BoxFit.contain,
                   width: displayWidth,
-                  height: displayHeight,
-                  child: _ImageErrorWidget(
-                    cs: cs,
-                    retrying: ArticleImageCacheService.isRetrying(
-                      widget.articleId,
-                      widget.imageUrl,
+                  memCacheWidth: cacheWidth,
+                  maxWidthDiskCache: diskCacheWidth,
+                  fadeInDuration: const Duration(milliseconds: 250),
+                  fadeOutDuration: const Duration(milliseconds: 80),
+                  placeholder: (context, url) => SizedBox(
+                    width: displayWidth,
+                    height: displayHeight,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     ),
-                    onRetry: () => _retryManually(),
                   ),
-                );
-              },
-            ),
+                  errorWidget: (context, url, error) {
+                    _reportFailure();
+                    return errorWidget;
+                  },
+                ),
+        );
+      },
     );
 
     if (canTap) {
@@ -1429,11 +1470,7 @@ class _ImageErrorWidget extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.image_outlined,
-            color: cs.onSurfaceVariant,
-            size: 36,
-          ),
+          Icon(Icons.image_outlined, color: cs.onSurfaceVariant, size: 36),
           const SizedBox(height: 6),
           Text(
             '重新加载中…',

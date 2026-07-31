@@ -2,13 +2,34 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
+import 'article_image_retry_scheduler.dart';
 import 'article_image_service.dart';
-import 'article_state_notifier.dart';
+
+@immutable
+class ArticleImageRetryState {
+  const ArticleImageRetryState({
+    required this.retrying,
+    required this.successRevision,
+  });
+
+  final bool retrying;
+  final int successRevision;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ArticleImageRetryState &&
+      retrying == other.retrying &&
+      successRevision == other.successRevision;
+
+  @override
+  int get hashCode => Object.hash(retrying, successRevision);
+}
 
 /// Article-body image prefetching and article-scoped cache cleanup.
 abstract final class ArticleImageCacheService {
@@ -49,12 +70,12 @@ abstract final class ArticleImageCacheService {
   /// 落盘到 [GStorage.localCache]，进程重启后 [retryFailedPrefetches] 仍可重扫。
   static final Map<String, Set<String>> _failedImageUrls = {};
 
-  /// 自动重试计数：cacheKey → 已尝试的自动重试次数。
-  /// 仅在内存中存活，进程重启后回到 0（失败记录仍在 [_failedImageUrls]）。
-  static final Map<String, int> _autoRetryAttempt = {};
-
-  /// 进行中的退避 [Timer]，避免同一 cacheKey 被重复调度。
-  static final Map<String, Timer> _autoRetryTimers = {};
+  static final ArticleImageRetryScheduler _retryScheduler =
+      ArticleImageRetryScheduler(backoff: _autoRetryBackoff);
+  static final Map<String, ValueNotifier<ArticleImageRetryState>>
+  _retryStateNotifiers = {};
+  static final Map<String, int> _retryStateUsers = {};
+  static final Map<String, int> _successfulRetryRevisions = {};
 
   static Timer? _cleanupTimer;
   static int _runningDownloads = 0;
@@ -64,6 +85,47 @@ abstract final class ArticleImageCacheService {
   static BaseCacheManager get _cacheManager => DefaultCacheManager();
 
   static bool get _enabled => Platform.isMacOS || Platform.isAndroid;
+
+  static ValueListenable<ArticleImageRetryState> acquireRetryState(
+    String articleId,
+    String imageUrl,
+  ) {
+    final key = cacheKey(articleId, imageUrl);
+    _retryStateUsers[key] = (_retryStateUsers[key] ?? 0) + 1;
+    return _retryStateNotifiers.putIfAbsent(
+      key,
+      () => ValueNotifier(_retrySnapshot(key)),
+    );
+  }
+
+  static void releaseRetryState(String articleId, String imageUrl) {
+    final key = cacheKey(articleId, imageUrl);
+    final users = (_retryStateUsers[key] ?? 0) - 1;
+    if (users > 0) {
+      _retryStateUsers[key] = users;
+      return;
+    }
+    _retryStateUsers.remove(key);
+    _retryStateNotifiers.remove(key)?.dispose();
+    _successfulRetryRevisions.remove(key);
+  }
+
+  static ArticleImageRetryState _retrySnapshot(String key) {
+    return ArticleImageRetryState(
+      retrying:
+          _retryScheduler.isWaiting(key) ||
+          _queuedKeys.contains(key) ||
+          _runningKeys.contains(key),
+      successRevision: _successfulRetryRevisions[key] ?? 0,
+    );
+  }
+
+  static void _publishRetryState(String key) {
+    final notifier = _retryStateNotifiers[key];
+    if (notifier == null) return;
+    final next = _retrySnapshot(key);
+    if (notifier.value != next) notifier.value = next;
+  }
 
   static _ImageCacheProfile get _profile => Platform.isAndroid
       ? const _ImageCacheProfile(
@@ -314,12 +376,25 @@ abstract final class ArticleImageCacheService {
     final key = cacheKey(task.articleId, task.imageUrl);
     if (_runningKeys.contains(key)) return;
     if (_queuedKeys.contains(key)) {
+      final foregroundIndex = _foregroundQueue.indexWhere(
+        (queued) => cacheKey(queued.articleId, queued.imageUrl) == key,
+      );
+      final backgroundIndex = _backgroundQueue.indexWhere(
+        (queued) => cacheKey(queued.articleId, queued.imageUrl) == key,
+      );
+      if (task.forceNetwork) {
+        if (foregroundIndex >= 0) {
+          _foregroundQueue[foregroundIndex] = task;
+        } else if (backgroundIndex >= 0) {
+          _backgroundQueue[backgroundIndex] = task;
+        }
+      }
       if (foreground) {
-        final backgroundIndex = _backgroundQueue.indexWhere(
-          (queued) => cacheKey(queued.articleId, queued.imageUrl) == key,
-        );
         if (backgroundIndex >= 0) {
-          final promoted = _backgroundQueue.removeAt(backgroundIndex);
+          final promoted = task.forceNetwork
+              ? task
+              : _backgroundQueue[backgroundIndex];
+          _backgroundQueue.removeAt(backgroundIndex);
           if (atFront) {
             _foregroundQueue.insert(0, promoted);
           } else {
@@ -367,29 +442,36 @@ abstract final class ArticleImageCacheService {
   }
 
   static Future<void> _download(_ImageDownloadTask task, String key) async {
+    var failed = false;
     try {
-      final cached = await _cacheManager.getFileFromCache(key);
-      if (cached == null) {
+      if (task.forceNetwork) {
+        await _cacheManager.removeFile(key);
         await _cacheManager.getSingleFile(
           task.imageUrl,
           key: key,
           headers: ArticleImageService.httpHeaders,
         );
+      } else {
+        final cached = await _cacheManager.getFileFromCache(key);
+        if (cached == null) {
+          await _cacheManager.getSingleFile(
+            task.imageUrl,
+            key: key,
+            headers: ArticleImageService.httpHeaders,
+          );
+        }
       }
       recordSuccess(task.articleId, task.imageUrl);
-      _autoRetryAttempt.remove(key);
     } catch (_) {
-      // 失败统一收敛到 service：登记失败状态、推进退避计数。每次真实下载
-      // 失败都推进一次（前台 errorWidget 经 scheduleRetryFromUi，后台直接
-      // 这里），[_scheduleAutoRetry] 的 isRetrying 保护防止前台 build 重复
-      // 推进。不依赖错误类型区分永久/临时失败（flutter_cache_manager 抛出
-      // 类型不稳定），改用退避次数控制：达到 maxAutoRetries 后停止自动重试，
-      // 失败记录保留，等待全局刷新重扫或用户手动点击重试。
+      failed = true;
       recordFailure(task.articleId, task.imageUrl);
-      _scheduleAutoRetry(task);
     } finally {
       _runningKeys.remove(key);
       _runningDownloads--;
+      // Only schedule after the running key is released. Scheduling inside the
+      // catch block is rejected by the duplicate-work guard.
+      if (failed) _scheduleAutoRetry(task);
+      _publishRetryState(key);
       _pumpQueue();
       final dueAt = _cleanupDueAt[task.articleId];
       if (dueAt != null && !dueAt.isAfter(DateTime.now())) {
@@ -428,9 +510,7 @@ abstract final class ArticleImageCacheService {
   static void _persistFailedUrls(String articleId) {
     final urls = _failedImageUrls[articleId];
     if (urls == null || urls.isEmpty) {
-      unawaited(
-        GStorage.localCache.delete('$_failedRegistryPrefix$articleId'),
-      );
+      unawaited(GStorage.localCache.delete('$_failedRegistryPrefix$articleId'));
       return;
     }
     unawaited(
@@ -453,77 +533,62 @@ abstract final class ArticleImageCacheService {
     }
   }
 
-  /// 查询某张图片当前是否正在后台自动重试中（有退避 Timer 在等，或正在
-  /// 下载）。供前台占位实时决定文案：true 显示「重新加载中…」，false 显示
-  /// 「点击重试」。前台不持有自己的重试状态，避免与后台退避进度脱节。
-  static bool isRetrying(String articleId, String imageUrl) {
-    if (!_enabled) return false;
-    final key = cacheKey(articleId, imageUrl);
-    return _autoRetryTimers.containsKey(key) || _runningKeys.contains(key);
-  }
-
-  /// 清除一次图片的失败标记。成功后若文章在前台，通知正文刷新以让占位
-  /// 自动变成图片。
+  /// Clears failure state and advances the image-specific success revision so
+  /// only the affected foreground image is recreated from the populated cache.
   static void recordSuccess(String articleId, String imageUrl) {
     if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
+    final key = cacheKey(articleId, imageUrl);
     final urls = _failedImageUrls[articleId];
     if (urls == null || urls.isEmpty) return;
     if (urls.remove(imageUrl)) {
+      _retryScheduler.reset(key);
+      if (_retryStateNotifiers.containsKey(key)) {
+        _successfulRetryRevisions[key] =
+            (_successfulRetryRevisions[key] ?? 0) + 1;
+      }
       if (urls.isEmpty) {
         _failedImageUrls.remove(articleId);
       }
       _persistFailedUrls(articleId);
-      // 仅在文章前台活跃时通知，避免对未打开文章做无谓的全局刷新。
-      if (_activeArticleIds.contains(articleId)) {
-        ArticleStateNotifier.tick(articleId);
-      }
+      _publishRetryState(key);
     }
   }
 
   /// 安排一次带指数退避的自动重试。达到 [maxAutoRetries] 后停止，失败
   /// 记录保留，等待全局刷新或手动重试。用一次性 [Timer]，无后台轮询。
-  /// 已有退避 Timer 在等或正在下载时（[isRetrying]）直接跳过，保证前台
-  /// errorWidget 每次 build 调用 [scheduleRetryFromUi] 不会重复推进计数。
-  /// 耗尽时若文章在前台，[tick] 通知占位从「重新加载中…」翻回「点击重试」。
+  /// Existing timers and queue/running state make repeated calls idempotent.
+  /// Exhaustion publishes a final non-retrying state without restarting.
   static void _scheduleAutoRetry(_ImageDownloadTask task) {
     final key = cacheKey(task.articleId, task.imageUrl);
-    // 幂等保护：该图已在退避中或正在下载，不要重复安排（前台 errorWidget
-    // 每次 build 都可能调到这里）。
-    if (_autoRetryTimers.containsKey(key) || _runningKeys.contains(key)) {
+    if (_runningKeys.contains(key) || _queuedKeys.contains(key)) {
       return;
     }
-    final attempt = _autoRetryAttempt[key] ?? 0;
-    if (attempt >= maxAutoRetries) {
-      _autoRetryAttempt.remove(key);
-      // 自动重试耗尽：保留失败记录等刷新重扫或手动重试，并通知前台占位
-      // 更新文案。tick 只在此处（真实下载失败耗尽）触发，绝不在 errorWidget
-      // build 里触发，因此不会因 build 重复而循环。
-      if (_activeArticleIds.contains(task.articleId)) {
-        ArticleStateNotifier.tick(task.articleId);
-      }
-      return;
+    final result = _retryScheduler.schedule(
+      key,
+      onReady: () {
+        if (!_failedUrlsFor(task.articleId).contains(task.imageUrl)) return;
+        final foreground = _activeArticleIds.contains(task.articleId);
+        _enqueue(
+          _ImageDownloadTask(
+            articleId: task.articleId,
+            imageUrl: task.imageUrl,
+            generation: _prefetchGeneration,
+            forceNetwork: true,
+          ),
+          foreground: foreground,
+          atFront: foreground,
+        );
+        _pumpQueue();
+        _publishRetryState(key);
+      },
+      onExhausted: () => _publishRetryState(key),
+    );
+    if (result == RetryScheduleResult.scheduled) {
+      _publishRetryState(key);
     }
-    final delay = _autoRetryBackoff[attempt.clamp(0, _autoRetryBackoff.length - 1)];
-    _autoRetryAttempt[key] = attempt + 1;
-    _autoRetryTimers[key]?.cancel();
-    _autoRetryTimers[key] = Timer(delay, () {
-      _autoRetryTimers.remove(key);
-      // 重新入队时打上当前 generation 快照，避免被新一轮 refresh 作废的任务
-      // 仍在旧的 cleanup/队列上下文中执行。
-      final retried = _ImageDownloadTask(
-        articleId: task.articleId,
-        imageUrl: task.imageUrl,
-        generation: _prefetchGeneration,
-      );
-      final foreground = _activeArticleIds.contains(task.articleId);
-      _enqueue(retried, foreground: foreground, atFront: foreground);
-      _pumpQueue();
-    });
   }
 
-  /// 供前台 errorWidget 失败时调用：登记失败并安排退避重试。重复调用幂等
-  ///（[recordFailure] 去重 + [_scheduleAutoRetry] 的 isRetrying 保护），
-  /// 因此 errorWidget 每次 build 调用都是安全的。
+  /// Called after the foreground error widget has committed its frame.
   static void scheduleRetryFromUi(String articleId, String imageUrl) {
     if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
     recordFailure(articleId, imageUrl);
@@ -539,34 +604,28 @@ abstract final class ArticleImageCacheService {
   /// 取消某篇自动重试中（等待退避 Timer）的任务，用于清理时停止退避。
   static void _cancelAutoRetryForArticle(String articleId) {
     final prefix = '$_cacheKeyPrefix:$articleId:';
-    final keys = _autoRetryTimers.keys
-        .where((key) => key.startsWith(prefix))
-        .toList(growable: false);
-    for (final key in keys) {
-      _autoRetryTimers[key]?.cancel();
-      _autoRetryTimers.remove(key);
-      _autoRetryAttempt.remove(key);
-    }
+    _retryScheduler.cancelWhere((key) => key.startsWith(prefix));
   }
 
   /// 供正文渲染层手动重试兜底调用：重置该图自动重试计数并立即重新入队。
   static void retryManually(String articleId, String imageUrl) {
     if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
     final key = cacheKey(articleId, imageUrl);
-    _autoRetryAttempt.remove(key);
-    _autoRetryTimers[key]?.cancel();
-    _autoRetryTimers.remove(key);
+    recordFailure(articleId, imageUrl);
+    _retryScheduler.reset(key);
     final foreground = _activeArticleIds.contains(articleId);
     _enqueue(
       _ImageDownloadTask(
         articleId: articleId,
         imageUrl: imageUrl,
         generation: _prefetchGeneration,
+        forceNetwork: true,
       ),
       foreground: foreground,
       atFront: foreground,
     );
     _pumpQueue();
+    _publishRetryState(key);
   }
 
   /// 全局刷新时重新排查所有失败图片，重新发起一轮（自动重试计数清零）。
@@ -577,24 +636,27 @@ abstract final class ArticleImageCacheService {
     // 收集当前内存 + 落盘的所有失败记录（重启后内存为空，需扫描落盘）。
     final articleIds = <String>{
       ..._failedImageUrls.keys,
-      ...GStorage.localCache.keys.where(
-        (k) => k.startsWith(_failedRegistryPrefix),
-      ).map((k) => k.substring(_failedRegistryPrefix.length)),
+      ...GStorage.localCache.keys
+          .whereType<String>()
+          .where((key) => key.startsWith(_failedRegistryPrefix))
+          .map((key) => key.substring(_failedRegistryPrefix.length)),
     };
 
     for (final articleId in articleIds) {
       final urls = _failedUrlsFor(articleId).toList(growable: false);
       for (final imageUrl in urls) {
         final key = cacheKey(articleId, imageUrl);
-        _autoRetryAttempt.remove(key);
+        _retryScheduler.reset(key);
         _enqueue(
           _ImageDownloadTask(
             articleId: articleId,
             imageUrl: imageUrl,
             generation: _prefetchGeneration,
+            forceNetwork: true,
           ),
           foreground: _activeArticleIds.contains(articleId),
         );
+        _publishRetryState(key);
       }
     }
     _pumpQueue();
@@ -667,6 +729,11 @@ abstract final class ArticleImageCacheService {
           continue;
         }
 
+        // Stop queued and delayed work synchronously before the first cache
+        // deletion await. A timer cannot enqueue the same image mid-cleanup.
+        _removeQueuedTasksForArticle(articleId);
+        _cancelAutoRetryForArticle(articleId);
+
         final keys = _keysFor(articleId).toList(growable: false);
         for (final key in keys) {
           await _cacheManager.removeFile(key);
@@ -674,8 +741,6 @@ abstract final class ArticleImageCacheService {
         }
         _registeredKeys.remove(articleId);
         await GStorage.localCache.delete('$_registryPrefix$articleId');
-        // 同步清理失败图片状态与进行中的退避 Timer，避免清理后留死标记。
-        _cancelAutoRetryForArticle(articleId);
         _failedImageUrls.remove(articleId);
         await GStorage.localCache.delete('$_failedRegistryPrefix$articleId');
         _cleanupDueAt.remove(articleId);
@@ -732,10 +797,12 @@ class _ImageDownloadTask {
   final String articleId;
   final String imageUrl;
   final int generation;
+  final bool forceNetwork;
 
   const _ImageDownloadTask({
     required this.articleId,
     required this.imageUrl,
     required this.generation,
+    this.forceNetwork = false,
   });
 }

@@ -93,6 +93,21 @@ flutter run -d <device-id> --no-pub
 - `flutter build macos --debug --no-pub`：构建成功；只有 `video_player_avfoundation 2.9.6` 的既有 `AVKeyValueStatus` 弃用警告。
 - 仍需用户真实运行验证：未登录浏览器时的官方登录页；已登录浏览器的快速回调；等待页取消；同一账号退出后重新登录并重建；手动 Token；旧配置导入；Prompt/DeepSeek/外观等普通设置在退出与重建后保持不变。
 
+## 2026-08-01 Android Folo 登录入口
+
+- 第一版系统浏览器实现已在真机确认失败：Folo 会根据 Android 移动 UA 在到达 SSR 登录页前将请求 `302` 至 `https://folo.is/`。桌面 UA 请求同一 URL 则返回 `200`。
+- 第二版全屏应用内 WebView + 桌面 UA 能加载 Folo 页面，但 Google 在真机明确提示“不安全的浏览器或应用”，因此该实现已撤销。
+- 第三版系统浏览器 + Chrome“桌面版网站”也已真机确认失败：设置发生在重定向后的 `folo.is`，重新打开原始 `app.folo.is` 登录 URL 时仍会按移动 UA 再次跳转。
+- 当前第四版改为官方移动端 Better Auth Expo 同类流程：`sign-in/social` → `expo-authorization-proxy` → Chrome Google 登录 → `folo://autofolo-auth?cookie=...` → `/get-session` 验证。服务端探针已确认 `folo://autofolo-auth` callbackURL 被接受，authorization proxy 能正确写入 OAuth state 并 302 至 Google。
+- 第四版首次真机授权后仍落到 `folo.is`：原因是实现错误地把初始响应中的普通 `better-auth.state` 作为 Expo `oauthState` 传给 proxy。官方 Expo 客户端只转发独立的 `oauth_state`；当前响应没有该 cookie，因此正确行为是省略参数，让 proxy 从 authorization URL 取 raw state 并自行签名。服务端探针已确认省略参数时返回正确的 `__Secure-better-auth.state`。
+- `flutter test --no-pub test/folo_auth_service_test.dart`：5 项通过，覆盖 CLI URL、provider 响应解析、Expo authorization proxy URL、Session Cookie 提取和账号显示名。
+- `dart analyze lib test`：无 error/warning；仅有 59 条已存在的 liquid-glass `prefer_initializing_formals` info。
+- `flutter build apk --debug --no-pub`：构建成功；`apkanalyzer` 确认最终 manifest 只声明 `folo://autofolo-auth` 精确 host。
+- Google 真机流程已确认：浏览器授权返回 Auto Folo，MethodChannel 收到回调，`/get-session` 验证通过，等待窗口关闭，Session Token 持久化，文章数据库与缓存开始重建。此前“闪烁后仍等待”是 Flutter 默认深链与 MethodChannel 双重处理同一 URI，现由 `MainActivity.shouldHandleDeeplinking() = false` 修复。
+- 多方式实现后，`flutter build apk --debug --no-pub` 成功；无效 Email 探针得到 Folo 结构化 `401 INVALID_EMAIL_OR_PASSWORD`，确认接口和移动 fallback header 可被服务端处理。真实 Email/TOTP 和 GitHub 仍需对应账号真机验证。
+- 登录入口新增 provider 等待动画；账号状态改为 macOS `48px`、Android `52px` 的无内描边头像与用户名，图片按约三倍显示尺寸解码，失败时回退首字符。资料编解码、头像字段解析与既有认证测试共 8 项通过，相关文件静态分析无问题。仍需两端视觉确认：旧 Token 启动后能自动补全名字/头像、重新启动无需再次查询、退出后旧资料消失、配置导入后资料正确恢复。
+- macOS 曾有一次完成网页登录后落到 Folo 官网而未回 Auto Folo，但当前代码、上一个可用提交、Folo 最新官方 CLI 和线上登录脚本的 `cli_callback` 协议一致。随后用户重新运行已成功；安全日志确认登录 URL 含 `cli_callback`、系统浏览器打开成功、localhost 收到 `GET /callback` 且带一次性 Token、等待框正常关闭。该异常未能复现，保留只记录 host/path/布尔状态而不记录 Token 的 `FoloAuthProbe` 检查点继续观察。
+
 ## 常规检查
 
 推荐检查：

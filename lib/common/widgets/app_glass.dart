@@ -1100,6 +1100,7 @@ class AppGlassButton extends StatefulWidget {
   final AppGlassButtonRole role;
   final bool expand;
   final double height;
+  final bool loading;
 
   const AppGlassButton({
     super.key,
@@ -1110,6 +1111,7 @@ class AppGlassButton extends StatefulWidget {
     this.role = AppGlassButtonRole.secondary,
     this.expand = false,
     this.height = 34,
+    this.loading = false,
   });
 
   @override
@@ -1153,8 +1155,17 @@ class _AppGlassButtonState extends State<AppGlassButton> {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
           children: [
-            if (widget.icon != null) ...[
-              Icon(widget.icon, size: 17, color: foreground),
+            if (widget.loading || widget.icon != null) ...[
+              if (widget.loading)
+                SizedBox.square(
+                  dimension: 15,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    color: foreground,
+                  ),
+                )
+              else
+                Icon(widget.icon, size: 17, color: foreground),
               const SizedBox(width: 7),
             ],
             Flexible(

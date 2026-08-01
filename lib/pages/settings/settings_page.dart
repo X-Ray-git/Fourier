@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:get/get.dart';
 
 import '../../common/constants/constants.dart';
@@ -12,6 +13,7 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
+import '../../models/folo_account_profile.dart';
 import '../../services/account_service.dart';
 import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
@@ -59,6 +61,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _obscureDeepseekKey = true;
   bool _testingCredentials = false;
   bool _changingAccount = false;
+  bool _loggingIn = false;
   late String _appearanceMode;
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
@@ -76,6 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _accountService = AccountService.instance;
+    unawaited(_accountService.refreshProfileIfMissing());
 
     _loadPersistedSettings();
     _readSyncWindowDaysFocusNode.addListener(_onReadSyncWindowFocusChanged);
@@ -174,7 +178,10 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final candidate = await FoloAuthService.validateSessionToken(token);
       if (!await _confirmAccountReplacement(candidate)) return false;
-      await _accountService.switchSessionToken(candidate.sessionToken);
+      await _accountService.switchSessionToken(
+        candidate.sessionToken,
+        profile: candidate.profile,
+      );
     } catch (error) {
       AppFeedback.error('认证未保存', error.toString());
       return false;
@@ -224,10 +231,20 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loginWithBrowser() async {
-    if (_changingAccount || !Platform.isMacOS) return;
-    setState(() => _changingAccount = true);
+    if (_changingAccount || (!Platform.isMacOS && !Platform.isAndroid)) {
+      return;
+    }
+    if (Platform.isAndroid) {
+      await _loginOnAndroid();
+      return;
+    }
+
+    setState(() {
+      _changingAccount = true;
+      _loggingIn = true;
+    });
     try {
-      final session = await FoloAuthService.startBrowserLogin();
+      final session = await FoloAuthService.startPlatformLogin();
       if (!mounted) {
         await session.cancel();
         return;
@@ -237,16 +254,84 @@ class _SettingsPageState extends State<SettingsPage> {
         barrierDismissible: false,
         builder: (_) => _BrowserLoginDialog(session: session),
       );
-      if (candidate == null || !mounted) return;
-      if (!await _confirmAccountReplacement(candidate)) return;
-      await _accountService.switchSessionToken(candidate.sessionToken);
-      _tokenController.text = candidate.sessionToken;
-      AppFeedback.success('Folo 登录成功', '已登录 ${candidate.displayName}，正在重建本地内容');
+      if (candidate != null && mounted) await _applyLoginCandidate(candidate);
     } catch (error) {
       if (mounted) AppFeedback.error('Folo 登录失败', error.toString());
     } finally {
-      if (mounted) setState(() => _changingAccount = false);
+      if (mounted) {
+        setState(() {
+          _changingAccount = false;
+          _loggingIn = false;
+        });
+      }
     }
+  }
+
+  Future<void> _loginOnAndroid() async {
+    setState(() {
+      _changingAccount = true;
+      _loggingIn = true;
+    });
+    try {
+      final providers = (await FoloAuthService.fetchAuthProviders())
+          .where((provider) => provider.id != 'apple')
+          .toList(growable: false);
+      if (!mounted) return;
+      final provider = await showModalBottomSheet<FoloAuthProvider>(
+        context: context,
+        showDragHandle: true,
+        useSafeArea: true,
+        builder: (_) => _AndroidLoginProviderSheet(providers: providers),
+      );
+      if (provider == null || !mounted) return;
+
+      FoloAccountCandidate? candidate;
+      if (provider.isCredential) {
+        candidate = await showDialog<FoloAccountCandidate>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const _AndroidEmailLoginDialog(),
+        );
+      } else {
+        final session = await FoloAuthService.startAndroidSocialLogin(
+          providerId: provider.id,
+          providerName: provider.name,
+        );
+        if (!mounted) {
+          await session.cancel();
+          return;
+        }
+        candidate = await showDialog<FoloAccountCandidate>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _BrowserLoginDialog(
+            session: session,
+            providerName: provider.name,
+          ),
+        );
+      }
+
+      if (candidate != null && mounted) await _applyLoginCandidate(candidate);
+    } catch (error) {
+      if (mounted) AppFeedback.error('Folo 登录失败', error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _changingAccount = false;
+          _loggingIn = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _applyLoginCandidate(FoloAccountCandidate candidate) async {
+    if (!await _confirmAccountReplacement(candidate)) return;
+    await _accountService.switchSessionToken(
+      candidate.sessionToken,
+      profile: candidate.profile,
+    );
+    _tokenController.text = candidate.sessionToken;
+    AppFeedback.success('Folo 登录成功', '已登录 ${candidate.displayName}，正在重建本地内容');
   }
 
   Future<void> _testCredentials() async {
@@ -566,11 +651,12 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final payload = await SettingsBackupService.readFromClipboard();
       final nextToken = payload.sessionToken?.trim() ?? '';
-      if (nextToken.isNotEmpty) {
-        await FoloAuthService.validateSessionToken(nextToken);
-      }
+      final candidate = nextToken.isEmpty
+          ? null
+          : await FoloAuthService.validateSessionToken(nextToken);
       final summary = await _accountService.applyAccountChange(
         nextSessionToken: nextToken.isEmpty ? null : nextToken,
+        nextProfile: candidate?.profile,
         persist: () async {
           await SettingsBackupService.applyPayload(payload);
           return payload.summary;
@@ -790,10 +876,13 @@ class _SettingsPageState extends State<SettingsPage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             AppGlassButton(
-                              label: _accountService.isLoggedIn.value
+                              label: _loggingIn
+                                  ? '正在连接 Folo…'
+                                  : _accountService.isLoggedIn.value
                                   ? '在浏览器中重新登录 Folo'
                                   : '使用浏览器登录 Folo',
                               icon: Icons.open_in_browser_rounded,
+                              loading: _loggingIn,
                               onPressed: _changingAccount
                                   ? null
                                   : () => unawaited(_loginWithBrowser()),
@@ -1083,39 +1172,11 @@ class _SettingsPageState extends State<SettingsPage> {
           staticMaterial: true,
           child: Obx(() {
             final loggedIn = _accountService.isLoggedIn.value;
-            return Row(
-              children: [
-                Icon(
-                  loggedIn ? Icons.check_circle : Icons.error_outline,
-                  color: loggedIn ? colorScheme.primary : colorScheme.error,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loggedIn ? '已登录 Folo' : '未登录 Folo',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: loggedIn
-                              ? colorScheme.primary
-                              : colorScheme.error,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        loggedIn ? '可以正常同步文章' : '可使用浏览器或 Token 登录',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            return _FoloAccountIdentity(
+              loggedIn: loggedIn,
+              profile: _accountService.profile.value,
+              avatarSize: 48,
+              loggedOutSubtitle: '可使用浏览器或 Token 登录',
             );
           }),
         ),
@@ -1297,30 +1358,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   horizontal: 16,
                   vertical: 14,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _accountService.isLoggedIn.value
-                          ? Icons.check_circle_rounded
-                          : Icons.error_outline_rounded,
-                      color: _accountService.isLoggedIn.value
-                          ? colorScheme.primary
-                          : colorScheme.error,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _accountService.isLoggedIn.value
-                            ? '服务认证已配置'
-                            : '服务认证尚未配置',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: _FoloAccountIdentity(
+                  loggedIn: _accountService.isLoggedIn.value,
+                  profile: _accountService.profile.value,
+                  avatarSize: 52,
+                  loggedOutSubtitle: '登录后即可同步文章',
                 ),
               ),
             ),
@@ -1335,12 +1377,45 @@ class _SettingsPageState extends State<SettingsPage> {
             const MobileSettingsSectionHeader(
               icon: Icons.key_rounded,
               title: '服务认证',
-              subtitle: 'Folo Session Token 与 DeepSeek API Key',
+              subtitle: 'Folo 账号与 DeepSeek API Key',
             ),
             MobileSettingsPanel(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _changingAccount
+                          ? null
+                          : () => unawaited(_loginWithBrowser()),
+                      icon: _loggingIn
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.login_rounded),
+                      label: Text(
+                        _loggingIn
+                            ? '正在连接 Folo…'
+                            : _accountService.isLoggedIn.value
+                            ? '重新登录 Folo'
+                            : '登录 Folo',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '也可以手动填写长期 Session Token',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _tokenController,
                     decoration: InputDecoration(
@@ -1667,30 +1742,11 @@ class _SettingsPageState extends State<SettingsPage> {
             () => Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(
-                      _accountService.isLoggedIn.value
-                          ? Icons.check_circle
-                          : Icons.error_outline,
-                      color: _accountService.isLoggedIn.value
-                          ? colorScheme.primary
-                          : colorScheme.error,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      _accountService.isLoggedIn.value
-                          ? '已配置 Token'
-                          : '未配置 Token',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: _accountService.isLoggedIn.value
-                            ? colorScheme.primary
-                            : colorScheme.error,
-                      ),
-                    ),
-                  ],
+                child: _FoloAccountIdentity(
+                  loggedIn: _accountService.isLoggedIn.value,
+                  profile: _accountService.profile.value,
+                  avatarSize: 52,
+                  loggedOutSubtitle: '登录后即可同步文章',
                 ),
               ),
             ),
@@ -2544,6 +2600,101 @@ class _MacInlineExpansionState extends State<_MacInlineExpansion>
   }
 }
 
+class _FoloAccountIdentity extends StatelessWidget {
+  const _FoloAccountIdentity({
+    required this.loggedIn,
+    required this.profile,
+    required this.avatarSize,
+    required this.loggedOutSubtitle,
+  });
+
+  final bool loggedIn;
+  final FoloAccountProfile? profile;
+  final double avatarSize;
+  final String loggedOutSubtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final displayName = profile?.displayName ?? 'Folo 账号';
+    return Row(
+      children: [
+        _buildAvatar(context, displayName),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                loggedIn ? displayName : '未登录 Folo',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: loggedIn ? cs.onSurface : cs.error,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                loggedIn ? '已连接到 Folo' : loggedOutSubtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, String displayName) {
+    final cs = Theme.of(context).colorScheme;
+    final fallback = ColoredBox(
+      color: loggedIn ? cs.primaryContainer : cs.errorContainer,
+      child: Center(
+        child: loggedIn
+            ? Text(
+                profile?.initials ?? 'F',
+                style: TextStyle(
+                  fontSize: avatarSize * 0.38,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onPrimaryContainer,
+                ),
+              )
+            : Icon(
+                Icons.person_outline_rounded,
+                size: avatarSize * 0.52,
+                color: cs.onErrorContainer,
+              ),
+      ),
+    );
+    final imageUrl = loggedIn ? profile?.imageUrl?.trim() : null;
+
+    return Semantics(
+      image: true,
+      label: loggedIn ? '$displayName 的头像' : '未登录 Folo',
+      child: ClipOval(
+        child: SizedBox.square(
+          dimension: avatarSize,
+          child: imageUrl == null || imageUrl.isEmpty
+              ? fallback
+              : CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  memCacheWidth: (avatarSize * 3).round(),
+                  memCacheHeight: (avatarSize * 3).round(),
+                  fadeInDuration: const Duration(milliseconds: 160),
+                  placeholder: (_, _) => fallback,
+                  errorWidget: (_, _, _) => fallback,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SettingsConfirmDialog extends StatelessWidget {
   final String title;
   final String content;
@@ -2561,6 +2712,17 @@ class _SettingsConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!Platform.isMacOS) {
+      return AlertDialog(
+        title: Text(title),
+        content: Text(content, style: const TextStyle(height: 1.5)),
+        actions: [
+          TextButton(onPressed: onCancel, child: const Text('取消')),
+          FilledButton(onPressed: onConfirm, child: Text(confirmLabel)),
+        ],
+      );
+    }
+
     final cs = Theme.of(context).colorScheme;
     return Dialog(
       elevation: 0,
@@ -2615,26 +2777,252 @@ class _SettingsConfirmDialog extends StatelessWidget {
   }
 }
 
-class _BrowserLoginDialog extends StatefulWidget {
-  const _BrowserLoginDialog({required this.session});
+class _AndroidLoginProviderSheet extends StatelessWidget {
+  const _AndroidLoginProviderSheet({required this.providers});
 
-  final FoloBrowserLoginSession session;
+  final List<FoloAuthProvider> providers;
+
+  IconData _iconFor(String providerId) {
+    return switch (providerId) {
+      'credential' => Icons.mail_outline_rounded,
+      'github' => Icons.code_rounded,
+      'google' => Icons.public_rounded,
+      _ => Icons.login_rounded,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...providers]
+      ..sort((a, b) {
+        const order = {'credential': 0, 'google': 1, 'github': 2};
+        return (order[a.id] ?? 10).compareTo(order[b.id] ?? 10);
+      });
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '登录 Folo',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '选择与 Folo 账号一致的登录方式',
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          for (final provider in sorted)
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: Icon(_iconFor(provider.id), color: cs.onSurface),
+              title: Text('使用 ${provider.name} 登录'),
+              subtitle: Text(provider.isCredential ? '输入邮箱和密码' : '在系统浏览器中继续'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onTap: () => Navigator.of(context).pop(provider),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AndroidEmailLoginDialog extends StatefulWidget {
+  const _AndroidEmailLoginDialog();
+
+  @override
+  State<_AndroidEmailLoginDialog> createState() =>
+      _AndroidEmailLoginDialogState();
+}
+
+class _AndroidEmailLoginDialogState extends State<_AndroidEmailLoginDialog> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _totpController = TextEditingController();
+  String? _twoFactorCookie;
+  String? _error;
+  bool _busy = false;
+  bool _obscurePassword = true;
+
+  bool get _requiresTwoFactor => _twoFactorCookie != null;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _totpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (_requiresTwoFactor) {
+        final candidate = await FoloAuthService.verifyEmailTotp(
+          code: _totpController.text,
+          twoFactorCookie: _twoFactorCookie!,
+        );
+        if (mounted) Navigator.of(context).pop(candidate);
+        return;
+      }
+
+      final result = await FoloAuthService.signInWithEmail(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      final candidate = result.candidate;
+      if (candidate != null) {
+        Navigator.of(context).pop(candidate);
+        return;
+      }
+      setState(() {
+        _twoFactorCookie = result.twoFactorCookie;
+        _busy = false;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.toString();
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AlertDialog(
+      icon: Icon(
+        _requiresTwoFactor
+            ? Icons.verified_user_outlined
+            : Icons.mail_outline_rounded,
+        color: cs.primary,
+      ),
+      title: Text(_requiresTwoFactor ? '二步验证' : '使用 Email 登录'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_requiresTwoFactor)
+            TextField(
+              controller: _totpController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: '6 位验证码',
+                counterText: '',
+              ),
+              onSubmitted: (_) => unawaited(_submit()),
+            )
+          else ...[
+            TextField(
+              controller: _emailController,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [
+                AutofillHints.username,
+                AutofillHints.email,
+              ],
+              textInputAction: TextInputAction.next,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordController,
+              autofillHints: const [AutofillHints.password],
+              obscureText: _obscurePassword,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: '密码',
+                suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? '显示密码' : '隐藏密码',
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
+              onSubmitted: (_) => unawaited(_submit()),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _error!,
+                style: TextStyle(fontSize: 12, color: cs.error),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : () => unawaited(_submit()),
+          child: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(_requiresTwoFactor ? '验证' : '登录'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BrowserLoginDialog extends StatefulWidget {
+  const _BrowserLoginDialog({required this.session, this.providerName});
+
+  final FoloLoginSession session;
+  final String? providerName;
 
   @override
   State<_BrowserLoginDialog> createState() => _BrowserLoginDialogState();
 }
 
-class _BrowserLoginDialogState extends State<_BrowserLoginDialog> {
+class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
+    with WidgetsBindingObserver {
   String? _error;
   bool _finished = false;
+  bool _finishScheduled = false;
+  FoloAccountCandidate? _candidate;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.session.result
         .then((candidate) {
-          _finished = true;
-          if (mounted) Navigator.of(context).pop(candidate);
+          _candidate = candidate;
+          _finishWhenResumed();
         })
         .catchError((Object error) {
           _finished = true;
@@ -2643,7 +3031,34 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _finishWhenResumed();
+  }
+
+  void _finishWhenResumed() {
+    if (!mounted || _candidate == null || _finishScheduled) return;
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    _finishScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _finishScheduled = false;
+      final candidate = _candidate;
+      if (!mounted || candidate == null) return;
+      _finished = true;
+      assert(() {
+        debugPrint('[FoloAuthProbe] Closing login dialog after app resume');
+        return true;
+      }());
+      Navigator.of(context, rootNavigator: true).pop(candidate);
+    });
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (!_finished) unawaited(widget.session.cancel());
     super.dispose();
   }
@@ -2658,6 +3073,8 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (Platform.isAndroid) return _buildAndroidDialog(context);
+
     final cs = Theme.of(context).colorScheme;
     return Dialog(
       elevation: 0,
@@ -2733,6 +3150,63 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAndroidDialog(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final providerName = widget.providerName ?? 'Folo';
+    return AlertDialog(
+      icon: Icon(Icons.open_in_browser_rounded, color: cs.primary),
+      title: Text('使用 $providerName 登录'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _error ??
+                '已在系统浏览器中打开 $providerName 登录。完成授权后会自动返回 Auto Folo，认证会自动保存。',
+            style: TextStyle(
+              height: 1.45,
+              color: _error == null ? cs.onSurfaceVariant : cs.error,
+            ),
+          ),
+          if (_error == null) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '等待浏览器确认',
+                  style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => unawaited(_cancel()),
+          child: Text(_error == null ? '取消' : '关闭'),
+        ),
+        if (_error == null)
+          FilledButton.icon(
+            onPressed: () => unawaited(widget.session.openBrowser()),
+            icon: const Icon(Icons.open_in_browser_rounded),
+            label: Text('重新打开 $providerName 登录'),
+          ),
+      ],
+      actionsAlignment: MainAxisAlignment.end,
+      scrollable: true,
     );
   }
 }

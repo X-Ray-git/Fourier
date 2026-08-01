@@ -25,12 +25,14 @@
 
 Folo 登录与退出：
 
-- macOS 首选“使用浏览器登录 Folo”。实现对标 Folo CLI：应用在 `127.0.0.1` 随机端口启动临时 callback，打开 `https://app.folo.is/login?cli_callback=...`，收到一次性 token 后调用 Better Auth `one-time-token/apply`（404 时兼容 `verify`），最后用 `/better-auth/get-session` 验证长期 Session Token。
-- 浏览器未登录时由 Folo 官方页面要求登录；浏览器已有登录态时可能直接返回。Auto Folo 不嵌入密码、验证码、2FA 或社交登录表单，也不读取浏览器 cookie。
+- macOS 首选 Folo 官方网页登录。实现对标 Folo CLI：应用在 `127.0.0.1` 随机端口启动临时 callback，在系统浏览器打开 `https://app.folo.is/login?cli_callback=...`，收到一次性 token 后调用 Better Auth `one-time-token/apply`（404 时兼容 `verify`），最后用 `/better-auth/get-session` 验证长期 Session Token。
+- Android 点击“登录 Folo”后动态读取并显示服务端提供方。当前 Folo 返回 Google、GitHub、Apple、Email；Android 与官方移动端一致地排除 Apple。Google/GitHub 在真实系统浏览器中完成，最终通过仅匹配 `folo://autofolo-auth` 的深链返回；Email 使用本地邮箱/密码表单，并支持 TOTP 二步验证码。不要恢复移动 `/login` 页面或登录 WebView；前者会跳官网，后者会被 Google 拒绝。
+- 社交登录已有对应网页会话时可能直接返回；Auto Folo 不读取系统浏览器 cookie，只接收 Better Auth Expo proxy 返回的会话 cookie。Email 密码与 TOTP 只在内存中提交，不写入设置、日志或配置备份。
 - 手动 Session Token 入口继续保留。手动保存同样必须先调用 `/better-auth/get-session` 验证，不能把任意字符串直接写成已登录状态。
 - 当前采用“单一活动账号”，不维护多账号档案，也不尝试识别不同 Session Token 是否属于同一用户。Token 实际变化时一律重建账号内容；完全相同的 Token 重复保存不清理数据。
 - “退出账号”是本地退出：删除 Auto Folo 的 Token 和账号内容，但不调用 Folo 远端 sign-out，也不退出系统浏览器。这样旧配置备份中的长期 Token 仍可导入。若要测试账号密码页面，需要用户自行在浏览器退出 Folo。
 - 浏览器登录、手动 Token、配置导入三条入口最终必须汇入 `AccountService.applyAccountChange()`，不要分别维护数据清理逻辑。
+- 登录状态的主视觉使用 Folo 返回的头像和用户名，不再用“已配置 Token”代表用户身份。`/better-auth/get-session` 返回的 `id/name/email/image` 会以轻量资料缓存在本机；旧安装仅在有 Token 但缺少资料时补查一次，头像失败则回退为用户名首字符。账号资料不进入 version 1 配置导出，导入 Token 时利用既有在线验证结果重新生成；切换或退出必须和 Token 一起替换或清除，不能残留上一个账号的头像。
 
 macOS UI：
 
@@ -48,6 +50,9 @@ macOS UI：
 Android UI：
 
 - Android 设置页使用独立的移动端分组布局，但继续复用相同保存语义与业务组件。页面水平边距为 `12px`，大面板使用 `MobileSettingsPanel` 的 `24px` 连续圆角和轻量静态材质；不要把 macOS 双栏设置布局压缩后直接搬到手机。
+- 服务认证卡提供动态登录方式选择、手动长期 Session Token 和本地退出。所有登录方式最终都必须经过 `/better-auth/get-session` 验证，不能仅凭 OAuth 回调、Email 200 响应或 cookie 存在就切换账号。
+- 点击登录后，provider 请求期间按钮显示旋转进度和“正在连接 Folo…”，但仍等待官方 provider 响应后再打开选择面板；不要用无反馈的禁用按钮让网络等待看起来像点击失效。
+- 账号切换、退出、配置导入/导出等确认面板在 Android 使用 Material 3 `AlertDialog`；不要复用 macOS 的透明 `AppGlassSurface/nativeBackdrop`，后者在 Android 透明 Dialog 上会让正文对比度不足。macOS 继续使用玻璃确认框。
 - 离散选择统一使用 `MobileSettingsSelectField<T>`。字段本身不裁剪 `InputDecorator` 的浮动标签；点击后打开 `AppMobileGlassSheet`，选中项显示勾选，选择后立即关闭并保存。不要恢复透明的 Material dropdown overlay。
 - `OutlineInputBorder` 的浮动 label 会向上越出输入框布局框约 `8.6px`。字段自身已经不裁剪它，但放进 `ExpansionTile`（内部对 body 用 `ClipRect`）或 `MobileSettingsPanel`（`Clip.antiAlias`）时，若控件上方紧贴容器顶部且缓冲 `< ~9px`，上溢部分仍会被上层容器切掉。`_LlmConfigCard` 的 `ExpansionTile` children padding 顶部因此从 `0` 改为 `10`；以后在裁切容器顶部紧跟带 `labelText` 的 outline 输入控件时，必须同样预留 `≥ 9px` 顶部缓冲。`AppGlassTextField` 用独立 `Text` 标题 + `InputBorder.none`，无浮动 label，不受此约束。
 - 移动端服务认证、LLM 自动提交数字输入和 Prompt 行为仍与 macOS 共享语义。正文最大宽度、macOS fling 上限等桌面专属项不得出现在 Android 设置页。

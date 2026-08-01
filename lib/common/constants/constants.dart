@@ -20,6 +20,7 @@ abstract final class AppConstants {
 
 abstract final class StorageKeys {
   static const String sessionToken = 'session_token';
+  static const String foloAccountProfile = 'folo_account_profile';
   // Legacy backup/storage keys. Folo authentication only requires the token.
   static const String clientId = 'client_id';
   static const String sessionId = 'session_id';

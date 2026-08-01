@@ -2,6 +2,7 @@ package io.github.xraygit.autofolo
 
 import android.content.ContentProviderClient
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,8 +17,16 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val MOVE_CHANNEL = "io.github.xraygit.autofolo/move_to_background"
     private val BADGE_CHANNEL = "io.github.xraygit.autofolo/badge"
+    private val AUTH_CALLBACK_CHANNEL = "io.github.xraygit.autofolo/auth_callback"
     private val BADGE_NOTIFICATION_ID = 1001
     private val BADGE_CHANNEL_ID = "badge_channel"
+    private var authCallbackChannel: MethodChannel? = null
+    private var pendingAuthCallback: String? = null
+
+    // Auth callbacks are consumed by AUTH_CALLBACK_CHANNEL. Letting Flutter's
+    // default deep-link handler see the same URI would push a second route over
+    // the waiting dialog, so the dialog's completion would pop the wrong route.
+    override fun shouldHandleDeeplinking(): Boolean = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -45,6 +54,51 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
+
+        authCallbackChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            AUTH_CALLBACK_CHANNEL
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "takePendingAuthCallback") {
+                    val callback = pendingAuthCallback
+                    pendingAuthCallback = null
+                    result.success(callback)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
+        captureAuthCallback(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureAuthCallback(intent)
+    }
+
+    private fun captureAuthCallback(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "folo" || uri.host != "autofolo-auth") return
+
+        val callback = uri.toString()
+        pendingAuthCallback = callback
+        authCallbackChannel?.invokeMethod(
+            "onAuthCallback",
+            callback,
+            object : MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (result == true && pendingAuthCallback == callback) {
+                        pendingAuthCallback = null
+                    }
+                }
+
+                override fun error(code: String, message: String?, details: Any?) = Unit
+
+                override fun notImplemented() = Unit
+            }
+        )
     }
 
     private fun setBadge(count: Int) {

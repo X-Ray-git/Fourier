@@ -106,7 +106,7 @@ flutter run -d <device-id> --no-pub
 - Google 真机流程已确认：浏览器授权返回 Auto Folo，MethodChannel 收到回调，`/get-session` 验证通过，等待窗口关闭，Session Token 持久化，文章数据库与缓存开始重建。此前“闪烁后仍等待”是 Flutter 默认深链与 MethodChannel 双重处理同一 URI，现由 `MainActivity.shouldHandleDeeplinking() = false` 修复。
 - 多方式实现后，`flutter build apk --debug --no-pub` 成功；无效 Email 探针得到 Folo 结构化 `401 INVALID_EMAIL_OR_PASSWORD`，确认接口和移动 fallback header 可被服务端处理。真实 Email/TOTP 和 GitHub 仍需对应账号真机验证。
 - 登录入口新增 provider 等待动画；账号状态改为 macOS `48px`、Android `52px` 的无内描边头像与用户名，图片按约三倍显示尺寸解码，失败时回退首字符。资料编解码、头像字段解析与既有认证测试共 8 项通过，相关文件静态分析无问题。仍需两端视觉确认：旧 Token 启动后能自动补全名字/头像、重新启动无需再次查询、退出后旧资料消失、配置导入后资料正确恢复。
-- macOS 曾有一次完成网页登录后落到 Folo 官网而未回 Auto Folo，但当前代码、上一个可用提交、Folo 最新官方 CLI 和线上登录脚本的 `cli_callback` 协议一致。随后用户重新运行已成功；安全日志确认登录 URL 含 `cli_callback`、系统浏览器打开成功、localhost 收到 `GET /callback` 且带一次性 Token、等待框正常关闭。该异常未能复现，保留只记录 host/path/布尔状态而不记录 Token 的 `FoloAuthProbe` 检查点继续观察。
+- macOS 安全日志确认登录 URL 含 `cli_callback`、系统浏览器打开成功、localhost 收到 `GET /callback` 且带一次性 Token。此前必须把焦点切回 Auto Folo 才完成登录，是 Android 共用的生命周期门禁误用于 macOS；现已拆分为 macOS 收到并验证回调后立即后台完成，Android 仍等待应用恢复前台。Folo 官网回调生成期间显示的“打开 Folo”会唤起官方客户端，属于上游通用页面行为；Auto Folo 等待框已明确提示无需点击。保留只记录 host/path/布尔状态而不记录 Token 的 `FoloAuthProbe` 检查点继续观察。
 
 ## 常规检查
 

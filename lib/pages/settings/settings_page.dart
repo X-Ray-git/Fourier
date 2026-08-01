@@ -3022,7 +3022,7 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
     widget.session.result
         .then((candidate) {
           _candidate = candidate;
-          _finishWhenResumed();
+          _finishWhenReady();
         })
         .catchError((Object error) {
           _finished = true;
@@ -3032,28 +3032,42 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _finishWhenResumed();
+    if (state == AppLifecycleState.resumed) _finishWhenReady();
   }
 
-  void _finishWhenResumed() {
+  void _finishWhenReady() {
     if (!mounted || _candidate == null || _finishScheduled) return;
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
+    if (Platform.isAndroid &&
+        lifecycleState != null &&
+        lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    if (!Platform.isAndroid) {
+      _completeLogin();
       return;
     }
 
     _finishScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _finishScheduled = false;
-      final candidate = _candidate;
-      if (!mounted || candidate == null) return;
-      _finished = true;
-      assert(() {
-        debugPrint('[FoloAuthProbe] Closing login dialog after app resume');
-        return true;
-      }());
-      Navigator.of(context, rootNavigator: true).pop(candidate);
+      _completeLogin();
     });
+  }
+
+  void _completeLogin() {
+    final candidate = _candidate;
+    if (!mounted || candidate == null || _finished) return;
+    _finished = true;
+    assert(() {
+      final reason = Platform.isAndroid
+          ? 'after app resume'
+          : 'after localhost callback';
+      debugPrint('[FoloAuthProbe] Closing login dialog $reason');
+      return true;
+    }());
+    Navigator.of(context, rootNavigator: true).pop(candidate);
   }
 
   @override
@@ -3102,7 +3116,7 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
               const SizedBox(height: 10),
               Text(
                 _error ??
-                    '已打开 Folo 官方登录页面。完成登录后会自动返回 Auto Folo；如果浏览器已经登录，授权可能会直接完成。',
+                    '已打开 Folo 官方登录页面。完成登录后，Auto Folo 会在后台自动接收授权；无需点击网页中的“打开 Folo”按钮。',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,

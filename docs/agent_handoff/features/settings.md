@@ -26,6 +26,7 @@
 Folo 登录与退出：
 
 - macOS 首选 Folo 官方网页登录。实现对标 Folo CLI：应用在 `127.0.0.1` 随机端口启动临时 callback，在系统浏览器打开 `https://app.folo.is/login?cli_callback=...`，收到一次性 token 后调用 Better Auth `one-time-token/apply`（404 时兼容 `verify`），最后用 `/better-auth/get-session` 验证长期 Session Token。
+- Folo 官网在生成 CLI 回调期间仍会显示通用的“打开 Folo”按钮，点击会唤起官方客户端，Auto Folo 无法从系统浏览器中隐藏它。macOS 等待框必须提示用户无需点击该按钮；localhost 回调一旦验证成功，应立即在后台完成登录，不能等待 Auto Folo 重新获得焦点。Android 深链仍需等待应用恢复前台后再关闭登录界面。
 - Android 点击“登录 Folo”后动态读取并显示服务端提供方。当前 Folo 返回 Google、GitHub、Apple、Email；Android 与官方移动端一致地排除 Apple。Google/GitHub 在真实系统浏览器中完成，最终通过仅匹配 `folo://autofolo-auth` 的深链返回；Email 使用本地邮箱/密码表单，并支持 TOTP 二步验证码。不要恢复移动 `/login` 页面或登录 WebView；前者会跳官网，后者会被 Google 拒绝。
 - 社交登录已有对应网页会话时可能直接返回；Auto Folo 不读取系统浏览器 cookie，只接收 Better Auth Expo proxy 返回的会话 cookie。Email 密码与 TOTP 只在内存中提交，不写入设置、日志或配置备份。
 - 手动 Session Token 入口继续保留。手动保存同样必须先调用 `/better-auth/get-session` 验证，不能把任意字符串直接写成已登录状态。

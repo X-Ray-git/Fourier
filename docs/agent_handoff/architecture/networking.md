@@ -9,6 +9,7 @@ Folo API：
   则返回 `401`，因此请求不再发送这两个无效 header。
 - `lib/http/init.dart` 中的 `Request` 设置通用请求头并安装认证 interceptor。
 - macOS 使用 Folo 官方 CLI 同类协议：临时 loopback callback 只绑定 `127.0.0.1` 随机端口；官方网页返回一次性 token 后，应用通过 `/better-auth/one-time-token/apply`（兼容 `/verify`）换取长期 Session Token，再调用 `/better-auth/get-session` 验证。callback 服务等待三分钟后自动关闭，用户取消也必须立即关闭。
+- macOS loopback 回调不依赖应用焦点：候选账号验证完成后必须立即结束等待框并应用账号，即使系统浏览器仍在前台。不要把 Android 为避免深链路由竞态而设置的 `resumed` 生命周期门禁扩散到 macOS。
 - Android 不访问 `/login` 页面：移动 UA 会被重定向至 `folo.is`，而桌面 UA WebView 又会被 Google 拒绝。应用优先从 `/better-auth/get-providers` 动态读取 Folo 当前登录方式，Android 排除需要原生身份令牌的 Apple；provider discovery 是辅助能力而不是登录硬依赖，网络或响应异常时必须回退至 Email、Google、GitHub 本地列表。Google、GitHub 等社交登录复用 Better Auth Expo 浏览器协议，Email 则直接调用 `/better-auth/sign-in/email`，并在需要时携带短期 two-factor cookie 调用 `/better-auth/two-factor/verify-totp`。社交流程通过 `/better-auth/expo-authorization-proxy` 让服务端根据 authorization URL 自行签发 OAuth state，授权完成后由 `folo://autofolo-auth` 返回带 Session Cookie 的回调。不要把首个响应中的普通 `better-auth.state` 当成 Expo 专用 `oauth_state` 转发，否则授权后会落回 `folo.is`。
 - Android manifest 只匹配 `host=autofolo-auth`，不宽泛接管其他 `folo://` 路径；`MainActivity` 必须关闭 Flutter 默认 deep-link navigation，回调只能由认证 MethodChannel 消费。否则同一 URI 会额外压入 Flutter 路由，完成登录时 `Navigator.pop` 会弹错路由，表现为界面闪烁后重新露出“等待浏览器登录”。
 - loopback 登录 URL 不包含长期 Session Token；返回 token 只在内存中交换和验证。不要把 callback query、Set-Cookie、长期 Token 或完整认证响应写入日志。

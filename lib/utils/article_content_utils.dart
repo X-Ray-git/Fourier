@@ -44,6 +44,10 @@ abstract final class ArticleContentUtils {
     _cache.remove(entryId);
   }
 
+  static void clearCache() {
+    _cache.clear();
+  }
+
   static const Set<String> _blockTags = {
     'p',
     'div',

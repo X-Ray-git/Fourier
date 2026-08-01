@@ -5,6 +5,8 @@ import 'html_chunk_parser.dart';
 abstract final class ArticleLengthEstimator {
   static final Map<String, _CachedLength> _cache = {};
 
+  static void clearCache() => _cache.clear();
+
   /// Uses a fixed logical-pixel reading width so the same article produces
   /// the same estimate across platforms and window sizes.
   static double estimateReadingHeight(ArticleModel article) {

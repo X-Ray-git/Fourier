@@ -7,6 +7,7 @@ import 'article_filter_service.dart';
 import 'article_state_notifier.dart';
 import 'llm_config.dart';
 import 'local_article_db_service.dart';
+import 'account_session_guard.dart';
 
 /// 后台 AI 过滤任务队列 — 并行判定
 abstract final class AutoFilterWorker {
@@ -91,9 +92,11 @@ abstract final class AutoFilterWorker {
   }
 
   static Future<void> _filterArticle(ArticleModel article) async {
+    final accountRevision = AccountSessionGuard.revision;
     try {
       if (article.isRead) return; // 处理前再检查一次
       final result = await ArticleFilterService.filterArticle(article);
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return;
       if (article.isRead) return; // 处理中可能被标已读
 
       if (result.shouldReject) {
@@ -144,7 +147,6 @@ abstract final class AutoFilterWorker {
     _processingTimer?.cancel();
     _processingTimer = null;
     _queue.clear();
-    _isProcessing = false;
     queuedCount.value = 0;
     processingCount.value = 0;
     doneCount.value = 0;

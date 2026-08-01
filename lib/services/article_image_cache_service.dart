@@ -461,16 +461,24 @@ abstract final class ArticleImageCacheService {
           );
         }
       }
+      if (task.generation != _prefetchGeneration) {
+        await _cacheManager.removeFile(key);
+        return;
+      }
       recordSuccess(task.articleId, task.imageUrl);
     } catch (_) {
       failed = true;
-      recordFailure(task.articleId, task.imageUrl);
+      if (task.generation == _prefetchGeneration) {
+        recordFailure(task.articleId, task.imageUrl);
+      }
     } finally {
       _runningKeys.remove(key);
       _runningDownloads--;
       // Only schedule after the running key is released. Scheduling inside the
       // catch block is rejected by the duplicate-work guard.
-      if (failed) _scheduleAutoRetry(task);
+      if (failed && task.generation == _prefetchGeneration) {
+        _scheduleAutoRetry(task);
+      }
       _publishRetryState(key);
       _pumpQueue();
       final dueAt = _cleanupDueAt[task.articleId];
@@ -756,6 +764,25 @@ abstract final class ArticleImageCacheService {
       _queuedKeys.remove(cacheKey(task.articleId, task.imageUrl));
     }
     _backgroundQueue.clear();
+  }
+
+  static Future<void> resetForAccountChange() async {
+    _prefetchGeneration++;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    _retryScheduler.cancelWhere((_) => true);
+    _foregroundQueue.clear();
+    _backgroundQueue.clear();
+    _queuedKeys.clear();
+    _registeredKeys.clear();
+    _failedImageUrls.clear();
+    _cleanupDueAt.clear();
+    _activeArticleIds.clear();
+    _successfulRetryRevisions.clear();
+    for (final key in _retryStateNotifiers.keys) {
+      _publishRetryState(key);
+    }
+    await _cacheManager.emptyCache();
   }
 
   static void _removeQueuedTasksForArticle(String articleId) {

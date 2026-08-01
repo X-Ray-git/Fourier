@@ -8,6 +8,9 @@ Folo API：
   `X-Client-Id`、`X-Session-Id` 均不影响结果，无 token 或伪造 token
   则返回 `401`，因此请求不再发送这两个无效 header。
 - `lib/http/init.dart` 中的 `Request` 设置通用请求头并安装认证 interceptor。
+- macOS 浏览器登录使用 Folo 官方 CLI 同类协议：临时 loopback callback 只绑定 `127.0.0.1` 随机端口；官方网页返回一次性 token 后，应用通过 `/better-auth/one-time-token/apply`（兼容 `/verify`）换取长期 Session Token，再调用 `/better-auth/get-session` 验证。callback 服务等待三分钟后自动关闭，用户取消也必须立即关闭。
+- loopback 登录 URL 不包含长期 Session Token；返回 token 只在内存中交换和验证。不要把 callback query、Set-Cookie、长期 Token 或完整认证响应写入日志。
+- 账号切换使用两阶段隔离：清理开始时进入 transitioning 并推进一次 `AccountSessionGuard` revision，此时 `Request` 直接拒绝新 Folo 请求；凭据持久化结束后退出 transitioning 并再次推进 revision。旧账号请求即使网络层成功返回、或恰好在清理窗口内启动，也必须作为 cancel 拒绝，不能进入业务合并逻辑。
 
 DeepSeek API：
 

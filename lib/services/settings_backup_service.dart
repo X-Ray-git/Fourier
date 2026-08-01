@@ -24,6 +24,15 @@ class SettingsBackupSummary {
   bool get containsSensitiveData => hasFoloCredentials || hasDeepseekApiKey;
 }
 
+class SettingsBackupPayload {
+  const SettingsBackupPayload({required this.settings, required this.summary});
+
+  final Map<String, dynamic> settings;
+  final SettingsBackupSummary summary;
+
+  String? get sessionToken => settings[StorageKeys.sessionToken] as String?;
+}
+
 abstract final class SettingsBackupService {
   static const String backupType = 'auto_folo_settings';
   static const int currentVersion = 1;
@@ -98,15 +107,27 @@ abstract final class SettingsBackupService {
   }
 
   static Future<SettingsBackupSummary> importFromClipboard() async {
+    final payload = await readFromClipboard();
+    await applyPayload(payload);
+    return payload.summary;
+  }
+
+  static Future<SettingsBackupPayload> readFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim();
     if (text == null || text.isEmpty) {
       throw const FormatException('剪贴板没有可导入的配置 JSON');
     }
-    return importFromJson(text);
+    return parseJson(text);
   }
 
   static Future<SettingsBackupSummary> importFromJson(String text) async {
+    final payload = parseJson(text);
+    await applyPayload(payload);
+    return payload.summary;
+  }
+
+  static SettingsBackupPayload parseJson(String text) {
     final decoded = jsonDecode(text);
     if (decoded is! Map) {
       throw const FormatException('配置 JSON 顶层必须是对象');
@@ -134,9 +155,15 @@ abstract final class SettingsBackupService {
       settings[key] = _normalizeValue(key, entry.value);
     }
 
-    await _replaceManagedSettings(settings);
+    return SettingsBackupPayload(
+      settings: settings,
+      summary: summarize(settings),
+    );
+  }
+
+  static Future<void> applyPayload(SettingsBackupPayload payload) async {
+    await _replaceManagedSettings(payload.settings);
     _refreshRuntimeCaches();
-    return summarize(settings);
   }
 
   static SettingsBackupSummary summarize(Map<String, dynamic> settings) {

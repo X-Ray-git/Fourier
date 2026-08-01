@@ -20,6 +20,17 @@
 - 由 `SettingsBackupService` 白名单管理。
 - 如果新增持久设置需要跨设备迁移，应加入导出/导入。
 - 导出内容可能包含敏感值；UI 应提醒用户。
+- 备份格式继续保持 `version: 1`，并继续导出长期 `session_token`，因此旧备份和当前备份都可以在重新安装后恢复登录，不需要强制重新走浏览器。
+- 导入必须先完整解析并验证候选 Session Token，验证通过后才能替换当前账号数据。无效或过期 Token 不能先覆盖当前设置，也不能触发本地账号数据清理。
+
+Folo 登录与退出：
+
+- macOS 首选“使用浏览器登录 Folo”。实现对标 Folo CLI：应用在 `127.0.0.1` 随机端口启动临时 callback，打开 `https://app.folo.is/login?cli_callback=...`，收到一次性 token 后调用 Better Auth `one-time-token/apply`（404 时兼容 `verify`），最后用 `/better-auth/get-session` 验证长期 Session Token。
+- 浏览器未登录时由 Folo 官方页面要求登录；浏览器已有登录态时可能直接返回。Auto Folo 不嵌入密码、验证码、2FA 或社交登录表单，也不读取浏览器 cookie。
+- 手动 Session Token 入口继续保留。手动保存同样必须先调用 `/better-auth/get-session` 验证，不能把任意字符串直接写成已登录状态。
+- 当前采用“单一活动账号”，不维护多账号档案，也不尝试识别不同 Session Token 是否属于同一用户。Token 实际变化时一律重建账号内容；完全相同的 Token 重复保存不清理数据。
+- “退出账号”是本地退出：删除 Auto Folo 的 Token 和账号内容，但不调用 Folo 远端 sign-out，也不退出系统浏览器。这样旧配置备份中的长期 Token 仍可导入。若要测试账号密码页面，需要用户自行在浏览器退出 Folo。
+- 浏览器登录、手动 Token、配置导入三条入口最终必须汇入 `AccountService.applyAccountChange()`，不要分别维护数据清理逻辑。
 
 macOS UI：
 
@@ -47,9 +58,9 @@ Android UI：
 - 选择型控件应选择即保存，包括 dropdown、segmented、switch/checkbox 等。
 - 单值数字输入不应边输边写盘；按 Enter 或失去焦点时校验并静默保存，无效值或写入失败应提示并恢复上一次有效值。
 - 凭据、API Key 和 Prompt 等敏感、组合或大段文本输入保留明确保存按钮。
-- Folo Session Token 与 DeepSeek API Key 共用一次保存操作：先完成所有格式校验，再写入本地；Folo Token 必填，DeepSeek Key 可以留空，留空保存表示清除已有 Key。
+- Folo Session Token 与 DeepSeek API Key 共用一次保存操作：先完成所有格式与 Folo 会话校验，再写入本地；Folo Token 必填，DeepSeek Key 可以留空，留空保存表示清除已有 Key。Token 发生变化时会清理账号内容，DeepSeek Key、Prompt 和其他普通设置不属于清理范围。
 - 旧设置备份中的 `client_id`、`session_id` 继续允许导入但会被忽略并清理，保证旧 JSON 可迁移；新导出不再包含这两个字段。
-- “测试连接”读取输入框当前值但不保存：Folo 使用只读 `/subscriptions` 并校验业务 `code == 0`；DeepSeek 使用需 Bearer 认证的只读 `/models`，不发起推理、不产生推理 token。两项独立测试并分别反馈，单项失败不能阻止另一项完成；DeepSeek Key 留空时显示“未配置，已跳过”，不把可选配置计为失败。
+- “测试连接”读取输入框当前值但不保存：Folo 仍使用只读 `/subscriptions` 并校验业务 `code == 0`；实际保存/导入则必须使用 `/better-auth/get-session` 验证会话结构。DeepSeek 使用需 Bearer 认证的只读 `/models`，不发起推理、不产生推理 token。两项独立测试并分别反馈，单项失败不能阻止另一项完成；DeepSeek Key 留空时显示“未配置，已跳过”，不把可选配置计为失败。
 - LLM 参数卡片中，模型、思考模式、思考强度和 `max_tokens` 选择后立即保存；Temperature 和并发数按 Enter/失焦保存，编辑中的草稿不得阻塞或污染其他选项。重置默认立即落盘。
 - Prompt 保留卡片内保存/重置操作；不要重新引入设置页全局“保存全部”按钮。
 - 摘要、翻译和过滤 Prompt 都使用同一份跨平台持久设置，Android/macOS 不维护两套默认值。代码默认值只在对应 key 从未保存时生效；用户手动保存或通过配置备份导入后，应用更新、覆盖安装和后续默认值调整都不得覆盖现有 Prompt。“重置此 Prompt”会删除持久值并显式回到当前代码默认值。

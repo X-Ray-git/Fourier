@@ -97,7 +97,6 @@ abstract final class AutoTranslationWorker {
     _processingTimer?.cancel();
     _processingTimer = null;
     _queue.clear();
-    _isProcessing = false;
     processingCount.value = 0;
   }
 }

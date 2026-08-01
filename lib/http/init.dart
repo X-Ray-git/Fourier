@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../common/constants/constants.dart';
 import '../services/app_version_service.dart';
+import '../services/account_session_guard.dart';
 import '../utils/storage.dart';
 
 /// HTTP 请求单例
@@ -122,8 +123,20 @@ class Request {
 
 /// 认证拦截器 — 注入 Folo session token
 class _AuthInterceptor extends Interceptor {
+  static const _accountRevisionKey = 'autoFolo.accountRevision';
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (AccountSessionGuard.isTransitioning) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+          message: 'Account change is in progress',
+        ),
+      );
+      return;
+    }
     final token =
         GStorage.setting.get(StorageKeys.sessionToken, defaultValue: '')
             as String;
@@ -134,7 +147,43 @@ class _AuthInterceptor extends Interceptor {
           'better-auth.last_used_login_method=google';
     }
 
+    options.extra[_accountRevisionKey] = AccountSessionGuard.revision;
+
     handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final revision = response.requestOptions.extra[_accountRevisionKey];
+    if (revision is int && !AccountSessionGuard.isCurrent(revision)) {
+      handler.reject(
+        DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          type: DioExceptionType.cancel,
+          message: 'Account changed while request was in flight',
+        ),
+      );
+      return;
+    }
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final revision = err.requestOptions.extra[_accountRevisionKey];
+    if (revision is int && !AccountSessionGuard.isCurrent(revision)) {
+      handler.reject(
+        DioException(
+          requestOptions: err.requestOptions,
+          response: err.response,
+          type: DioExceptionType.cancel,
+          message: 'Account changed while request was in flight',
+        ),
+      );
+      return;
+    }
+    handler.next(err);
   }
 }
 

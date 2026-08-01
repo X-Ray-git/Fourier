@@ -13,6 +13,7 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../models/feed.dart';
 import '../../common/widgets/feedback_toast.dart';
+import '../../services/account_session_guard.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_cache_service.dart';
 import '../../services/content_cache_service.dart';
@@ -53,6 +54,7 @@ class TimelineController extends GetxController {
   bool _hasMore = true;
   bool _isRefreshingRecentRead = false;
   bool _isBatchingScopeChange = false;
+  bool _reloadAfterAccountChange = false;
   int _timelineListResetVersion = 0;
   String _timelineScopeKey = 'normal::';
   final Map<String, Object> _deferredReadVisualUpdates = {};
@@ -63,6 +65,7 @@ class TimelineController extends GetxController {
 
   final Map<String, FeedModel> _feedMap = {};
   Future<void> Function()? _scrollToTopHandler;
+  Worker? _accountWorker;
 
   @override
   void onInit() {
@@ -71,6 +74,10 @@ class TimelineController extends GetxController {
     ever(selectedFeedId, (_) => _handleScopeFieldChanged());
     ever(selectedCategory, (_) => _handleScopeFieldChanged());
     ever(isSilentSelected, (_) => _handleScopeFieldChanged());
+    _accountWorker = ever(
+      AccountService.instance.accountRevision,
+      (_) => _handleAccountChanged(),
+    );
 
     // 监听全局文章状态变更，精准更新内存数据，保持 UI 同步（如 AI 过滤拦截数）
     ever(ArticleStateNotifier.version, (_) {
@@ -81,6 +88,28 @@ class TimelineController extends GetxController {
     });
 
     loadFeedsThenArticles(showToast: false);
+  }
+
+  void _handleAccountChanged() {
+    _cursor = null;
+    _hasMore = false;
+    _feedMap.clear();
+    articles.clear();
+    allArticles.clear();
+    selectedArticle.value = null;
+    selectedFeedId.value = null;
+    selectedCategory.value = null;
+    isSilentSelected.value = false;
+    filterCount.value = 0;
+    if (!AccountService.instance.isLoggedIn.value) {
+      loadingState.value = const LoadError('请先在“设置”页登录 Folo');
+      return;
+    }
+    if (isSyncing.value) {
+      _reloadAfterAccountChange = true;
+    } else {
+      unawaited(loadFeedsThenArticles(showToast: false));
+    }
   }
 
   /// 先加载订阅源映射，再加载文章
@@ -96,9 +125,11 @@ class TimelineController extends GetxController {
       return;
     }
 
+    final accountRevision = AccountSessionGuard.revision;
     isSyncing.value = true;
     try {
       final catalogResult = await SubscriptionCatalogService.sync();
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return;
       _feedMap
         ..clear()
         ..addEntries(
@@ -117,10 +148,15 @@ class TimelineController extends GetxController {
       }
     } finally {
       isSyncing.value = false;
+      if (_reloadAfterAccountChange) {
+        _reloadAfterAccountChange = false;
+        unawaited(loadFeedsThenArticles(showToast: false));
+      }
     }
   }
 
   Future<void> loadData() async {
+    final accountRevision = AccountSessionGuard.revision;
     _cursor = null;
     _hasMore = false;
 
@@ -135,6 +171,7 @@ class TimelineController extends GetxController {
       FeedHttp.collectEntries(view: 1, withContent: true, feedMap: _feedMap),
       FeedHttp.collectAllInboxEntries(limit: 100, withContent: true),
     ]);
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
 
     final feedsResult = results[0];
     final socialResult = results[1];
@@ -547,6 +584,7 @@ class TimelineController extends GetxController {
 
   @override
   void onClose() {
+    _accountWorker?.dispose();
     for (final timer in _deferredArticleStateNotificationFallbacks.values) {
       timer.cancel();
     }

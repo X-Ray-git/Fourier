@@ -698,6 +698,21 @@
 
 后果：播放、暂停、进度、音量、设置、全屏、空格/媒体键和文章滚动只维护一套基础交互；平台 wrapper 仅准备 URI、缩略图/占位和官方回退。应用运行不依赖 Node.js，生产资产固定在 `assets/embed_video_player/`，可复现源码和锁文件在 `tool/embed_video_player_runtime/`。YouTube macOS 基础体验已由用户验证；Bilibili 以及 Android 两个平台仍需真实视频、画质、字幕、弹幕、滚动和全屏检查。以后调整共同控制体验应优先修改共享运行时/`ShakaEmbedPlayer`，但 API、解析器、代理白名单和官方回退必须继续按来源隔离；不要删除懒加载或在文章初始渲染时预取媒体。
 
+## Folo 登录采用官方浏览器交接与单一活动账号重建
+
+背景：Auto Folo 过去只允许用户手工填写长期 Session Token，缺少普通登录入口。Folo 最新官方 CLI 已提供稳定的系统浏览器登录协议：本机启动随机 loopback callback，官方网页完成账号、验证码、2FA 或社交登录后返回一次性 token，再换取长期会话。与此同时，Auto Folo 的文章、订阅目录、AI 结果、阅读历史、图片缓存和后台队列都使用全局本地存储，并未按账号隔离；直接替换 Token 会把两个账号的数据混在一起。
+
+决策：macOS 首选对标官方 CLI 的系统浏览器登录，不在 Flutter 内复制密码、验证码、2FA、OAuth WebView 和 cookie 管理。继续保留手动长期 Session Token 与 version 1 配置备份；所有候选 Token 在覆盖前必须经 `/better-auth/get-session` 验证。产品只维护一个活动账号，不建立本地多账号档案，也不根据 Folo user id 优化“同账号换 Token”：只要 Token 实际变化，就统一清理账号内容并从服务器重建。退出是本地断开，不请求远端 sign-out，不影响系统浏览器登录，也不让已导出的长期 Token 失效。
+
+后果：普通设置、DeepSeek Key、Prompt、模型参数、外观和 feed 偏好始终保留；文章、订阅缓存、已读覆盖、阅读时间、摘要、翻译、审核结果、正文/图片缓存、待同步队列和 Undo/Redo 清理。旧异步任务通过会话 revision 和图片 generation 防止迟到写回。用户已明确不要求恢复本机阅读时间、已读旧文章、AI 结果、审核结果和缓存，并假定切换前的业务操作已同步到 Folo。以后若要保留多账号离线内容，必须另行设计账号命名空间和数据迁移，不能在当前全局 box 上堆条件分支。
+
+不要回退：
+
+- 不要在收到浏览器一次性 token 后直接存储；必须先交换成长期会话并验证。
+- 不要在配置导入后才验证 Token；无效备份不能先清理当前账号。
+- 不要把“本地退出”改成远端 sign-out，除非同时重新讨论旧配置备份恢复语义。
+- 不要只清 Hive box 而忽略运行中的网络、AI 和图片任务；迟到写回会重新造成账号污染。
+
 ## 带浮动标签的设置输入控件上方必须为裁切容器预留缓冲
 
 背景：Android 设置页 `MobileSettingsSelectField<T>` 用 `InputDecorator` + `OutlineInputBorder` + `labelText`（如 LLM 卡片里的“模型”）。`OutlineInputBorder` 的浮动 label 中心对齐顶部边框线，上半部分会向上越出输入框自身布局框约 `labelHeight/2 × 0.75`（默认 16sp titleMedium 下约 `8.6px`）。之前已经修过一轮字段自身的裁切：`MobileSettingsSelectField` 本身不再用 `clipBehavior` 包裹 `InputDecorator`，外层只约束点击形状（见“Android 次级页面与目标设备圆角收敛”的边界说明）。那一轮没有覆盖字段被放进 `ExpansionTile` 后由上层容器引入的新裁切点。

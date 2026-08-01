@@ -1,6 +1,7 @@
 import '../http/feed_http.dart';
 import '../http/init.dart';
 import '../utils/storage.dart';
+import 'account_session_guard.dart';
 
 class PendingReadSyncItem {
   final String entryId;
@@ -99,13 +100,15 @@ abstract final class ReadSyncService {
 
   static Future<void> syncPendingReads() {
     if (_syncInFlight != null) return _syncInFlight!;
-    _syncInFlight = _syncPendingReadsInternal().whenComplete(() {
-      _syncInFlight = null;
+    final future = _syncPendingReadsInternal();
+    _syncInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_syncInFlight, future)) _syncInFlight = null;
     });
-    return _syncInFlight!;
   }
 
   static void clear() {
+    _syncInFlight = null;
     GStorage.localCache.delete(_pendingReadIdsKey);
   }
 
@@ -115,6 +118,7 @@ abstract final class ReadSyncService {
   }
 
   static Future<void> _syncPendingReadsInternal() async {
+    final accountRevision = AccountSessionGuard.revision;
     final items = pendingReadItems;
     if (items.isEmpty) {
       GStorage.localCache.put(
@@ -133,6 +137,7 @@ abstract final class ReadSyncService {
     for (final entry in grouped.entries) {
       final ids = entry.value.map((item) => item.entryId).toList();
       for (var i = 0; i < ids.length; i += 50) {
+        if (!AccountSessionGuard.isCurrent(accountRevision)) return;
         final end = i + 50 > ids.length ? ids.length : i + 50;
         final chunk = ids.sublist(i, end);
         var ok = false;
@@ -141,15 +146,19 @@ abstract final class ReadSyncService {
             entryIds: chunk,
             isInbox: entry.key,
           );
+          if (!AccountSessionGuard.isCurrent(accountRevision)) return;
           if (result is Success<void>) {
             ok = true;
             break;
           }
-          if (retry < 2) await Future.delayed(Duration(seconds: 1 << retry));
+          if (retry < 2) {
+            await Future.delayed(Duration(seconds: 1 << retry));
+          }
         }
         if (ok) removeMany(chunk);
       }
     }
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
     GStorage.localCache.put(
       _lastReadSyncAtKey,
       DateTime.now().millisecondsSinceEpoch,

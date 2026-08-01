@@ -86,6 +86,13 @@ flutter build apk --debug --no-pub
 flutter run -d <device-id> --no-pub
 ```
 
+## 2026-07-31 macOS Folo 浏览器登录与账号重建
+
+- `dart analyze lib test`：无 error/warning；仍只有仓库既有的 `prefer_initializing_formals` info。
+- `flutter test --no-pub`：125 项全部通过，新增账号切换隔离、官方登录 URL、候选账号显示名和 version 1 配置解析兼容测试。
+- `flutter build macos --debug --no-pub`：构建成功；只有 `video_player_avfoundation 2.9.6` 的既有 `AVKeyValueStatus` 弃用警告。
+- 仍需用户真实运行验证：未登录浏览器时的官方登录页；已登录浏览器的快速回调；等待页取消；同一账号退出后重新登录并重建；手动 Token；旧配置导入；Prompt/DeepSeek/外观等普通设置在退出与重建后保持不变。
+
 ## 常规检查
 
 推荐检查：

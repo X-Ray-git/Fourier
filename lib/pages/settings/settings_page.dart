@@ -17,6 +17,7 @@ import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/llm_config.dart';
 import '../../services/settings_backup_service.dart';
+import '../../services/folo_auth_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/translation_service.dart';
 import '../../router/app_pages.dart';
@@ -57,6 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _obscureToken = true;
   bool _obscureDeepseekKey = true;
   bool _testingCredentials = false;
+  bool _changingAccount = false;
   late String _appearanceMode;
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
@@ -151,7 +153,8 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  bool _saveCredentials({bool showSuccess = true}) {
+  Future<bool> _saveCredentials({bool showSuccess = true}) async {
+    if (_changingAccount) return false;
     final token = SecurityUtils.normalizeCredential(_tokenController.text);
     final deepseekKey = _deepseekApiKeyController.text.trim();
 
@@ -167,7 +170,18 @@ class _SettingsPageState extends State<SettingsPage> {
       return false;
     }
 
-    _accountService.saveSessionToken(token);
+    setState(() => _changingAccount = true);
+    try {
+      final candidate = await FoloAuthService.validateSessionToken(token);
+      if (!await _confirmAccountReplacement(candidate)) return false;
+      await _accountService.switchSessionToken(candidate.sessionToken);
+    } catch (error) {
+      AppFeedback.error('认证未保存', error.toString());
+      return false;
+    } finally {
+      if (mounted) setState(() => _changingAccount = false);
+    }
+
     if (deepseekKey.isNotEmpty) {
       TranslationService.setApiKey(deepseekKey);
       SummaryService.setApiKey(deepseekKey);
@@ -186,6 +200,53 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     }
     return true;
+  }
+
+  Future<bool> _confirmAccountReplacement(
+    FoloAccountCandidate candidate,
+  ) async {
+    final currentToken = _accountService.sessionToken?.trim() ?? '';
+    if (currentToken.isEmpty || currentToken == candidate.sessionToken) {
+      return true;
+    }
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _SettingsConfirmDialog(
+        title: '切换 Folo 账号',
+        content:
+            '将登录“${candidate.displayName}”。当前账号的本地文章、摘要、翻译、阅读记录、图片缓存和撤销历史会被清理；Prompt、AI 参数和界面偏好会保留。',
+        confirmLabel: '清理并切换',
+        onCancel: () => Get.back(result: false),
+        onConfirm: () => Get.back(result: true),
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _loginWithBrowser() async {
+    if (_changingAccount || !Platform.isMacOS) return;
+    setState(() => _changingAccount = true);
+    try {
+      final session = await FoloAuthService.startBrowserLogin();
+      if (!mounted) {
+        await session.cancel();
+        return;
+      }
+      final candidate = await showDialog<FoloAccountCandidate>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _BrowserLoginDialog(session: session),
+      );
+      if (candidate == null || !mounted) return;
+      if (!await _confirmAccountReplacement(candidate)) return;
+      await _accountService.switchSessionToken(candidate.sessionToken);
+      _tokenController.text = candidate.sessionToken;
+      AppFeedback.success('Folo 登录成功', '已登录 ${candidate.displayName}，正在重建本地内容');
+    } catch (error) {
+      if (mounted) AppFeedback.error('Folo 登录失败', error.toString());
+    } finally {
+      if (mounted) setState(() => _changingAccount = false);
+    }
   }
 
   Future<void> _testCredentials() async {
@@ -425,15 +486,31 @@ class _SettingsPageState extends State<SettingsPage> {
     };
   }
 
-  void _clear() {
-    _tokenController.clear();
-    _deepseekApiKeyController.clear();
-    _accountService.clearTokens();
-    TranslationService.setApiKey('');
-    SummaryService.setApiKey('');
-    GStorage.setting.delete('deepseek_api_key');
+  Future<void> _signOutLocally() async {
+    if (_changingAccount || !_accountService.isLoggedIn.value) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _SettingsConfirmDialog(
+        title: '退出 Folo 账号',
+        content:
+            '将从 Auto Folo 移除当前登录并清理本地文章、摘要、翻译、阅读记录、图片缓存和撤销历史。Prompt、AI 参数、DeepSeek Key 和界面偏好会保留；浏览器中的 Folo 登录不会退出。',
+        confirmLabel: '退出并清理',
+        onCancel: () => Get.back(result: false),
+        onConfirm: () => Get.back(result: true),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
 
-    AppFeedback.info('配置已清除', '已移除本地配置');
+    setState(() => _changingAccount = true);
+    try {
+      await _accountService.signOutLocally();
+      _tokenController.clear();
+      AppFeedback.info('已退出 Folo', '普通设置与 AI 配置均已保留');
+    } catch (error) {
+      AppFeedback.error('退出失败', error.toString());
+    } finally {
+      if (mounted) setState(() => _changingAccount = false);
+    }
   }
 
   Future<bool> _confirmSettingsExport() async {
@@ -487,8 +564,18 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _importSettingsFromClipboard() async {
     if (!await _confirmSettingsImport()) return;
     try {
-      final summary = await SettingsBackupService.importFromClipboard();
-      _accountService.reload();
+      final payload = await SettingsBackupService.readFromClipboard();
+      final nextToken = payload.sessionToken?.trim() ?? '';
+      if (nextToken.isNotEmpty) {
+        await FoloAuthService.validateSessionToken(nextToken);
+      }
+      final summary = await _accountService.applyAccountChange(
+        nextSessionToken: nextToken.isEmpty ? null : nextToken,
+        persist: () async {
+          await SettingsBackupService.applyPayload(payload);
+          return payload.summary;
+        },
+      );
       setState(_loadPersistedSettings);
       AppFeedback.success(
         '配置已导入',
@@ -702,6 +789,26 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            AppGlassButton(
+                              label: _accountService.isLoggedIn.value
+                                  ? '在浏览器中重新登录 Folo'
+                                  : '使用浏览器登录 Folo',
+                              icon: Icons.open_in_browser_rounded,
+                              onPressed: _changingAccount
+                                  ? null
+                                  : () => unawaited(_loginWithBrowser()),
+                              role: AppGlassButtonRole.primary,
+                              expand: true,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '也可以手动填写长期 Session Token',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
                             AppGlassTextField(
                               controller: _tokenController,
                               label: 'Session Token',
@@ -738,7 +845,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             const SizedBox(height: 12),
                             _CredentialActions(
                               useGlass: true,
-                              testing: _testingCredentials,
+                              testing: _testingCredentials || _changingAccount,
                               onTest: _testCredentials,
                               onSave: _saveCredentials,
                             ),
@@ -988,7 +1095,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        loggedIn ? '已配置 Token' : '未配置 Token',
+                        loggedIn ? '已登录 Folo' : '未登录 Folo',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -999,7 +1106,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        loggedIn ? '可以正常同步文章' : '需要填写 Folo API 认证',
+                        loggedIn ? '可以正常同步文章' : '可使用浏览器或 Token 登录',
                         style: TextStyle(
                           fontSize: 12,
                           color: colorScheme.onSurfaceVariant,
@@ -1023,9 +1130,11 @@ class _SettingsPageState extends State<SettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               AppGlassButton(
-                onPressed: _clear,
-                icon: Icons.delete_outline_rounded,
-                label: '清除账号',
+                onPressed: _accountService.isLoggedIn.value
+                    ? () => unawaited(_signOutLocally())
+                    : null,
+                icon: Icons.logout_rounded,
+                label: '退出账号',
                 role: AppGlassButtonRole.destructive,
                 expand: true,
               ),
@@ -1266,7 +1375,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 14),
                   _CredentialActions(
                     useGlass: false,
-                    testing: _testingCredentials,
+                    testing: _testingCredentials || _changingAccount,
                     onTest: _testCredentials,
                     onSave: _saveCredentials,
                   ),
@@ -1274,14 +1383,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
-                      onPressed: _clear,
+                      onPressed: _accountService.isLoggedIn.value
+                          ? () => unawaited(_signOutLocally())
+                          : null,
                       icon: Icon(
-                        Icons.delete_outline_rounded,
+                        Icons.logout_rounded,
                         size: 18,
                         color: colorScheme.error,
                       ),
                       label: Text(
-                        '清除认证',
+                        '退出 Folo 账号',
                         style: TextStyle(color: colorScheme.error),
                       ),
                     ),
@@ -1661,7 +1772,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
           _CredentialActions(
             useGlass: false,
-            testing: _testingCredentials,
+            testing: _testingCredentials || _changingAccount,
             onTest: _testCredentials,
             onSave: _saveCredentials,
           ),
@@ -1833,9 +1944,11 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 24),
 
           OutlinedButton.icon(
-            onPressed: _clear,
-            icon: const Icon(Icons.delete_outline_rounded),
-            label: const Text('清除账号与 API Key'),
+            onPressed: _accountService.isLoggedIn.value
+                ? () => unawaited(_signOutLocally())
+                : null,
+            icon: const Icon(Icons.logout_rounded),
+            label: const Text('退出 Folo 账号'),
           ),
 
           const SizedBox(height: 24),
@@ -2502,6 +2615,128 @@ class _SettingsConfirmDialog extends StatelessWidget {
   }
 }
 
+class _BrowserLoginDialog extends StatefulWidget {
+  const _BrowserLoginDialog({required this.session});
+
+  final FoloBrowserLoginSession session;
+
+  @override
+  State<_BrowserLoginDialog> createState() => _BrowserLoginDialogState();
+}
+
+class _BrowserLoginDialogState extends State<_BrowserLoginDialog> {
+  String? _error;
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.session.result
+        .then((candidate) {
+          _finished = true;
+          if (mounted) Navigator.of(context).pop(candidate);
+        })
+        .catchError((Object error) {
+          _finished = true;
+          if (mounted) setState(() => _error = error.toString());
+        });
+  }
+
+  @override
+  void dispose() {
+    if (!_finished) unawaited(widget.session.cancel());
+    super.dispose();
+  }
+
+  Future<void> _cancel() async {
+    if (!_finished) {
+      _finished = true;
+      await widget.session.cancel();
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Dialog(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: AppGlassSurface(
+          borderRadius: AppGlassRadii.panel,
+          padding: const EdgeInsets.all(20),
+          tone: AppGlassTone.panel,
+          nativeBackdrop: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '在浏览器中登录 Folo',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _error ??
+                    '已打开 Folo 官方登录页面。完成登录后会自动返回 Auto Folo；如果浏览器已经登录，授权可能会直接完成。',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: _error == null ? cs.onSurfaceVariant : cs.error,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  if (_error == null) ...[
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: cs.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '等待浏览器确认',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  AppGlassButton(
+                    label: _error == null ? '取消' : '关闭',
+                    onPressed: () => unawaited(_cancel()),
+                  ),
+                  if (_error == null) ...[
+                    const SizedBox(width: 10),
+                    AppGlassButton(
+                      label: '重新打开浏览器',
+                      icon: Icons.open_in_browser_rounded,
+                      onPressed: () => unawaited(widget.session.openBrowser()),
+                      role: AppGlassButtonRole.primary,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MacGlassSegmentedField<T> extends StatelessWidget {
   final T value;
   final List<T> options;
@@ -3104,7 +3339,7 @@ class _CredentialActions extends StatelessWidget {
   final bool useGlass;
   final bool testing;
   final Future<void> Function() onTest;
-  final bool Function({bool showSuccess}) onSave;
+  final Future<bool> Function({bool showSuccess}) onSave;
 
   const _CredentialActions({
     required this.useGlass,
@@ -3126,7 +3361,9 @@ class _CredentialActions extends StatelessWidget {
             AppGlassButton(
               label: '保存认证',
               icon: Icons.save_rounded,
-              onPressed: testing ? null : () => onSave(showSuccess: true),
+              onPressed: testing
+                  ? null
+                  : () => unawaited(onSave(showSuccess: true)),
               role: AppGlassButtonRole.primary,
             ),
           ]
@@ -3138,7 +3375,9 @@ class _CredentialActions extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
-              onPressed: testing ? null : () => onSave(showSuccess: true),
+              onPressed: testing
+                  ? null
+                  : () => unawaited(onSave(showSuccess: true)),
               icon: const Icon(Icons.save_rounded),
               label: const Text('保存认证'),
             ),

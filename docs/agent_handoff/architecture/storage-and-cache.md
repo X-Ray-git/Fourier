@@ -21,6 +21,17 @@ Hive box 在 `lib/utils/storage.dart` 中初始化。
 - 不要提交真实 API 响应、文章 HTML、token 或调试脚本。使用已忽略的 `scratch/`。
 - 设置导入/导出刻意使用白名单；新增需要跨设备迁移的持久设置时，要加入 `SettingsBackupService`。
 
+## 账号数据生命周期
+
+- `setting` 中的 Prompt、DeepSeek Key、模型参数、外观、布局、滚动参数和 feed 偏好属于普通配置，退出或切换 Folo 账号时保留。
+- `localCache`、`readStatus`、`articleDb`、`translations`、`summaries`、`readHistory` 属于当前 Folo 账号；Session Token 变化或本地退出时由 `AccountDataService.clearForAccountChange()` 统一清空。
+- `setting` 中 `readability_fetched_<entryId>` 和 `inbox_detail_fetched_<entryId>` 虽然位于设置 box，实际是文章级瞬态标记，账号变化时必须删除。`feed_auto_*` 和 `feed_silent_*` 是用户偏好，继续保留。
+- 清理前由 `AccountSessionGuard.beginAccountChange()` 进入隔离期，并停止过滤、正文抓取、翻译、摘要和图片预取队列。Folo Dio interceptor 在隔离期拒绝新请求，也会拒绝旧 revision 的迟到响应；翻译、摘要、过滤、正文抓取和图片下载还各自在落盘前复核 revision/generation。凭据写入后由 `finishAccountChange()` 再推进一次 revision，覆盖清理窗口内启动的任务。
+- `ReadSyncService` 的旧待同步已读任务和 `SubscriptionCatalogService` 的旧目录同步也必须捕获 revision；账号变化后不得继续重试、补写时间戳、删除新账号队列项或把旧订阅缓存重新写回。
+- 图片缓存切换时清空 `DefaultCacheManager`，运行中的旧下载完成后必须依据 generation 删除其结果，不能登记失败、重试或重新写入旧文章索引。
+- 清理后必须重置 `LocalArticleDbService` 内存缓存、订阅目录、正文规范化缓存、长度估算缓存、AI 运行时记录和 Undo/Redo，并发出全量文章状态通知。
+- 用户接受重建只恢复服务器仍提供的订阅、未读文章和已同步已读状态；本机阅读时间、超出同步窗口的已读旧文、摘要/翻译、审核结果、正文/图片缓存及 Undo/Redo 不保证恢复。
+
 ## macOS 正文图片缓存
 
 - `ArticleImageCacheService` 负责 macOS 与 Android 正文图片的文章级缓存键、预取调度和已读后清理。两端正常阅读、后台预取和图片查看器共用同一套文章级键；历史 `v2_<url>` 文件不自动迁移或清理。

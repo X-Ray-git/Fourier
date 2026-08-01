@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 
 import '../../http/init.dart';
 import '../../models/feed.dart';
+import '../../services/account_session_guard.dart';
 import '../../services/account_service.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/content_cache_service.dart';
@@ -42,6 +43,7 @@ class SubscriptionsController extends GetxController {
   final viewNodes = <SourceViewNode>[].obs;
   final expandedState = <String, bool>{}.obs;
   Worker? _catalogWorker;
+  Worker? _accountWorker;
 
   @override
   void onInit() {
@@ -49,6 +51,10 @@ class SubscriptionsController extends GetxController {
     _catalogWorker = ever(
       SubscriptionCatalogService.version,
       (_) => _applyFeeds(SubscriptionCatalogService.feeds),
+    );
+    _accountWorker = ever(
+      AccountService.instance.accountRevision,
+      (_) => loadData(),
     );
     refreshUnreadCounts();
     loadData();
@@ -62,10 +68,12 @@ class SubscriptionsController extends GetxController {
   @override
   void onClose() {
     _catalogWorker?.dispose();
+    _accountWorker?.dispose();
     super.onClose();
   }
 
   Future<void> loadData() async {
+    final accountRevision = AccountSessionGuard.revision;
     refreshUnreadCounts();
     if (!AccountService.instance.isLoggedIn.value) {
       loadingState.value = const LoadError('请先在“设置”页配置 Folo Token');
@@ -83,6 +91,7 @@ class SubscriptionsController extends GetxController {
     }
 
     final result = await SubscriptionCatalogService.sync();
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
     if (result.feeds.isNotEmpty || result.anySucceeded) {
       _applyFeeds(result.feeds);
     } else if (cached.isEmpty) {

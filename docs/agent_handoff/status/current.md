@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-07-29：
+截至 2026-07-31：
 
 - `main` 是当前集成分支。
 - Android 设计迁移已通过 merge commit `bd8c1b8` 合入 `main`；新代理应以 `main` 中的移动端实现为当前事实，不再等待旧 `android` 分支。
@@ -17,6 +17,7 @@
 - Dart package 名仍是 `autofolo`。
 - Android application id、macOS bundle id、MethodChannel 命名空间使用 `io.github.xraygit.autofolo`。
 - 这是 X-Ray 个人使用的软件，围绕 Folo 使用场景构建，但不能暗示官方 Folo 所有权。
+- macOS 已接入 Folo 官方网页 + loopback callback 登录；手动长期 Session Token 与 version 1 配置导入继续兼容。当前是单一活动账号，本地退出/Token 变化会保留普通设置并重建全部账号内容，不执行 Folo 远端 sign-out。
 
 用户最近已验证：
 

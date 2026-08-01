@@ -11,6 +11,7 @@ import 'local_article_db_service.dart';
 import 'feed_readability_settings_service.dart';
 import 'auto_ai_queue_coordinator.dart';
 import 'auto_filter_worker.dart';
+import 'account_session_guard.dart';
 
 abstract final class AutoReadabilityWorker {
   static final _queue = <ArticleModel>[];
@@ -65,6 +66,7 @@ abstract final class AutoReadabilityWorker {
   }
 
   static Future<void> _processArticle(ArticleModel article) async {
+    final accountRevision = AccountSessionGuard.revision;
     try {
       ArticleModel processedArticle = article;
       var rawContent = article.content ?? '';
@@ -77,7 +79,8 @@ abstract final class AutoReadabilityWorker {
             entryId: article.entryId,
           );
           if (detailResult is Success<String> &&
-              detailResult.response.isNotEmpty) {
+              detailResult.response.isNotEmpty &&
+              AccountSessionGuard.isCurrent(accountRevision)) {
             rawContent = detailResult.response;
             processedArticle = ArticleModel(
               entryId: article.entryId,
@@ -117,10 +120,12 @@ abstract final class AutoReadabilityWorker {
 
       // 仅当该订阅源开启了 Readability 开关时才抓取长文
       if (!hasFetched && isManualForced && article.url.isNotEmpty) {
+        if (!AccountSessionGuard.isCurrent(accountRevision)) return;
         // 立即打上标记，防止无论成功失败都反复重试
         GStorage.setting.put(hasFetchedKey, true);
         try {
           final response = await Request.dio.get(article.url);
+          if (!AccountSessionGuard.isCurrent(accountRevision)) return;
           final document = html_parser.parse(response.data.toString());
           final node = ArticleContentUtils.getReadabilityContent(document);
           if (node != null) {
@@ -158,12 +163,20 @@ abstract final class AutoReadabilityWorker {
         }
       }
 
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return;
       // 过滤保持原有行为；自动 AI 调度统一按最新持久化状态判断，避免
       // 上游队列中的旧未读快照在标记已读后重新入队。
       AutoFilterWorker.enqueue(processedArticle);
       AutoAiQueueCoordinator.onArticleContentAvailable(processedArticle);
     } finally {
-      _queuedIds.remove(article.entryId);
+      if (AccountSessionGuard.isCurrent(accountRevision)) {
+        _queuedIds.remove(article.entryId);
+      }
     }
+  }
+
+  static void cancelProcessing() {
+    _queue.clear();
+    _queuedIds.clear();
   }
 }

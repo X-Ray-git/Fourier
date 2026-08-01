@@ -8,6 +8,7 @@ import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
+import 'account_session_guard.dart';
 
 enum SummaryStatus { idle, pending, done, error }
 
@@ -179,14 +180,18 @@ abstract final class SummaryService {
     final existing = _inFlight[article.entryId];
     if (existing != null) return existing;
 
+    final accountRevision = AccountSessionGuard.revision;
     final future = _summarizeArticleInternal(
       article,
       targetLang,
       overrideContent,
+      accountRevision,
     );
     _inFlight[article.entryId] = future;
     future.whenComplete(() {
-      _inFlight.remove(article.entryId);
+      if (identical(_inFlight[article.entryId], future)) {
+        _inFlight.remove(article.entryId);
+      }
     });
     return future;
   }
@@ -195,6 +200,7 @@ abstract final class SummaryService {
     ArticleModel article,
     String targetLang,
     String? overrideContent,
+    int accountRevision,
   ) async {
     final apiKey = getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -226,12 +232,13 @@ abstract final class SummaryService {
         errorMessage: '文章内容为空，无法生成摘要',
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
-      _writeRecord(article.entryId, record);
+      _writeRecord(article.entryId, record, accountRevision: accountRevision);
       return record;
     }
 
     final systemPrompt = getPrompt(targetLang);
-    final maxRetries = GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final maxRetries =
+        GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
     for (int attempt = 1; attempt <= totalAttempts; attempt++) {
@@ -254,7 +261,13 @@ abstract final class SummaryService {
           ...llmConfig.toRequestBody(),
         };
 
-        final response = await _dio.post('/chat/completions', data: requestBody);
+        final response = await _dio.post(
+          '/chat/completions',
+          data: requestBody,
+        );
+        if (!AccountSessionGuard.isCurrent(accountRevision)) {
+          throw const _StaleAccountOperation();
+        }
 
         final content = _extractMessageContent(response.data);
         if (content == null || content.trim().isEmpty) {
@@ -264,7 +277,8 @@ abstract final class SummaryService {
         Map<String, dynamic> parsed;
         try {
           parsed =
-              jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
+              jsonDecode(_normalizeJsonPayload(content))
+                  as Map<String, dynamic>;
         } on FormatException {
           final recovered = _extractJsonObject(content);
           if (recovered != null) {
@@ -284,12 +298,17 @@ abstract final class SummaryService {
           summaryText: summaryText,
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         );
-        _writeRecord(article.entryId, record);
+        _writeRecord(article.entryId, record, accountRevision: accountRevision);
         return record;
       } catch (e) {
+        if (e is _StaleAccountOperation ||
+            !AccountSessionGuard.isCurrent(accountRevision)) {
+          rethrow;
+        }
         if (attempt < totalAttempts) {
           debugPrint(
-              '[Summary] Attempt $attempt failed for ${article.entryId}, retrying in 1s...');
+            '[Summary] Attempt $attempt failed for ${article.entryId}, retrying in 1s...',
+          );
           await Future.delayed(const Duration(seconds: 1));
           continue;
         }
@@ -305,7 +324,12 @@ abstract final class SummaryService {
           errorMessage = e.toString();
         }
 
-        _restoreAfterFailure(article.entryId, previous, errorMessage);
+        _restoreAfterFailure(
+          article.entryId,
+          previous,
+          errorMessage,
+          accountRevision,
+        );
         return SummaryRecord(
           status: SummaryStatus.error,
           errorMessage: errorMessage,
@@ -327,10 +351,17 @@ abstract final class SummaryService {
     GStorage.summaries.delete(entryId);
   }
 
+  static void resetForAccountChange() {
+    _records.clear();
+    _inFlight.clear();
+    _hydrated = false;
+  }
+
   static void _restoreAfterFailure(
     String entryId,
     SummaryRecord? previous,
     String errorMessage,
+    int accountRevision,
   ) {
     if (previous != null) {
       _writeRecord(
@@ -342,6 +373,7 @@ abstract final class SummaryService {
           errorMessage: errorMessage,
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         ),
+        accountRevision: accountRevision,
       );
     } else {
       final record = SummaryRecord(
@@ -349,11 +381,19 @@ abstract final class SummaryService {
         errorMessage: errorMessage,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
-      _writeRecord(entryId, record);
+      _writeRecord(entryId, record, accountRevision: accountRevision);
     }
   }
 
-  static void _writeRecord(String entryId, SummaryRecord record) {
+  static void _writeRecord(
+    String entryId,
+    SummaryRecord record, {
+    int? accountRevision,
+  }) {
+    if (accountRevision != null &&
+        !AccountSessionGuard.isCurrent(accountRevision)) {
+      return;
+    }
     ensureHydrated();
     _records[entryId] = record;
     GStorage.summaries.put(entryId, record.toJson());
@@ -399,4 +439,8 @@ abstract final class SummaryService {
       return null;
     }
   }
+}
+
+class _StaleAccountOperation implements Exception {
+  const _StaleAccountOperation();
 }

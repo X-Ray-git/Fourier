@@ -9,6 +9,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/html_entity_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
+import 'account_session_guard.dart';
 
 enum TranslationStatus { idle, pending, done, error }
 
@@ -229,14 +230,18 @@ abstract final class TranslationService {
     final existing = _inFlight[article.entryId];
     if (existing != null) return existing;
 
+    final accountRevision = AccountSessionGuard.revision;
     final future = _translateArticleInternal(
       article,
       targetLang,
       overrideContent,
+      accountRevision,
     );
     _inFlight[article.entryId] = future;
     future.whenComplete(() {
-      _inFlight.remove(article.entryId);
+      if (identical(_inFlight[article.entryId], future)) {
+        _inFlight.remove(article.entryId);
+      }
     });
     return future;
   }
@@ -245,6 +250,7 @@ abstract final class TranslationService {
     ArticleModel article,
     String targetLang,
     String? overrideContent,
+    int accountRevision,
   ) async {
     final apiKey = getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -273,7 +279,13 @@ abstract final class TranslationService {
     // 正文过大时分块翻译，避免 LLM 输出畸形 JSON
     const chunkThreshold = 35 * 1024;
     if (htmlContent.length > chunkThreshold) {
-      return _translateInChunks(article, targetLang, htmlContent, previous);
+      return _translateInChunks(
+        article,
+        targetLang,
+        htmlContent,
+        previous,
+        accountRevision,
+      );
     }
     if (htmlContent.isEmpty) {
       final record = TranslationRecord(
@@ -281,7 +293,7 @@ abstract final class TranslationService {
         errorMessage: '文章内容为空，无法翻译',
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
-      _writeRecord(article.entryId, record);
+      _writeRecord(article.entryId, record, accountRevision: accountRevision);
       return record;
     }
 
@@ -314,6 +326,9 @@ abstract final class TranslationService {
           '/chat/completions',
           data: requestBody,
         );
+        if (!AccountSessionGuard.isCurrent(accountRevision)) {
+          throw const _StaleAccountOperation();
+        }
 
         final content = _extractMessageContent(response.data);
         if (content == null || content.trim().isEmpty) {
@@ -355,9 +370,13 @@ abstract final class TranslationService {
           translatedContent: _cleanTranslatedContent(translatedHtml),
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         );
-        _writeRecord(article.entryId, record);
+        _writeRecord(article.entryId, record, accountRevision: accountRevision);
         return record;
       } catch (e) {
+        if (e is _StaleAccountOperation ||
+            !AccountSessionGuard.isCurrent(accountRevision)) {
+          rethrow;
+        }
         if (attempt < totalAttempts) {
           debugPrint(
             '[Translation] Attempt $attempt failed for ${article.entryId}, retrying in 1s...',
@@ -377,7 +396,12 @@ abstract final class TranslationService {
           errorMessage = e.toString();
         }
 
-        _restoreAfterFailure(article.entryId, previous, errorMessage);
+        _restoreAfterFailure(
+          article.entryId,
+          previous,
+          errorMessage,
+          accountRevision,
+        );
         return TranslationRecord(
           status: TranslationStatus.error,
           errorMessage: errorMessage,
@@ -403,6 +427,7 @@ abstract final class TranslationService {
     String targetLang,
     String htmlContent,
     TranslationRecord? previous,
+    int accountRevision,
   ) async {
     final apiKey = getApiKey()!;
     final chunks = _splitHtmlIntoChunks(htmlContent);
@@ -422,8 +447,15 @@ abstract final class TranslationService {
         llmConfig: llmConfig,
         attempt: attempt,
       );
+      if (!AccountSessionGuard.isCurrent(accountRevision)) {
+        throw const _StaleAccountOperation();
+      }
       if (result.record != null) {
-        _writeRecord(article.entryId, result.record!);
+        _writeRecord(
+          article.entryId,
+          result.record!,
+          accountRevision: accountRevision,
+        );
         return result.record!;
       }
       lastFailureSummary = result.failureSummary;
@@ -432,7 +464,12 @@ abstract final class TranslationService {
     final errorMessage = lastFailureSummary == null
         ? '分块翻译失败，已重试${totalAttempts - 1}次'
         : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：$lastFailureSummary';
-    _restoreAfterFailure(article.entryId, previous, errorMessage);
+    _restoreAfterFailure(
+      article.entryId,
+      previous,
+      errorMessage,
+      accountRevision,
+    );
     return TranslationRecord(
       status: TranslationStatus.error,
       errorMessage: errorMessage,
@@ -620,10 +657,18 @@ abstract final class TranslationService {
     recordsVersion.value++;
   }
 
+  static void resetForAccountChange() {
+    _records.clear();
+    _inFlight.clear();
+    _hydrated = false;
+    recordsVersion.value++;
+  }
+
   static void _restoreAfterFailure(
     String entryId,
     TranslationRecord? previous,
     String errorMessage,
+    int accountRevision,
   ) {
     if (previous != null) {
       _writeRecord(
@@ -635,6 +680,7 @@ abstract final class TranslationService {
           errorMessage: errorMessage,
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         ),
+        accountRevision: accountRevision,
       );
     } else {
       final record = TranslationRecord(
@@ -642,11 +688,19 @@ abstract final class TranslationService {
         errorMessage: errorMessage,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
-      _writeRecord(entryId, record);
+      _writeRecord(entryId, record, accountRevision: accountRevision);
     }
   }
 
-  static void _writeRecord(String entryId, TranslationRecord record) {
+  static void _writeRecord(
+    String entryId,
+    TranslationRecord record, {
+    int? accountRevision,
+  }) {
+    if (accountRevision != null &&
+        !AccountSessionGuard.isCurrent(accountRevision)) {
+      return;
+    }
     ensureHydrated();
     _records[entryId] = record;
     GStorage.translations.put(entryId, record.toJson());
@@ -734,6 +788,10 @@ abstract final class TranslationService {
     }
     return null;
   }
+}
+
+class _StaleAccountOperation implements Exception {
+  const _StaleAccountOperation();
 }
 
 // ─── 分块翻译结果 ─────────────────────────────

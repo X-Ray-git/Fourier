@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../http/feed_http.dart';
 import '../http/init.dart';
 import '../models/feed.dart';
+import 'account_session_guard.dart';
 import 'content_cache_service.dart';
 
 class SubscriptionCatalogSyncResult {
@@ -31,6 +32,12 @@ abstract final class SubscriptionCatalogService {
   static Future<SubscriptionCatalogSyncResult>? _syncInFlight;
 
   static List<FeedModel> get feeds => List.unmodifiable(_feeds);
+
+  static void reset() {
+    _feeds = const [];
+    _syncInFlight = null;
+    version.value++;
+  }
 
   static void upsertLocal(FeedModel feed) {
     if (feed.feedId.isEmpty) return;
@@ -63,6 +70,7 @@ abstract final class SubscriptionCatalogService {
   }
 
   static Future<SubscriptionCatalogSyncResult> _syncInternal() async {
+    final accountRevision = AccountSessionGuard.revision;
     final cached = ContentCacheService.readSubscriptions();
     if (_feeds.isEmpty && cached.isNotEmpty) _feeds = cached;
 
@@ -70,6 +78,13 @@ abstract final class SubscriptionCatalogService {
       FeedHttp.getSubscriptions(),
       FeedHttp.getInboxes(),
     ]);
+    if (!AccountSessionGuard.isCurrent(accountRevision)) {
+      return const SubscriptionCatalogSyncResult(
+        feeds: [],
+        subscriptionsSucceeded: false,
+        inboxesSucceeded: false,
+      );
+    }
     final subscriptionsResult = results[0];
     final inboxesResult = results[1];
 

@@ -852,6 +852,7 @@ class TimelineController extends GetxController {
       filterReason: updatedFromDb.filterReason,
       filterReviewed: updatedFromDb.filterReviewed,
       filteredAt: updatedFromDb.filteredAt,
+      userAction: updatedFromDb.userAction,
     );
 
     allArticles[idx] = finalUpdated;
@@ -923,6 +924,7 @@ class TimelineController extends GetxController {
       filterReason: article.filterReason,
       filterReviewed: article.filterReviewed,
       filteredAt: article.filteredAt,
+      userAction: article.userAction,
     );
   }
 
@@ -948,6 +950,7 @@ class TimelineController extends GetxController {
           filterReason: a.filterReason,
           filterReviewed: a.filterReviewed,
           filteredAt: a.filteredAt,
+          userAction: a.userAction,
         );
       }
       return a;

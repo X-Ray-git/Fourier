@@ -17,7 +17,15 @@ import 'bounded_history.dart';
 import 'local_article_db_service.dart';
 import 'read_sync_service.dart';
 
-enum UndoActionType { read, batchRead, filterReject, filterKeep, custom }
+enum UndoActionType {
+  read,
+  batchRead,
+  filterReject,
+  filterKeep,
+  misclassifyKeep,
+  misclassifySpam,
+  custom,
+}
 
 typedef UndoCommandCallback = Future<bool> Function();
 
@@ -72,6 +80,8 @@ class UndoAction {
     UndoActionType.batchRead => '批量标为已读',
     UndoActionType.filterReject => '从垃圾拦截移除',
     UndoActionType.filterKeep => '在垃圾拦截中保留',
+    UndoActionType.misclassifyKeep => '移出垃圾拦截并标为已读',
+    UndoActionType.misclassifySpam => '移入垃圾拦截并标为已读',
     UndoActionType.custom => customActionName!,
   };
 
@@ -80,6 +90,8 @@ class UndoAction {
     UndoActionType.batchRead => '将 ${articles.length} 篇静默文章标为已读',
     UndoActionType.filterReject => '从垃圾拦截移除《${article.title}》',
     UndoActionType.filterKeep => '在垃圾拦截中保留《${article.title}》',
+    UndoActionType.misclassifyKeep => '移出垃圾拦截并标为已读《${article.title}》',
+    UndoActionType.misclassifySpam => '移入垃圾拦截并标为已读《${article.title}》',
     UndoActionType.custom => customDescription!,
   };
 }
@@ -153,6 +165,16 @@ class UndoService {
       type == UndoActionType.filterReject || type == UndoActionType.filterKeep,
     );
     _record(type, article);
+  }
+
+  static void recordMisclassifyAction(
+    ArticleModel article, {
+    required bool reject,
+  }) {
+    _record(
+      reject ? UndoActionType.misclassifySpam : UndoActionType.misclassifyKeep,
+      article,
+    );
   }
 
   static void recordCustom({
@@ -252,7 +274,10 @@ class UndoService {
     if (recordHistory) {
       recordFilterAction(article, UndoActionType.filterKeep);
     }
-    AutoFilterWorker.unReject(article.entryId);
+    AutoFilterWorker.unReject(
+      article.entryId,
+      userAction: ArticleModel.userActionKeep,
+    );
     GStorage.readStatus.delete(article.entryId);
     _refreshTimelineArticleFromCache(article.entryId);
   }
@@ -265,10 +290,49 @@ class UndoService {
       recordFilterAction(article, UndoActionType.filterReject);
     }
     LocalArticleDbService.upsertOne(
-      _copyArticle(article, isRead: article.isRead, filterReviewed: true),
+      _copyArticle(
+        article,
+        isRead: article.isRead,
+        filterReviewed: true,
+        userAction: ArticleModel.userActionReject,
+      ),
     );
     applyReadLocally(article, recordHistory: false);
     ArticleStateNotifier.tick(article.entryId);
+  }
+
+  /// 误分类：翻转拒绝状态并标为已读（原子动作，写 userAction 标记）
+  static void applyMisclassify(
+    ArticleModel article, {
+    required bool reject,
+    bool recordHistory = true,
+    bool deferTimelineVisualUpdate = false,
+  }) {
+    if (recordHistory) {
+      recordMisclassifyAction(article, reject: reject);
+    }
+    if (reject) {
+      LocalArticleDbService.upsertOne(
+        _copyArticle(
+          article,
+          isRead: true,
+          filterReviewed: true,
+          isRejectedByAi: true,
+          userAction: ArticleModel.userActionMisclassifySpam,
+        ),
+      );
+    } else {
+      // 保持方向必须用原始 map 写入，upsertMany 的拒绝 OR 合并无法撤回拒绝
+      AutoFilterWorker.unReject(
+        article.entryId,
+        userAction: ArticleModel.userActionMisclassifyKeep,
+      );
+    }
+    applyReadLocally(
+      article,
+      recordHistory: false,
+      deferTimelineVisualUpdate: deferTimelineVisualUpdate,
+    );
   }
 
   static Future<void> markAsRead(
@@ -448,7 +512,8 @@ class UndoService {
     final article = action.article;
 
     if (action.type == UndoActionType.filterKeep) {
-      LocalArticleDbService.upsertOne(article);
+      // 整条替换快照：merge 的 ?? 会保留动作前的 userAction 标记
+      LocalArticleDbService.upsertOne(article, forceReplace: true);
       _replaceTimelineArticle(article);
       ArticleStateNotifier.tick(article.entryId);
       _notifyRestored(action);
@@ -456,8 +521,15 @@ class UndoService {
       return article;
     }
 
-    if (action.type == UndoActionType.filterReject) {
-      LocalArticleDbService.upsertOne(article);
+    if (action.type == UndoActionType.filterReject ||
+        action.type == UndoActionType.misclassifyKeep) {
+      // 整条替换快照：OR 合并会把动作标记（m/n_keep）留在已回滚的文章上
+      LocalArticleDbService.upsertOne(article, forceReplace: true);
+      _replaceTimelineArticle(article);
+    } else if (action.type == UndoActionType.misclassifySpam) {
+      // OR 合并无法把已拒绝恢复为未拒绝，必须整条替换
+      LocalArticleDbService.upsertOne(article, forceReplace: true);
+      _replaceTimelineArticle(article);
     }
 
     if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
@@ -467,6 +539,7 @@ class UndoService {
         _notifyRestored(action);
         return article;
       }
+      _restoreAppliedFilterAction(action);
       _rollbackUndo(action);
       return null;
     }
@@ -493,11 +566,7 @@ class UndoService {
         LocalArticleDbService.setReadState(article.entryId, true);
         ArticleStateNotifier.tick(article.entryId);
       }
-      if (action.type == UndoActionType.filterReject) {
-        LocalArticleDbService.upsertOne(
-          _copyArticle(article, isRead: true, filterReviewed: true),
-        );
-      }
+      _restoreAppliedFilterAction(action);
       _rollbackUndo(action);
       AppFeedback.error('撤销失败', '网络请求失败，已恢复为已读');
       return null;
@@ -576,6 +645,22 @@ class UndoService {
       case UndoActionType.filterKeep:
         applyFilterKeep(action.article, recordHistory: false);
         break;
+      case UndoActionType.misclassifyKeep:
+        applyMisclassify(
+          action.article,
+          reject: false,
+          recordHistory: false,
+          deferTimelineVisualUpdate: true,
+        );
+        break;
+      case UndoActionType.misclassifySpam:
+        applyMisclassify(
+          action.article,
+          reject: true,
+          recordHistory: false,
+          deferTimelineVisualUpdate: true,
+        );
+        break;
       case UndoActionType.custom:
         throw StateError('自定义重做应在 switch 前处理');
     }
@@ -642,10 +727,53 @@ class UndoService {
     controller.allArticles.refresh();
   }
 
+  static void _restoreAppliedFilterAction(UndoAction action) {
+    final article = action.article;
+    final restored = appliedFilterSnapshot(action);
+    if (restored == null) return;
+
+    GStorage.readStatus.put(article.entryId, true);
+    LocalArticleDbService.upsertOne(restored, forceReplace: true);
+    _replaceTimelineArticle(restored);
+    if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
+      Get.find<ArticleController>(tag: article.entryId).isRead.value = true;
+    }
+    ArticleStateNotifier.tick(article.entryId);
+  }
+
+  static ArticleModel? appliedFilterSnapshot(UndoAction action) {
+    final article = action.article;
+    return switch (action.type) {
+      UndoActionType.filterReject => _copyArticle(
+        article,
+        isRead: true,
+        filterReviewed: true,
+        userAction: ArticleModel.userActionReject,
+      ),
+      UndoActionType.misclassifyKeep => _copyArticle(
+        article,
+        isRead: true,
+        filterReviewed: true,
+        isRejectedByAi: false,
+        userAction: ArticleModel.userActionMisclassifyKeep,
+      ),
+      UndoActionType.misclassifySpam => _copyArticle(
+        article,
+        isRead: true,
+        filterReviewed: true,
+        isRejectedByAi: true,
+        userAction: ArticleModel.userActionMisclassifySpam,
+      ),
+      _ => null,
+    };
+  }
+
   static ArticleModel _copyArticle(
     ArticleModel article, {
     required bool isRead,
     required bool filterReviewed,
+    bool? isRejectedByAi,
+    String? userAction,
   }) {
     return ArticleModel(
       entryId: article.entryId,
@@ -661,10 +789,11 @@ class UndoService {
       subscriptionCategory: article.subscriptionCategory,
       author: article.author,
       imageUrl: article.imageUrl,
-      isRejectedByAi: article.isRejectedByAi,
+      isRejectedByAi: isRejectedByAi ?? article.isRejectedByAi,
       filterReason: article.filterReason,
       filterReviewed: filterReviewed,
       filteredAt: article.filteredAt,
+      userAction: userAction ?? article.userAction,
     );
   }
 

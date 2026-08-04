@@ -1,6 +1,7 @@
 import 'package:autofolo/services/mac_article_shortcut_service.dart';
 import 'package:autofolo/common/widgets/mac_empty_placeholder.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -65,5 +66,26 @@ void main() {
     await tester.pump();
 
     expect(focusNode.hasFocus, isTrue);
+  });
+
+  testWidgets('recognizes modifiers that must bypass article shortcuts', (
+    tester,
+  ) async {
+    expect(MacArticleShortcutService.hasNonShiftModifier, isFalse);
+
+    for (final key in <LogicalKeyboardKey>[
+      LogicalKeyboardKey.metaLeft,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.altLeft,
+    ]) {
+      await tester.sendKeyDownEvent(key);
+      expect(MacArticleShortcutService.hasNonShiftModifier, isTrue);
+      await tester.sendKeyUpEvent(key);
+      expect(MacArticleShortcutService.hasNonShiftModifier, isFalse);
+    }
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    expect(MacArticleShortcutService.hasNonShiftModifier, isFalse);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
   });
 }

@@ -43,12 +43,21 @@ abstract final class LocalArticleDbService {
     return null;
   }
 
-  static void upsertMany(List<ArticleModel> source, {bool? defaultReadState}) {
+  static void upsertMany(
+    List<ArticleModel> source, {
+    bool? defaultReadState,
+    bool forceReplace = false,
+  }) {
     if (source.isEmpty) return;
     final updates = <String, dynamic>{};
 
     for (final item in source) {
       if (item.entryId.isEmpty) continue;
+
+      if (forceReplace) {
+        updates[item.entryId] = item.toJson();
+        continue;
+      }
 
       final existingRaw = GStorage.articleDb.get(item.entryId);
       final existing = existingRaw is Map
@@ -109,6 +118,7 @@ abstract final class LocalArticleDbService {
         filteredAt: mergedRejected
             ? (item.filteredAt ?? existing?.filteredAt)
             : null,
+        userAction: item.userAction ?? existing?.userAction,
       );
 
       updates[item.entryId] = merged.toJson();
@@ -122,8 +132,8 @@ abstract final class LocalArticleDbService {
     _trimOverflow();
   }
 
-  static void upsertOne(ArticleModel article) {
-    upsertMany([article]);
+  static void upsertOne(ArticleModel article, {bool forceReplace = false}) {
+    upsertMany([article], forceReplace: forceReplace);
   }
 
   static void recordReadHistory(String entryId) {
@@ -166,6 +176,7 @@ abstract final class LocalArticleDbService {
       filterReason: old.filterReason,
       filterReviewed: old.filterReviewed,
       filteredAt: old.filteredAt,
+      userAction: old.userAction,
     );
     GStorage.articleDb.put(entryId, updated.toJson());
     invalidateCache();
@@ -174,13 +185,13 @@ abstract final class LocalArticleDbService {
     }
   }
 
-  static void clearFilterState(String entryId) {
+  static void clearFilterState(String entryId, {String? userAction}) {
     final raw = GStorage.articleDb.get(entryId);
     if (raw is! Map) return;
     raw['isRejectedByAi'] = false;
-    raw['filterReason'] = null;
+    // 保留 filterReason/filteredAt，供事后统计 AI 原判理由
     raw['filterReviewed'] = true;
-    raw['filteredAt'] = null;
+    if (userAction != null) raw['userAction'] = userAction;
     GStorage.articleDb.put(entryId, raw);
     invalidateCache();
   }

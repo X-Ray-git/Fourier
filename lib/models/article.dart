@@ -15,10 +15,16 @@ class ArticleModel {
   final String subscriptionCategory;
   final String? author;
   final String? imageUrl;
+  static const String userActionKeep = 'k';
+  static const String userActionReject = 'm';
+  static const String userActionMisclassifyKeep = 'n_keep';
+  static const String userActionMisclassifySpam = 'n_spam';
+
   final bool isRejectedByAi;
   final String? filterReason;
   final bool filterReviewed; // 用户已审核过，不再重判
   final int? filteredAt; // 拦截判定完成的时间戳（毫秒）
+  final String? userAction; // 用户动作标记，事后统计误分类用
 
   ArticleModel({
     required this.entryId,
@@ -38,6 +44,7 @@ class ArticleModel {
     this.filterReason,
     this.filterReviewed = false,
     this.filteredAt,
+    this.userAction,
   });
 
   factory ArticleModel.fromEntryJson(
@@ -134,6 +141,7 @@ class ArticleModel {
     'filterReason': filterReason,
     'filterReviewed': filterReviewed,
     'filteredAt': filteredAt,
+    'userAction': userAction,
   };
 
   factory ArticleModel.fromCache(Map<String, dynamic> json) => ArticleModel(
@@ -158,6 +166,7 @@ class ArticleModel {
     ),
     filterReviewed: json['filterReviewed'] as bool? ?? false,
     filteredAt: json['filteredAt'] as int?,
+    userAction: json['userAction'] as String?,
   );
 
   String get displayCategory =>

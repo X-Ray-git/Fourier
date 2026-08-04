@@ -271,14 +271,24 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     if (event is! KeyDownEvent) return false;
 
     if (!Platform.isMacOS || !_isActiveMacReviewPage) return false;
-    if (event.logicalKey == LogicalKeyboardKey.keyK) {
-      final selected = _selectedArticle.value;
-      if (selected != null) {
+    if (MacArticleShortcutService.hasNonShiftModifier) {
+      return false;
+    }
+    final selected = _selectedArticle.value;
+    if (selected == null) return false;
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.keyK:
         _keep(selected, source: 'keyK');
         return true;
-      }
+      case LogicalKeyboardKey.keyM:
+        _reject(selected, source: 'keyM');
+        return true;
+      case LogicalKeyboardKey.keyN:
+        _misclassifyKeep(selected, source: 'keyN');
+        return true;
+      default:
+        return false;
     }
-    return false;
   }
 
   void _loadArticles() {
@@ -596,9 +606,56 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
   }
 
+  void _misclassifyKeep(
+    ArticleModel article, {
+    bool removalAlreadyStaged = false,
+    String source = 'unknown',
+  }) {
+    _ReviewAnimProbe.begin(
+      article.entryId,
+      source: source,
+      event: 'action.misclassifyKeep',
+      fields: {
+        'selected': _selectedArticle.value?.entryId == article.entryId,
+        'index': _articles.indexWhere((a) => a.entryId == article.entryId),
+        'count': _articles.length,
+        'preStaged': removalAlreadyStaged,
+      },
+    );
+    if (Platform.isMacOS && !removalAlreadyStaged) {
+      final accepted = _listCoordinator.beginRemoval(article.entryId);
+      _ReviewAnimProbe.log(article.entryId, 'coordinator.begin', {
+        'accepted': accepted,
+      });
+      if (!accepted) {
+        _ReviewAnimProbe.finish(article.entryId);
+        return;
+      }
+    } else if (Platform.isMacOS) {
+      _ReviewAnimProbe.log(article.entryId, 'coordinator.pre-staged');
+    }
+    if (Platform.isMacOS) {
+      _pendingReviewActionIds.add(article.entryId);
+    }
+    final bool shouldAdvance =
+        _selectedArticle.value?.entryId == article.entryId;
+    final ArticleModel? nextArticle = shouldAdvance && !Platform.isMacOS
+        ? _nextArticleAfterRemoving(article.entryId)
+        : null;
+
+    UndoService.applyMisclassify(article, reject: false);
+
+    _scheduleReviewedArticleRemoval(article.entryId);
+    if (shouldAdvance && !Platform.isMacOS) {
+      _selectReviewedSuccessor(nextArticle);
+    }
+  }
+
   bool? _prepareRedo(UndoAction action) {
     if (action.type != UndoActionType.filterKeep &&
-        action.type != UndoActionType.filterReject) {
+        action.type != UndoActionType.filterReject &&
+        action.type != UndoActionType.misclassifyKeep &&
+        action.type != UndoActionType.misclassifySpam) {
       return null;
     }
     final index = _articles.indexWhere(
@@ -861,6 +918,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                   final currentSelected = _selectedArticle.value;
                   if (currentSelected != null) {
                     _keep(currentSelected, source: 'menuKeep');
+                  }
+                },
+                onMisclassifyKeyPressed: () {
+                  final currentSelected = _selectedArticle.value;
+                  if (currentSelected != null) {
+                    _misclassifyKeep(currentSelected, source: 'keyN');
                   }
                 },
                 onClose: _clearSelectionAndFocusEmptyDetail,

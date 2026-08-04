@@ -15,6 +15,7 @@ class MacOSArticleMenuTarget {
     required this.openOriginal,
     required this.copyMarkdown,
     required this.performPrimaryAction,
+    required this.performMisclassifyAction,
     required this.goPrevious,
     required this.goNext,
     required this.performTranslationAction,
@@ -33,6 +34,7 @@ class MacOSArticleMenuTarget {
   final VoidCallback openOriginal;
   final VoidCallback copyMarkdown;
   final VoidCallback performPrimaryAction;
+  final VoidCallback? performMisclassifyAction;
   final VoidCallback goPrevious;
   final VoidCallback goNext;
   final VoidCallback? Function() performTranslationAction;
@@ -44,6 +46,20 @@ class MacOSArticleMenuTarget {
   String get primaryActionLabel {
     if (isReviewContext) return '移除《${article.title}》';
     return isRead() ? '将《${article.title}》恢复未读' : '将《${article.title}》标为已读';
+  }
+
+  String get misclassifyLabel {
+    return isReviewContext ? '误分类：保留并标为已读' : '误分类：移入垃圾拦截';
+  }
+
+  String get misclassifyDisabledLabel {
+    if (isRead()) return '已读文章不可标记为误分类';
+    return '已在垃圾拦截中，请前往垃圾拦截页面标记误分类';
+  }
+
+  bool get misclassifyEnabled {
+    if (isReviewContext) return true;
+    return !isRead() && !article.isRejectedByAi;
   }
 }
 

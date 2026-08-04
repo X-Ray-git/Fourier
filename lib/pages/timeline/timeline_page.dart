@@ -1118,8 +1118,89 @@ class _TimelinePageState extends State<TimelinePage> {
     });
   }
 
+  void _handleMacMisclassifyShortcut() {
+    if (_isHandlingMacReadShortcut) return;
+
+    final currentSelected = controller.selectedArticle.value;
+    if (currentSelected == null) return;
+
+    final currentIndex = controller.allArticles.indexWhere(
+      (article) => article.entryId == currentSelected.entryId,
+    );
+    final current = currentIndex >= 0
+        ? controller.allArticles[currentIndex]
+        : currentSelected;
+
+    if (current.isRead || current.isRejectedByAi) return;
+
+    _TimelineAnimationProbe.begin(
+      current.entryId,
+      source: 'keyN.misclassify',
+      event: 'action.detected',
+      fields: _timelineProbeFields(article: current),
+    );
+
+    _isHandlingMacReadShortcut = true;
+    Future<void>.delayed(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      _isHandlingMacReadShortcut = false;
+    });
+
+    final expectsRemoval =
+        controller.selectedMode.value == TimelineViewMode.unread;
+    if (expectsRemoval) {
+      if (!_listCoordinator.beginRemoval(current.entryId)) {
+        _TimelineAnimationProbe.log(
+          current.entryId,
+          'coordinator.rejected',
+          _timelineProbeFields(article: current),
+        );
+        _TimelineAnimationProbe.finish(current.entryId);
+        return;
+      }
+    } else {
+      _selectRelativeArticle(1, scrollTo: false);
+    }
+    _TimelineAnimationProbe.log(
+      current.entryId,
+      expectsRemoval ? 'selection.held-for-removal' : 'selection.advanced',
+      _timelineProbeFields(article: current),
+    );
+
+    UndoService.applyMisclassify(
+      current,
+      reject: true,
+      deferTimelineVisualUpdate: expectsRemoval,
+    );
+    _TimelineAnimationProbe.log(
+      current.entryId,
+      'misclassify.dispatched',
+      _timelineProbeFields(article: current),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _TimelineAnimationProbe.log(
+        current.entryId,
+        'action.next-frame',
+        _timelineProbeFields(article: current),
+      );
+    });
+    Future<void>.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _TimelineAnimationProbe.log(
+        current.entryId,
+        'action.after-250ms',
+        _timelineProbeFields(article: current),
+      );
+    });
+  }
+
   bool? _prepareRedo(UndoAction action) {
-    if (action.type != UndoActionType.read) return null;
+    if (action.type != UndoActionType.read &&
+        action.type != UndoActionType.misclassifyKeep &&
+        action.type != UndoActionType.misclassifySpam) {
+      return null;
+    }
     final index = controller.articles.indexWhere(
       (article) => article.entryId == action.article.entryId,
     );
@@ -1219,6 +1300,7 @@ class _TimelinePageState extends State<TimelinePage> {
                     onPrevious: () => _selectRelativeArticle(-1),
                     onNext: () => _selectRelativeArticle(1),
                     onMKeyPressed: _handleMacReadShortcut,
+                    onMisclassifyKeyPressed: _handleMacMisclassifyShortcut,
                     onOpenOriginalAndMarkRead: () {
                       final current = controller.selectedArticle.value;
                       if (current != null) {

@@ -18,8 +18,25 @@
 - `ArticleModel.filterReason`
 - `ArticleModel.filterReviewed`
 - `ArticleModel.filteredAt`
+- `ArticleModel.userAction`：用户动作标记，事后统计误分类用。取值 `'k'`（拦截页保留）、`'m'`（拦截页确认拒绝）、`'n_keep'`（拦截页误分类：保留+已读）、`'n_spam'`（常规页误分类：拒绝+已读）、null（未表态）。同一文章多次动作时 latest wins。
+- 统计仅覆盖当前 `articleDb` 中仍保留的近期文章，不是永久操作历史。它受 5000 篇缓存上限和账号数据清理约束；这是用户确认的产品边界，不要为此另建长期日志或把记录加入设置备份。
 
 本地数据库 merge 时不要丢失这些字段。
+
+误分类（`N` / 右上角旗帜按钮）：
+
+- 拦截页语义：当前文章应该保留，但用户已读完 → 保留 + 标为已读，写 `userAction='n_keep'`；复用 `_keep` 的 pending/退场/后继选中机制。
+- 常规时间线语义：标为已读且应放进垃圾拦截 → 拒绝 + 标为已读，写 `userAction='n_spam'`；复用 `M` 的列表离场/后继选择路径。已读或已在拦截中的文章按钮置灰。
+- 两类误分类都是一条原子 UndoAction，撤销/重做同时恢复分类与已读状态。
+- 所有过滤动作的撤销路径（`filterKeep`/`filterReject`/`misclassifyKeep`/`misclassifySpam`）都使用 `upsertOne(forceReplace: true)` 整条还原动作前快照；不能用普通 merge，`item.userAction ?? existing?.userAction` 会把动作标记留在已回滚的文章上。
+- `LocalArticleDbService.setReadState` 重建文章时必须保留 `userAction`（及全部过滤字段），否则标已读/未读会把标记覆盖成 null。
+- macOS 拦截页的 `K/M/N` 由页面级 `HardwareKeyboard` 处理器执行（`_handleHardwareKeyEvent`），不依赖详情面板是否挂载；`ArticlePageView` 在 `isReviewContext` 下对 `M/N` 只消费按键不执行回调，避免与页面级处理器双触发。`HardwareKeyboard` 会调用全部注册处理器，不能依赖返回 true 短路。
+- 页面级 `K/M/N` 必须在 Alt/Control/Command 按下时放行，尤其不能让 `Cmd+M`、`Cmd+N` 同时触发业务操作。统一使用 `MacArticleShortcutService.hasNonShiftModifier` 判断。
+- 统计口径：FP = `'k'` + `'n_keep'`，FN = `'n_spam'`，`'m'` 是弱信号（可能同意也可能懒得分辨），null 无信号。
+- 保留动作（`K`、`'n_keep'`）不再清空 `filterReason`/`filteredAt`，供事后按 AI 原判理由聚合 FP；UI 已按 `isRejectedByAi` 隐藏显示，不受影响。
+- `upsertMany` 合并使用 `item.userAction ?? existing?.userAction`，网络同步数据不得覆盖本地动作标记；旧版本二进制重写文章时会丢弃该字段（不可修复），统计语义为"只有真的没有假的"。
+- 所有从现有 `ArticleModel` 重建新实例的路径都必须复制 `userAction`。数据库 merge 能保护落盘值，但内存模型丢字段会让后续 Undo 快照无法精确恢复上一个动作。
+- 时间线 `N` 复用已读退场的帧边界通知；`applyMisclassify` 不得在 `applyReadLocally(...deferTimelineVisualUpdate: true)` 后额外立即调用 `ArticleStateNotifier.tick`，否则会绕过动画保护。
 
 与普通时间线的复用边界：
 

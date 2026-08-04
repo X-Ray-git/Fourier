@@ -308,6 +308,15 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
                   : '标为已读 / 恢复未读',
               onSelected: enabled ? target.performPrimaryAction : null,
             ),
+            if (target?.performMisclassifyAction != null)
+              PlatformMenuItem(
+                label: target!.misclassifyEnabled
+                    ? '${target.misclassifyLabel}（N）'
+                    : target.misclassifyDisabledLabel,
+                onSelected: target.misclassifyEnabled
+                    ? target.performMisclassifyAction
+                    : null,
+              ),
             if (target?.keepReviewArticle != null)
               PlatformMenuItem(
                 label: '保留《${_truncate(title, 28)}》',

@@ -811,6 +811,11 @@ class _SettingsPageState extends State<SettingsPage> {
     _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
     _buildShortcutItem(context, 'M', '时间线切换已读；垃圾拦截移除'),
     _buildShortcutItem(context, 'K', '垃圾拦截保留文章'),
+    _buildShortcutItem(
+      context,
+      'N',
+      '误分类：时间线移入垃圾拦截；垃圾拦截保留并标为已读',
+    ),
     _buildShortcutItem(context, 'B', '在浏览器中打开原文'),
     _buildShortcutItem(context, 'Shift + B', '标为已读并打开；垃圾拦截移除并打开'),
     _buildShortcutItem(context, 'C', '复制原文全文为 Markdown'),

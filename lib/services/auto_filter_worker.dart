@@ -118,6 +118,7 @@ abstract final class AutoFilterWorker {
           filterReason: result.reason,
           filterReviewed: article.filterReviewed,
           filteredAt: DateTime.now().millisecondsSinceEpoch,
+          userAction: article.userAction,
         );
         LocalArticleDbService.upsertOne(updated);
         ArticleStateNotifier.tick(article.entryId);
@@ -153,9 +154,9 @@ abstract final class AutoFilterWorker {
   }
 
   /// 清除单篇文章的过滤状态（用户捞回）
-  static void unReject(String entryId) {
+  static void unReject(String entryId, {String? userAction}) {
     if (entryId.isEmpty) return;
-    LocalArticleDbService.clearFilterState(entryId);
+    LocalArticleDbService.clearFilterState(entryId, userAction: userAction);
     ArticleStateNotifier.tick(entryId);
   }
 }

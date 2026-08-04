@@ -519,6 +519,7 @@ class FeedDetailController extends GetxController {
           filterReason: a.filterReason,
           filterReviewed: a.filterReviewed,
           filteredAt: a.filteredAt,
+          userAction: a.userAction,
         );
       }
       return a;

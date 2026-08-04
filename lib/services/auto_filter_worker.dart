@@ -118,6 +118,7 @@ abstract final class AutoFilterWorker {
           filterReason: result.reason,
           filterReviewed: article.filterReviewed,
           filteredAt: DateTime.now().millisecondsSinceEpoch,
+          userAction: article.userAction,
         );
         LocalArticleDbService.upsertOne(updated);
         ArticleStateNotifier.tick(article.entryId);

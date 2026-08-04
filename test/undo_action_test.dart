@@ -108,10 +108,7 @@ void main() {
 
     expect(UndoService.nextUndoAction?.type, UndoActionType.misclassifyKeep);
     expect(UndoService.nextUndoAction?.actionName, '移出垃圾拦截并标为已读');
-    expect(
-      UndoService.nextUndoAction?.description,
-      '移出垃圾拦截并标为已读《T1》',
-    );
+    expect(UndoService.nextUndoAction?.description, '移出垃圾拦截并标为已读《T1》');
   });
 
   test('misclassify spam action carries menu metadata', () {
@@ -126,9 +123,57 @@ void main() {
 
     expect(UndoService.nextUndoAction?.type, UndoActionType.misclassifySpam);
     expect(UndoService.nextUndoAction?.actionName, '移入垃圾拦截并标为已读');
-    expect(
-      UndoService.nextUndoAction?.description,
-      '移入垃圾拦截并标为已读《T2》',
+    expect(UndoService.nextUndoAction?.description, '移入垃圾拦截并标为已读《T2》');
+  });
+
+  test('failed filter undo can rebuild the applied action snapshot', () {
+    final original = ArticleModel(
+      entryId: '3',
+      feedId: 'f',
+      feedTitle: 'F',
+      title: 'T3',
+      url: 'u',
+      isRejectedByAi: true,
+      filterReason: 'reason',
+      filteredAt: 42,
     );
+
+    final rejected = UndoService.appliedFilterSnapshot(
+      UndoAction(
+        sequence: 1,
+        type: UndoActionType.filterReject,
+        article: original,
+      ),
+    )!;
+    expect(rejected.isRead, isTrue);
+    expect(rejected.isRejectedByAi, isTrue);
+    expect(rejected.filterReviewed, isTrue);
+    expect(rejected.userAction, ArticleModel.userActionReject);
+
+    final kept = UndoService.appliedFilterSnapshot(
+      UndoAction(
+        sequence: 2,
+        type: UndoActionType.misclassifyKeep,
+        article: original,
+      ),
+    )!;
+    expect(kept.isRead, isTrue);
+    expect(kept.isRejectedByAi, isFalse);
+    expect(kept.filterReviewed, isTrue);
+    expect(kept.filterReason, 'reason');
+    expect(kept.filteredAt, 42);
+    expect(kept.userAction, ArticleModel.userActionMisclassifyKeep);
+
+    final spammed = UndoService.appliedFilterSnapshot(
+      UndoAction(
+        sequence: 3,
+        type: UndoActionType.misclassifySpam,
+        article: original,
+      ),
+    )!;
+    expect(spammed.isRead, isTrue);
+    expect(spammed.isRejectedByAi, isTrue);
+    expect(spammed.filterReviewed, isTrue);
+    expect(spammed.userAction, ArticleModel.userActionMisclassifySpam);
   });
 }

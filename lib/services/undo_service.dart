@@ -333,7 +333,6 @@ class UndoService {
       recordHistory: false,
       deferTimelineVisualUpdate: deferTimelineVisualUpdate,
     );
-    ArticleStateNotifier.tick(article.entryId);
   }
 
   static Future<void> markAsRead(
@@ -540,6 +539,7 @@ class UndoService {
         _notifyRestored(action);
         return article;
       }
+      _restoreAppliedFilterAction(action);
       _rollbackUndo(action);
       return null;
     }
@@ -566,15 +566,7 @@ class UndoService {
         LocalArticleDbService.setReadState(article.entryId, true);
         ArticleStateNotifier.tick(article.entryId);
       }
-      if (action.type == UndoActionType.filterReject) {
-        LocalArticleDbService.upsertOne(
-          _copyArticle(article, isRead: true, filterReviewed: true),
-        );
-      } else if (action.type == UndoActionType.misclassifyKeep) {
-        applyMisclassify(article, reject: false, recordHistory: false);
-      } else if (action.type == UndoActionType.misclassifySpam) {
-        applyMisclassify(article, reject: true, recordHistory: false);
-      }
+      _restoreAppliedFilterAction(action);
       _rollbackUndo(action);
       AppFeedback.error('撤销失败', '网络请求失败，已恢复为已读');
       return null;
@@ -733,6 +725,47 @@ class UndoService {
     if (index < 0) return;
     controller.allArticles[index] = article;
     controller.allArticles.refresh();
+  }
+
+  static void _restoreAppliedFilterAction(UndoAction action) {
+    final article = action.article;
+    final restored = appliedFilterSnapshot(action);
+    if (restored == null) return;
+
+    GStorage.readStatus.put(article.entryId, true);
+    LocalArticleDbService.upsertOne(restored, forceReplace: true);
+    _replaceTimelineArticle(restored);
+    if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
+      Get.find<ArticleController>(tag: article.entryId).isRead.value = true;
+    }
+    ArticleStateNotifier.tick(article.entryId);
+  }
+
+  static ArticleModel? appliedFilterSnapshot(UndoAction action) {
+    final article = action.article;
+    return switch (action.type) {
+      UndoActionType.filterReject => _copyArticle(
+        article,
+        isRead: true,
+        filterReviewed: true,
+        userAction: ArticleModel.userActionReject,
+      ),
+      UndoActionType.misclassifyKeep => _copyArticle(
+        article,
+        isRead: true,
+        filterReviewed: true,
+        isRejectedByAi: false,
+        userAction: ArticleModel.userActionMisclassifyKeep,
+      ),
+      UndoActionType.misclassifySpam => _copyArticle(
+        article,
+        isRead: true,
+        filterReviewed: true,
+        isRejectedByAi: true,
+        userAction: ArticleModel.userActionMisclassifySpam,
+      ),
+      _ => null,
+    };
   }
 
   static ArticleModel _copyArticle(

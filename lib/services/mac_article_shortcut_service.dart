@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 
 typedef MacShortcutPredicate = bool Function();
 typedef MacBoundarySelection = bool Function(int direction);
@@ -7,6 +8,13 @@ class MacArticleShortcutService {
   MacArticleShortcutService._();
 
   static final instance = MacArticleShortcutService._();
+
+  static bool get hasNonShiftModifier {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isAltPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed;
+  }
 
   final Map<Object, _MacArticleShortcutTarget> _targets = {};
 

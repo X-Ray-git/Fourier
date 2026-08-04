@@ -271,6 +271,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     if (event is! KeyDownEvent) return false;
 
     if (!Platform.isMacOS || !_isActiveMacReviewPage) return false;
+    if (MacArticleShortcutService.hasNonShiftModifier) {
+      return false;
+    }
     final selected = _selectedArticle.value;
     if (selected == null) return false;
     switch (event.logicalKey) {

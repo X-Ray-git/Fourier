@@ -257,6 +257,7 @@ class ArticleController extends GetxController {
       filterReason: article.filterReason,
       filterReviewed: article.filterReviewed,
       filteredAt: article.filteredAt,
+      userAction: article.userAction,
     );
     LocalArticleDbService.upsertOne(fetchedArticle);
     ArticleContentUtils.clearCacheForEntry(article.entryId);
@@ -1991,8 +1992,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             if (widget.onMisclassifyKeyPressed == null) {
               return const SizedBox.shrink();
             }
-            final hasToc =
-                _tocEntriesFor(activeChunks, showTrans).isNotEmpty;
+            final hasToc = _tocEntriesFor(activeChunks, showTrans).isNotEmpty;
             final enabled = widget.isReviewContext
                 ? true
                 : !isRead && !widget.article.isRejectedByAi;
@@ -2007,8 +2007,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               top: _macToolbarButtonTop(context),
               right: hasToc
                   ? _macTocButtonRight +
-                      _macToolbarButtonSize +
-                      _macToolbarButtonGap
+                        _macToolbarButtonSize +
+                        _macToolbarButtonGap
                   : _macTocButtonRight,
               child: AppGlassIconButton(
                 icon: Icons.outlined_flag,

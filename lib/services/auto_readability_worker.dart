@@ -100,6 +100,7 @@ abstract final class AutoReadabilityWorker {
               filterReason: article.filterReason,
               filterReviewed: article.filterReviewed,
               filteredAt: article.filteredAt,
+              userAction: article.userAction,
             );
             LocalArticleDbService.upsertOne(processedArticle);
             ArticleContentUtils.clearCacheForEntry(article.entryId);
@@ -150,6 +151,7 @@ abstract final class AutoReadabilityWorker {
                 filterReason: article.filterReason,
                 filterReviewed: article.filterReviewed,
                 filteredAt: article.filteredAt,
+                userAction: article.userAction,
               );
               // 将包含长文的新文章存入本地数据库
               LocalArticleDbService.upsertOne(processedArticle);

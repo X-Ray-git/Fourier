@@ -760,6 +760,7 @@
 决策：
 
 - `ArticleModel.userAction` 落库，取值 `'k'/'m'/'n_keep'/'n_spam'/null`，同一文章多次动作 latest wins。`upsertMany` 合并用 `item.userAction ?? existing?.userAction`，网络同步数据（恒为 null）不覆盖本地标记。
+- 统计范围是当前 `articleDb` 仍保留的近期文章，允许随 5000 篇缓存淘汰和账号内容清理而消失；不建立独立长期记录库，也不进入设置备份。
 - 统计口径：FP = `'k'` + `'n_keep'`，FN = `'n_spam'`，`'m'` 弱信号，null 无信号。`K`/`N` 不再清空 `filterReason`/`filteredAt`，供事后按 AI 原判理由聚合 FP。
 - 时间线上的 `N` 对已读或已在拦截中的文章禁用（按钮置灰、菜单禁用），保护 FN 语义纯净：`n_spam` 只会写在从未被 AI 拒绝的文章上。拦截页 `N` 恒可用。
 - 按钮为 macOS 文章详情右上角浮动白色旗帜图标（`Icons.outlined_flag`），位于目录按钮左侧；无目录时占据目录位置（复制/已读按钮簇左侧）。快捷键 `N`，`Cmd+N` 必须放行给系统新建窗口。Android 暂不加按钮。
@@ -778,7 +779,7 @@
 
 背景：调试中发现两类数据库写入陷阱。第一，`upsertMany` 的合并策略是 `isRejectedByAi` 用 OR、`userAction` 用 `item ?? existing`，因此"把已拒绝恢复为未拒绝"和"把动作标记回滚为 null"都无法通过普通 merge 完成；K 的捞回路径本来就必须用 raw map 写入（`clearFilterState`），M/N 的撤销也踩中同一陷阱，表现为撤销后状态恢复但 `userAction` 标记残留。第二，`LocalArticleDbService.setReadState` 重建文章模型时曾遗漏 `userAction`，而 `applyMisclassify`/`applyFilterReject` 的写入顺序是先 upsert 带标记的文章、再经 `applyReadLocally → setReadState` 标已读，导致标记刚写入就被覆盖成 null——这是"N/M 标记写不进去"的主因，K 路径不走 `setReadState` 所以只有 K 的标记幸存。
 
-决策：四个过滤动作（`filterKeep`/`filterReject`/`misclassifyKeep`/`misclassifySpam`）的撤销路径全部使用 `LocalArticleDbService.upsertOne(article, forceReplace: true)` 整条还原动作前快照；`forceReplace` 跳过全部合并逻辑，直接写入 `toJson()`。`setReadState` 重建时完整保留 `isRejectedByAi`/`filterReason`/`filterReviewed`/`filteredAt`/`userAction`。
+决策：四个过滤动作（`filterKeep`/`filterReject`/`misclassifyKeep`/`misclassifySpam`）的撤销路径全部使用 `LocalArticleDbService.upsertOne(article, forceReplace: true)` 整条还原动作前快照；`forceReplace` 跳过全部合并逻辑，直接写入 `toJson()`。`setReadState` 及所有从现有文章重建实例的路径完整保留 `isRejectedByAi`/`filterReason`/`filterReviewed`/`filteredAt`/`userAction`。若恢复未读的远端请求最终失败，必须用 `appliedFilterSnapshot` 重新落下操作后的分类、已读、审核和 `userAction` 状态，再把 UndoAction 放回撤销栈；正文控制器挂载与否不能形成两套结果。
 
 后果：受控测试与真机验证确认：`n_spam` 写入后 `Cmd+Z` 一次性回滚分类、已读、审核标记和 `userAction`（`拒绝=false 已读=false 已审=false act=null`）；`K` 撤销精确还原快照（含快照中已有的标记值）。
 
@@ -792,7 +793,7 @@
 
 背景：macOS 拦截页 `MacSplitArticleListCoordinator.reconcileSelection()` 对 null 选择直接返回，不会自动选中第一篇；详情面板未挂载时 `M`/`N` 没有任何处理器（`K` 是页面级处理器所以能用），用户按 `M` 完全无响应。同时确认 Flutter `HardwareKeyboard` 会调用全部注册处理器并做 `handled = handled || thisResult`，不因第一个返回 true 而短路——页面级处理器与详情 `ArticlePageView` 处理器会双触发。
 
-决策：拦截页的 `K/M/N` 统一由页面级 `_handleHardwareKeyEvent` 执行（`K` 保留、`M` 确认拒绝、`N` 误分类保留+已读），不依赖详情面板是否挂载；`ArticlePageView` 在 `isReviewContext` 下对 `M/N` 只消费按键不执行回调，避免双触发。时间线 `M/N` 仍由 `ArticlePageView` 处理器执行（`onMKeyPressed`/`onMisclassifyKeyPressed`）。
+决策：拦截页的 `K/M/N` 统一由页面级 `_handleHardwareKeyEvent` 执行（`K` 保留、`M` 确认拒绝、`N` 误分类保留+已读），不依赖详情面板是否挂载；`ArticlePageView` 在 `isReviewContext` 下对 `M/N` 只消费按键不执行回调，避免双触发。时间线 `M/N` 仍由 `ArticlePageView` 处理器执行（`onMKeyPressed`/`onMisclassifyKeyPressed`）。页面级处理器通过 `MacArticleShortcutService.hasNonShiftModifier` 放行 Alt/Control/Command 组合键，避免抢占 `Cmd+M`、`Cmd+N` 等系统命令。
 
 后果：拦截页在无选中时不再静默吞掉 `M/N`；双重触发被明确消除，不再依赖 `beginRemoval` 的 pending 守卫兜底。
 

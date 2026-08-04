@@ -53,8 +53,9 @@ flutter test --no-pub
 
 ## 文档
 
+- 工程 Wiki（中文，克隆后双击 `index.html` 即可离线浏览）：[入口](index.html)
 - 交接入口：[`AGENT_HANDOFF.md`](AGENT_HANDOFF.md)
-- 专题知识库：[`docs/agent_handoff/README.md`](docs/agent_handoff/README.md)
+- 知识库维护说明：[`docs/agent_handoff/meta/site-guide.html`](docs/agent_handoff/meta/site-guide.html)
 
 ## 许可证
 

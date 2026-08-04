@@ -111,7 +111,7 @@ fi
 
 perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml
 
-release_history="docs/agent_handoff/history/releases.md"
+release_history="docs/agent_handoff/history/releases.html"
 printf -v message_arg '%q' "$message"
 release_flags=""
 if [[ "$allow_literal_backslash_n" == true ]]; then
@@ -124,7 +124,16 @@ fi
   printf '\n## %s\n\n```bash\n' "$tag"
   printf './scripts/release.sh %s -m %s%s\n' "$version" "$message_arg" "$release_flags"
   printf '```\n'
-} >> "$release_history"
+} | python3 -c '
+import sys
+frag = sys.stdin.read().replace("</script>", "<\\\\/script>")
+path = sys.argv[1]
+src = open(path, encoding="utf-8").read()
+marker = "</script>"
+idx = src.find(marker)
+assert idx != -1 and "id=\"wiki-content\"" in src[:idx], "releases.html wiki-content block not found"
+open(path, "w", encoding="utf-8").write(src[:idx] + frag + src[idx:])
+' "$release_history"
 
 git add pubspec.yaml "$release_history"
 git commit -m "chore: bump version to $version+$next_build"

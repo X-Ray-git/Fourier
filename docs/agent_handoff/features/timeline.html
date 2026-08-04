@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="wiki-base" content="..">
+<meta name="repo-root" content="../../..">
+<title>时间线 · Auto Folo Wiki</title>
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<header class="wiki-header">
+  <div class="wiki-header-inner">
+    <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
+    <a class="brand" href="../../../index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Auto Folo Wiki</span>
+    </a>
+    <div class="header-tools">
+      <div class="search-box">
+        <input id="wiki-search-input" type="search" placeholder="搜索文档…" autocomplete="off" aria-label="搜索文档">
+      </div>
+      <button id="theme-toggle" type="button" class="theme-toggle" aria-label="切换明暗主题" title="切换明暗主题">
+        <svg class="theme-icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="search-results" class="search-results" hidden></div>
+</header>
+<div class="wiki-layout">
+  <nav id="wiki-nav" class="wiki-nav" aria-label="站点导航"></nav>
+  <div class="wiki-content-col">
+    <main class="wiki-main">
+      <article>
+        <div id="wiki-rendered" class="wiki-rendered"></div>
+      </article>
+    </main>
+    <footer class="wiki-footer">
+      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
+      <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
+      <a href="../../../AGENT_HANDOFF.md">交接入口</a>
+    </footer>
+  </div>
+  <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
+</div>
+<script type="text/markdown" id="wiki-content">
+# 时间线
+
+相关文件：
+
+- `lib/pages/timeline/timeline_controller.dart`
+- `lib/pages/timeline/timeline_page.dart`
+- `lib/pages/widgets/article_card.dart`
+- `lib/common/widgets/article_card_chrome.dart`
+- `lib/common/widgets/article_length_label.dart`
+- `lib/utils/article_length_estimator.dart`
+- `lib/common/widgets/app_glass_sync_button.dart`
+- `lib/common/widgets/app_glass_selection_button.dart`
+- `lib/pages/widgets/article_actions_menu.dart`
+- `lib/common/widgets/mac_split_article_list_coordinator.dart`
+
+当前行为：
+
+- 模式：未读、全部、已读。
+- macOS 中间 header 的文章范围只暴露未读/全部，并使用与排序统一的圆形 morph 选择按钮，而不是完整 segment 或二态 switch。
+- Android 主时间线 header 与订阅源详情复用圆形文章范围按钮，点击后从玻璃底部面板选择 `未读/全部`；已读文章仍通过最近阅读等独立入口访问，不等于删除已读能力。
+- macOS 中间栏 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截，不要只在某个页面单独处理。
+- macOS 文章卡片普通态使用极轻中性色填充，统一由 `ArticleCardChrome` 控制；当前深色模式 alpha 为 `0.018`，浅色模式为 `0.012`。时间线、最近阅读和垃圾拦截不要分别覆盖该值。
+- macOS 与 Android 的普通文章卡片、垃圾拦截审核卡片共用标题字号 `14` 和辅助正文 `12`，统一由 `ArticleCardChrome.titleFontSize/bodyFontSize` 提供，不要在页面中分别硬编码。
+- 普通文章卡片在最下方订阅源行右侧显示预计内容高度；共享 `ArticleLengthLabel` 使用弱化 `12px` 文字，不增加卡片高度、胶囊、图标或平台分支。macOS 垃圾拦截虽然保留独立 `_MacReviewRow`，也必须调用同一个标签组件。后台任务失败卡片不属于正常阅读列表，不显示长度。
+- macOS 主时间线和垃圾拦截列表共用 `MacArticleListChrome` 的两层下边距：`viewportPadding` 是滚动过程中始终存在的窗口下边界，`contentPadding` 是滚到列表末尾后出现的内容留白。不要只增加 `ListView.padding.bottom` 来替代视口边界，也不要在两个页面分别硬编码。
+- macOS 主时间线、垃圾拦截、最近阅读和订阅源详情通过 `MacHeaderPane` 共享固定 header/body 几何。内容和 scrollbar 自然从 header 下方开始；thumb 宽度及右侧 margin 继续由 `MacGlassScrollbarStyle.articlePaneTheme` 提供（`8px`、`1px`），`MacArticleListChrome.contentPadding` 另保留 `2px` 右侧内容间隔。
+- macOS 订阅源详情页的 header 筛选复用同一个文章范围 morph 组件；不要重新引入 `仅已读` 入口。
+- 已读模式/页面仍在其他入口存在，不应删除。
+- 过滤支持选中订阅源、分类和静默订阅源。
+- 本地文章库支撑时间线状态。
+- 已读/未读变化会更新本地状态并通知其他视图。
+- 时间线和最近阅读列表合并本地已读状态时，使用 `LocalArticleDbService.readOverrideOf(entryId)`，没有覆盖时保留 `ArticleModel.isRead`。该规则同时支持本地标为已读和恢复未读，不要退回到只处理 `readStatus == true` 的旧逻辑。
+- 本地标为已读后的 `readStatus == true` 是跨请求竞态保护，不能在 mark-read HTTP 成功时立即删除。未读请求可能比 mark-read 更早发出并返回旧快照；只在后续成功未读快照明确不再包含该文章时，才清除覆盖并以本地数据库中的已读状态继续。主时间线和订阅源详情必须遵循同一规则。
+- 垃圾拦截/审核这类列表如果语义要求稳定追加，新文章应稳定附加。
+
+macOS 静默订阅源批量导出：
+
+- 批量入口只出现在“静默订阅源”汇总视图，不出现在单个静默订阅源中。进入批量模式时默认不选文章；卡片本体仍用于打开阅读，右上角独立的轻量标识负责切换勾选，不能复用当前文章的选中描边。
+- 全选/全不选作用于当前筛选后的整个静默文章集合，不局限于当前视口。离开静默汇总 scope 时退出批量模式并清空勾选。
+- 动作只有“复制 Markdown”“保存 Markdown”“复制并标为已读”“保存并标为已读”，不提供单独的批量标为已读。纯导出成功后保留批量模式和勾选；组合动作成功后退出批量模式并清空右侧详情。
+- 批量导出入口与文章范围、排序入口共用锚定在右上角的液态玻璃 morph 展开组件；它是命令菜单，不显示持久选中项或勾号。批量模式下按 `Esc` 必须复用右上角关闭按钮的退出路径，同时清空本次勾选；处理中的批量动作仍禁止中途退出。
+- 单篇复制和批量导出统一调用 `ArticleMarkdownExportService`，页面不得自行维护 Markdown 转换器。批量保持当前列表顺序，文章之间只用 `---` 分隔，不添加“静默订阅源导出”总标题或批次元数据。正文尚未缓存时仍输出标题、来源、链接，并写入 `> 正文尚未缓存`，不能为了导出临时联网拉正文。
+- 组合动作必须先完成剪贴板写入或文件保存，之后才标为已读；文件保存取消、写入失败或复制失败都不能改变读状态。整批标为已读只占一个业务撤销项，撤销时整批恢复未读，重做时整批重新标为已读。
+- 批量本地状态通过 `TimelineController.setManyReadStatesLocal()` 一次合并列表、计数和跨页面通知，不逐篇触发全量过滤或卡片动画。`BatchReadSyncService` 逐篇追踪前向成功、补偿成功和最终仍改变的文章：部分请求失败后补偿已确认成功的请求；补偿全部成功时本地和历史都不变，补偿仍有失败时只把最终改变的子集写入本地并登记为可撤销批次。部分 Undo/Redo 同样拆分成功与未成功的子集，使两侧历史始终对应最终远端状态。
+
+macOS 分栏选择与移除协调：
+
+- `MacSplitArticleListCoordinator` 统一承载分栏文章列表中的稳定 item key、删除前后继项计算、删除期间选择保持、`onRemoveEnd` 后详情切换、相对导航和 reveal 回调。页面继续负责已读、审核、数据库和网络等业务动作，不要把这些业务塞进协调器。
+- 页面必须在任何数据库写入、`ArticleStateNotifier.tick()` 或列表删除之前调用 `beginRemoval(entryId)`。垃圾拦截曾在动画开始前由 `_pruneInvalidSelection()` 立即切换右侧详情，首次正文构建因此抢占移除动画帧；协调器通过 `reconcileSelection()` 在退出期间保留旧详情，直到真实 `onRemoveEnd`。
+- 垃圾拦截已接入协调器，`M`、保留、移除共用同一删除生命周期；移动端仍保持原业务路径。
+- 主时间线的 `M` 和双击也已接入协调器：未读卡片退出期间保留当前详情，真实 `onRemoveEnd` 后才切换并 reveal 后继文章。动画期间的 `Command-Z` 通过 `restoreSelection()` 取消待切换目标，避免恢复后的文章再次被选走。
+- 最近阅读尚未接入。后续迁移时需要先确认恢复未读后的选择语义。不要为了共享而把三个页面强行做成同一个大 Widget。
+
+排序：
+
+- `TimelineSortMode.newest`：默认，最新优先。
+- `TimelineSortMode.longest`：估算长文优先。
+- `TimelineSortMode.shortest`：估算短文优先。
+- 排序只作用于当前本地/已加载文章集合，不是远端全历史。
+- 长度排序与卡片数值共用 `ArticleLengthEstimator`、规范化 HTML、解析后的 chunk 和内容签名缓存。估算固定使用 `340 logical px` 阅读宽度，标题、段落、图片、代码、表格、列表和视频等渲染块按既有规则计入，不读取当前窗口、平台或设备像素比。
+- 卡片格式小于 `1000` 时显示整数 `px`，更长时显示一位小数的 `k px`，例如 `860 px`、`4.3k px`。这里是稳定的预计逻辑像素高度，不是当前窗口完成布局后的实测物理像素；正文补全导致实际内容变化时，内容签名会使缓存重新计算。相同文章数据在 Android 与 macOS 应显示相同结果。
+- 排序刻意保持本地化。UI 文案不能让用户误以为是远端/全历史排序。
+
+性能决策：
+
+- macOS 时间线列表使用 `ImplicitlyAnimatedList`，但只应把动画用于普通标记已读/恢复未读带来的局部插入/移除。
+- 批量变化必须无动画同步，不应做大规模 diff 动画。批量变化包括：切换未读/全部等模式、切换订阅源/分类/静默范围、切换排序、本地库批量回填、同步/加载更多，以及单篇元数据确实改变列表成员或排序的情况。
+- `TimelineController.timelineListResetVersion` 是这个边界的核心：批量变化递增它，并作为 `ImplicitlyAnimatedList.batchUpdateVersion` 传入。组件在同一个 `AnimatedList` 和 `ScrollController` 上以零时长协调项目，不再把 version 放进 key 重建整列，因此不会仅因刷新或元数据通知把滚动位置重置为顶部。
+- 列表外层 key 只包含 selected mode 和 scope key；模式/范围切换仍可建立新的列表语义。`markAsReadLocal` / `markAsUnreadLocal` 不递增 batch version，所以普通读状态局部动画保留。
+- 单篇数据库通知先比较过滤后的 entry id 顺序。标题、正文、摘要等非结构元数据更新不触发 batch version；只有列表成员或顺序确实改变时才做零时长同步。不要恢复成“任何非已读字段变化都重建整列”的旧判断。
+- `TimelineController.setTimelineScope()` 负责批量更新 `isSilentSelected`、`selectedFeedId`、`selectedCategory`，避免侧边栏一次点击触发多次 `_applyFilter()`。
+- 不要重新在侧边栏或文章页里直接连续设置 `selectedFeedId.value` / `selectedCategory.value` / `isSilentSelected.value`；这会恢复“多次过滤 + 多次重建”的卡顿。
+- 普通标记已读时，单项移除动画仍保留。
+- 首次长文/短文排序可能需要一次估算；用户验证时未观察到不可接受的成本。
+- 避免批量重排或模式切换触发大型列表动画；这曾经让文章 loading spinner 等无关动画也卡住。
+
+状态与交互：
+
+- 卡片右键菜单操作如果影响当前选中文章，必须立即刷新可见详情状态。
+- backing service 记录被删除后，不要回退到过期 controller 字段。
+- 即使同步在按钮订阅 controller 前已经开始，同步按钮也必须开始旋转。
+- macOS 刷新/排序/操作按钮在用户明确要求时，应对齐文章卡片边界。
+- macOS 文章范围闭合态为 `34px` 圆形按钮，未读使用 `filter_alt_rounded`，全部使用 `filter_alt_off_rounded`；点击后从按钮右上角锚定展开“文章范围”面板。主时间线、订阅源详情和排序共用 `AppGlassMorphSelectionButton`，不要重新复制动画或菜单代码。
+- 文章范围触发图标在未读/全部之间只改变图形，不改变为橙色：深色固定白色，浅色使用 `onSurface`。旧 `58/42px` switch 及其轨道/rim 参数已经废弃。
+- macOS 中间时间线处于具体订阅源筛选时，header 只保留时间线级操作，例如排序和同步。
+- 不要在该 header 重复放置订阅源级设置按钮，例如自动拉取全文、自动翻译、静默等；这些入口属于左侧侧边栏订阅源项。
+- 该 header 也不显示“清除筛选”。用户通过左侧侧边栏切换范围或回到全部文章。
+- 这个取舍来自一次拥挤问题：进入某个分类下的具体订阅源后，刷新、清除筛选、拉取全文、自动翻译等按钮挤在同一行，视觉负担过重且功能重复。
+- macOS 时间线 header 的横向间距已经按文章卡片右边界校准：文章范围→排序 `8px`、排序→同步 `8px`、同步→中间栏右边界 `10px`。文章卡片右边缘到时间线右边界也保持 `10px`；文章详情右上角三个按钮的既有间距不随这里联动。
+- 同步按钮样式和旋转逻辑集中在 `AppGlassSyncButton`。普通时间线通过 `_MacSyncButton` 订阅 `TimelineController.isSyncing`，垃圾拦截页也复用同一个按钮。
+- 文章卡片的长按/右键 AI 操作集中在 `ArticleActionsMenu`。不要再把翻译/摘要菜单逻辑塞回 `article_card.dart`。
+- 文章列表卡片的基础“外壳”样式集中在 `ArticleCardChrome`：macOS 普通态使用极高透明度中性色填充，不使用普通边框；选中态仍使用主色背景和边框。外边距、内部 padding 和圆角也从这里取值，不要在普通时间线、最近阅读、垃圾拦截审核行之间复制常量。
+- 垃圾拦截审核行有保留/移除按钮、拒绝理由和摘要块，所以不强行复用完整 `ArticleCard`；但卡片外壳必须复用 `ArticleCardChrome`，避免之后调整卡片密度时漏改。
+- 最近阅读页里的文章本来都属于“已读语境”，标题不要再因 `isRead` 降低字重；只保留已读颜色淡化即可，否则和其他页面的标题观感不统一。
+- 不要在文章卡片上使用重型玻璃、BackdropFilter、渐变边框或阴影。用户尝试过细线边框后认为不好看，最终取舍是轻填充 + 较大的卡片间距。
+- macOS 空态占位符应在左右分栏中对齐。左侧列表有 AppBar/header 时，右侧详情空态使用 `MacSplitDetailEmptyPlaceholder` 预留对应顶部 inset；不要用临时 `Padding(top: 64)` 推动左侧空态。
+- 订阅源筛选或无文章状态下，macOS 空态应使用安静的图标占位，不要回退到移动端旧文案如“一切就绪”“没有阅读文章”“强制同步”。
+- Android 主时间线的紧凑 switch 左边界与文章卡片统一为 `12px`，其点击区可以大于可见轨道。不要根据 `Row` 的视觉尺寸推算对齐，应以最终渲染位置检查。
+- Android 卡片、骨架和空态复用 `ArticleCardChrome` 布局基线；玻璃迁移不把密集卡片变成实时模糊表面。
+
+当前文章保持可见：
+
+- macOS 上切换文章时，如果目标卡片已经构建，继续使用 `ScrollUtils.ensureVisible` 做短距离校正。
+- 如果目标卡片因为列表虚拟化尚未构建，先根据当前已构建卡片和估算 item 高度 `jumpTo` 到附近，再做短距离 `ensureVisible` 校正。
+- 不要用长距离 `animateTo` 粗定位；它会和右侧文章切换同时竞争 UI isolate，用户曾观察到明显掉帧。
+
+标为已读的动画时序：
+
+- 主时间线在未读模式下处理 `M` 或双击时，先登记后继文章，但保持当前详情；卡片真实完成退出后再切换详情并把后继卡片留在可见区域。非移除模式继续使用普通相对选择。
+- 本地数据库写入是同步重工作；不能在 `addPostFrameCallback` 中同时做持久化和列表变更。post-frame callback 仍属于当前帧，实测会让 180ms 动画只剩约 30–55ms 可见时间。
+- `UndoService.markAsRead(... deferTimelineVisualUpdate: true)` 供 macOS 双击路径使用；主时间线 `M` 在未读模式下也直接要求 `TimelineController.markAsReadLocal(... deferVisualUpdateToFrameBoundary: true, deferArticleStateNotification: true)`。控制器先持久化，再等待新的 `endOfFrame` 才更新当前可见列表；其他调用方默认行为不变。
+- 单篇已读不能在动画首帧调用完整 `_applyFilter()`。日志曾确认本地模型约有 `4799` 篇文章，全量扫描、应用角标/计数并通知所有订阅者会占用约 73–90ms。当前移除路径只从可见 `articles` 中增量删除对应项，离场文章的 `allArticles`、角标、计数和其他页面状态在动画完成后统一维护。
+- `ArticleStateNotifier.tick()` 会同步扇出到最近阅读全库读取/排序、订阅源未读计数、订阅源详情和垃圾拦截等页面。会移除卡片时，跨页面通知由 `completeDeferredReadTransition(entryId)` 在真实 `onRemoveEnd` 后再跨一个 `endOfFrame` 发出，避免其他页面的同步工作吞掉 180ms 退场动画。若生命周期异常没有回调，控制器用 1 秒 fallback 保证通知最终发生。
+- 延后的视觉更新和跨页面通知分别带一次性 token；在执行前恢复未读会同时取消它们，避免极快 `Command-Z` 被迟到的“标为已读”更新覆盖。
+- 退场期间不要更新当前选中文章对象，也不要为单篇已读重复写入 `loadingState = Success(...)` 或额外执行 `allArticles.refresh()`；这些更新会无意义地重建右侧详情或放大通知成本。
+- 如果当前是未读模式并会删除卡片，原文浏览器必须等列表 `onRemoveEnd` 后再跨一帧打开。固定 `200ms` 延迟曾在动画中途抢走前台，视觉上看起来像没有动画。
+- 不要把这个特殊时序全局套到文章页按钮或 Android；默认参数刻意保持原行为。
+- 最终诊断结果：在约 `4799` 篇本地文章的环境中，增量可视更新耗时约 164–671 微秒；两次 `M` 和四次双击都完整经过动画 bucket `4→3→2→1→0`，双击在 141–166ms 内识别，且移除期间没有列表 reset。用户随后完成视觉确认。
+
+</script>
+<script src="../assets/wiki-common.js"></script>
+<script src="../assets/vendor/markdown-it.min.js"></script>
+<script src="../assets/vendor/markdown-it-anchor.umd.js"></script>
+<script src="../assets/data/nav.js"></script>
+<script src="../assets/data/search-index.js"></script>
+<script src="../assets/app.js"></script>
+</body>
+</html>

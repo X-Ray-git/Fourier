@@ -629,6 +629,7 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onMKeyPressed;
+  final VoidCallback? onMisclassifyKeyPressed;
   final VoidCallback? onOpenOriginalAndMarkRead;
   final bool Function()? isActive;
   final bool Function(String entryId)? isSelectedArticle;
@@ -648,6 +649,7 @@ class ArticlePageView extends StatefulWidget {
     this.onPrevious,
     this.onNext,
     this.onMKeyPressed,
+    this.onMisclassifyKeyPressed,
     this.onOpenOriginalAndMarkRead,
     this.isActive,
     this.isSelectedArticle,
@@ -867,6 +869,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             _toggleReadState();
           }
         },
+        performMisclassifyAction: widget.onMisclassifyKeyPressed == null
+            ? null
+            : () => widget.onMisclassifyKeyPressed!(),
         goPrevious: () => widget.onPrevious?.call(),
         goNext: () => widget.onNext?.call(),
         performTranslationAction: () {
@@ -962,7 +967,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     if (key == LogicalKeyboardKey.keyM) {
       if (event is KeyRepeatEvent) return true;
       if (widget.onMKeyPressed != null) {
-        widget.onMKeyPressed!();
+        // 拦截页的 M 由页面级处理器执行，这里只消费按键避免双触发
+        if (!widget.isReviewContext) {
+          widget.onMKeyPressed!();
+        }
         return true;
       }
       if (controller.isUpdatingReadState.value) return true;
@@ -970,6 +978,17 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       _toggleReadState();
       if (wasUnread && widget.onNext != null) {
         widget.onNext!();
+      }
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.keyN) {
+      if (_hasShortcutModifierPressed()) return false;
+      if (event is KeyRepeatEvent) return true;
+      if (widget.onMisclassifyKeyPressed == null) return false;
+      // 拦截页的 N 由页面级处理器执行，这里只消费按键避免双触发
+      if (!widget.isReviewContext) {
+        widget.onMisclassifyKeyPressed!();
       }
       return true;
     }
@@ -1957,6 +1976,46 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                     onEntryTap: _scrollToTocEntry,
                   );
                 },
+              ),
+            );
+          }),
+        if (Platform.isMacOS)
+          Obx(() {
+            final showTrans =
+                controller.showTranslation.value &&
+                controller.translatedChunks.isNotEmpty;
+            final activeChunks = showTrans
+                ? controller.translatedChunks
+                : controller.chunks;
+            final isRead = controller.isRead.value;
+            if (widget.onMisclassifyKeyPressed == null) {
+              return const SizedBox.shrink();
+            }
+            final hasToc =
+                _tocEntriesFor(activeChunks, showTrans).isNotEmpty;
+            final enabled = widget.isReviewContext
+                ? true
+                : !isRead && !widget.article.isRejectedByAi;
+            final tooltip = widget.isReviewContext
+                ? '误分类：保留并标为已读 (N)'
+                : enabled
+                ? '误分类：移入垃圾拦截 (N)'
+                : isRead
+                ? '已读文章不可标记为误分类'
+                : '已在垃圾拦截中，请前往垃圾拦截页面标记误分类';
+            return Positioned(
+              top: _macToolbarButtonTop(context),
+              right: hasToc
+                  ? _macTocButtonRight +
+                      _macToolbarButtonSize +
+                      _macToolbarButtonGap
+                  : _macTocButtonRight,
+              child: AppGlassIconButton(
+                icon: Icons.outlined_flag,
+                tooltip: tooltip,
+                onPressed: enabled
+                    ? () => widget.onMisclassifyKeyPressed!()
+                    : null,
               ),
             );
           }),

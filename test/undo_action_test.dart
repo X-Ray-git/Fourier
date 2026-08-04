@@ -94,4 +94,41 @@ void main() {
     expect(undoCalls, 1);
     expect(redoCalls, 1);
   });
+
+  test('misclassify keep action carries menu metadata', () {
+    final kept = ArticleModel(
+      entryId: '1',
+      feedId: 'f',
+      feedTitle: 'F',
+      title: 'T1',
+      url: 'u',
+      isRejectedByAi: true,
+    );
+    UndoService.recordMisclassifyAction(kept, reject: false);
+
+    expect(UndoService.nextUndoAction?.type, UndoActionType.misclassifyKeep);
+    expect(UndoService.nextUndoAction?.actionName, '移出垃圾拦截并标为已读');
+    expect(
+      UndoService.nextUndoAction?.description,
+      '移出垃圾拦截并标为已读《T1》',
+    );
+  });
+
+  test('misclassify spam action carries menu metadata', () {
+    final spam = ArticleModel(
+      entryId: '2',
+      feedId: 'f',
+      feedTitle: 'F',
+      title: 'T2',
+      url: 'u',
+    );
+    UndoService.recordMisclassifyAction(spam, reject: true);
+
+    expect(UndoService.nextUndoAction?.type, UndoActionType.misclassifySpam);
+    expect(UndoService.nextUndoAction?.actionName, '移入垃圾拦截并标为已读');
+    expect(
+      UndoService.nextUndoAction?.description,
+      '移入垃圾拦截并标为已读《T2》',
+    );
+  });
 }

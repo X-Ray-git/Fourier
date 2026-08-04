@@ -69,4 +69,29 @@ void main() {
     expect(article.url, 'https://example.com?a=1&amp;b=2');
     expect(article.content, '<p>A &ensp; B</p>');
   });
+
+  test('userAction survives cache round trip and defaults to null', () {
+    final article = ArticleModel(
+      entryId: 'e-ua',
+      feedId: 'f',
+      feedTitle: 'F',
+      title: 'T',
+      url: 'u',
+      userAction: ArticleModel.userActionMisclassifySpam,
+    );
+
+    expect(article.toJson()['userAction'], 'n_spam');
+    expect(
+      ArticleModel.fromCache(article.toJson()).userAction,
+      ArticleModel.userActionMisclassifySpam,
+    );
+    expect(
+      ArticleModel.fromEntryJson(<String, dynamic>{
+        'entries': <String, dynamic>{'id': 'x'},
+        'feeds': <String, dynamic>{},
+      }).userAction,
+      isNull,
+    );
+    expect(ArticleModel.fromCache({}).userAction, isNull);
+  });
 }

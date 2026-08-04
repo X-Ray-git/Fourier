@@ -752,3 +752,63 @@
 - 不要把自动重试计数落盘；它只是当前会话的瞬时退避进度，落盘会让重启后立即跑满 3 次重试，反而绕过"刷新时重扫一轮"的节奏。
 - 不要把缓存清理和失败重扫并行启动；清理完成后才能重新入队失败图片。
 - 不要在行内图片和画廊上复用本次重试，除非单独验证其 `errorWidget` 改造；本次范围明确不含。
+
+## 误分类（N）用 userAction 标记记录统计信号
+
+背景：用户希望事后统计 AI 是否错误分类文章。被 AI 拒绝的文章进入垃圾拦截页，用户用 `K`（保留）、`M`（确认拒绝）和新增的 `N`（误分类）处理；普通时间线用 `N` 把文章标记为误分类。设计讨论确认：`N` 是"分类翻转 + 强制已读"的对称操作，拦截页 `N` = 保留+已读（等价先 `K` 再在常规列表 `M`），时间线 `N` = 拒绝+已读；两者都是原子 UndoAction。`M` 语义模糊（可能同意 AI 也可能懒得分辨），用户明确不拆分成两个动作。统计核心是 FP（`k`+`n_keep`）和 FN（`n_spam`），`m` 是弱信号单独归类，null 无信号；时间趋势分析不需要，用户明确不添加动作时间戳。
+
+决策：
+
+- `ArticleModel.userAction` 落库，取值 `'k'/'m'/'n_keep'/'n_spam'/null`，同一文章多次动作 latest wins。`upsertMany` 合并用 `item.userAction ?? existing?.userAction`，网络同步数据（恒为 null）不覆盖本地标记。
+- 统计口径：FP = `'k'` + `'n_keep'`，FN = `'n_spam'`，`'m'` 弱信号，null 无信号。`K`/`N` 不再清空 `filterReason`/`filteredAt`，供事后按 AI 原判理由聚合 FP。
+- 时间线上的 `N` 对已读或已在拦截中的文章禁用（按钮置灰、菜单禁用），保护 FN 语义纯净：`n_spam` 只会写在从未被 AI 拒绝的文章上。拦截页 `N` 恒可用。
+- 按钮为 macOS 文章详情右上角浮动白色旗帜图标（`Icons.outlined_flag`），位于目录按钮左侧；无目录时占据目录位置（复制/已读按钮簇左侧）。快捷键 `N`，`Cmd+N` 必须放行给系统新建窗口。Android 暂不加按钮。
+- 兼容性立场：旧版本二进制不认识 `userAction`，任何旧版重写（同步、标已读、undo）都会把该字段静默剥掉，这是二进制层面不可修复的行为。讨论过独立 Hive box 方案（旧版本从不打开新 box 可完全免疫），用户评估后选择字段方案，接受"统计只有真的没有假的"语义（系统性低估但不会脏）。
+
+后果：标记写入、四种动作方向和撤销回滚都经受控测试与真机验证；`tool/inspect_user_actions.dart` 可随时检查标记落库情况。旧版本混用时期产生的标记缺失属于已接受的数据语义。
+
+不要回退：
+
+- 不要给 `userAction` 添加时间戳字段，用户已明确决定不做时间趋势分析。
+- 不要在时间线上对已读或已在拦截中的文章启用 `N`。
+- 不要把 `M` 拆成"同意/懒得分辨"两个动作。
+- 不要让网络同步数据覆盖本地动作标记。
+
+## 过滤动作撤销必须整条替换快照，setReadState 必须保留全部过滤字段
+
+背景：调试中发现两类数据库写入陷阱。第一，`upsertMany` 的合并策略是 `isRejectedByAi` 用 OR、`userAction` 用 `item ?? existing`，因此"把已拒绝恢复为未拒绝"和"把动作标记回滚为 null"都无法通过普通 merge 完成；K 的捞回路径本来就必须用 raw map 写入（`clearFilterState`），M/N 的撤销也踩中同一陷阱，表现为撤销后状态恢复但 `userAction` 标记残留。第二，`LocalArticleDbService.setReadState` 重建文章模型时曾遗漏 `userAction`，而 `applyMisclassify`/`applyFilterReject` 的写入顺序是先 upsert 带标记的文章、再经 `applyReadLocally → setReadState` 标已读，导致标记刚写入就被覆盖成 null——这是"N/M 标记写不进去"的主因，K 路径不走 `setReadState` 所以只有 K 的标记幸存。
+
+决策：四个过滤动作（`filterKeep`/`filterReject`/`misclassifyKeep`/`misclassifySpam`）的撤销路径全部使用 `LocalArticleDbService.upsertOne(article, forceReplace: true)` 整条还原动作前快照；`forceReplace` 跳过全部合并逻辑，直接写入 `toJson()`。`setReadState` 重建时完整保留 `isRejectedByAi`/`filterReason`/`filterReviewed`/`filteredAt`/`userAction`。
+
+后果：受控测试与真机验证确认：`n_spam` 写入后 `Cmd+Z` 一次性回滚分类、已读、审核标记和 `userAction`（`拒绝=false 已读=false 已审=false act=null`）；`K` 撤销精确还原快照（含快照中已有的标记值）。
+
+不要回退：
+
+- 不要让任何过滤动作撤销回到普通 merge 路径。
+- 不要在 `setReadState` 或其他"从旧记录重建"的写入路径中遗漏 `userAction` 或任何过滤字段。
+- 不要在 `applyMisclassify`/`applyFilterReject` 中依赖"先 upsert 后标已读"的顺序而不验证标记是否保留。
+
+## 拦截页 K/M/N 由页面级键盘处理器执行，HardwareKeyboard 不短路
+
+背景：macOS 拦截页 `MacSplitArticleListCoordinator.reconcileSelection()` 对 null 选择直接返回，不会自动选中第一篇；详情面板未挂载时 `M`/`N` 没有任何处理器（`K` 是页面级处理器所以能用），用户按 `M` 完全无响应。同时确认 Flutter `HardwareKeyboard` 会调用全部注册处理器并做 `handled = handled || thisResult`，不因第一个返回 true 而短路——页面级处理器与详情 `ArticlePageView` 处理器会双触发。
+
+决策：拦截页的 `K/M/N` 统一由页面级 `_handleHardwareKeyEvent` 执行（`K` 保留、`M` 确认拒绝、`N` 误分类保留+已读），不依赖详情面板是否挂载；`ArticlePageView` 在 `isReviewContext` 下对 `M/N` 只消费按键不执行回调，避免双触发。时间线 `M/N` 仍由 `ArticlePageView` 处理器执行（`onMKeyPressed`/`onMisclassifyKeyPressed`）。
+
+后果：拦截页在无选中时不再静默吞掉 `M/N`；双重触发被明确消除，不再依赖 `beginRemoval` 的 pending 守卫兜底。
+
+不要回退：
+
+- 不要依赖 `HardwareKeyboard` 处理器的返回 true 来短路其他处理器。
+- 不要只依赖详情面板挂载来响应拦截页快捷键。
+- 新增页面级与组件级共存的键盘处理器时，必须显式处理双触发。
+
+## Obx 内所有提前 return 之前必须先读取 observable
+
+背景：误分类旗帜按钮的 `Obx` 在 `onMisclassifyKeyPressed == null`（最近阅读/订阅源详情页）时提前 `return SizedBox.shrink()`，且提前返回发生在读取任何 observable 之前，触发 GetX 的"improper use"异常（`RxInterface.notifyChildren` 在 `canUpdate == false` 时 throw）。Debug 构建表现为 GetX 红色错误组件覆盖右侧面板；Release 构建表现为正文区域一片半透明空白（构建失败，子树不渲染）——用户最初把后者描述为"50% 白色覆盖"。这与 Android Inbox 曾出现的"Obx 未读取 Rx"是同一类陷阱。
+
+决策：`Obx`/`GetX` 的 builder 中，所有条件提前返回之前必须先读取至少一个 observable（如 `controller.isRead.value`），保证每次构建都有依赖登记。
+
+不要回退：
+
+- 不要在 `Obx` 内把 observable 读取放在提前 return 之后。
+- 排查"Release 版一片空白/半透明覆盖"时，先检查是否有 Obx 提前返回未读取 observable；GetX 误用异常在 Release 会被吞掉，只剩空白渲染。

@@ -32,6 +32,12 @@
 - 用户从旧桌面/移动端 build 导出 JSON，安装迁移后的包，再导入设置。
 - 缓存/内容数据刻意不属于设置备份。
 
+## 文章字段迁移
+
+- `ArticleModel.userAction`（`'k'/'m'/'n_keep'/'n_spam'/null`）为本地统计字段，Hive 无 schema，无需数据迁移，缺失时默认 null。
+- `upsertMany` 合并策略：`item.userAction ?? existing?.userAction`，网络数据恒为 null，不覆盖本地动作标记。
+- 旧版本二进制不认识该字段，任何旧版重写（同步、标已读、undo）都会把它从文章 JSON 中静默剥掉；这是二进制层面的不可修复行为，统计以"有记录即真实信号"为准，不做跨版本数量对齐。
+
 ## Android 签名对齐
 
 问题：

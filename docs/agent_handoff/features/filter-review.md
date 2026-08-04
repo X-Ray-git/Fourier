@@ -37,6 +37,7 @@
 - `upsertMany` 合并使用 `item.userAction ?? existing?.userAction`，网络同步数据不得覆盖本地动作标记；旧版本二进制重写文章时会丢弃该字段（不可修复），统计语义为"只有真的没有假的"。
 - 所有从现有 `ArticleModel` 重建新实例的路径都必须复制 `userAction`。数据库 merge 能保护落盘值，但内存模型丢字段会让后续 Undo 快照无法精确恢复上一个动作。
 - 时间线 `N` 复用已读退场的帧边界通知；`applyMisclassify` 不得在 `applyReadLocally(...deferTimelineVisualUpdate: true)` 后额外立即调用 `ArticleStateNotifier.tick`，否则会绕过动画保护。
+- `N` 撤销时可先将动作前的完整快照写回数据库，但时间线内存快照必须暂时保持已读，再由 `markAsUnreadLocal` 完成唯一一次未读插入。如果内存也提前恢复为未读，标准恢复路径会提前返回，后续数据库通知只能通过整表结构刷新重插卡片，并会取消进场动画。
 
 与普通时间线的复用边界：
 

@@ -525,11 +525,15 @@ class UndoService {
         action.type == UndoActionType.misclassifyKeep) {
       // 整条替换快照：OR 合并会把动作标记（m/n_keep）留在已回滚的文章上
       LocalArticleDbService.upsertOne(article, forceReplace: true);
-      _replaceTimelineArticle(article);
+      _replaceTimelineArticle(
+        action.type == UndoActionType.misclassifyKeep
+            ? _snapshotBeforeUnreadRestore(article)
+            : article,
+      );
     } else if (action.type == UndoActionType.misclassifySpam) {
       // OR 合并无法把已拒绝恢复为未拒绝，必须整条替换
       LocalArticleDbService.upsertOne(article, forceReplace: true);
-      _replaceTimelineArticle(article);
+      _replaceTimelineArticle(_snapshotBeforeUnreadRestore(article));
     }
 
     if (Get.isRegistered<ArticleController>(tag: article.entryId)) {
@@ -794,6 +798,16 @@ class UndoService {
       filterReviewed: filterReviewed,
       filteredAt: article.filteredAt,
       userAction: userAction ?? article.userAction,
+    );
+  }
+
+  static ArticleModel _snapshotBeforeUnreadRestore(ArticleModel article) {
+    // Restore classification metadata immediately, but leave the live timeline
+    // item read until markAsUnreadLocal performs the single animated insertion.
+    return _copyArticle(
+      article,
+      isRead: true,
+      filterReviewed: article.filterReviewed,
     );
   }
 

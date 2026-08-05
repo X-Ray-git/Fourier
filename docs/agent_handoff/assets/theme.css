@@ -1247,8 +1247,8 @@ html.js body.page-ready { opacity: 1; }
   border: none;
   padding: 0;
   background: transparent;
-  max-width: 94vw;
-  max-height: 92vh;
+  max-width: 96vw;
+  max-height: 94vh;
   overflow: auto;
 }
 
@@ -1259,6 +1259,8 @@ html.js body.page-ready { opacity: 1; }
 }
 
 #dg-lightbox .lb-frame {
+  width: fit-content;
+  margin: 0 auto;
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1271,8 +1273,7 @@ html.js body.page-ready { opacity: 1; }
   display: block;
   width: 100%;
   height: auto;
-  max-width: 90vw;
-  max-height: 82vh;
+  max-width: 100%;
 }
 
 #dg-lightbox .lb-close {
@@ -1285,6 +1286,11 @@ html.js body.page-ready { opacity: 1; }
   background: var(--surface);
   color: var(--text-weak);
   cursor: pointer;
+}
+
+@media (max-width: 620px) {
+  #dg-lightbox { max-width: 100vw; }
+  #dg-lightbox .lb-frame { padding: 8px; }
 }
 
 #dg-lightbox .lb-close:hover { color: var(--text); border-color: var(--brand-color); }

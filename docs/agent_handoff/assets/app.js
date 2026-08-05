@@ -465,7 +465,21 @@
       if (!svg) return;
       var frame = document.createElement('div');
       frame.className = 'lb-frame';
-      frame.appendChild(svg.cloneNode(true));
+      var clone = svg.cloneNode(true);
+      // 按视口与图形宽高比计算灯箱宽度，保证任意比例下都大于内嵌图且不溢出
+      var ratio = 2;
+      var vb = svg.getAttribute('viewBox');
+      if (vb) {
+        var p = vb.trim().split(/[\s,]+/).map(Number);
+        if (p.length === 4 && p[2] > 0 && p[3] > 0) ratio = p[2] / p[3];
+      }
+      // 视口宽度以布局视口为准（移动端 visual viewport 可能小于布局视口）
+      var vw = document.documentElement.clientWidth || window.innerWidth;
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var lw = Math.min(vw * 0.94, vh * 0.88 * ratio);
+      // 宽度直接作用于 SVG（frame 为 fit-content，避免 box-sizing 吃掉 padding）
+      clone.style.width = Math.max(320, Math.round(lw)) + 'px';
+      frame.appendChild(clone);
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'lb-close';

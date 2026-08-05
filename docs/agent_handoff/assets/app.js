@@ -808,27 +808,6 @@
     });
   }
 
-  /* ── 落地页卡片滚动渐显 ───────────────────────── */
-
-  function initReveal() {
-    var cards = renderEl ? renderEl.querySelectorAll('.landing .feature-card, .landing .entry-card') : [];
-    if (!cards.length) return;
-    cards.forEach(function (c, i) {
-      c.classList.add('reveal');
-      c.style.transitionDelay = (Math.min(i, 8) * 40) + 'ms';
-    });
-    if (!('IntersectionObserver' in window)) {
-      cards.forEach(function (c) { c.classList.add('revealed'); });
-      return;
-    }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) { e.target.classList.add('revealed'); io.unobserve(e.target); }
-      });
-    }, { threshold: 0.12 });
-    cards.forEach(function (c) { io.observe(c); });
-  }
-
   /* ── mockup 流程演示（huashu Dashboard+Cinematic 模式）── */
 
   function initMockupCinematic() {
@@ -985,8 +964,8 @@
           });
           rio.unobserve(en.target);
         });
-      // 全屏镜头：场景中部进入视口中部时才触发
-      }, { rootMargin: '-30% 0px -30% 0px', threshold: 0 });
+      // 区块顶部进入视口下沿附近即触发（不再依赖 100vh 全屏镜头）
+      }, { rootMargin: '0px 0px -15% 0px', threshold: 0.05 });
       reveals.forEach(function (el, i) {
         el.style.transitionDelay = (i % 3) * 60 + 'ms';
         rio.observe(el);
@@ -1011,7 +990,6 @@
     initCopyButtons();
     initLightbox();
     initSectionReveal();
-    initReveal();
     initCommandPalette();
     initReadSettings();
     initKeyboardNav();

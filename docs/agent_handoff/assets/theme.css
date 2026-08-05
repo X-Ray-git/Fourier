@@ -788,65 +788,8 @@ body.wiki-full .wiki-rendered > h1:first-child {
 }
 
 /* 功能亮点卡片 */
-.landing-section { margin-top: 44px; }
-
-.landing-section > h2 {
-  font-size: 22px;
-  margin: 0 0 6px;
-  border: none;
-}
-
-.landing-section > .section-lead {
-  color: var(--text-weak);
-  margin: 0 0 22px;
-  font-size: 14.5px;
-}
-
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.feature-card {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px 20px 18px;
-  background: var(--surface);
-  transition: transform 0.2s var(--ease-expo-out), border-color 0.2s var(--ease-expo-out), box-shadow 0.2s var(--ease-expo-out);
-}
-
-.feature-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--brand-color);
-  box-shadow: var(--shadow-soft);
-}
-
-.feature-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 13px;
-  color: var(--brand-color-strong);
-  background: var(--selection);
-}
-
-.feature-icon svg { width: 21px; height: 21px; }
-
-.feature-card h3 {
-  margin: 0 0 7px;
-  font-size: 15.5px;
-}
-
-.feature-card p {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: var(--text-weak);
-}
+.hp-section + .hp-section,
+.stats-band + .hp-section { margin-top: 8px; }
 
 /* Wiki 快速入口 */
 .entry-grid {
@@ -880,20 +823,18 @@ body.wiki-full .wiki-rendered > h1:first-child {
 .entry-card .entry-desc { font-size: 12.5px; color: var(--text-weak); line-height: 1.65; }
 
 @media (max-width: 900px) {
-  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero { padding: 44px 26px 40px; }
+  .hero { padding: 40px 24px 32px; }
 }
 
 @media (max-width: 560px) {
-  .feature-grid { grid-template-columns: 1fr; }
   .entry-grid { grid-template-columns: 1fr; }
   .hero h2 { font-size: 28px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hero-orb { animation: none; }
-  .hero-cta a, .feature-card, .entry-card { transition: none; }
+  .hero-cta a, .entry-card { transition: none; }
 }
 
 /* ── 全站视觉横幅（每页顶部）─────────────────── */
@@ -1157,14 +1098,6 @@ html.js body.page-ready { opacity: 1; }
 .wiki-rendered tr { transition: background 0.12s; }
 .wiki-rendered tbody tr:hover { background: var(--selection); }
 
-.landing .reveal {
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
-
-.landing .reveal.revealed { opacity: 1; transform: none; }
-
 .hero-inner { animation: hero-in 0.6s ease both; }
 @keyframes hero-in {
   from { opacity: 0; transform: translateY(14px); }
@@ -1175,7 +1108,7 @@ html.js body.page-ready { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   body, .wiki-rendered a, .wiki-rendered tr, .dg svg { transition: none; }
-  .landing .reveal, .hero-inner, .page-banner { animation: none; opacity: 1; transform: none; }
+  .hero-inner, .page-banner { animation: none; opacity: 1; transform: none; }
   .page-banner::after { animation: none; }
   .wiki-rendered details.dg-callout summary::before { transition: none; }
 }
@@ -1510,7 +1443,7 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   .wiki-content-col { max-width: none !important; }
   .page-banner { break-inside: avoid; }
   .wiki-rendered h1, .wiki-rendered h2, .wiki-rendered h3 { break-after: avoid; }
-  pre, blockquote, table, .dg, .feature-card, .entry-card { break-inside: avoid; }
+  pre, blockquote, table, .dg, .highlight-card, .flow-step, .entry-card { break-inside: avoid; }
   a { color: inherit; text-decoration: none; }
   .wiki-footer { border-top: 1px solid #999; color: #333; }
   .wiki-rendered { font-size: 11pt; line-height: 1.65; }
@@ -1555,12 +1488,10 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 .hp-section {
   text-align: center;
-  min-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 48px 0 40px;
+  padding: 64px 0 56px;
 }
 
 #wiki-entry { scroll-margin-top: 24px; }
@@ -1568,11 +1499,11 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 /* Hero v3：巨型展示 + 界面示意 */
 .hero {
   border-radius: 26px;
-  padding: 84px 48px 0;
+  padding: 56px 48px 40px;
   text-align: center;
 }
 
-.hero-logo { justify-content: center; margin-bottom: 30px; }
+.hero-logo { justify-content: center; margin-bottom: 22px; }
 
 .hero h2 {
   font-size: clamp(38px, 6.4vw, 68px);
@@ -1607,8 +1538,8 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 /* 界面示意窗口 */
 .app-mockup {
-  margin: 46px -20px -2px;
-  padding: 0 24px 26px;
+  margin: 40px 0 0;
+  padding: 0 18px;
   position: relative;
 }
 
@@ -1616,11 +1547,11 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -30px;
+  bottom: -22px;
   transform: translateX(-50%);
-  width: 76%;
-  height: 90px;
-  background: radial-gradient(ellipse 50% 100% at 50% 0%, rgba(245, 158, 11, 0.30), transparent 70%);
+  width: 72%;
+  height: 80px;
+  background: radial-gradient(ellipse 50% 100% at 50% 0%, rgba(245, 158, 11, 0.28), transparent 70%);
   filter: blur(18px);
   pointer-events: none;
 }
@@ -1850,12 +1781,11 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 /* 统计带 */
 .stats-band {
-  min-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 56px 40px 52px;
+  padding: 72px 40px 68px;
   background:
     radial-gradient(ellipse 80% 120% at 20% -30%, rgba(245, 158, 11, 0.20) 0%, transparent 55%),
     radial-gradient(ellipse 70% 110% at 90% 10%, rgba(249, 115, 22, 0.14) 0%, transparent 55%),
@@ -1888,60 +1818,67 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   color: rgba(235, 237, 245, 0.72);
 }
 
-/* 流程条 */
+/* 流程条：横向编号导轨，区别于上方的亮点卡片 */
 .flow-strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 34px;
+  gap: 0;
+  margin-top: 36px;
   text-align: left;
+  counter-reset: flow;
 }
 
 .flow-step {
   position: relative;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px 16px 14px;
-  background: var(--surface);
+  padding: 6px 18px 6px 0;
 }
 
-.flow-step:not(:first-child)::before {
+.flow-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  left: -11px;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border-top: 2px solid var(--brand-color);
-  border-right: 2px solid var(--brand-color);
-  transform: translateY(-50%) rotate(45deg);
-  opacity: 0.75;
+  right: 0;
+  top: 17px;
+  width: 14px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand-color), color-mix(in srgb, var(--brand-color) 25%, transparent));
+  border-radius: 2px;
 }
 
 .flow-step .fs-num {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
   color: var(--brand-color-strong);
-  margin-bottom: 10px;
+  background: var(--selection);
+  border: 1px solid color-mix(in srgb, var(--brand-color) 35%, transparent);
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .flow-step h4 {
   margin: 0 0 6px;
-  font-size: 14.5px;
+  font-size: 15px;
 }
 
 .flow-step p {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.65;
+  font-size: 13px;
+  line-height: 1.7;
   color: var(--text-weak);
+  text-wrap: pretty;
 }
 
 @media (max-width: 900px) {
   .highlight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 14px; }
-  .flow-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .flow-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 18px; }
+  .flow-step:not(:last-child)::after { display: none; }
 }
 
 @media (max-width: 560px) {

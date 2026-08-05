@@ -799,6 +799,92 @@
     cards.forEach(function (c) { io.observe(c); });
   }
 
+  /* ── 落地页效果（Apple 式滚动叙事）────────────── */
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function initLandingFx() {
+    if (!document.body.classList.contains('wiki-full')) return;
+    var html = document.documentElement;
+    var heroH2 = renderEl ? renderEl.querySelector('.hero h2') : null;
+
+    // 1) hero 标题随滚动轻微缩放（退场感）
+    if (heroH2 && !reducedMotion()) {
+      var ticking = false;
+      window.addEventListener('scroll', function () {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(function () {
+          ticking = false;
+          var y = window.scrollY;
+          var scale = Math.max(0.86, 1 - y * 0.00028);
+          var opacity = Math.max(0, 1 - y * 0.0011);
+          heroH2.style.transform = 'scale(' + scale + ')';
+          heroH2.style.opacity = opacity;
+        });
+      }, { passive: true });
+    }
+
+    // 2) 大数字滚动递增
+    var counters = renderEl ? renderEl.querySelectorAll('.stat-num') : [];
+    if (counters.length) {
+      var setNum = function (el, v) {
+        // 只更新首个文本节点，保留 % 等后缀子元素
+        var tn = el.firstChild;
+        if (tn && tn.nodeType === 3) tn.textContent = v;
+        else el.textContent = v;
+      };
+      var animate = function (el) {
+        var target = Number(el.getAttribute('data-count') || 0);
+        var dur = 1200;
+        var t0 = null;
+        function step(ts) {
+          if (!t0) t0 = ts;
+          var p = Math.min(1, (ts - t0) / dur);
+          var eased = 1 - Math.pow(1 - p, 3);
+          setNum(el, Math.round(target * eased));
+          if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      };
+      var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { animate(en.target); io.unobserve(en.target); }
+        });
+      }, { threshold: 0.4 }) : null;
+      counters.forEach(function (c) {
+        if (reducedMotion() || html.classList.contains('no-anim')) {
+          setNum(c, c.getAttribute('data-count'));
+        } else if (io) {
+          io.observe(c);
+        } else {
+          setNum(c, c.getAttribute('data-count'));
+        }
+      });
+    }
+
+    // 3) 展示区块模糊渐显（交错延迟）
+    var reveals = renderEl ? renderEl.querySelectorAll('.hp-reveal') : [];
+    if (reveals.length && !reducedMotion() && !html.classList.contains('no-anim') && 'IntersectionObserver' in window) {
+      var rio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) {
+            en.target.classList.add('revealed');
+            rio.unobserve(en.target);
+          }
+        });
+      }, { threshold: 0.12 });
+      reveals.forEach(function (el, i) {
+        el.style.transitionDelay = (i % 3) * 70 + 'ms';
+        rio.observe(el);
+      });
+    } else {
+      reveals.forEach(function (el) { el.classList.add('revealed'); });
+    }
+  }
+
   /* ── 启动 ─────────────────────────────────────── */
 
   function init() {
@@ -818,6 +904,7 @@
     initCommandPalette();
     initReadSettings();
     initKeyboardNav();
+    initLandingFx();
     requestAnimationFrame(function () { document.body.classList.add('page-ready'); });
   }
 

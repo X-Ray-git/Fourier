@@ -170,6 +170,22 @@
     }
   }
 
+  /* ── 缓动库（移植自 huashu-design animations.jsx）── */
+
+  var EASING = {
+    expoOut: function (t) { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); },
+    overshoot: function (t) {
+      var c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    },
+    anticipation: function (t) {
+      if (t < 0.2) return -0.3 * (t / 0.2) * (t / 0.2);
+      var a = (t - 0.2) / 0.8;
+      return -0.012 + 1.012 * a * a * (3 - 2 * a);
+    },
+    easeOutCubic: function (t) { return 1 - Math.pow(1 - t, 3); },
+  };
+
   /* ── 搜索与命令面板共用工具 ───────────────────── */
 
   function norm(s) { return (s || '').toLowerCase(); }
@@ -813,6 +829,77 @@
     cards.forEach(function (c) { io.observe(c); });
   }
 
+  /* ── mockup 流程演示（huashu Dashboard+Cinematic 模式）── */
+
+  function initMockupCinematic() {
+    if (!renderEl) return;
+    var playBtn = renderEl.querySelector('.mock-play');
+    if (!playBtn) return;
+    var win = playBtn.closest('.mock-window');
+    var list = win.querySelector('.mock-list');
+    var article = win.querySelector('.mock-article');
+    var running = false;
+    var html = document.documentElement;
+
+    function buildCard() {
+      var proto = list.querySelector('.mock-card');
+      var card = proto ? proto.cloneNode(true) : document.createElement('div');
+      card.className = 'mock-card enter from';
+      card.classList.remove('read', 'flagged');
+      return card;
+    }
+
+    function addBar() {
+      var b = document.createElement('div');
+      b.className = 'ma-para grow';
+      article.appendChild(b);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { b.classList.add('on'); });
+      });
+    }
+
+    function reset() {
+      var temp = list.querySelector('.mock-card.enter');
+      if (temp) temp.remove();
+      article.querySelectorAll('.ma-para.grow').forEach(function (b) { b.remove(); });
+      win.classList.remove('playing');
+      running = false;
+    }
+
+    playBtn.addEventListener('click', function () {
+      if (running) return;
+      running = true;
+      win.classList.add('playing');
+      var card = buildCard();
+      list.insertBefore(card, list.firstChild);
+      var reduced = reducedMotion() || html.classList.contains('no-anim');
+      if (reduced) {
+        // 减动效：直接显示终态，短暂停留后复位
+        card.classList.remove('from');
+        card.classList.add('flagged');
+        addBar(); addBar();
+        card.classList.add('read');
+        setTimeout(reset, 1400);
+        return;
+      }
+      // Scene 1 · 新卡片进入（0s）
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { card.classList.remove('from'); });
+      });
+      // Scene 2 · AI 判定（1.6s）
+      setTimeout(function () { card.classList.add('flagged'); }, 1600);
+      // Scene 3 · 阅读填充（3.2s / 3.7s）
+      setTimeout(function () { addBar(); }, 3200);
+      setTimeout(function () { addBar(); }, 3600);
+      // Scene 4 · 已读（6.0s）
+      setTimeout(function () {
+        card.classList.add('read');
+      }, 6000);
+      // Scene 5 · 复位（7.6s）
+      setTimeout(reset, 7600);
+    });
+  }
+
   /* ── 落地页效果（Apple 式滚动叙事）────────────── */
 
   function reducedMotion() {
@@ -857,8 +944,7 @@
         function step(ts) {
           if (!t0) t0 = ts;
           var p = Math.min(1, (ts - t0) / dur);
-          var eased = 1 - Math.pow(1 - p, 3);
-          setNum(el, Math.round(target * eased));
+          setNum(el, Math.round(target * EASING.expoOut(p)));
           if (p < 1) requestAnimationFrame(step);
         }
         requestAnimationFrame(step);
@@ -879,17 +965,27 @@
       });
     }
 
-    // 3) 展示区块模糊渐显（交错延迟）
+    // 3) 展示区块模糊渐显（场景化：区块 blur-in + 行级 stagger）
     var reveals = renderEl ? renderEl.querySelectorAll('.hp-reveal') : [];
     if (reveals.length && !reducedMotion() && !html.classList.contains('no-anim') && 'IntersectionObserver' in window) {
       var rio = new IntersectionObserver(function (entries) {
         entries.forEach(function (en) {
-          if (en.isIntersecting) {
-            en.target.classList.add('revealed');
-            rio.unobserve(en.target);
-          }
+          if (!en.isIntersecting) return;
+          en.target.classList.add('revealed');
+          // 行级 stagger：卡片按行列交错进入（expoOut）
+          var items = en.target.querySelectorAll('.highlight-card, .flow-step, .stat, .entry-card');
+          items.forEach(function (it, i) {
+            it.classList.add('reveal-item');
+            it.style.transitionDelay = (Math.floor(i / 3) * 90 + (i % 3) * 50) + 'ms';
+            requestAnimationFrame(function () {
+              it.classList.add('reveal-item-show');
+            });
+            // 过渡结束后清除 delay，避免影响 hover 反馈
+            setTimeout(function () { it.style.transitionDelay = ''; }, 1600);
+          });
+          rio.unobserve(en.target);
         });
-      }, { threshold: 0.12 });
+      }, { threshold: 0.1 });
       reveals.forEach(function (el, i) {
         el.style.transitionDelay = (i % 3) * 70 + 'ms';
         rio.observe(el);
@@ -919,6 +1015,7 @@
     initReadSettings();
     initKeyboardNav();
     initLandingFx();
+    initMockupCinematic();
     requestAnimationFrame(function () { document.body.classList.add('page-ready'); });
   }
 

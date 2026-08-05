@@ -5,6 +5,11 @@
  */
 
 :root {
+  /* 动效令牌（移植自 huashu-design Easing 库） */
+  --ease-expo-out: cubic-bezier(0.16, 1, 0.3, 1);        /* 主缓动：迅速启动+缓慢刹车 */
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);   /* 弹性弹出：图标/徽章 */
+  --ease-anticipation: cubic-bezier(0.3, -0.25, 0.6, 1); /* 蓄力：面板/按钮按下 */
+
   --brand-color: #f59e0b;
   --brand-color: oklch(0.769 0.165 70.1);
   --brand-color-strong: #f97316;
@@ -161,7 +166,7 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.75;
   -webkit-font-smoothing: antialiased;
 }
@@ -378,6 +383,11 @@ html[data-theme='auto'] .theme-icon-auto { display: block; }
 
 .wiki-main { min-width: 0; }
 
+/* 中文最佳行长 28–32 字（huashu 排印规则）：正文列 36em 居中 */
+.wiki-rendered { max-width: 36em; margin-inline: auto; }
+
+body.wiki-full .wiki-rendered { max-width: none; }
+
 .wiki-toc {
   position: sticky;
   top: 72px;
@@ -428,15 +438,15 @@ html[data-theme='auto'] .theme-icon-auto { display: block; }
 
 .wiki-rendered > h1:first-child {
   margin-top: 0;
-  font-size: clamp(24px, 3.2vw, 30px);
+  font-size: clamp(26px, 3.4vw, 32px);
   line-height: 1.35;
   letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
-.wiki-rendered h1 { font-size: clamp(23px, 2.8vw, 28px); text-wrap: balance; }
+.wiki-rendered h1 { font-size: clamp(25px, 3vw, 31px); text-wrap: balance; }
 .wiki-rendered h2 {
-  font-size: clamp(19px, 2.2vw, 22px);
+  font-size: clamp(20px, 2.4vw, 25px);
   margin-top: 34px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
@@ -454,8 +464,8 @@ html[data-theme='auto'] .theme-icon-auto { display: block; }
   border-radius: 2px;
   background: linear-gradient(90deg, var(--brand-color), color-mix(in srgb, var(--brand-color) 30%, transparent));
 }
-.wiki-rendered h3 { font-size: 17px; margin-top: 26px; text-wrap: balance; }
-.wiki-rendered h4 { font-size: 15.5px; margin-top: 20px; }
+.wiki-rendered h3 { font-size: 20px; margin-top: 26px; text-wrap: balance; }
+.wiki-rendered h4 { font-size: 16.5px; margin-top: 20px; }
 
 .wiki-rendered h2[id], .wiki-rendered h3[id], .wiki-rendered h4[id] { scroll-margin-top: 76px; }
 
@@ -803,7 +813,7 @@ body.wiki-full .wiki-rendered > h1:first-child {
   border-radius: 16px;
   padding: 20px 20px 18px;
   background: var(--surface);
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: transform 0.2s var(--ease-expo-out), border-color 0.2s var(--ease-expo-out), box-shadow 0.2s var(--ease-expo-out);
 }
 
 .feature-card:hover {
@@ -911,6 +921,8 @@ body.wiki-full .wiki-rendered > h1:first-child {
   to { opacity: 1; transform: none; }
 }
 
+.page-banner { animation-timing-function: var(--ease-expo-out); }
+
 /* 光泽扫过 */
 .page-banner::after {
   content: '';
@@ -1001,6 +1013,7 @@ body.wiki-full .wiki-rendered > h1:first-child {
   border-color: color-mix(in srgb, var(--banner-accent) 40%, transparent);
   background: color-mix(in srgb, var(--banner-accent) 10%, transparent);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 各分区横幅配色（浅色主题） */
@@ -1158,6 +1171,8 @@ html.js body.page-ready { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
 
+.hero-inner { animation-timing-function: var(--ease-expo-out); }
+
 @media (prefers-reduced-motion: reduce) {
   body, .wiki-rendered a, .wiki-rendered tr, .dg svg { transition: none; }
   .landing .reveal, .hero-inner, .page-banner { animation: none; opacity: 1; transform: none; }
@@ -1177,7 +1192,7 @@ html.js body.page-ready { opacity: 1; }
 
 /* 主题图标切换：缩放 + 模糊 */
 .theme-toggle .theme-icon-sun, .theme-toggle .theme-icon-moon, .theme-toggle .theme-icon-auto {
-  transition: transform 0.18s ease, opacity 0.18s ease, filter 0.18s ease;
+  transition: transform 0.22s var(--ease-overshoot), opacity 0.22s var(--ease-overshoot), filter 0.22s var(--ease-overshoot);
 }
 
 .theme-toggle.icons-swap .theme-icon-sun,
@@ -1218,7 +1233,7 @@ html.js body.page-ready { opacity: 1; }
   transform-origin: top center;
   transform: translateY(-4px) scale(0.985);
   opacity: 0;
-  transition: transform 0.16s ease, opacity 0.16s ease;
+  transition: transform 0.2s var(--ease-expo-out), opacity 0.2s var(--ease-expo-out);
   pointer-events: none;
 }
 
@@ -1300,11 +1315,13 @@ html.js body.page-ready { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
 
+#dg-lightbox .lb-frame { animation-timing-function: var(--ease-expo-out); }
+
 /* 章节滚动渐显 */
 .wiki-rendered h2.sec-reveal, .wiki-rendered h3.sec-reveal {
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transition: opacity 0.4s var(--ease-expo-out), transform 0.4s var(--ease-expo-out);
 }
 
 .wiki-rendered h2.sec-reveal.revealed, .wiki-rendered h3.sec-reveal.revealed {
@@ -1326,7 +1343,7 @@ html.js body.page-ready { opacity: 1; }
 /* 阅读设置变量 */
 html { --read-scale: 1; --read-lh: 1.75; --read-width: 100%; }
 
-body { font-size: calc(16px * var(--read-scale)); }
+body { font-size: calc(17px * var(--read-scale)); }
 .wiki-rendered { line-height: var(--read-lh); }
 .wiki-content-col { max-width: var(--read-width); }
 
@@ -1695,11 +1712,61 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.mock-card { position: relative; }
 .mock-card .mc-title { height: 11px; width: 82%; border-radius: 4px; background: rgba(255, 255, 255, 0.42); margin-bottom: 8px; }
 .mock-card .mc-line { height: 7px; width: 96%; border-radius: 4px; background: rgba(255, 255, 255, 0.14); margin-bottom: 5px; }
 .mock-card .mc-line.short { width: 64%; margin-bottom: 0; }
 .mock-card.read .mc-title { opacity: 0.45; }
 .mock-card.read .mc-line { opacity: 0.28; }
+
+/* 播放按钮 */
+.mock-play {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  color: #1c1305;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45);
+  transition: transform 0.22s var(--ease-overshoot), opacity 0.25s ease;
+}
+
+.mock-play:hover { transform: scale(1.1); }
+
+.mock-window.playing .mock-play { opacity: 0; pointer-events: none; }
+
+/* 流程动画状态 */
+.mock-card.enter { transition: opacity 0.5s var(--ease-expo-out), transform 0.5s var(--ease-expo-out); }
+.mock-card.enter.from { opacity: 0; transform: translateY(12px); }
+
+.mock-card.flagged::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #fbbf24, #f97316);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+}
+
+.mock-article .ma-para.grow {
+  opacity: 0;
+  transform: scaleY(0.5);
+  transform-origin: top;
+  transition: opacity 0.45s var(--ease-expo-out), transform 0.45s var(--ease-expo-out);
+}
+
+.mock-article .ma-para.grow.on { opacity: 1; transform: none; }
 
 .mock-article { padding: 20px 22px; }
 
@@ -1735,7 +1802,7 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   border-radius: 18px;
   padding: 26px 26px 24px;
   background: var(--surface);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.24s var(--ease-expo-out), box-shadow 0.24s var(--ease-expo-out), border-color 0.24s var(--ease-expo-out);
 }
 
 .highlight-card:hover {
@@ -1858,18 +1925,35 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   .flow-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* 展示元素滚动渐显（模糊进入） */
+/* 展示元素滚动渐显（模糊进入 + 行级 stagger） */
 .hp-reveal {
   opacity: 0;
   transform: translateY(22px);
   filter: blur(7px);
-  transition: opacity 0.6s ease, transform 0.6s ease, filter 0.6s ease;
+  transition: opacity 0.6s var(--ease-expo-out), transform 0.6s var(--ease-expo-out), filter 0.6s var(--ease-expo-out);
 }
 
 .hp-reveal.revealed { opacity: 1; transform: none; filter: none; }
 
+.hp-reveal .highlight-card.reveal-item,
+.hp-reveal .flow-step.reveal-item,
+.hp-reveal .stat.reveal-item,
+.hp-reveal .entry-card.reveal-item {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.5s var(--ease-expo-out),
+    transform 0.5s var(--ease-expo-out),
+    border-color 0.2s var(--ease-expo-out),
+    box-shadow 0.2s var(--ease-expo-out);
+}
+
+.hp-reveal .reveal-item-show { opacity: 1; transform: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .mock-window { animation: none; }
+  .mock-play { transition: none; }
+  .mock-card.enter, .mock-article .ma-para.grow { transition: none; }
   .hp-reveal { transition: none; opacity: 1; transform: none; filter: none; }
   .highlight-card { transition: none; }
   .hero h2, .hero .hero-logo { animation: none; }

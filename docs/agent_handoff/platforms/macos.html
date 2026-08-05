@@ -50,6 +50,57 @@
 <script type="text/markdown" id="wiki-content">
 # macOS 说明
 
+<div class="dg dg-win">
+
+<svg viewBox="0 0 900 380" role="img" aria-labelledby="win-title win-desc">
+<title id="win-title">macOS 窗口分层</title>
+<desc id="win-desc">AppKit 原生层与 Flutter 内容层分离：原生玻璃由 sidebarBackdropHost 裁剪，红黄绿自绘按钮转发系统 action，拖动只由 MacOSWindowDragArea 触发。</desc>
+<defs>
+  <marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-head"/>
+  </marker>
+  <marker id="dg-arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-flow-head"/>
+  </marker>
+</defs>
+
+<g class="dg-row">
+  <rect x="20" y="30" width="860" height="92" rx="12" class="dg-node dg-note"/>
+  <text x="450" y="56" class="dg-label">窗口外框 · 连续圆角 24 · full-size content view</text>
+  <text x="450" y="76" class="dg-sub">sidebarBackdropHost：只裁剪原生玻璃宿主的 24px AppKit 圆角</text>
+  <text x="450" y="96" class="dg-sub">原生 backdrop 外扩 1px 堵住抗锯齿漏底细缝</text>
+</g>
+
+<g class="dg-row">
+  <rect x="20" y="160" width="300" height="100" rx="12" class="dg-node"/>
+  <text x="170" y="186" class="dg-label">AppKit 原生层</text>
+  <text x="170" y="206" class="dg-sub">NSGlassEffectView(.regular) 侧边栏玻璃</text>
+  <text x="170" y="226" class="dg-sub">自绘红黄绿 NSControl（转发系统 action）</text>
+  <text x="170" y="246" class="dg-sub">窗口 isMovable=false · 启动隐藏到首帧</text>
+
+  <rect x="360" y="160" width="300" height="100" rx="12" class="dg-node"/>
+  <text x="510" y="186" class="dg-label">Flutter 内容层</text>
+  <text x="510" y="206" class="dg-sub">页面 / 侧边栏内容 / 阴影与 0.5px 轮廓</text>
+  <text x="510" y="226" class="dg-sub">MacOSLayoutMetrics 几何真值 → channel 同步</text>
+  <text x="510" y="246" class="dg-sub">深浅主题与 NSApp.appearance 同步</text>
+
+  <rect x="700" y="160" width="180" height="100" rx="12" class="dg-node dg-warn"/>
+  <text x="790" y="186" class="dg-label">拖动区</text>
+  <text x="790" y="206" class="dg-sub">MacOSWindowDragArea</text>
+  <text x="790" y="226" class="dg-sub">标题与空白区主动拖动</text>
+  <text x="790" y="246" class="dg-sub">按钮/输入框不入子树</text>
+</g>
+
+<g class="dg-row">
+  <rect x="20" y="300" width="420" height="60" rx="12" class="dg-node dg-fallback"/>
+  <text x="230" y="334" class="dg-label">全屏视频：唯一临时隐藏红黄绿按钮的页面</text>
+
+  <rect x="470" y="300" width="410" height="60" rx="12" class="dg-node dg-note"/>
+  <text x="675" y="334" class="dg-label">冷启动：LiquidGlassWidgets.initialize() 在窗口隐藏期预热 shader</text>
+</g>
+</svg>
+</div>
+
 macOS 是近期 UI 工作的主要验证目标。
 
 当前 UI：

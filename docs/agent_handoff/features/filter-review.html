@@ -50,6 +50,71 @@
 <script type="text/markdown" id="wiki-content">
 # 垃圾拦截与审核
 
+<div class="dg dg-frev">
+
+<svg viewBox="0 0 900 420" role="img" aria-labelledby="frev-title frev-desc">
+<title id="frev-title">垃圾拦截审核流转</title>
+<desc id="frev-desc">文章经 AI 判定进入审核页，K/M/N 三种动作写入 userAction 统计信号；误分类是保留或拒绝与已读的原子组合。</desc>
+<defs>
+  <marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-head"/>
+  </marker>
+  <marker id="dg-arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-flow-head"/>
+  </marker>
+</defs>
+
+<g class="dg-row">
+  <rect x="20" y="30" width="190" height="70" rx="12" class="dg-node dg-input"/>
+  <text x="115" y="56" class="dg-label">文章流</text>
+  <text x="115" y="76" class="dg-sub">时间线 / 订阅源</text>
+
+  <rect x="260" y="30" width="200" height="70" rx="12" class="dg-node"/>
+  <text x="360" y="56" class="dg-label">AI 过滤判定</text>
+  <text x="360" y="76" class="dg-sub">DeepSeek · 可编辑 Prompt</text>
+
+  <rect x="510" y="30" width="180" height="70" rx="12" class="dg-node dg-warn"/>
+  <text x="600" y="56" class="dg-label">被拒绝？</text>
+
+  <rect x="740" y="30" width="140" height="70" rx="12" class="dg-node dg-fallback"/>
+  <text x="810" y="56" class="dg-label">保留在</text>
+  <text x="810" y="76" class="dg-sub">普通时间线</text>
+</g>
+<path class="dg-edge dg-flow" d="M 210 65 H 260"/>
+<path class="dg-edge dg-flow" d="M 460 65 H 510"/>
+<path class="dg-edge" d="M 690 65 H 740"/>
+
+<path class="dg-edge dg-flow" d="M 600 100 V 150"/>
+
+<g class="dg-row">
+  <rect x="470" y="160" width="260" height="72" rx="12" class="dg-node"/>
+  <text x="600" y="186" class="dg-label">垃圾拦截审核页</text>
+  <text x="600" y="206" class="dg-sub">独立审核队列 · 横滑 / 快捷键 / 右键</text>
+</g>
+
+<g class="dg-row">
+  <rect x="20" y="290" width="240" height="88" rx="12" class="dg-node"/>
+  <text x="140" y="316" class="dg-label">K 保留</text>
+  <text x="140" y="336" class="dg-sub">写 userAction='k'</text>
+  <text x="140" y="356" class="dg-sub">保留 filterReason</text>
+
+  <rect x="280" y="290" width="240" height="88" rx="12" class="dg-node dg-warn"/>
+  <text x="400" y="316" class="dg-label">M 确认拒绝</text>
+  <text x="400" y="336" class="dg-sub">写 userAction='m'</text>
+  <text x="400" y="356" class="dg-sub">弱信号</text>
+
+  <rect x="540" y="290" width="240" height="88" rx="12" class="dg-node dg-fallback"/>
+  <text x="660" y="316" class="dg-label">N 误分类（旗帜）</text>
+  <text x="660" y="336" class="dg-sub">拦截页 n_keep / 时间线 n_spam</text>
+  <text x="660" y="356" class="dg-sub">原子撤销：分类 + 已读</text>
+</g>
+<path class="dg-edge" d="M 600 232 V 290" class="dg-edge dg-flow"/>
+<path class="dg-edge" d="M 140 232 V 290" class="dg-edge"/>
+<path class="dg-edge" d="M 400 232 V 290" class="dg-edge"/>
+
+</svg>
+</div>
+
 垃圾拦截/审核页用于审核被 AI 拒绝的文章。
 
 关键预期：

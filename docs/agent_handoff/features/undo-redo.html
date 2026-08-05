@@ -50,7 +50,7 @@
 <script type="text/markdown" id="wiki-content">
 # 撤销与重做
 
-macOS 的业务撤销/重做由 `UndoService` + `BoundedHistory` 提供，容量 50 项，覆盖标为已读、垃圾拦截保留/移除、误分类（`N`）和静默订阅源整批标为已读。
+macOS 的业务撤销/重做由 `UndoService` + `BoundedHistory` 提供，容量 50 项，覆盖标为已读、垃圾拦截保留/移除、误分类（<kbd>N</kbd>）和静默订阅源整批标为已读。
 
 <div class="dg dg-undo">
 
@@ -112,11 +112,11 @@ macOS 的业务撤销/重做由 `UndoService` + `BoundedHistory` 提供，容量
 
 ## 行为
 
-- `Cmd+Z` 使用最多 50 项的业务历史连续撤销“标为已读、垃圾拦截保留、垃圾拦截移除、静默文章整批标为已读”；`Shift+Cmd+Z` 按相反顺序连续重做。新的业务动作会清空 redo 栈；导航、切换时间线范围、订阅源、分类或静默 scope 不清空历史。
+- <kbd>Cmd+Z</kbd> 使用最多 50 项的业务历史连续撤销“标为已读、垃圾拦截保留、垃圾拦截移除、静默文章整批标为已读”；<kbd>Shift+Cmd+Z</kbd> 按相反顺序连续重做。新的业务动作会清空 redo 栈；导航、切换时间线范围、订阅源、分类或静默 scope 不清空历史。
 - 业务栈在应用本次运行期间保持一致，只有进程彻底退出才自然消失，不持久化到下次启动。不要在 scope 切换时调用 `UndoService.clear()`。
-- 文本输入框继续使用 Flutter 自身的文本 Undo/Redo。原生“编辑”菜单与全局快捷键必须先检查当前焦点，不能让文章业务历史抢走输入框里的 `Cmd+Z` / `Shift+Cmd+Z`。
+- 文本输入框继续使用 Flutter 自身的文本 Undo/Redo。原生“编辑”菜单与全局快捷键必须先检查当前焦点，不能让文章业务历史抢走输入框里的 <kbd>Cmd+Z</kbd> / <kbd>Shift+Cmd+Z</kbd>。
 - 全部过滤动作的撤销路径（`filterKeep`/`filterReject`/`misclassifyKeep`/`misclassifySpam`）都使用 `upsertOne(forceReplace: true)` 整条还原动作前快照；不能用普通 merge，`item.userAction ?? existing?.userAction` 会把动作标记留在已回滚的文章上。
-- 误分类（`N`）是一条原子 UndoAction：撤销/重做同时恢复分类与已读状态。`N` 撤销时可先将动作前的完整快照写回数据库，但时间线内存快照必须暂时保持已读，再由 `markAsUnreadLocal` 完成唯一一次未读插入。如果内存也提前恢复为未读，标准恢复路径会提前返回，后续数据库通知只能通过整表结构刷新重插卡片，并会取消进场动画。
+- 误分类（<kbd>N</kbd>）是一条原子 UndoAction：撤销/重做同时恢复分类与已读状态。<kbd>N</kbd> 撤销时可先将动作前的完整快照写回数据库，但时间线内存快照必须暂时保持已读，再由 `markAsUnreadLocal` 完成唯一一次未读插入。如果内存也提前恢复为未读，标准恢复路径会提前返回，后续数据库通知只能通过整表结构刷新重插卡片，并会取消进场动画。
 - 静默订阅源整批标为已读只占一个业务撤销项；部分 Undo/Redo 会把已完成与未完成子集拆到 redo/undo 两侧，使两侧历史始终对应最终远端状态。
 - `UndoService` 使用 `BoundedHistory` 保存 undo/redo 双栈，并串行执行撤销/重做，避免快速连续按键造成网络回滚乱序。`UndoAction` 可以承载单篇或不可拆分的一批文章；页面只通过 redo preparation 在数据变化前登记列表离场；数据变更集中复用单篇或批量本地状态入口，不能在重做路径复制数据库规则。
 
@@ -127,7 +127,7 @@ macOS 的业务撤销/重做由 `UndoService` + `BoundedHistory` 提供，容量
 
 ## 相关页面
 
-- [快捷键与焦点](../features/keyboard-shortcuts.html)：`Cmd+Z`/`Shift+Cmd+Z` 与焦点、动画的关系。
+- [快捷键与焦点](../features/keyboard-shortcuts.html)：<kbd>Cmd+Z</kbd>/<kbd>Shift+Cmd+Z</kbd> 与焦点、动画的关系。
 - [垃圾拦截与审核](../features/filter-review.html)：过滤动作撤销的 forceReplace 与动画时序。
 - [时间线](../features/timeline.html)：单篇已读退场与批量标已读的撤销语义。
 - [决策日志](../history/decisions.html)：有界双栈、误分类原子撤销等决策背景。

@@ -50,6 +50,67 @@
 <script type="text/markdown" id="wiki-content">
 # 性能
 
+<div class="dg dg-perf">
+
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="perf-title perf-desc">
+<title id="perf-title">时间线列表动画时序</title>
+<desc id="perf-desc">单篇已读走增量删除与 180ms 退场动画，跨页通知延后到 onRemoveEnd；批量变化走零时长 batchUpdateVersion，不做大规模 diff 动画。</desc>
+<defs>
+  <marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-head"/>
+  </marker>
+  <marker id="dg-arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-flow-head"/>
+  </marker>
+</defs>
+
+<g class="dg-row">
+  <rect x="20" y="30" width="250" height="72" rx="12" class="dg-node dg-input"/>
+  <text x="145" y="56" class="dg-label">单篇 M / 双击</text>
+  <text x="145" y="76" class="dg-sub">本地持久化立即执行</text>
+
+  <rect x="320" y="30" width="250" height="72" rx="12" class="dg-node"/>
+  <text x="445" y="56" class="dg-label">可见列表增量删除</text>
+  <text x="445" y="76" class="dg-sub">约 164–671 µs · 无列表 reset</text>
+
+  <rect x="620" y="30" width="260" height="72" rx="12" class="dg-node dg-warn"/>
+  <text x="750" y="56" class="dg-label">180ms 退场动画</text>
+  <text x="750" y="76" class="dg-sub">onRemoveEnd 后切换下一篇</text>
+</g>
+<path class="dg-edge dg-flow" d="M 270 66 H 320"/>
+<path class="dg-edge dg-flow" d="M 570 66 H 620"/>
+
+<path class="dg-edge" d="M 750 102 V 160"/>
+
+<g class="dg-row">
+  <rect x="20" y="170" width="560" height="80" rx="12" class="dg-node"/>
+  <text x="300" y="196" class="dg-label">completeDeferredReadTransition</text>
+  <text x="300" y="216" class="dg-sub">真实 onRemoveEnd 后跨 endOfFrame：完整过滤 / 角标计数 / 跨页 ArticleStateNotifier</text>
+  <text x="300" y="236" class="dg-sub">1 秒 fallback 防异常生命周期丢失通知</text>
+
+  <rect x="620" y="170" width="260" height="80" rx="12" class="dg-node dg-note"/>
+  <text x="750" y="196" class="dg-label">外部浏览器</text>
+  <text x="750" y="216" class="dg-sub">等 remove.end 后再跨一帧</text>
+  <text x="750" y="236" class="dg-sub">避免动画中途失焦</text>
+</g>
+
+<path class="dg-edge dg-flow" d="M 145 102 V 170"/>
+
+<g class="dg-row">
+  <rect x="20" y="300" width="420" height="80" rx="12" class="dg-node dg-fallback"/>
+  <text x="230" y="326" class="dg-label">批量变化（模式/排序/同步/回填）</text>
+  <text x="230" y="346" class="dg-sub">timelineListResetVersion → batchUpdateVersion</text>
+  <text x="230" y="364" class="dg-sub">同一列表实例零时长协调 · 保留滚动位置</text>
+
+  <rect x="470" y="300" width="410" height="80" rx="12" class="dg-node dg-note"/>
+  <text x="675" y="326" class="dg-label">诊断埋点（默认关闭）</text>
+  <text x="675" y="346" class="dg-sub">AUTO_FOLO_ANIMATION_PROBE=true</text>
+  <text x="675" y="364" class="dg-sub">只输出 id 末 8 位与动画阶段</text>
+</g>
+<path class="dg-edge" d="M 230 250 V 300" class="dg-edge"/>
+</svg>
+</div>
+
 本项目的性能工作主要是：在不破坏阅读体验的前提下，避免 macOS UI isolate 卡顿。
 
 ## 核心原则

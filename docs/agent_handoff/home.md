@@ -1,54 +1,3 @@
-<!DOCTYPE html>
-<html lang="zh-CN" data-theme="auto">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="wiki-base" content="docs/agent_handoff">
-<meta name="repo-root" content=".">
-<meta name="wiki-full" content="1">
-<title>Auto Folo — 高密度信息流阅读客户端 · Auto Folo Wiki</title>
-<link rel="stylesheet" href="docs/agent_handoff/assets/theme.css">
-</head>
-<body>
-<header class="wiki-header">
-  <div class="wiki-header-inner">
-    <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
-    <a class="brand" href="./index.html">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
-    </a>
-    <div class="header-tools">
-      <div class="search-box">
-        <input id="wiki-search-input" type="search" placeholder="搜索文档…" autocomplete="off" aria-label="搜索文档">
-      </div>
-      <button id="theme-toggle" type="button" class="theme-toggle" aria-label="切换明暗主题" title="切换明暗主题">
-        <svg class="theme-icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-        <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      </button>
-    </div>
-  </div>
-  <div id="search-results" class="search-results" hidden></div>
-</header>
-<div class="wiki-layout">
-  <nav id="wiki-nav" class="wiki-nav" aria-label="站点导航"></nav>
-  <div class="wiki-content-col">
-    <main class="wiki-main">
-      <article>
-        <div id="wiki-rendered" class="wiki-rendered"></div>
-      </article>
-    </main>
-    <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="./LICENSE">AGPL-3.0</a></span>
-      <a href="./docs/agent_handoff/meta/site-guide.html">站点指南</a>
-      <a href="./docs/agent_handoff/meta/migration-map.html">迁移映射</a>
-      <a href="./AGENT_HANDOFF.md">交接入口</a>
-    </footer>
-  </div>
-  <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
-</div>
-<script type="text/markdown" id="wiki-content">
 # Auto Folo — 高密度信息流阅读客户端
 
 <div class="landing">
@@ -190,12 +139,12 @@
 
 ## 推荐阅读顺序
 
-1. [当前状态](docs/agent_handoff/status/current.html) — 最近的集成分支、产品形态与用户验证结论
-2. [待办与搁置事项](docs/agent_handoff/status/pending.html) — 当前有效的未来事项索引
-3. [验证记录](docs/agent_handoff/status/verification.html) — 仍需持续观察的开放验证项
-4. [开发流程](docs/agent_handoff/operations/development.html) — 常用命令与检查方式
+1. [当前状态](status/current.html) — 最近的集成分支、产品形态与用户验证结论
+2. [待办与搁置事项](status/pending.html) — 当前有效的未来事项索引
+3. [验证记录](status/verification.html) — 仍需持续观察的开放验证项
+4. [开发流程](operations/development.html) — 常用命令与检查方式
 5. 当前任务对应的专题页
-6. 需要历史证据时查[历史主题归档](docs/agent_handoff/history/archive/README.html)；按旧章节编号查找使用[历史时间索引](docs/agent_handoff/history/chronology.html)
+6. 需要历史证据时查[历史主题归档](history/archive/README.html)；按旧章节编号查找使用[历史时间索引](history/chronology.html)
 
 ## 硬性规则
 
@@ -211,13 +160,3 @@
 - 原始历史证据按主题保存在 `history/archive/`；提炼总结时不要删除归档。`history/timeline.html` 只用于兼容旧链接，不再追加内容。
 - 记录决策时优先写入 `history/decisions.html`，包含背景、决策、后果和“不要回退”的说明。
 - 更新文档后运行 `./scripts/docs.sh index` 重新生成搜索索引，并运行 `./scripts/docs.sh check` 验证链接与一致性。
-
-</script>
-<script src="docs/agent_handoff/assets/wiki-common.js"></script>
-<script src="docs/agent_handoff/assets/vendor/markdown-it.min.js"></script>
-<script src="docs/agent_handoff/assets/vendor/markdown-it-anchor.umd.js"></script>
-<script src="docs/agent_handoff/assets/data/nav.js"></script>
-<script src="docs/agent_handoff/assets/data/search-index.js"></script>
-<script src="docs/agent_handoff/assets/app.js"></script>
-</body>
-</html>

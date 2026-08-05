@@ -50,6 +50,70 @@
 <script type="text/markdown" id="wiki-content">
 # 订阅源
 
+<div class="dg dg-sub">
+
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="sub-title sub-desc">
+<title id="sub-title">订阅源侧边栏结构</title>
+<desc id="sub-desc">分类行、展开箭头与订阅源行职责分离；当前订阅源临时锁定父分类展开；静默订阅源作为独立分组。</desc>
+<defs>
+  <marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-head"/>
+  </marker>
+  <marker id="dg-arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-flow-head"/>
+  </marker>
+</defs>
+
+<g class="dg-row">
+  <rect x="20" y="30" width="260" height="76" rx="12" class="dg-node"/>
+  <text x="150" y="56" class="dg-label">分类行</text>
+  <text x="150" y="76" class="dg-sub">点击 = 切换分类筛选</text>
+  <text x="150" y="96" class="dg-sub">hover/press 整行单一反馈</text>
+
+  <rect x="310" y="30" width="200" height="76" rx="12" class="dg-node"/>
+  <text x="410" y="56" class="dg-label">展开箭头</text>
+  <text x="410" y="76" class="dg-sub">独立点击 · 只改展开</text>
+  <text x="410" y="96" class="dg-sub">临时锁定时 no-op</text>
+
+  <rect x="540" y="30" width="200" height="76" rx="12" class="dg-node"/>
+  <text x="640" y="56" class="dg-label">订阅源行</text>
+  <text x="640" y="76" class="dg-sub">点击 = 选择具体源</text>
+  <text x="640" y="96" class="dg-sub">右键编辑 / 取消订阅</text>
+
+  <rect x="770" y="30" width="110" height="76" rx="12" class="dg-node dg-warn"/>
+  <text x="825" y="56" class="dg-label">当前源</text>
+  <text x="825" y="76" class="dg-sub">父分类</text>
+  <text x="825" y="96" class="dg-sub">临时锁定</text>
+</g>
+
+<path class="dg-edge" d="M 150 106 V 170"/>
+<path class="dg-edge" d="M 640 106 V 170" class="dg-edge dg-flow"/>
+
+<g class="dg-row">
+  <rect x="20" y="180" width="420" height="80" rx="12" class="dg-node"/>
+  <text x="230" y="206" class="dg-label">SubscriptionCatalogService</text>
+  <text x="230" y="226" class="dg-sub">共享权威目录 · 分区快照 · 失败保留缓存</text>
+  <text x="230" y="244" class="dg-sub">侧边栏与时间线 feed mapping 同一份数据</text>
+
+  <rect x="480" y="180" width="400" height="80" rx="12" class="dg-node dg-fallback"/>
+  <text x="680" y="206" class="dg-label">静默订阅源分组</text>
+  <text x="680" y="226" class="dg-sub">独立分组 · 点击只进入静默时间线</text>
+  <text x="680" y="244" class="dg-sub">不因“被选中”自动展开</text>
+</g>
+
+<path class="dg-edge dg-flow" d="M 230 260 V 320"/>
+<path class="dg-edge" d="M 680 260 V 320"/>
+
+<g class="dg-row">
+  <rect x="20" y="330" width="420" height="56" rx="12" class="dg-node dg-note"/>
+  <text x="230" y="362" class="dg-label">真实总高度滚动区（SingleChildScrollView + Column）</text>
+
+  <rect x="480" y="330" width="400" height="56" rx="12" class="dg-node dg-note"/>
+  <text x="680" y="362" class="dg-label">订阅管理写操作（添加/编辑/取消 · 可撤销）</text>
+</g>
+</svg>
+</div>
+
 订阅源数据支撑时间线过滤和展示。
 
 当前行为：

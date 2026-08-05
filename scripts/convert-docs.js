@@ -114,6 +114,7 @@ const TEMPLATE = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="__WIKI_BASE__">
 <meta name="repo-root" content="__REPO_ROOT__">
+__WIKI_FULL__
 <title>__TITLE__ · Auto Folo Wiki</title>
 <link rel="stylesheet" href="__WIKI_BASE__/assets/theme.css">
 </head>
@@ -202,6 +203,7 @@ function convertFile(relPath, rootMode) {
   const html = TEMPLATE
     .replace(/__WIKI_BASE__/g, wikiBase)
     .replace(/__REPO_ROOT__/g, repoRoot)
+    .replace('__WIKI_FULL__', rootMode ? '<meta name="wiki-full" content="1">' : '')
     .replace('__TITLE__', () => title)
     // 必须用函数替换：content 中的 `$'` 等序列会被字符串替换解释为模板片段
     .replace('__CONTENT__', () => content);

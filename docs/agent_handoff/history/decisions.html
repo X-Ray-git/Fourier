@@ -82,12 +82,14 @@
 
 后果：除非进行专门重构，否则围绕当前结构优化。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 保留全文选择行为。
 - 保留目录锚点准确性。
 - 保留图片预览/光标/菜单行为。
 - 保留当前滚动位置语义。
+</details>
 
 ## 畸形文章修复保持保守
 
@@ -155,11 +157,13 @@
 
 后果：红黄绿、外框、侧边栏和右下角文章裁剪必须联动维护。不要把“圆角收敛”扩展成全局搜索替换。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要单独改 `MainFlutterWindow.swift` 的 `windowRadius` 而不同步 Flutter 外框、红黄绿圆心和文章右下角裁剪。
 - 不要把 `999` 胶囊、圆形按钮、图片、代码块、表格、小标签或 Android 端纳入这一轮 macOS 主几何收敛。
 - 不要为了统一而给宽表格 scroll viewport 加圆角裁剪。
+</details>
 
 ## 玻璃按钮先集中颜色 token，再统一角色规则
 
@@ -169,11 +173,13 @@
 
 后果：不要因为已经有 palette 就认为按钮设计语言已经统一。后续如果改右上角文章按钮、目录按钮、时间线排序按钮、同步按钮或 pill 控件，应优先接入同一套角色规则，而不是继续在各自页面手写颜色公式。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要重新在页面局部复制 `cs.primary.withValues(...)`、`cs.onSurface.withValues(...)` 等玻璃控制状态公式。
 - 不要在角色规则未稳定前批量做贴图化，否则会把临时视觉状态固化成资产。
 - 不要为了统一而把密集重复控件改回重型玻璃；性能约束仍然优先。
+</details>
 
 ## 批量时间线变化保留列表实例，读状态变化保留动画
 
@@ -183,12 +189,14 @@
 
 后果：批量变化避免全局动画卡顿，普通单卡片标已读/恢复未读动画保留；列表不再因为无关元数据通知被替换，因此滚动位置不会被重置到顶部。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要让排序、筛选范围切换、同步回填、加载更多重新触发大规模列表 diff 动画。
 - 不要为了禁用批量动画把 reset version 放回列表 key；这曾直接造成 `M` 后回到顶部，并绕过单卡片退场动画。
 - 不要在侧边栏直接连续设置 `isSilentSelected`、`selectedFeedId`、`selectedCategory`；应使用 `setTimelineScope()` 合并为一次过滤。
 - 不要为了禁用批量动画而移除已读/未读的局部动画，除非用户重新明确要求。
+</details>
 
 ## 本地已读覆盖保留到未读快照确认
 
@@ -198,11 +206,13 @@
 
 后果：刷新与已读同步并发时，文章不会因为旧快照重新出现在未读列表；恢复未读的 `false` 覆盖也会在服务端快照确认文章已读后清除。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要在 `ArticleController.markAsRead()` 或 `UndoService.markAsRead()` 的 HTTP 成功分支立即删除 true 覆盖。
 - 不要因为当前 pending 队列为空，就把未读快照中仍出现的文章直接降级为未读；pending 可能刚被并发同步清空。
 - 不要永久保留已被服务端“未读快照缺席”确认过的覆盖，否则其他客户端后续恢复未读无法同步回来。
+</details>
 
 ## 时间线排序保持本地化
 
@@ -228,11 +238,13 @@
 
 后果：切换范围和订阅源级设置由左侧侧边栏承担；中间栏保持轻量，避免按钮拥挤。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要为了“方便”把订阅源级设置重新塞回中间 header。
 - 不要在中间 header 添加清除筛选按钮，除非用户重新明确要求。
 - 如果以后需要更多订阅源级操作，优先扩展左侧侧边栏或订阅源上下文菜单。
+</details>
 
 ## 垃圾拦截页复用时间线级组件
 
@@ -242,11 +254,13 @@
 
 后果：后续改同步按钮样式或文章 AI 菜单时，普通时间线和垃圾拦截页可以一起受益；审核页的保留/移除、拒绝理由、下一篇选择等特殊逻辑仍然独立。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要重新在 `ArticleCard` 和垃圾拦截审核行复制翻译/摘要菜单代码。
 - 不要为了“统一”把垃圾拦截页的审核操作塞进普通 `ArticleCard`，除非重新设计整个审核流。
 - 已读/未读快速切换属于普通时间线，不需要同步到垃圾拦截页。
+</details>
 
 ## macOS Debug 禁用 Xcode Debug Dylib
 
@@ -256,11 +270,13 @@
 
 后果：`flutter run` 可以正常启动 Dart VM Service。修改后如果仍使用旧构建产物，需要先执行 `flutter clean && flutter pub get`。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要只看 Flutter 的 `log reader stopped` 表象就判断为 Dart 代码崩溃。
 - 不要优先尝试普通 build phase 清理 xattr；实测时机不稳定，最终产物仍可能带 provenance。
 - 如果本机有真实开发者证书，未来可以重新评估签名方案，但当前用户机器没有有效 codesigning identity。
+</details>
 
 ## 使用 AppKit 系统红黄绿按钮
 
@@ -270,12 +286,14 @@
 
 后果：AppKit 负责符号、非激活状态和 zoom/fullscreen 行为。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - Hover 任意红黄绿按钮时应显示系统 hover 符号。
 - 非激活窗口应显示系统灰色状态。
 - 绿色按钮应保留 AppKit zoom/fullscreen 语义。
 - 红色关闭应保留“隐藏窗口而非退出应用”的行为。
+</details>
 
 ## Android 内部安装签名保持对齐
 
@@ -349,12 +367,14 @@
 
 后果：不改变既有 180ms 动画曲线，也不把平台特殊时序扩散到 Android。用户验证 `M/K` 和双击恢复稳定。诊断埋点保留为 Debug 显式开关 `AUTO_FOLO_ANIMATION_PROBE`，普通运行和 Release 没有监听/日志成本。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要让垃圾拦截在 pending action 期间响应同一 entry id 的增量状态通知并提前删项。
 - 不要把同步数据库写入和 `ImplicitlyAnimatedList` 列表变更重新放进同一个 post-frame callback。
 - 不要用固定短延迟在移除动画中途打开外部浏览器；应依赖真实移除生命周期。
 - 不要默认开启同步诊断日志；需要排查时用 dart-define 临时启用。
+</details>
 
 ## macOS soft scroll edge 实验已撤销，回到固定 header
 
@@ -364,11 +384,13 @@
 
 最终决策：用户长时间使用后认为渐隐灰色不够自然，撤销整套 header 渐隐设计。主时间线、垃圾拦截、最近阅读、订阅源详情现在通过轻量 `MacHeaderPane` 使用固定 `surface` header，列表从 header 下方开始；文章详情同样恢复固定 `surface` header，但不恢复整块 `BackdropFilter`。玻璃只保留在交互控件。中间栏 header 仍不显示底部分隔线；文章 header 底部始终显示 `1px`、`outlineVariant`、alpha `0.30` 的细线，橙色阅读进度覆盖在该细线上。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要恢复文章 header 的整块 `BackdropFilter`，否则可能重新采样相邻分栏控件的高光。
 - 不要未经重新讨论恢复 `MacHeaderScrollEdge`、透明 header 或内容滚入 header 的渐隐方案。
 - 不要把文章进度条重新移到面板最顶端；当前位于文章 header 下边缘，并与常驻细分隔线叠层。
+</details>
 
 ## macOS 固定 header 让 scrollbar 自然从正文区域开始
 
@@ -378,10 +400,12 @@
 
 后果：thumb 从 header 下缘开始且一开始可见，内容不会进入 header。中间栏和右侧正文保留各自的 `crossAxisMargin`。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要用矩形色块遮住从窗口顶端绘制的 scrollbar。
 - 不要把 scrollbar 放回正文右下角安全 clip 内部。
+</details>
 
 ## macOS 正文图片按文章预取并随已读状态回收
 
@@ -756,12 +780,14 @@
 
 后果：普通设置、DeepSeek Key、Prompt、模型参数、外观和 feed 偏好始终保留；文章、订阅缓存、已读覆盖、阅读时间、摘要、翻译、审核结果、正文/图片缓存、待同步队列和 Undo/Redo 清理。旧异步任务通过会话 revision 和图片 generation 防止迟到写回。用户已明确不要求恢复本机阅读时间、已读旧文章、AI 结果、审核结果和缓存，并假定切换前的业务操作已同步到 Folo。以后若要保留多账号离线内容，必须另行设计账号命名空间和数据迁移，不能在当前全局 box 上堆条件分支。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要在收到浏览器一次性 token 后直接存储；必须先交换成长期会话并验证。
 - 不要在配置导入后才验证 Token；无效备份不能先清理当前账号。
 - 不要把“本地退出”改成远端 sign-out，除非同时重新讨论旧配置备份恢复语义。
 - 不要只清 Hive box 而忽略运行中的网络、AI 和图片任务；迟到写回会重新造成账号污染。
+</details>
 
 ## 带浮动标签的设置输入控件上方必须为裁切容器预留缓冲
 
@@ -773,11 +799,13 @@
 
 排查结论（供后续判断同类风险）：同类裁切必须同时满足三个条件——控件用 `OutlineInputBorder` + `labelText`；外层是会裁切的容器（`ExpansionTile` 内部 `ClipRect`、`MobileSettingsPanel` 的 `Clip.antiAlias` 等）；控件上方紧贴容器顶部且缓冲 `< ~9px`。全工程排查后，满足这三个条件的只有 `_LlmConfigCard`（翻译/摘要/过滤三卡复用同一组件，一并修复）。`AppGlassTextField` 用独立 `Text(label)` 作为固定标题且输入框为 `InputBorder.none`，没有浮动 label 机制，macOS 端从根本上免疫。`_PromptConfigCard` 虽有同样的 `top=0` padding，但其 `TextField` 只有 `hintText` 无 `labelText`，不产生浮动 label。其他安卓 `MobileSettingsPanel` 调用点 padding 均为 `EdgeInsets.all(16)`，顶部有 `16px` 足够容纳 `8.6px` 上溢。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要把 `_LlmConfigCard` 的 children padding 顶部改回 `0` 或任何 `< 9` 的值。
 - 不要为了“统一”给 `MobileSettingsSelectField` 或 `InputDecorator` 本身加 `clipBehavior`，那会重新引入已修复的字段层裁切。
 - 以后在安卓端新增带 `labelText` + `OutlineInputBorder` 的控件时，若它会被放进 `ExpansionTile` 或其他 `Clip.antiAlias` 容器，必须确保控件上方有 `≥ 9px` 的非裁切缓冲；放进普通滚动列表或 padding `≥ 16` 的面板则不受影响。
+</details>
 
 ## 图片加载失败的重试统一收敛到 ArticleImageCacheService
 
@@ -793,7 +821,8 @@
 
 边界：不依赖错误类型区分永久/临时失败，因为 `flutter_cache_manager` 抛出的异常类型不稳定；统一用退避次数控制，三次后停止并保留失败记录等待刷新或手动重试。本次覆盖独立块级普通图片和 SVG；HTML 行内图片扩展（`_imageExtension`）与图片画廊仍无自动重试。进程重启后退避次数回到 0，但失败记录仍在，下次刷新会重扫。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要让正文渲染层自己维护退避/计数或直接下载；失败登记和重试调度都走 service 的 `scheduleRetryFromUi` / `retryManually`。
 - 不要恢复 `_retryCount++` + `appendRetryStamp` 与 service 并行下载的旧路径；一张图片一次只能有一条下载链。
@@ -802,6 +831,7 @@
 - 不要把自动重试计数落盘；它只是当前会话的瞬时退避进度，落盘会让重启后立即跑满 3 次重试，反而绕过"刷新时重扫一轮"的节奏。
 - 不要把缓存清理和失败重扫并行启动；清理完成后才能重新入队失败图片。
 - 不要在行内图片和画廊上复用本次重试，除非单独验证其 `errorWidget` 改造；本次范围明确不含。
+</details>
 
 ## 误分类（N）用 userAction 标记记录统计信号
 
@@ -818,12 +848,14 @@
 
 后果：标记写入、四种动作方向和撤销回滚都经受控测试与真机验证；`tool/inspect_user_actions.dart` 可随时检查标记落库情况。旧版本混用时期产生的标记缺失属于已接受的数据语义。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要给 `userAction` 添加时间戳字段，用户已明确决定不做时间趋势分析。
 - 不要在时间线上对已读或已在拦截中的文章启用 `N`。
 - 不要把 `M` 拆成"同意/懒得分辨"两个动作。
 - 不要让网络同步数据覆盖本地动作标记。
+</details>
 
 ## 过滤动作撤销必须整条替换快照，setReadState 必须保留全部过滤字段
 
@@ -833,11 +865,13 @@
 
 后果：受控测试与真机验证确认：`n_spam` 写入后 `Cmd+Z` 一次性回滚分类、已读、审核标记和 `userAction`（`拒绝=false 已读=false 已审=false act=null`）；`K` 撤销精确还原快照（含快照中已有的标记值）。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要让任何过滤动作撤销回到普通 merge 路径。
 - 不要在 `setReadState` 或其他"从旧记录重建"的写入路径中遗漏 `userAction` 或任何过滤字段。
 - 不要在 `applyMisclassify`/`applyFilterReject` 中依赖"先 upsert 后标已读"的顺序而不验证标记是否保留。
+</details>
 
 ## 拦截页 K/M/N 由页面级键盘处理器执行，HardwareKeyboard 不短路
 
@@ -847,11 +881,13 @@
 
 后果：拦截页在无选中时不再静默吞掉 `M/N`；双重触发被明确消除，不再依赖 `beginRemoval` 的 pending 守卫兜底。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要依赖 `HardwareKeyboard` 处理器的返回 true 来短路其他处理器。
 - 不要只依赖详情面板挂载来响应拦截页快捷键。
 - 新增页面级与组件级共存的键盘处理器时，必须显式处理双触发。
+</details>
 
 ## Obx 内所有提前 return 之前必须先读取 observable
 
@@ -859,10 +895,12 @@
 
 决策：`Obx`/`GetX` 的 builder 中，所有条件提前返回之前必须先读取至少一个 observable（如 `controller.isRead.value`），保证每次构建都有依赖登记。
 
-不要回退：
+<details class="dg-callout" open>
+<summary>不要回退</summary>
 
 - 不要在 `Obx` 内把 observable 读取放在提前 return 之后。
 - 排查"Release 版一片空白/半透明覆盖"时，先检查是否有 Obx 提前返回未读取 observable；GetX 误用异常在 Release 会被吞掉，只剩空白渲染。
+</details>
 
 </script>
 <script src="../assets/wiki-common.js"></script>

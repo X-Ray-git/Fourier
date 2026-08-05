@@ -110,6 +110,7 @@ window.WIKI_NAV = [
     group: '其他',
     items: [
       { title: '第三方依赖、许可与致谢', path: 'legal/third-party.html' },
+      { title: '设计规范', path: 'meta/design-guide.html' },
       { title: '站点指南', path: 'meta/site-guide.html' },
       { title: '旧文档迁移映射', path: 'meta/migration-map.html' },
     ],

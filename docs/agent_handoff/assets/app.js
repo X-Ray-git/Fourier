@@ -147,10 +147,20 @@
     var btn = $('#theme-toggle');
     if (!btn) return;
     applyTheme(readTheme());
-    btn.addEventListener('click', function () {
+    btn.addEventListener('click', function (e) {
       var order = ['auto', 'light', 'dark'];
       var next = order[(order.indexOf(readTheme()) + 1) % order.length];
-      applyTheme(next);
+      btn.classList.add('icons-swap');
+      setTimeout(function () { btn.classList.remove('icons-swap'); }, 220);
+      var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reduced && document.startViewTransition) {
+        var rect = btn.getBoundingClientRect();
+        document.documentElement.style.setProperty('--vt-x', Math.round(rect.left + rect.width / 2) + 'px');
+        document.documentElement.style.setProperty('--vt-y', Math.round(rect.top + rect.height / 2) + 'px');
+        document.startViewTransition(function () { applyTheme(next); });
+      } else {
+        applyTheme(next);
+      }
     });
     // 跟随系统主题变化（仅 auto 模式）
     if (window.matchMedia) {
@@ -158,6 +168,32 @@
         if (readTheme() === 'auto') applyTheme('auto');
       });
     }
+  }
+
+  /* ── 搜索与命令面板共用工具 ───────────────────── */
+
+  function norm(s) { return (s || '').toLowerCase(); }
+
+  // 轻量模糊匹配（CJK 友好，无第三方依赖）：
+  // 精确包含得满分；否则拆成英文词 + 单个汉字，要求全部命中并按顺序性加权
+  function fuzzyScore(text, q) {
+    var tl = norm(text);
+    if (tl.indexOf(q) !== -1) return 1;
+    var toks = [];
+    (q.match(/[a-z0-9]+/gi) || []).forEach(function (w) { toks.push(w.toLowerCase()); });
+    (q.match(/[\u4e00-\u9fff]/g) || []).forEach(function (c) { toks.push(c); });
+    if (!toks.length) return 0;
+    var hit = 0, last = -1, ordered = true;
+    for (var i = 0; i < toks.length; i++) {
+      var idx = tl.indexOf(toks[i]);
+      if (idx === -1) { ordered = false; continue; }
+      if (idx < last) ordered = false;
+      last = idx;
+      hit++;
+    }
+    if (!hit) return 0;
+    var cov = hit / toks.length;
+    return ordered ? 0.5 * cov + 0.4 : 0.3 * cov;
   }
 
   /* ── 搜索 ─────────────────────────────────────── */
@@ -170,17 +206,11 @@
     var active = -1;
     var items = [];
 
-    function norm(s) { return (s || '').toLowerCase(); }
-
     function score(entry, q) {
       var s = 0;
-      var ql = norm(q);
-      if (norm(entry.title).indexOf(ql) !== -1) s += 100;
-      entry.headings.forEach(function (h) {
-        if (norm(h.text).indexOf(ql) !== -1) s += 30;
-      });
-      var body = norm(entry.text);
-      if (body.indexOf(ql) !== -1) s += 10;
+      s += 100 * fuzzyScore(entry.title, q);
+      entry.headings.forEach(function (h) { s += 30 * fuzzyScore(h.text, q); });
+      s += 10 * fuzzyScore(entry.text, q);
       return s;
     }
 
@@ -194,11 +224,23 @@
       return (start > 0 ? '…' : '') + entry.text.slice(start, end) + (end < entry.text.length ? '…' : '');
     }
 
+    function show() {
+      var ir = input.getBoundingClientRect();
+      var pw = Math.min(720, window.innerWidth - 24);
+      var originX = Math.max(0, Math.min(pw, ir.left + ir.width / 2 - (window.innerWidth - pw) / 2));
+      panel.style.transformOrigin = originX + 'px top';
+      panel.classList.add('open');
+    }
+
+    function hide() {
+      panel.classList.remove('open');
+    }
+
     function render(q) {
       items = [];
       active = -1;
       panel.innerHTML = '';
-      if (!q) { panel.hidden = true; return; }
+      if (!q) { hide(); return; }
       var ranked = index
         .map(function (e) { return { e: e, s: score(e, q) }; })
         .filter(function (r) { return r.s > 0; })
@@ -232,7 +274,7 @@
         items.push(a);
         panel.appendChild(a);
       });
-      panel.hidden = false;
+      show();
     }
 
     function setActive(i) {
@@ -249,10 +291,10 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); setActive((active + 1) % items.length); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((active - 1 + items.length) % items.length); }
       else if (e.key === 'Enter') { if (active >= 0) { e.preventDefault(); location.href = items[active].href; } }
-      else if (e.key === 'Escape') { panel.hidden = true; input.blur(); }
+      else if (e.key === 'Escape') { hide(); input.blur(); }
     });
     input.addEventListener('blur', function () {
-      setTimeout(function () { panel.hidden = true; }, 150);
+      setTimeout(hide, 150);
     });
     input.addEventListener('focus', function () { if (input.value.trim()) render(input.value.trim()); });
   }
@@ -313,7 +355,8 @@
     banner.innerHTML =
       '<div class="banner-icon">' + meta.icon + '</div>' +
       '<div class="banner-text"></div>' +
-      '<span class="banner-rule">' + meta.label + '</span>';
+      '<span class="banner-rule">' + meta.label + '</span>' +
+      '<span class="banner-chip">约 ' + readMinutes() + ' 分钟</span>';
     var id = h1.id;
     var titleEl = document.createElement('h1');
     if (id) titleEl.id = id;
@@ -333,6 +376,15 @@
       var idxH2 = h2 ? Array.prototype.indexOf.call(renderEl.children, h2) : renderEl.children.length;
       if (idxP >= 0 && idxP < idxH2) firstP.remove();
     }
+  }
+
+  // 阅读时长估算：中文按 350 字/分钟、英文按 180 词/分钟
+  function readMinutes() {
+    if (!renderEl) return 1;
+    var t = renderEl.textContent || '';
+    var cjk = (t.match(/[\u4e00-\u9fff]/g) || []).length;
+    var latin = (t.match(/[A-Za-z0-9]+/g) || []).length;
+    return Math.max(1, Math.round(cjk / 350 + latin / 180));
   }
 
   /* ── 阅读进度条 ───────────────────────────────── */
@@ -364,11 +416,12 @@
       btn.type = 'button';
       btn.className = 'pre-copy';
       btn.textContent = '复制';
+      var CK = '<svg class="ck-svg" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="ck-path" d="M2 6.5 5 9.5 10 3"/></svg>';
       btn.addEventListener('click', function () {
         var code = pre.querySelector('code');
         var text = code ? code.textContent : pre.textContent;
         var done = function () {
-          btn.textContent = '已复制';
+          btn.innerHTML = CK + '已复制';
           btn.classList.add('copied');
           setTimeout(function () {
             btn.textContent = '复制';
@@ -394,6 +447,335 @@
       try { document.execCommand('copy'); } catch (e) { }
       ta.remove();
     }
+  }
+
+  /* ── 图形灯箱 ─────────────────────────────────── */
+
+  function initLightbox() {
+    if (!renderEl) return;
+    var dlg = document.createElement('dialog');
+    dlg.id = 'dg-lightbox';
+    dlg.setAttribute('aria-label', '图形放大查看');
+    document.body.appendChild(dlg);
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg) dlg.close();
+    });
+    renderEl.addEventListener('click', function (e) {
+      var svg = e.target.closest ? e.target.closest('.dg svg') : null;
+      if (!svg) return;
+      var frame = document.createElement('div');
+      frame.className = 'lb-frame';
+      frame.appendChild(svg.cloneNode(true));
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lb-close';
+      btn.textContent = '关闭（Esc）';
+      btn.addEventListener('click', function () { dlg.close(); });
+      frame.appendChild(btn);
+      dlg.innerHTML = '';
+      dlg.appendChild(frame);
+      if (typeof dlg.showModal === 'function') dlg.showModal();
+    });
+  }
+
+  /* ── 章节滚动渐显 ─────────────────────────────── */
+
+  function initSectionReveal() {
+    if (!renderEl || document.body.classList.contains('wiki-full')) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var heads = renderEl.querySelectorAll('h2, h3');
+    if (heads.length < 3 || !('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('revealed'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.05 });
+    heads.forEach(function (h, i) {
+      if (i < 2) return;
+      h.classList.add('sec-reveal');
+      io.observe(h);
+    });
+  }
+
+  /* ── 命令面板（Ctrl+K / ?）────────────────────── */
+
+  var CMD_ACTIONS = null;
+
+  function cmdPaletteEls() {
+    var dlg = $('#cmd-palette');
+    if (dlg) return { dlg: dlg, input: $('#cmd-input'), list: $('#cmd-results') };
+    dlg = document.createElement('dialog');
+    dlg.id = 'cmd-palette';
+    dlg.setAttribute('aria-label', '命令面板');
+    dlg.innerHTML =
+      '<input id="cmd-input" type="text" placeholder="搜索页面或输入命令…" autocomplete="off" aria-label="命令面板搜索">' +
+      '<div id="cmd-results"></div>';
+    document.body.appendChild(dlg);
+    return { dlg: dlg, input: $('#cmd-input'), list: $('#cmd-results') };
+  }
+
+  function buildCmdActions() {
+    if (CMD_ACTIONS) return CMD_ACTIONS;
+    var self = {
+      theme: { title: '切换明暗主题', hint: '点击按钮', run: function () { var b = $('#theme-toggle'); if (b) b.click(); } },
+      settings: { title: '阅读设置（字号/行距/宽度）', hint: '', run: function () { var b = $('.read-toggle'); if (b) b.click(); } },
+      top: { title: '返回顶部', hint: 't', run: function () { window.scrollTo({ top: 0, behavior: (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth' }); } },
+      home: { title: '打开 Wiki 首页', hint: '', run: function () { location.href = repoRoot + '/index.html'; } },
+      help: { title: '快捷键帮助', hint: '?', run: function () { renderCmdHelp(); } },
+    };
+    CMD_ACTIONS = [self.theme, self.settings, self.top, self.home, self.help];
+    return CMD_ACTIONS;
+  }
+
+  var HELP_ROWS = [
+    ['Cmd / Ctrl + K', '打开命令面板'],
+    ['/ ', '聚焦搜索'],
+    ['?', '快捷键帮助'],
+    ['n / p', '下一页 / 上一页'],
+    ['t', '返回顶部'],
+    ['Esc', '关闭浮层'],
+  ];
+
+  function renderCmdHelp() {
+    var els = cmdPaletteEls();
+    var h = '<div class="cmd-help">';
+    HELP_ROWS.forEach(function (r) {
+      h += '<div class="ch-row"><span>' + r[1] + '</span><kbd>' + r[0] + '</kbd></div>';
+    });
+    h += '</div>';
+    els.list.innerHTML = h;
+  }
+
+  function renderCmd(query) {
+    var els = cmdPaletteEls();
+    var q = norm(query);
+    var html = '';
+    var actions = buildCmdActions().filter(function (a) {
+      return !q || fuzzyScore(a.title, q) > 0;
+    });
+    if (actions.length) {
+      html += '<div class="cmd-group">动作</div>';
+      actions.forEach(function (a, i) {
+        html += '<div class="cmd-item" data-act="' + i + '" tabindex="0">' + a.title +
+          (a.hint ? '<span class="cmd-key">' + a.hint + '</span>' : '') + '</div>';
+      });
+    }
+    var index = (typeof window.WIKI_SEARCH_INDEX !== 'undefined') ? window.WIKI_SEARCH_INDEX : [];
+    var pages = index
+      .map(function (e) { return { e: e, s: scoreEntry(e, q) }; })
+      .filter(function (r) { return r.s > 0; })
+      .sort(function (a, b) { return b.s - a.s; })
+      .slice(0, 12);
+    if (pages.length) {
+      html += '<div class="cmd-group">页面</div>';
+      pages.forEach(function (r) {
+        html += '<a href="' + (r.e.home ? repoRoot + '/' : wikiBase + '/') + r.e.path + '">' +
+          r.e.title + '<span class="cmd-path">' + r.e.path + '</span></a>';
+      });
+    }
+    if (!actions.length && !pages.length) {
+      html = '<div class="cmd-empty">没有匹配的页面或命令</div>';
+    }
+    els.list.innerHTML = html;
+    els.list.querySelectorAll('.cmd-item').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var act = buildCmdActions()[Number(el.getAttribute('data-act'))];
+        if (act) { els.dlg.close(); act.run(); }
+      });
+    });
+    els.list.querySelectorAll('a, .cmd-item').forEach(function (el, i) {
+      el.addEventListener('mouseenter', function () { setCmdActive(i); });
+    });
+  }
+
+  function scoreEntry(entry, q) {
+    var s = 0;
+    s += 100 * fuzzyScore(entry.title, q);
+    entry.headings.forEach(function (h) { s += 30 * fuzzyScore(h.text, q); });
+    s += 10 * fuzzyScore(entry.text, q);
+    return s;
+  }
+
+  var cmdActiveIdx = -1;
+  var cmdItems = [];
+
+  function setCmdActive(i) {
+    var els = cmdPaletteEls();
+    var items = els.list.querySelectorAll('a, .cmd-item');
+    if (i < 0 || i >= items.length) return;
+    if (cmdActiveIdx >= 0 && items[cmdActiveIdx]) items[cmdActiveIdx].classList.remove('cmd-active');
+    cmdActiveIdx = i;
+    items[cmdActiveIdx].classList.add('cmd-active');
+    if (items[cmdActiveIdx].scrollIntoView) items[cmdActiveIdx].scrollIntoView({ block: 'nearest' });
+  }
+
+  function openCmdPalette(helpMode) {
+    var els = cmdPaletteEls();
+    if (!els.dlg.open) els.dlg.showModal();
+    if (helpMode) {
+      renderCmdHelp();
+      els.input.blur();
+    } else {
+      els.input.value = '';
+      renderCmd('');
+      els.input.focus();
+    }
+  }
+
+  function initCommandPalette() {
+    var els = cmdPaletteEls();
+    els.input.addEventListener('input', function () { renderCmd(els.input.value); });
+    els.input.addEventListener('keydown', function (e) {
+      var items = els.list.querySelectorAll('a, .cmd-item');
+      if (!items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); setCmdActive((cmdActiveIdx + 1) % items.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setCmdActive((cmdActiveIdx - 1 + items.length) % items.length); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (cmdActiveIdx >= 0 && items[cmdActiveIdx]) items[cmdActiveIdx].click();
+      }
+    });
+    els.list.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+        e.preventDefault();
+        els.input.focus();
+      }
+    });
+  }
+
+  /* ── 阅读设置（Tweaks）────────────────────────── */
+
+  var READ_KEY = 'wiki-read';
+
+  function readSettings() {
+    try {
+      var v = JSON.parse(localStorage.getItem(READ_KEY));
+      if (v && typeof v === 'object') return v;
+    } catch (e) { /* 忽略 */ }
+    return { scale: '1', lh: '1.75', width: '100%', motion: 'on' };
+  }
+
+  function applySettings(s) {
+    document.documentElement.style.setProperty('--read-scale', s.scale);
+    document.documentElement.style.setProperty('--read-lh', s.lh);
+    document.documentElement.style.setProperty('--read-width', s.width);
+    document.documentElement.classList.toggle('no-anim', s.motion !== 'on');
+    try { localStorage.setItem(READ_KEY, JSON.stringify(s)); } catch (e) { /* 忽略 */ }
+    var dlg = $('#read-settings');
+    if (dlg) {
+      dlg.querySelectorAll('.rs-seg').forEach(function (seg) {
+        seg.querySelectorAll('button').forEach(function (b) {
+          b.classList.toggle('active', b.getAttribute('data-v') === String(s[b.getAttribute('data-k')]));
+        });
+      });
+    }
+  }
+
+  function initReadSettings() {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'read-toggle';
+    btn.textContent = 'Aa';
+    btn.setAttribute('aria-label', '阅读设置');
+    btn.title = '阅读设置（字号 / 行距 / 宽度 / 动效）';
+    document.body.appendChild(btn);
+
+    var dlg = document.createElement('dialog');
+    dlg.id = 'read-settings';
+    dlg.setAttribute('aria-label', '阅读设置');
+    dlg.innerHTML =
+      '<h3>阅读设置</h3>' +
+      '<div class="rs-row"><span class="rs-label">字号</span><div class="rs-seg" data-k="scale">' +
+      '<button data-v="0.9">小</button><button data-v="1">标准</button><button data-v="1.15">大</button><button data-v="1.3">特大</button></div></div>' +
+      '<div class="rs-row"><span class="rs-label">行距</span><div class="rs-seg" data-k="lh">' +
+      '<button data-v="1.6">紧凑</button><button data-v="1.75">标准</button><button data-v="2">宽松</button></div></div>' +
+      '<div class="rs-row"><span class="rs-label">正文宽度</span><div class="rs-seg" data-k="width">' +
+      '<button data-v="100%">标准</button><button data-v="46rem">窄</button></div></div>' +
+      '<div class="rs-row"><span class="rs-label">动效</span><div class="rs-seg" data-k="motion">' +
+      '<button data-v="on">开</button><button data-v="off">关</button></div></div>';
+    document.body.appendChild(dlg);
+
+    btn.addEventListener('click', function () {
+      if (dlg.open) dlg.close();
+      else dlg.showModal();
+    });
+
+    dlg.addEventListener('click', function (e) {
+      var b = e.target.closest('.rs-seg button');
+      if (!b) return;
+      var seg = b.parentElement;
+      var s = readSettings();
+      s[seg.getAttribute('data-k')] = b.getAttribute('data-v');
+      applySettings(s);
+    });
+
+    applySettings(readSettings());
+  }
+
+  /* ── 键盘导航 ─────────────────────────────────── */
+
+  function isEditableTarget(e) {
+    var t = e.target;
+    return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable));
+  }
+
+  function flatNav() {
+    var out = [];
+    if (typeof window.WIKI_NAV !== 'undefined') {
+      window.WIKI_NAV.forEach(function (g) {
+        g.items.forEach(function (it) { out.push(it); });
+      });
+    }
+    return out;
+  }
+
+  function navAdj(delta) {
+    var flat = flatNav();
+    if (!flat.length) return;
+    var cur = currentPagePath();
+    var idx = -1;
+    for (var i = 0; i < flat.length; i++) {
+      if (flat[i].path === cur) { idx = i; break; }
+    }
+    if (idx === -1) idx = 0;
+    var next = flat[(idx + delta + flat.length) % flat.length];
+    location.href = (next.home ? repoRoot + '/' : wikiBase + '/') + next.path;
+  }
+
+  function initKeyboardNav() {
+    document.addEventListener('keydown', function (e) {
+      if (e.isComposing || e.keyCode === 229) return;
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        openCmdPalette(false);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isEditableTarget(e)) return;
+      switch (e.key) {
+        case '/':
+          e.preventDefault();
+          var si = $('#wiki-search-input');
+          if (si) si.focus();
+          break;
+        case '?':
+          e.preventDefault();
+          openCmdPalette(true);
+          break;
+        case 'n': case 'N':
+          e.preventDefault();
+          navAdj(1);
+          break;
+        case 'p': case 'P':
+          e.preventDefault();
+          navAdj(-1);
+          break;
+        case 't': case 'T':
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth' });
+          break;
+      }
+    });
   }
 
   /* ── 落地页卡片滚动渐显 ───────────────────────── */
@@ -430,7 +812,12 @@
     initNavToggle();
     initProgress();
     initCopyButtons();
+    initLightbox();
+    initSectionReveal();
     initReveal();
+    initCommandPalette();
+    initReadSettings();
+    initKeyboardNav();
     requestAnimationFrame(function () { document.body.classList.add('page-ready'); });
   }
 

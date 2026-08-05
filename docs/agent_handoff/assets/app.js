@@ -985,8 +985,8 @@
           });
           rio.unobserve(en.target);
         });
-      // 全屏镜头：场景中部进入视口中部时才触发（rootMargin 收窄）
-      }, { rootMargin: '-35% 0px -35% 0px', threshold: 0 });
+      // 全屏镜头：场景中部进入视口中部时才触发
+      }, { rootMargin: '-30% 0px -30% 0px', threshold: 0 });
       reveals.forEach(function (el, i) {
         el.style.transitionDelay = (i % 3) * 60 + 'ms';
         rio.observe(el);

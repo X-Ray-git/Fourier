@@ -1560,7 +1560,7 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 56px 0 48px;
+  padding: 48px 0 40px;
 }
 
 #wiki-entry { scroll-margin-top: 24px; }
@@ -1898,10 +1898,24 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 }
 
 .flow-step {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px 16px 14px;
   background: var(--surface);
+}
+
+.flow-step:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid var(--brand-color);
+  border-right: 2px solid var(--brand-color);
+  transform: translateY(-50%) rotate(45deg);
+  opacity: 0.75;
 }
 
 .flow-step .fs-num {
@@ -1958,7 +1972,13 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
     box-shadow 0.2s var(--ease-expo-out);
 }
 
-.hp-reveal .reveal-item-show { opacity: 1; transform: none; }
+.hp-reveal .highlight-card.reveal-item.reveal-item-show,
+.hp-reveal .flow-step.reveal-item.reveal-item-show,
+.hp-reveal .stat.reveal-item.reveal-item-show,
+.hp-reveal .entry-card.reveal-item.reveal-item-show {
+  opacity: 1;
+  transform: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .mock-window { animation: none; }

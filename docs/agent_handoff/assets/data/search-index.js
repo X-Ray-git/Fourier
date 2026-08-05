@@ -1,5 +1,5 @@
 /* 由 scripts/docs-index.js 生成，随内容提交；阅读端零生成。 */
-window.WIKI_SEARCH_MANIFEST = "ad2ea55fa18a21ca";
+window.WIKI_SEARCH_MANIFEST = "05de89449f4cf1cf";
 window.WIKI_SEARCH_INDEX = [
  {
   "path": "architecture/networking.html",
@@ -3548,6 +3548,22 @@ window.WIKI_SEARCH_INDEX = [
    {
     "id": "obx-内所有提前-return-之前必须先读取-observable",
     "text": "Obx 内所有提前 return 之前必须先读取 observable"
+   },
+   {
+    "id": "知识库采用编辑阅读的单文件-html-页面体系",
+    "text": "知识库采用“编辑=阅读”的单文件 HTML 页面体系"
+   },
+   {
+    "id": "首页兼具产品宣传页与-wiki-入口",
+    "text": "首页兼具产品宣传页与 Wiki 入口"
+   },
+   {
+    "id": "文档图形统一使用内联-svg不引入-mermaid",
+    "text": "文档图形统一使用内联 SVG，不引入 Mermaid"
+   },
+   {
+    "id": "发布足迹直接追加进-releaseshtml-的内嵌-markdown",
+    "text": "发布足迹直接追加进 releases.html 的内嵌 Markdown"
    }
   ],
   "text": "决策日志 保留根目录 AGENT_HANDOFF.md 作为入口 背景：后续 agent 会预期根目录存在交接文件。 决策：保留 AGENT_HANDOFF.md 作为短入口，把详细知识迁移到 docs/agent_handoff/ 。 后果：agent 能快速起步，同时完整历史仍然可查。 完整历史按主题归档 背景：旧的单文件交接文档包含重要历史讨论，但 8,000 余行内容集中在一个文件中，不适合作为 wiki 证据库继续维护。 决策：完整历史按主题迁移到 history/archive/ ，每个旧编号章节只归入一个主主题； history/chronology.md 保留原始出现顺序和稳定 legacy-xxx 锚点。 history/timeline.md 只保留兼容入口。 后果：专题页可以保持简洁，历史仍可按主题或旧编号追溯，也不会继续形成新的巨型单文件。 不使用数字文件前缀 背景：开发顺序不遵循固定计划。 决策：使用语义化 wiki 路径，由 README 描述推荐阅读顺序。 后果：新增主题时无需重命名文件，也不会暗示优先级。 文章正文保留 Column 背景：Sliver 虚拟化可能提升性能，但会影响选择、目录锚点、图片生命周期和滚动行为。 决策：不要随意切换到 SliverList.builder 。 后果：除非进行专门重构，否则围绕当前结构优化。 不要回退 保留全文选择行为。 保留目录锚点准确性。 保留图片预览/光标/菜单行为。 保留当前滚动位置语义。 畸形文章修复保持保守 背景：少数真实文章出现异常空白、表格渲染、空代码块或交互组件文本问题。有些问题来自上游内容本身畸形。 决策：添加宽泛渲染启发式规则前，先检查真实源内容。优先做窄修复，或接受罕见上游边缘情况。 后果：渲染保持可预测，不为了少数坏文章牺牲常见正确文章。 不裁剪宽表格 scroll viewport 背景：在横向表格 scroll viewport 外包圆角 ClipRRect ，会在表格宽于文章栏时切掉矩形表格四角。 决策：不要仅为视觉一致性而给表格 viewport 加圆角裁剪。 后果：宽表格保持正确的直角边框，同时仍可横向滚动。 无 <th> 的稳定网格仍属于数据表 背景：阿里技术文章《为什么大模型的缓存命中率能到 90%？》包含 7×5 和 4×2 两个结构完整的数据表，但首行使用 <td> 而不是 <th> 。旧规范化规则把所有无 <th> 表格当成 Newsletter 布局容器，导致两张表在渲染前被摊平成正文。 决策：布局表格清理改用保守的结构判断。有 <th> 的表格直接保留；无 <th> 时，至少两行两列、列数稳定、无嵌套、文本单元格占主导且非媒体主导的网格也保留。其余明确像布局容器的表格继续扁平化。 后果：修复不依赖订阅源、文章标题或具体文本，正确的 td-only 数据表可以进入现有表格渲染器，Newsletter 单单元格/嵌套布局仍保持轻量。 未来方向：如果表格与其他富文本清洗需求继续分化，应把阅读渲染规范化和 LLM 输入清洗拆成独立管线与缓存；本轮不扩大到该架构重构。 避免会改变布局的图片 hover 背景：macOS 图片 hover 缩小/边框效果会移动后续文字，造成明显布局不稳定。 决策：macOS 图片 hover 不应改变图片布局尺寸；用光标表达可点击。 后果：文章文字保持稳定，同时图片仍有可点击提示。 选择性使用 Liquid Glass 背景：全局铺开 Liquid Glass 会造成可读性和 macOS 性能问题，尤其是在密集重复 UI 中。 决策：有意义的浮动控件/表面可以使用玻璃；密集设置、任务中心、未读标签和重复装饰使用轻量描边/静态样式。 后果：应用保留设计方向，同时避免重现 v1.1.25 风格的性能回归。 不在 Flutter 中追求真实外部背景取色边框 背景：用户希望边框高光颜色来自应用窗口后方真实内容。Flutter 绘制无法可靠采样这些像素；NSVisualEffectView/系统 compositor 才拥有这部分模糊。 决策：放弃 Flutter-only 的真实外部背景取色边框。未来如果要做，应作为 native/AppKit renderer 实验。 后果：当前玻璃边框使用实用的白色/高光样式，不假装采样不可得像素。 macOS 中间 header 保持轻量 背景：中间时间线/列表 header 的玻璃背景增加视觉重量，也可能影响性能。后续细线分隔也被取消。 决策：除非明确重新讨论，否则 macOS 中间栏 header 不使用玻璃背景。 后果：中间列表 chrome 保持安静且不显示底部分隔线；文章详情独立保留细分隔线和阅读进度。 macOS 圆角收敛按层级联动 背景：用户希望 macOS 整体圆角略微变小，同时文章卡片圆角略微增大。此前调研 Apple 官方资料后，没有找到普通 macOS app 的固定圆角数值规范；官方更强调圆角同心性、容器关系和系统控件自适应。 决策：第一阶段只收敛主几何层和大面板：窗口/Flutter 外框 24 ，红黄绿圆心 24 ，侧边栏面板 18 ， AppGlassSurface 默认 16 ， AppGlassPanel 默认 18 ，突出面板 20 ，macOS 文章卡片 10 。分屏文章右下角安全裁剪同步外框半径。 后果：红黄绿、外框、侧边栏和右下角文章裁剪必须联动维护。不要把“圆角收敛”扩展成全局搜索替换。 不要回退 不要单独改 MainFlutterWindow.swift 的 windowRadius 而不同步 Flutter 外框、红黄绿圆心和文章右下角裁剪。 不要把 999 胶囊、圆形按钮、图片、代码块、表格、小标签或 Android 端纳入这一轮 macOS 主几何收敛。 不要为了统一而给宽表格 scroll viewport 加圆角裁剪。 玻璃按钮先集中颜色 token，再统一角色规则 背景：用户希望进一步规划液态玻璃按钮的背景颜色规则，并评估哪些控件未来可以贴图/预绘制以改善性能。当前项目里右上角文章按钮、目录按钮、时间线排序/同步按钮、摘要/翻译 pill、设置页 segmented/select 等控件虽然都带有玻璃语言，但选中态、默认态、hover、橙色使用范围仍存在分叉。 决策：第一阶段只新增 AppGlassControlPalette ，把散落的 hover、pressed、active、border、disabled 色值集中管理，并保持视觉体感基本不变。第二阶段再讨论和实现“按钮角色规则”，决定哪些状态允许橙色背景、哪些只改变图标色、哪些保持中性背景。贴图/预绘制应排在角色规则稳定之后。 后果：不要因为已经有 palette 就认为按钮设计语言已经统一。后续如果改右上角文章按钮、目录按钮、时间线排序按钮、同步按钮或 pill 控件，应优先接入同一套角色规则，而不是继续在各自页面手写颜色公式。 不要回退 不要重新在页面局部复制 cs.primary.withValues(...) 、 cs.onSurface.withValues(...) 等玻璃控制状态公式。 "
@@ -3713,6 +3729,10 @@ window.WIKI_SEARCH_INDEX = [
    {
     "id": "敏感信息检查结论",
     "text": "敏感信息检查结论"
+   },
+   {
+    "id": "本次重构的决策记录",
+    "text": "本次重构的决策记录"
    }
   ],
   "text": "旧文档迁移映射 本页记录 Wiki 重构前后的完整映射，确保没有旧文档被静默遗漏。原则：内容仍然有效的进入对应专题页；长期设计取舍进入决策页；仅有历史价值的内容进入历史归档并标注“历史资料”；旧 .md 页面统一转换为同名 .html 单文件页面（正文仍为 Markdown，内嵌于 <script type=\"text/markdown\"> ）。 转换方式 转换 说明 .md → 同名 .html 正文以 Markdown 内嵌在页面中，编辑与阅读同一文件 内部链接 .md → .html 全部 265 处相对链接由转换器机械改写，锚点（如 legacy-xxx ）保留 根 index.html 旧营销页（590 行，含远程字体依赖）替换为 Wiki 入口 docs/agent_handoff/README.md 阅读顺序与知识地图并入根 index.html 首页，原文件删除 逐文件映射 状态 旧路径 新路径 处理 status/current.md status/current.html 转换 status/pending.md status/pending.html 转换 status/verification.md status/verification.html 转换 产品 旧路径 新路径 处理 product/principles.md product/principles.html 转换 product/terminology.md product/terminology.html 转换 product/privacy.md product/privacy.html 转换 —（新增） product/overview.html 从根 README.md 与 product/principles.md 提炼产品定位 架构 旧路径 新路径 处理 architecture/overview.md architecture/overview.html 转换 + 内嵌总体架构图 architecture/networking.md architecture/networking.html 转换 architecture/routing-state.md architecture/routing-state.html 转换 architecture/storage-and-cache.md architecture/storage-and-cache.html 转换 —（新增） architecture/sync-state.html 从 networking.md 、 storage-and-cache.md 、 current.md 与决策日志提炼数据同步与状态传播专题 功能 旧路径 新路径 处理 features/timeline.md features/timeline.html 转换 features/article-rendering.md features/article-rendering.html 转换 + 视频内容抽离至 media-playback + 内嵌处理流水线图 features/translation-summary.md features/translation-summary.html 转换 features/filter-review.md features/filter-review.html 转换 features/settings.md features/settings.html 转换 features/subscriptions.md features/subscriptions.html 转换 features/background-tasks.md features/background-tasks.html 转换 features/keyboard-shortcuts.md features/keyboard-shortcuts.html 转换 features/performance.md features/performance.html 转换 —（新增） features/media-playback.html 从 article-rendering.md 视频章节与 networking.md 播放器网络细节合并为媒体播放专题 —（新增） features/undo-redo.html 从 keyboard-shortcuts.md 、 filter-review.md 、决策日志提炼撤销/重做专题 平台与设计 旧路径 新路径 处理 platforms/macos.md platforms/macos.html 转换 platforms/android.md platforms/android.html 转换 design/liquid-glass.md design/liquid-glass.html 转换 design/macos-ui.md design/macos-ui.html 转换 design/interaction-patterns.md design/interaction-patterns.html 转换 操作 旧路径 新路径 处理 operations/release-build.md operations/release-build.html 转换 + 内嵌构建发布流程图 operations/git-worktrees.md operations/git-worktrees.html 转换 operations/testing.md operations/testing.html 转换 operations/troubleshooting.md operations/troubleshooting.html 转换 —（新增） operations/development.html 从根 README.md 、 testing.md 、 verification.md 提炼开发流程 历史 旧路径 新路径 处理 history/decisions.md history/decisions.html 转换 history/migrations.md history/migrations.html 转换 history/releases.md history/releases.html 转换为快照；机器追加日志改为由 scripts/release.sh 直接追加进 releases.html 的内嵌 Markdown（行为不变） history/chronology.md history/chronology.html 转换 history/historical-map.md history/historical-map.html 转换 history/timeline.md history/timeline.html 转换 + “历史资料”横幅（兼容入口） history/archive/README.md history/archive/README.html 转换 + “历史资料”横幅 histor"

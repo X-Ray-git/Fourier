@@ -143,7 +143,7 @@
 
 | 旧路径 | 新路径 | 处理 |
 |---|---|---|
-| `index.html`（旧营销页） | `index.html`（新 Wiki 入口） | 替换 |
+| `index.html`（旧营销页） | `index.html`（Wiki 入口 + 产品宣传落地页） | 替换；全宽落地页：深色 hero、功能亮点卡片、快速入口（详见[决策日志](../history/decisions.html)「首页兼具产品宣传页与 Wiki 入口」） |
 | `AGENT_HANDOFF.md` | `AGENT_HANDOFF.md` | 保留，重写为短入口，链接更新为 `.html` |
 | `README.md` | `README.md` | 保留，文档章节更新 |
 | `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.md` | 保留，新增 markdown-it / markdown-it-anchor 条目 |
@@ -168,11 +168,17 @@
 | `scripts/convert-docs.js` | 一次性 `.md` → `.html` 转换器（保留供批量格式化使用） |
 | `scripts/docs-index.js` | 搜索索引生成器 |
 | `scripts/docs-check.js` | 链接/锚点/敏感信息/一致性检查 |
-| `scripts/docs.sh` | 命令入口（check / index / convert） |
+| `scripts/docs.sh` | 命令入口（check / index / convert（一次性）） |
+
+页面呈现组件（横幅、阅读进度条、代码复制按钮、kbd 键帽、"不要回退"折叠框、微动效）由 `app.js`/`theme.css` 自动生成，说明见[站点指南](site-guide.html)。
 
 ## 敏感信息检查结论
 
 迁移前已扫描全部文档与根文件：未发现本机用户目录绝对路径（如以用户主目录开头的路径）、真实 Session Token、API Key 或账号标识；文档中仅出现概念性字段名（如 `__Secure-better-auth.session_token` 的用途描述），不构成敏感信息。`reference/`、`scratch/` 已被仓库 `.gitignore` 排除，不在迁移范围。
+
+## 本次重构的决策记录
+
+迁移完成后的长期设计取舍（单文件 HTML 页面体系、首页兼具宣传页、内联 SVG 图形、releases.html 单一产物等）统一记录在 [决策日志](../history/decisions.html)；页面结构与组件说明见[站点指南](site-guide.html)。本页只负责“旧文件到哪里去了”的映射，不再重复决策理由。
 
 </script>
 <script src="../assets/wiki-common.js"></script>

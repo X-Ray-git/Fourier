@@ -902,6 +902,60 @@
 - 排查"Release 版一片空白/半透明覆盖"时，先检查是否有 Obx 提前返回未读取 observable；GetX 误用异常在 Release 会被吞掉，只剩空白渲染。
 </details>
 
+## 知识库采用“编辑=阅读”的单文件 HTML 页面体系
+
+背景：用户要求文档的编辑与阅读是同一个东西、克隆后零依赖零执行即可阅读，并明确不使用需要构建、开发服务器或 `fetch` 本地 Markdown 的静态站点生成器；浏览器对 `file://` 协议禁止运行时 `fetch` 本地文件，因此任何“HTML 运行时加载 md”的方案在双击场景下都不可行。
+
+决策：每个专题页是自包含的 `.html` 文件，正文以 Markdown 内嵌于 `<script type="text/markdown" id="wiki-content">`；阅读时由仓库内置的 markdown-it（UMD 经典脚本）渲染；导航清单与搜索索引是仓库内经典 JS 数据文件；全部资源相对路径、无网络依赖。编辑和阅读是同一个文件，不维护独立的 Markdown 源与生成后的 HTML 副本。旧 `.md` 页面全部迁移为同名 `.html` 并建立逐文件映射（见 `meta/migration-map.html`）。
+
+后果：克隆后双击根 `index.html` 即可离线浏览全部专题；GitHub 网页不再渲染 wiki 页面（`.html` 显示源码，但 Markdown 正文以明文存在于 script 标签中，agent 与文本工具可直接读取）；根 `README.md`、`AGENT_HANDOFF.md` 保留为 .md 短入口。
+
+不要回退：
+
+- 不要重新引入需要构建、HTTP 服务或运行时网络资源的站点生成器（Docusaurus/VitePress/MDBook 等均依赖其一）。
+- 不要为了“GitHub 渲染”恢复每页一份独立 `.md` 源文件——那会回到双份维护。
+- 不要在页面中使用 `fetch()`、ES Module、动态 import 或远程 CDN 资源；页面脚本必须是经典 script 格式。
+- 正文的 Markdown 中不得出现会提前结束脚本块的闭合序列（确有需要展示时以反斜杠转义书写，渲染时自动还原，写法见 `meta/site-guide.html`）；也不要空行后 4 空格缩进 HTML（markdown-it 会解析成代码块）。
+
+## 首页兼具产品宣传页与 Wiki 入口
+
+背景：旧营销 `index.html` 被替换后，入口需要同时承担产品介绍与知识库导航，而首页又是唯一的“门面”。
+
+决策：根 `index.html` 做成全宽落地页（`wiki-full` 标记隐藏侧栏与目录，保留品牌栏、搜索与主题切换）：深色渐变 hero（品牌标识、标语、CTA、徽章与“非官方客户端”声明）、6 张行内 SVG 图标功能亮点卡片、Wiki 快速入口网格，之后接推荐阅读顺序与硬性规则。每个专题页由 `app.js` 自动生成分区配色的视觉横幅（图标 + 标题 + 首段摘要 + 专题标签）。宣传文案从旧营销页与产品文档综合改写，不使用截图。
+
+后果：入口同时具备产品传达与技术手册导航；文案需要与产品现状保持同步更新。
+
+不要回退：
+
+- 落地页 HTML 必须以顶格书写；空行后 4 空格缩进的 HTML 会被 markdown-it 当作代码块（曾导致 6 张功能卡与 8 个入口卡整体渲染成代码文本）。
+- 首页链接使用 `docs/agent_handoff/` 前缀（页面位于仓库根）；不要删除 hero 与功能卡结构只留链接。
+- “非官方个人二次开发客户端”声明必须保留。
+
+## 文档图形统一使用内联 SVG，不引入 Mermaid
+
+背景：架构图、流程图需要可复用、明暗主题清晰、离线可用；Mermaid 依赖运行时绘图库且与“零依赖”约束冲突。
+
+决策：图形是 `div.dg` 包裹的内联 `<svg>`（`div` 包装确保 markdown-it 按原始 HTML 块透传），样式统一由 `assets/theme.css` 的 `dg-*` 类与 CSS 变量提供（节点/边/箭头/标签，随明暗主题切换）；动画仅用于解释状态变化（箭头流动等 CSS keyframes），`prefers-reduced-motion: reduce` 时全部禁用；SVG 带 `viewBox`、`role="img"` 与 `<title>/<desc>`。当前共 12 张：总体架构、数据同步、文章流水线、撤销重做、媒体链路、构建发布、AI 队列、审核流转、存储与账号生命周期、订阅侧边栏、macOS 窗口分层、动画时序。
+
+不要回退：
+
+- 不要引入 Mermaid、ECharts 或其他运行时绘图依赖。
+- 图形必须取材真实代码与文档结构，不得为美观虚构架构。
+- 新增图形复用现有 `dg-*` 样式与两个共享箭头 marker（`dg-arrow` / `dg-arrow-flow`），不要在页面里散落手写样式。
+
+## 发布足迹直接追加进 releases.html 的内嵌 Markdown
+
+背景：旧 `scripts/release.sh` 把发布可复现命令追加到 `history/releases.md`；wiki 迁移为单文件 HTML 体系后，继续维护 `.md` 副本会破坏单一产物原则。
+
+决策：`scripts/release.sh` 改为把足迹插入 `history/releases.html` 的 `wiki-content` 脚本块（在第一个 `</script>` 前，并转义内容中的 `</script>`）；脚本行为与版本号/分支/校验规则保持不变。`history/releases.html` 是唯一产物，未来改动页面模板时必须保持“第一个 `</script>` 前是 `id="wiki-content"` 块”的约束。
+
+后果：发布记录与 wiki 页面同一文件，GitHub 上以 .md 形式查看的旧习惯不再适用；`docs-check` 会校验该结构完整性。
+
+不要回退：
+
+- 不要恢复向 `releases.md` 追加的逻辑（双份维护）。
+- 修改 `releases.html` 或页面模板时，不要移除 `id="wiki-content"` 或在正文块前插入其他 `</script>`。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

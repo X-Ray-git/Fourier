@@ -985,9 +985,10 @@
           });
           rio.unobserve(en.target);
         });
-      }, { threshold: 0.1 });
+      // 全屏镜头：场景中部进入视口中部时才触发（rootMargin 收窄）
+      }, { rootMargin: '-35% 0px -35% 0px', threshold: 0 });
       reveals.forEach(function (el, i) {
-        el.style.transitionDelay = (i % 3) * 70 + 'ms';
+        el.style.transitionDelay = (i % 3) * 60 + 'ms';
         rio.observe(el);
       });
     } else {

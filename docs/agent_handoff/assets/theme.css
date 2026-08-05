@@ -1555,8 +1555,15 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 .hp-section {
   text-align: center;
-  padding: 72px 0 40px;
+  min-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 0 48px;
 }
+
+#wiki-entry { scroll-margin-top: 24px; }
 
 /* Hero v3：巨型展示 + 界面示意 */
 .hero {
@@ -1843,8 +1850,11 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 /* 统计带 */
 .stats-band {
-  border-radius: 26px;
-  margin-top: 56px;
+  min-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 56px 40px 52px;
   background:
     radial-gradient(ellipse 80% 120% at 20% -30%, rgba(245, 158, 11, 0.20) 0%, transparent 55%),

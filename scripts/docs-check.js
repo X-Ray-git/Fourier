@@ -102,6 +102,25 @@ function main() {
     if (!info.content) err(`缺少 wiki-content: ${rel}`);
     if (info.rawContent.includes('</script')) err(`未转义的 </script: ${rel}`);
 
+    // 1b. wiki-content 块必须完整结束：正文中的字面量 </script> 会提前终止脚本块，
+    // 提取正则会“恰好”截断在该处而误判通过，因此必须检查第一个 </script> 之后
+    // 是否紧接模板脚本区（script src 形式）
+    const openIdx = info.html.indexOf('id="wiki-content">');
+    if (openIdx !== -1) {
+      const after = info.html.slice(openIdx);
+      const firstClose = after.indexOf('</script>');
+      if (firstClose !== -1) {
+        const tail = after.slice(firstClose + '</script>'.length);
+        if (!/^\n<script src=/.test(tail)) {
+          err(`wiki-content 块被正文中的字面量提前终止: ${rel}`);
+        }
+      }
+    }
+
+    // 1c. 全页 </script> 数量必须等于模板值（1 个内容结束 + 6 个 include）
+    const closeCount = (info.html.match(/<\/script>/g) || []).length;
+    if (closeCount !== 7) err(`页面 </script> 数量异常（${closeCount}，应为 7）: ${rel}`);
+
     // 2. 渲染
     if (!info.rendered) continue;
 

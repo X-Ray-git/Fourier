@@ -947,14 +947,14 @@
 
 背景：旧 `scripts/release.sh` 把发布可复现命令追加到 `history/releases.md`；wiki 迁移为单文件 HTML 体系后，继续维护 `.md` 副本会破坏单一产物原则。
 
-决策：`scripts/release.sh` 改为把足迹插入 `history/releases.html` 的 `wiki-content` 脚本块（在第一个 `</script>` 前，并转义内容中的 `</script>`）；脚本行为与版本号/分支/校验规则保持不变。`history/releases.html` 是唯一产物，未来改动页面模板时必须保持“第一个 `</script>` 前是 `id="wiki-content"` 块”的约束。
+决策：`scripts/release.sh` 改为把足迹插入 `history/releases.html` 的 `wiki-content` 脚本块（在第一个 `<\/script>` 前，并转义内容中的 `<\/script>`）；脚本行为与版本号/分支/校验规则保持不变。`history/releases.html` 是唯一产物，未来改动页面模板时必须保持“第一个 `<\/script>` 前是 `id="wiki-content"` 块”的约束。
 
 后果：发布记录与 wiki 页面同一文件，GitHub 上以 .md 形式查看的旧习惯不再适用；`docs-check` 会校验该结构完整性。
 
 不要回退：
 
 - 不要恢复向 `releases.md` 追加的逻辑（双份维护）。
-- 修改 `releases.html` 或页面模板时，不要移除 `id="wiki-content"` 或在正文块前插入其他 `</script>`。
+- 修改 `releases.html` 或页面模板时，不要移除 `id="wiki-content"` 或在正文块前插入其他 `<\/script>`。
 
 </script>
 <script src="../assets/wiki-common.js"></script>

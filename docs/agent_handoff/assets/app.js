@@ -808,62 +808,6 @@
     });
   }
 
-  /* ── 钉住交叉切换场景（Apple 式滚动驱动变换）────── */
-
-  function initScenePin() {
-    if (!renderEl) return;
-    var stage = renderEl.querySelector('.scene-pin-stage');
-    if (!stage) return;
-    var slides = stage.querySelectorAll('.pin-slide');
-    var dots = stage.querySelectorAll('.pin-dot');
-    var n = slides.length;
-    if (!n) return;
-    var html = document.documentElement;
-
-    function setActive(i) {
-      slides.forEach(function (s, k) {
-        var diff = k - i;
-        s.classList.toggle('active', diff === 0);
-        s.style.transform = diff < 0 ? 'translateY(-56px)' : diff > 0 ? 'translateY(56px)' : '';
-      });
-      dots.forEach(function (d, k) { d.classList.toggle('active', k === i); });
-    }
-
-    function progress() {
-      var total = stage.offsetHeight - window.innerHeight;
-      if (total <= 0) return 0;
-      var rect = stage.getBoundingClientRect();
-      return Math.max(0, Math.min(1, -rect.top / total));
-    }
-
-    var lastI = -1;
-    function onScroll() {
-      var i = Math.min(n - 1, Math.floor(progress() * n));
-      if (i !== lastI) { lastI = i; setActive(i); }
-    }
-
-    if (reducedMotion() || html.classList.contains('no-anim')) return;
-
-    setActive(0);
-    lastI = 0;
-    var ticking = false;
-    window.addEventListener('scroll', function () {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(function () { ticking = false; onScroll(); });
-    }, { passive: true });
-    onScroll();
-
-    dots.forEach(function (d) {
-      d.addEventListener('click', function () {
-        var i = Number(d.getAttribute('data-i'));
-        var total = stage.offsetHeight - window.innerHeight;
-        var targetY = Math.max(0, stage.getBoundingClientRect().top + window.scrollY + (i / (n - 1)) * total);
-        window.scrollTo({ top: targetY, behavior: (reducedMotion() ? 'auto' : 'smooth') });
-      });
-    });
-  }
-
   /* ── mockup 流程演示（huashu Dashboard+Cinematic 模式）── */
 
   function initMockupCinematic() {
@@ -1008,7 +952,7 @@
           if (!en.isIntersecting) return;
           en.target.classList.add('revealed');
           // 行级 stagger：卡片按行列交错进入（expoOut）
-          var items = en.target.querySelectorAll('.flow-step, .stat, .entry-card');
+          var items = en.target.querySelectorAll('.highlight-card, .flow-step, .stat, .entry-card');
           items.forEach(function (it, i) {
             it.classList.add('reveal-item');
             it.style.transitionDelay = (Math.floor(i / 3) * 90 + (i % 3) * 50) + 'ms';
@@ -1050,7 +994,6 @@
     initReadSettings();
     initKeyboardNav();
     initLandingFx();
-    initScenePin();
     initMockupCinematic();
     requestAnimationFrame(function () { document.body.classList.add('page-ready'); });
   }

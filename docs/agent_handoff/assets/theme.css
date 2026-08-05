@@ -828,6 +828,7 @@ body.wiki-full .wiki-rendered > h1:first-child {
 }
 
 @media (max-width: 560px) {
+  .highlight-grid { grid-template-columns: 1fr; }
   .entry-grid { grid-template-columns: 1fr; }
   .hero h2 { font-size: 28px; }
 }
@@ -1728,146 +1729,57 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
   .hero h2 { font-size: clamp(34px, 9vw, 46px); }
 }
 
-/* 钉住交叉切换场景（Apple 式：滚动驱动原地变换） */
-.scene-pin-stage {
-  height: 420vh;
-  position: relative;
+/* 亮点卡片（大字号标题，同屏网格） */
+.highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  text-align: left;
+  margin-top: 36px;
 }
 
-.scene-pin-fixed {
-  position: sticky;
-  top: 0;
-  height: 100vh;
+.highlight-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 26px 26px 24px;
+  background: var(--surface);
+  transition: transform 0.24s var(--ease-expo-out), box-shadow 0.24s var(--ease-expo-out), border-color 0.24s var(--ease-expo-out);
+}
+
+.highlight-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--brand-color);
+  box-shadow: var(--shadow);
+}
+
+.highlight-card .hc-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  margin-bottom: 18px;
+  color: var(--brand-color-strong);
+  background: var(--selection);
 }
 
-.pin-slide {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 48px 24px;
-  opacity: 0;
-  transform: translateY(56px);
-  transition: opacity 0.45s var(--ease-expo-out), transform 0.45s var(--ease-expo-out);
-  pointer-events: none;
-}
+.highlight-card .hc-icon svg { width: 23px; height: 23px; }
 
-.pin-slide.active {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-}
-
-.pin-slide .pin-icon {
-  width: 76px;
-  height: 76px;
-  border-radius: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 30px;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--brand-color), var(--brand-color-strong));
-  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.35);
-}
-
-.pin-slide .pin-icon svg { width: 36px; height: 36px; }
-
-.pin-slide h3 {
-  font-size: clamp(26px, 3.6vw, 40px);
-  letter-spacing: -0.02em;
-  margin: 0 0 16px;
+.highlight-card h3 {
+  font-size: 19px;
+  line-height: 1.35;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
-.pin-slide p {
-  font-size: 17px;
-  line-height: 1.85;
-  color: var(--text-weak);
-  max-width: 30em;
+.highlight-card p {
   margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-weak);
   text-wrap: pretty;
-}
-
-.pin-dots {
-  position: absolute;
-  right: 26px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 2;
-}
-
-.pin-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  background: var(--border-strong);
-  cursor: pointer;
-  transition: background 0.25s var(--ease-expo-out), transform 0.25s var(--ease-overshoot);
-}
-
-.pin-dot:hover { background: var(--text-faint); }
-
-.pin-dot.active {
-  background: var(--brand-color);
-  transform: scale(1.4);
-  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
-}
-
-@media (max-width: 620px) {
-  .pin-dots { right: 14px; gap: 9px; }
-  .pin-slide { padding: 40px 20px; }
-  .pin-slide .pin-icon { width: 60px; height: 60px; margin-bottom: 24px; }
-  .pin-slide .pin-icon svg { width: 29px; height: 29px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .scene-pin-stage { height: auto; }
-  .scene-pin-fixed {
-    position: static;
-    height: auto;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    padding: 24px 0;
-  }
-  .pin-slide {
-    position: static;
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-    align-items: flex-start;
-    text-align: left;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    transition: none;
-  }
-  .pin-slide .pin-icon { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 14px; }
-  .pin-slide .pin-icon svg { width: 22px; height: 22px; }
-  .pin-slide h3 { font-size: 18px; margin-bottom: 8px; }
-  .pin-slide p { font-size: 13.5px; line-height: 1.7; }
-  .pin-dots { display: none; }
-}
-
-@media (prefers-reduced-motion: reduce) and (max-width: 900px) {
-  .scene-pin-fixed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (prefers-reduced-motion: reduce) and (max-width: 560px) {
-  .scene-pin-fixed { grid-template-columns: 1fr; }
 }
 
 /* 统计带 */
@@ -1988,6 +1900,7 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 .hp-reveal.revealed { opacity: 1; transform: none; filter: none; }
 
+.hp-reveal .highlight-card.reveal-item,
 .hp-reveal .flow-step.reveal-item,
 .hp-reveal .stat.reveal-item,
 .hp-reveal .entry-card.reveal-item {
@@ -2000,6 +1913,7 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
     box-shadow 0.2s var(--ease-expo-out);
 }
 
+.hp-reveal .highlight-card.reveal-item.reveal-item-show,
 .hp-reveal .flow-step.reveal-item.reveal-item-show,
 .hp-reveal .stat.reveal-item.reveal-item-show,
 .hp-reveal .entry-card.reveal-item.reveal-item-show {

@@ -789,7 +789,7 @@ body.wiki-full .wiki-rendered > h1:first-child {
 
 /* 功能亮点卡片 */
 .hp-section + .hp-section,
-.stats-band + .hp-section { margin-top: 8px; }
+.stats-band + .hp-section { margin-top: 44px; }
 
 /* Wiki 快速入口 */
 .entry-grid {
@@ -1488,10 +1488,12 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 .hp-section {
   text-align: center;
+  min-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 64px 0 56px;
+  justify-content: center;
+  padding: 56px 0 48px;
 }
 
 #wiki-entry { scroll-margin-top: 24px; }
@@ -1781,11 +1783,12 @@ html.no-anim *, html.no-anim *::before, html.no-anim *::after {
 
 /* 统计带 */
 .stats-band {
+  min-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 72px 40px 68px;
+  padding: 64px 40px 60px;
   background:
     radial-gradient(ellipse 80% 120% at 20% -30%, rgba(245, 158, 11, 0.20) 0%, transparent 55%),
     radial-gradient(ellipse 70% 110% at 90% 10%, rgba(249, 115, 22, 0.14) 0%, transparent 55%),

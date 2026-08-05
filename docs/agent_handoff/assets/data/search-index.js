@@ -1,5 +1,5 @@
 /* 由 scripts/docs-index.js 生成，随内容提交；阅读端零生成。 */
-window.WIKI_SEARCH_MANIFEST = "ee4c55b7b7129fb5";
+window.WIKI_SEARCH_MANIFEST = "3f6dc0c0f63ed0ea";
 window.WIKI_SEARCH_INDEX = [
  {
   "path": "architecture/networking.html",

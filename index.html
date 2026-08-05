@@ -136,13 +136,8 @@
 <div class="scene-inner">
   <p class="hp-label">核心能力</p>
   <h2 class="hp-display">不止于阅读——<span class="grad">从数据到决策的完整闭环。</span></h2>
-</section>
-
-<section class="landing-section hp-section hp-reveal" id="features-pin">
-  <p class="hp-label">核心能力</p>
-  <h2 class="hp-display">不止于阅读——<span class="grad">从数据到决策的完整闭环。</span></h2>
   <p class="hp-lead">从数据拉取到 AI 决策，每一层都经过精心设计。</p>
-  <div class="highlight-grid">
+<div class="highlight-grid">
 
 <div class="highlight-card">
   <div class="hc-icon">
@@ -194,6 +189,7 @@
 
   </div>
 </div>
+</div>
 </section>
 
 <section class="landing-section hp-section hp-reveal scene" id="flow-scene">
@@ -201,44 +197,57 @@
 
   <p class="hp-label">处理流水线</p>
   <h2 class="hp-display">从 API 到你的屏幕，<span class="grad">每一步都可见。</span></h2>
-  <div class="flow-strip">
+  <div class="flow-rail">
 
-<div class="flow-step">
-  <div class="fs-num">01</div>
-  <h4>拉取</h4>
-  <p>从 Folo API 获取 feeds / social / inbox 三类未读文章。</p>
+<div class="flow-node">
+  <div class="fn-num">01</div>
+  <div class="fn-body">
+    <h4>拉取</h4>
+    <p>从 Folo API 获取 feeds / social / inbox 三类未读文章。</p>
+  </div>
 </div>
 
-<div class="flow-step">
-  <div class="fs-num">02</div>
-  <h4>本地合并</h4>
-  <p>写入文章库并合并已读覆盖、订阅源与历史状态。</p>
+<div class="flow-node">
+  <div class="fn-num">02</div>
+  <div class="fn-body">
+    <h4>本地合并</h4>
+    <p>写入文章库并合并已读覆盖、订阅源与历史状态。</p>
+  </div>
 </div>
 
-<div class="flow-step">
-  <div class="fs-num">03</div>
-  <h4>AI 判定</h4>
-  <p>DeepSeek 给出保留 / 拒绝建议，被拒文章进入审核队列。</p>
+<div class="flow-node">
+  <div class="fn-num">03</div>
+  <div class="fn-body">
+    <h4>AI 判定</h4>
+    <p>DeepSeek 给出保留 / 拒绝建议，被拒文章进入审核队列。</p>
+  </div>
 </div>
 
-<div class="flow-step">
-  <div class="fs-num">04</div>
-  <h4>翻译与摘要</h4>
-  <p>仍未读的文章按配置进入独立后台队列。</p>
+<div class="flow-node">
+  <div class="fn-num">04</div>
+  <div class="fn-body">
+    <h4>翻译与摘要</h4>
+    <p>仍未读的文章按配置进入独立后台队列。</p>
+  </div>
 </div>
 
-<div class="flow-step">
-  <div class="fs-num">05</div>
-  <h4>审核</h4>
-  <p>横滑或操作菜单处理被拒文章，保留回时间线或移除。</p>
+<div class="flow-node">
+  <div class="fn-num">05</div>
+  <div class="fn-body">
+    <h4>审核</h4>
+    <p>横滑或操作菜单处理被拒文章，保留回时间线或移除。</p>
+  </div>
 </div>
 
-<div class="flow-step">
-  <div class="fs-num">06</div>
-  <h4>同步</h4>
-  <p>已读状态分批同步到 Folo，失败重试并保留待同步记录。</p>
+<div class="flow-node">
+  <div class="fn-num">06</div>
+  <div class="fn-body">
+    <h4>同步</h4>
+    <p>已读状态分批同步到 Folo，失败重试并保留待同步记录。</p>
+  </div>
 </div>
 
+  </div>
   </div>
 </div>
 </section>

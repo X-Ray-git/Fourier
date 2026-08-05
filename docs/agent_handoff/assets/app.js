@@ -944,32 +944,35 @@
       });
     }
 
-    // 3) 展示区块模糊渐显（场景化：区块 blur-in + 行级 stagger）
-    var reveals = renderEl ? renderEl.querySelectorAll('.hp-reveal') : [];
-    if (reveals.length && !reducedMotion() && !html.classList.contains('no-anim') && 'IntersectionObserver' in window) {
-      var rio = new IntersectionObserver(function (entries) {
-        entries.forEach(function (en) {
-          if (!en.isIntersecting) return;
-          en.target.classList.add('revealed');
-          // 行级 stagger：卡片按行列交错进入（expoOut）
-          var items = en.target.querySelectorAll('.highlight-card, .flow-step, .stat, .entry-card');
-          items.forEach(function (it, i) {
-            it.classList.add('reveal-item');
-            it.style.transitionDelay = (Math.floor(i / 3) * 90 + (i % 3) * 50) + 'ms';
-            requestAnimationFrame(function () {
-              it.classList.add('reveal-item-show');
-            });
-            // 过渡结束后清除 delay，避免影响 hover 反馈
-            setTimeout(function () { it.style.transitionDelay = ''; }, 1600);
-          });
-          rio.unobserve(en.target);
+    // 3) 展示区块：钉住时触发渐显（场景顶部到达视口顶部才 reveal）
+    //    避免进场提前触发——否则会出现"先见标题、钉住后标题+卡片静态出现"
+    var reveals = renderEl ? renderEl.querySelectorAll('.hp-reveal.scene') : [];
+    if (reveals.length && !reducedMotion() && !html.classList.contains('no-anim')) {
+      var pending = Array.prototype.slice.call(reveals);
+      function activateReveal(el) {
+        el.classList.add('revealed');
+        var items = el.querySelectorAll('.highlight-card, .flow-node, .stat, .entry-card');
+        items.forEach(function (it, i) {
+          it.classList.add('reveal-item');
+          it.style.transitionDelay = (Math.floor(i / 3) * 90 + (i % 3) * 50) + 'ms';
+          requestAnimationFrame(function () { it.classList.add('reveal-item-show'); });
+          setTimeout(function () { it.style.transitionDelay = ''; }, 1600);
         });
-      // 场景钉住前触发：场景顶部接近视口顶部（内容即将进入钉住区）
-      }, { rootMargin: '0px 0px -80% 0px', threshold: 0 });
-      reveals.forEach(function (el, i) {
-        el.style.transitionDelay = (i % 3) * 60 + 'ms';
-        rio.observe(el);
-      });
+      }
+      function checkReveals() {
+        if (!pending.length) return;
+        pending = pending.filter(function (el) {
+          if (el.getBoundingClientRect().top <= 0) { activateReveal(el); return false; }
+          return true;
+        });
+      }
+      var rticking = false;
+      window.addEventListener('scroll', function () {
+        if (rticking) return;
+        rticking = true;
+        requestAnimationFrame(function () { rticking = false; checkReveals(); });
+      }, { passive: true });
+      checkReveals();
     } else {
       reveals.forEach(function (el) { el.classList.add('revealed'); });
     }

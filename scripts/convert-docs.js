@@ -233,7 +233,12 @@ function main() {
     convertFile(rel, false);
   }
   if (rootMode) {
-    convertFile('home.md', true);
+    const homeAbs = path.join(WIKI, 'home.md');
+    if (fs.existsSync(homeAbs)) {
+      convertFile('home.md', true);
+    } else {
+      console.log('home.md 不存在（首页已是直接编辑的 index.html），跳过。');
+    }
   }
   console.log('done. pages:', mdFiles.length + (rootMode ? 1 : 0));
 }

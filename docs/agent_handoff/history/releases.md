@@ -27,3 +27,9 @@
 确认没有正式发布产物后删除该 tag；workflow 改为使用 Node 24 的
 `actions/setup-java@v5`，随后在保持 `1.2.0+31` 和原 release notes 不变的
 前提下，于修复提交上重建 annotated `v1.2.0`。
+
+## v1.2.1
+
+```bash
+./scripts/release.sh 1.2.1 -m $'- feat: add cross-platform Folo browser login and account switching\n- feat: add misclassification actions with atomic undo and review markers\n- feat: retry failed article images with deterministic backoff\n- fix: preserve undo animations and Android settings labels' --push
+```

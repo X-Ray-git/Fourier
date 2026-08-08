@@ -34,4 +34,4 @@ render "fourier-android-legacy.svg" 192 "$android_res/mipmap-xxxhdpi/ic_launcher
 mkdir -p "$android_res/drawable-nodpi"
 render "fourier-android-foreground.svg" 432 \
   "$android_res/drawable-nodpi/ic_launcher_foreground.png"
-render "fourier.svg" 1024 "$root/assets/icon.png"
+render "fourier-macos.svg" 1024 "$root/assets/icon.png"

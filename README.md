@@ -1,4 +1,4 @@
-# Fourier — Folo RSS 阅读器
+# Fourier
 
 <p align="center">
   <img src="assets/icon.png" alt="Fourier" width="256">

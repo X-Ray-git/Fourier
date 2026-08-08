@@ -11,6 +11,7 @@ import '../pages/article/article_page.dart';
 import '../pages/timeline/timeline_controller.dart';
 import '../utils/storage.dart';
 import 'article_state_notifier.dart';
+import 'analysis_event_ledger.dart';
 import 'auto_filter_worker.dart';
 import 'batch_read_sync_service.dart';
 import 'bounded_history.dart';
@@ -279,6 +280,17 @@ class UndoService {
       userAction: ArticleModel.userActionKeep,
     );
     GStorage.readStatus.delete(article.entryId);
+    AnalysisEventLedger.recordUserAction(
+      article: article,
+      action: ArticleModel.userActionKeep,
+      before: AnalysisEventLedger.stateSnapshotOf(article),
+      after: {
+        ...AnalysisEventLedger.stateSnapshotOf(article),
+        'isRejectedByAi': false,
+        'filterReviewed': true,
+        'userAction': ArticleModel.userActionKeep,
+      },
+    );
     _refreshTimelineArticleFromCache(article.entryId);
   }
 
@@ -299,6 +311,17 @@ class UndoService {
     );
     applyReadLocally(article, recordHistory: false);
     ArticleStateNotifier.tick(article.entryId);
+    AnalysisEventLedger.recordUserAction(
+      article: article,
+      action: ArticleModel.userActionReject,
+      before: AnalysisEventLedger.stateSnapshotOf(article),
+      after: {
+        ...AnalysisEventLedger.stateSnapshotOf(article),
+        'isRead': true,
+        'filterReviewed': true,
+        'userAction': ArticleModel.userActionReject,
+      },
+    );
   }
 
   /// 误分类：翻转拒绝状态并标为已读（原子动作，写 userAction 标记）
@@ -311,6 +334,9 @@ class UndoService {
     if (recordHistory) {
       recordMisclassifyAction(article, reject: reject);
     }
+    final action = reject
+        ? ArticleModel.userActionMisclassifySpam
+        : ArticleModel.userActionMisclassifyKeep;
     if (reject) {
       LocalArticleDbService.upsertOne(
         _copyArticle(
@@ -332,6 +358,18 @@ class UndoService {
       article,
       recordHistory: false,
       deferTimelineVisualUpdate: deferTimelineVisualUpdate,
+    );
+    AnalysisEventLedger.recordUserAction(
+      article: article,
+      action: action,
+      before: AnalysisEventLedger.stateSnapshotOf(article),
+      after: {
+        ...AnalysisEventLedger.stateSnapshotOf(article),
+        'isRead': true,
+        'isRejectedByAi': reject,
+        'filterReviewed': true,
+        'userAction': action,
+      },
     );
   }
 

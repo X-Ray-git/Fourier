@@ -482,6 +482,18 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
                                   fadeOutDuration: const Duration(
                                     milliseconds: 80,
                                   ),
+                                  // 全屏成功下载后通知统一缓存状态：清除正文
+                                  // 失败占位并推进该图成功 revision。
+                                  imageBuilder: (context, imageProvider) {
+                                    ArticleImageCacheService.notifyImageLoadedSuccessfully(
+                                      widget.articleId,
+                                      url,
+                                    );
+                                    return Image(
+                                      image: imageProvider,
+                                      fit: BoxFit.contain,
+                                    );
+                                  },
                                   placeholder: (context, url) => const SizedBox(
                                     width: 40,
                                     height: 40,

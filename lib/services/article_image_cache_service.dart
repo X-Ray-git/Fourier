@@ -541,6 +541,18 @@ abstract final class ArticleImageCacheService {
     }
   }
 
+  /// 统一成功通知路径：正文内联加载器与全屏查看器都在图片成功就绪后调用，
+  /// 避免两套加载器各自维护失败状态。清除失败标记并推进该图成功 revision，
+  /// 只重建受影响的前台占位，不重建整篇文章。
+  ///
+  /// 通过微任务延迟执行，安全用于 build 阶段的 imageBuilder 回调。
+  static void notifyImageLoadedSuccessfully(String articleId, String imageUrl) {
+    if (!_enabled || articleId.isEmpty || imageUrl.isEmpty) return;
+    scheduleMicrotask(() {
+      recordSuccess(articleId, imageUrl);
+    });
+  }
+
   /// Clears failure state and advances the image-specific success revision so
   /// only the affected foreground image is recreated from the populated cache.
   static void recordSuccess(String articleId, String imageUrl) {

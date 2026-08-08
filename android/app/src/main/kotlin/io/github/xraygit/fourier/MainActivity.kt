@@ -1,4 +1,4 @@
-package io.github.xraygit.autofolo
+package io.github.xraygit.fourier
 
 import android.content.ContentProviderClient
 import android.content.Context
@@ -15,9 +15,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val MOVE_CHANNEL = "io.github.xraygit.autofolo/move_to_background"
-    private val BADGE_CHANNEL = "io.github.xraygit.autofolo/badge"
-    private val AUTH_CALLBACK_CHANNEL = "io.github.xraygit.autofolo/auth_callback"
+    private val MOVE_CHANNEL = "io.github.xraygit.fourier/move_to_background"
+    private val BADGE_CHANNEL = "io.github.xraygit.fourier/badge"
+    private val AUTH_CALLBACK_CHANNEL = "io.github.xraygit.fourier/auth_callback"
     private val BADGE_NOTIFICATION_ID = 1001
     private val BADGE_CHANNEL_ID = "badge_channel"
     private var authCallbackChannel: MethodChannel? = null
@@ -80,7 +80,7 @@ class MainActivity : FlutterActivity() {
 
     private fun captureAuthCallback(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (uri.scheme != "folo" || uri.host != "autofolo-auth") return
+        if (uri.scheme != "folo" || uri.host != "fourier-auth") return
 
         val callback = uri.toString()
         pendingAuthCallback = callback

@@ -1,5 +1,5 @@
-import 'package:autofolo/models/article.dart';
-import 'package:autofolo/services/batch_read_sync_service.dart';
+import 'package:fourier/models/article.dart';
+import 'package:fourier/services/batch_read_sync_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

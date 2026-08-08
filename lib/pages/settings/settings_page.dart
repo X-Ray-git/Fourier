@@ -69,7 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void _showOpenSourceLicenses() {
     showLicensePage(
       context: context,
-      applicationName: 'Auto Folo',
+      applicationName: AppConstants.appName,
       applicationVersion: AppVersionService.version,
       applicationLegalese: 'Licensed under AGPL-3.0-only.',
     );
@@ -578,7 +578,7 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) => _SettingsConfirmDialog(
         title: '退出 Folo 账号',
         content:
-            '将从 Auto Folo 移除当前登录并清理本地文章、摘要、翻译、阅读记录、图片缓存和撤销历史。Prompt、AI 参数、DeepSeek Key 和界面偏好会保留；浏览器中的 Folo 登录不会退出。',
+            '将从 Fourier 移除当前登录并清理本地文章、摘要、翻译、阅读记录、图片缓存和撤销历史。Prompt、AI 参数、DeepSeek Key 和界面偏好会保留；浏览器中的 Folo 登录不会退出。',
         confirmLabel: '退出并清理',
         onCancel: () => Get.back(result: false),
         onConfirm: () => Get.back(result: true),
@@ -622,7 +622,7 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) {
         const content =
-            '将从剪贴板读取 Auto Folo 配置 JSON，并覆盖当前已保存的账号、AI、Prompt 和订阅源偏好设置。'
+            '将从剪贴板读取 Fourier 配置 JSON，并覆盖当前已保存的账号、AI、Prompt 和订阅源偏好设置。'
             '文章缓存、已读历史、摘要和翻译结果不会被导入。';
         return _SettingsConfirmDialog(
           title: '导入配置',
@@ -811,11 +811,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
     _buildShortcutItem(context, 'M', '时间线切换已读；垃圾拦截移除'),
     _buildShortcutItem(context, 'K', '垃圾拦截保留文章'),
-    _buildShortcutItem(
-      context,
-      'N',
-      '误分类：时间线移入垃圾拦截；垃圾拦截保留并标为已读',
-    ),
+    _buildShortcutItem(context, 'N', '误分类：时间线移入垃圾拦截；垃圾拦截保留并标为已读'),
     _buildShortcutItem(context, 'B', '在浏览器中打开原文'),
     _buildShortcutItem(context, 'Shift + B', '标为已读并打开；垃圾拦截移除并打开'),
     _buildShortcutItem(context, 'C', '复制原文全文为 Markdown'),
@@ -1280,7 +1276,7 @@ class _SettingsPageState extends State<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Auto Folo v${AppVersionService.version}',
+          '${AppConstants.appName} v${AppVersionService.version}',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -1652,7 +1648,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Auto Folo v${AppVersionService.version}',
+                    '${AppConstants.appName} v${AppVersionService.version}',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -2157,7 +2153,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Auto Folo v${AppVersionService.version}',
+                    '${AppConstants.appName} v${AppVersionService.version}',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -3121,7 +3117,7 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
               const SizedBox(height: 10),
               Text(
                 _error ??
-                    '已打开 Folo 官方登录页面。完成登录后，Auto Folo 会在后台自动接收授权；无需点击网页中的“打开 Folo”按钮。',
+                    '已打开 Folo 官方登录页面。完成登录后，Fourier 会在后台自动接收授权；无需点击网页中的“打开 Folo”按钮。',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
@@ -3183,8 +3179,7 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _error ??
-                '已在系统浏览器中打开 $providerName 登录。完成授权后会自动返回 Auto Folo，认证会自动保存。',
+            _error ?? '已在系统浏览器中打开 $providerName 登录。完成授权后会自动返回 Fourier，认证会自动保存。',
             style: TextStyle(
               height: 1.45,
               color: _error == null ? cs.onSurfaceVariant : cs.error,

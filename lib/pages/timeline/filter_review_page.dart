@@ -41,7 +41,7 @@ import '../widgets/article_actions_menu.dart';
 
 class _ReviewAnimProbe {
   static const bool _requested = bool.fromEnvironment(
-    'AUTO_FOLO_ANIMATION_PROBE',
+    'FOURIER_ANIMATION_PROBE',
   );
   static final Stopwatch _clock = Stopwatch()..start();
   static _ReviewAnimProbeSession? _active;

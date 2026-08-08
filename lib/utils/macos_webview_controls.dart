@@ -6,7 +6,7 @@ class MacOSWebViewControls {
   const MacOSWebViewControls._();
 
   static const _channel = MethodChannel(
-    'io.github.xraygit.autofolo/webview_controls',
+    'io.github.xraygit.fourier/webview_controls',
   );
 
   static Future<void> enableElementFullscreen(int webViewIdentifier) async {

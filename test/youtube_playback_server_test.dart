@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:autofolo/services/youtube_playback_server.dart';
+import 'package:fourier/services/youtube_playback_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

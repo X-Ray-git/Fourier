@@ -5,8 +5,8 @@ class AppLicenseService {
   AppLicenseService._();
 
   static const _licenseAssets = <(List<String>, String)>[
-    (<String>['Auto Folo', 'Folo'], 'LICENSE'),
-    (<String>['Auto Folo third-party notices'], 'THIRD_PARTY_NOTICES.md'),
+    (<String>['Fourier', 'Folo'], 'LICENSE'),
+    (<String>['Fourier third-party notices'], 'THIRD_PARTY_NOTICES.md'),
     (<String>['PiliPlus'], 'third_party/licenses/GPL-3.0.txt'),
     (<String>['Flutter'], 'third_party/licenses/BSD-3-Clause-Flutter.txt'),
     (

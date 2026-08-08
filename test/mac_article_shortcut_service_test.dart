@@ -1,5 +1,5 @@
-import 'package:autofolo/services/mac_article_shortcut_service.dart';
-import 'package:autofolo/common/widgets/mac_empty_placeholder.dart';
+import 'package:fourier/services/mac_article_shortcut_service.dart';
+import 'package:fourier/common/widgets/mac_empty_placeholder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -1,5 +1,5 @@
-import 'package:autofolo/models/feed.dart';
-import 'package:autofolo/services/subscription_catalog_service.dart';
+import 'package:fourier/models/feed.dart';
+import 'package:fourier/services/subscription_catalog_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

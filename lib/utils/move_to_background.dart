@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 
 class MoveToBackground {
   static const MethodChannel _channel = MethodChannel(
-    'io.github.xraygit.autofolo/move_to_background',
+    'io.github.xraygit.fourier/move_to_background',
   );
 
   static Future<void> moveTaskToBack() async {

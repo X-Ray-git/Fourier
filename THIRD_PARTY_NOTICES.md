@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Auto Folo includes code from the following open-source projects. Their
+Fourier includes code from the following open-source projects. Their
 copyright and license terms remain applicable to the corresponding portions.
 
 ## Folo

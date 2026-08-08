@@ -1,4 +1,4 @@
-import 'package:autofolo/services/translation_service.dart';
+import 'package:fourier/services/translation_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

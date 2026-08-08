@@ -29,7 +29,7 @@ class Request {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'X-App-Platform': 'mobile/android',
-        'X-App-Name': 'Auto Folo',
+        'X-App-Name': AppConstants.appName,
         'X-App-Version': AppVersionService.version,
       },
     );
@@ -123,7 +123,7 @@ class Request {
 
 /// 认证拦截器 — 注入 Folo session token
 class _AuthInterceptor extends Interceptor {
-  static const _accountRevisionKey = 'autoFolo.accountRevision';
+  static const _accountRevisionKey = 'fourier.accountRevision';
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {

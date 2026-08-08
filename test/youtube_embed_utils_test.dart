@@ -1,4 +1,4 @@
-import 'package:autofolo/utils/youtube_embed_utils.dart';
+import 'package:fourier/utils/youtube_embed_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

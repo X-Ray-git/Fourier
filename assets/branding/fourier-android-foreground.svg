@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2255 2255">
+  <defs>
+    <linearGradient
+      id="middle-bar"
+      x1="95.54"
+      y1="923.59"
+      x2="1526.46"
+      y2="1444.41"
+      gradientUnits="userSpaceOnUse"
+      spreadMethod="reflect"
+    >
+      <stop offset="0" stop-color="#ff5d00" stop-opacity="0.0196078"/>
+      <stop offset="0.15" stop-color="#ff5d00" stop-opacity="0.0196078"/>
+      <stop offset="0.49" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <path d="M728 912 813.5 570 1835 570 1749.5 912Z" fill="#ffffff"/>
+  <path d="M63 1355 148.5 1013 1559 1013 1473.5 1355Z" fill="url(#middle-bar)"/>
+  <path d="M670 1798 755.5 1456 1127 1456 1041.5 1798Z" fill="#ffffff"/>
+</svg>

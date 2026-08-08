@@ -1,4 +1,4 @@
-import 'package:autofolo/services/bilibili_playback_server.dart';
+import 'package:fourier/services/bilibili_playback_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

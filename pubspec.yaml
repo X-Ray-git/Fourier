@@ -1,5 +1,5 @@
-name: autofolo
-description: "Auto Folo - RSS 信息流浏览器"
+name: fourier
+description: "Fourier - RSS 信息流浏览器"
 publish_to: 'none'
 version: 1.2.1+32
 
@@ -54,7 +54,7 @@ dependencies:
   device_info_plus: ^12.1.0
   package_info_plus: ^9.0.0
 
-  # SVG 支持（Auto Folo 图标等）
+  # SVG 支持（Fourier 图标等）
   flutter_svg: ^2.0.14
 
   # 权限（保存图片等）

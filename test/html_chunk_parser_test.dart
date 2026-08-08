@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/pages/article/widgets/html_chunk_card.dart';
-import 'package:autofolo/utils/html_chunk_parser.dart';
+import 'package:fourier/pages/article/widgets/html_chunk_card.dart';
+import 'package:fourier/utils/html_chunk_parser.dart';
 
 void main() {
   test('resource-less media remains as an unavailable chunk', () {
@@ -39,14 +39,14 @@ void main() {
 
   test('compact author markup becomes one author-list chunk', () {
     const html = '''
-<auto-folo-author-list>
-  <auto-folo-author name="Jane Doe" handle="jane"
+<fourier-author-list>
+  <fourier-author name="Jane Doe" handle="jane"
       avatar="https://example.com/jane.png"
-      profile="https://huggingface.co/jane"></auto-folo-author>
-  <auto-folo-author name="John Doe" handle="john"
+      profile="https://huggingface.co/jane"></fourier-author>
+  <fourier-author name="John Doe" handle="john"
       avatar="https://example.com/john.png"
-      profile="https://huggingface.co/john"></auto-folo-author>
-</auto-folo-author-list>
+      profile="https://huggingface.co/john"></fourier-author>
+</fourier-author-list>
 ''';
 
     final chunks = HtmlChunkParser.parseSync(html);
@@ -60,6 +60,21 @@ void main() {
       chunks.single.authors.first.profileUrl,
       'https://huggingface.co/jane',
     );
+  });
+
+  test('legacy Auto Folo author markup remains readable', () {
+    const html = '''
+<auto-folo-author-list>
+  <auto-folo-author name="Legacy Author"
+      avatar="https://example.com/legacy.png"></auto-folo-author>
+</auto-folo-author-list>
+''';
+
+    final chunks = HtmlChunkParser.parseSync(html);
+
+    expect(chunks, hasLength(1));
+    expect(chunks.single.type, HtmlChunkType.authorList);
+    expect(chunks.single.authors.single.name, 'Legacy Author');
   });
 
   testWidgets('resource-less media explains the problem instead of hiding it', (

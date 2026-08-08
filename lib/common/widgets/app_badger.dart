@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// Vivo/OriginOS：直写 ContentProvider，通知栏干净
 /// 其他厂商：静默 Notification 兜底
 abstract final class AppBadger {
-  static const _channel = MethodChannel('io.github.xraygit.autofolo/badge');
+  static const _channel = MethodChannel('io.github.xraygit.fourier/badge');
 
   static Future<void> updateBadgeCount(int count) =>
       _channel.invokeMethod('updateBadge', {'count': count});

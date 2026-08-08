@@ -1,4 +1,4 @@
-import 'package:autofolo/services/article_image_retry_scheduler.dart';
+import 'package:fourier/services/article_image_retry_scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/models/article.dart';
-import 'package:autofolo/pages/widgets/article_card.dart';
+import 'package:fourier/models/article.dart';
+import 'package:fourier/pages/widgets/article_card.dart';
 
 void main() {
   testWidgets('ArticleCard renders when local AI caches are not hydrated', (

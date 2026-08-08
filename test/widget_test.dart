@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/main.dart';
+import 'package:fourier/main.dart';
 
 void main() {
-  test('AutoFoloApp is constructible', () {
-    expect(const AutoFoloApp(), isA<AutoFoloApp>());
+  test('FourierApp is constructible', () {
+    expect(const FourierApp(), isA<FourierApp>());
   });
 }

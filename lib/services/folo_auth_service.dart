@@ -89,7 +89,7 @@ abstract final class FoloAuthService {
   static const _expoAuthorizationProxyPath =
       '/better-auth/expo-authorization-proxy';
 
-  static final Uri androidAuthCallbackUri = Uri.parse('folo://autofolo-auth');
+  static final Uri androidAuthCallbackUri = Uri.parse('folo://fourier-auth');
   static const androidFallbackAuthProviders = <FoloAuthProvider>[
     FoloAuthProvider(id: 'credential', name: 'Email'),
     FoloAuthProvider(id: 'google', name: 'Google'),
@@ -595,10 +595,12 @@ class FoloBrowserLoginSession implements FoloLoginSession {
   }
 
   static Future<void> _respondHtml(HttpResponse response, bool success) async {
-    final title = success ? 'Auto Folo 登录完成' : 'Auto Folo 登录失败';
+    final title = success
+        ? '${AppConstants.appName} 登录完成'
+        : '${AppConstants.appName} 登录失败';
     final message = success
-        ? '可以关闭此页面并返回 Auto Folo。'
-        : '回调中缺少登录凭据，请返回 Auto Folo 重试。';
+        ? '可以关闭此页面并返回 ${AppConstants.appName}。'
+        : '回调中缺少登录凭据，请返回 ${AppConstants.appName} 重试。';
     final html =
         '<!doctype html><html lang="zh-CN"><head>'
         '<meta charset="utf-8"><meta name="viewport" '
@@ -624,7 +626,7 @@ class FoloAndroidSocialLoginSession implements FoloLoginSession {
   });
 
   static const _channel = MethodChannel(
-    'io.github.xraygit.autofolo/auth_callback',
+    'io.github.xraygit.fourier/auth_callback',
   );
 
   final Uri callbackUri;

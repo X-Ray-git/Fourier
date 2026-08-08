@@ -1,6 +1,6 @@
-import 'package:autofolo/models/article.dart';
-import 'package:autofolo/services/bounded_history.dart';
-import 'package:autofolo/services/undo_service.dart';
+import 'package:fourier/models/article.dart';
+import 'package:fourier/services/bounded_history.dart';
+import 'package:fourier/services/undo_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

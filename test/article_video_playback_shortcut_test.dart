@@ -1,4 +1,4 @@
-import 'package:autofolo/pages/article/widgets/article_video_playback_shortcut.dart';
+import 'package:fourier/pages/article/widgets/article_video_playback_shortcut.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

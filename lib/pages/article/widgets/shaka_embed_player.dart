@@ -59,7 +59,7 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
 
   Future<void> _togglePlayback() async {
     await _controller?.runJavaScript(
-      'globalThis.AutoFoloVideoControls?.togglePlayPause();',
+      'globalThis.FourierVideoControls?.togglePlayPause();',
     );
   }
 
@@ -101,7 +101,7 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
         });
       }
       await controller.addJavaScriptChannel(
-        'AutoFoloVideoPlayer',
+        'FourierVideoPlayer',
         onMessageReceived: _handlePlayerMessage,
       );
       await controller.setNavigationDelegate(

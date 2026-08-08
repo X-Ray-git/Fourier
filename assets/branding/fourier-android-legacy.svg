@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="legacy-icon-mask">
+      <rect width="1024" height="1024" rx="220" ry="220"/>
+    </clipPath>
+  </defs>
+  <image width="1024" height="1024" xlink:href="fourier.svg" preserveAspectRatio="xMidYMid slice" clip-path="url(#legacy-icon-mask)"/>
+</svg>

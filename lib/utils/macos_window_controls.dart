@@ -6,7 +6,7 @@ class MacOSWindowControls {
   const MacOSWindowControls._();
 
   static const _channel = MethodChannel(
-    'io.github.xraygit.autofolo/window_controls',
+    'io.github.xraygit.fourier/window_controls',
   );
 
   static Future<void> setTrafficLightsHidden(bool hidden) async {

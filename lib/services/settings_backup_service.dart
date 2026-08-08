@@ -34,7 +34,13 @@ class SettingsBackupPayload {
 }
 
 abstract final class SettingsBackupService {
-  static const String backupType = 'auto_folo_settings';
+  static const String backupType = 'fourier_settings';
+  // Existing Auto Folo exports are the supported migration path after the
+  // application identifiers change to Fourier.
+  static const Set<String> _supportedBackupTypes = {
+    backupType,
+    'auto_folo_settings',
+  };
   static const int currentVersion = 1;
 
   static const _deepseekApiKey = 'deepseek_api_key';
@@ -133,8 +139,8 @@ abstract final class SettingsBackupService {
       throw const FormatException('配置 JSON 顶层必须是对象');
     }
 
-    if (decoded['type'] != backupType) {
-      throw const FormatException('不是 Auto Folo 设置备份');
+    if (!_supportedBackupTypes.contains(decoded['type'])) {
+      throw const FormatException('不是 Fourier 设置备份');
     }
 
     final version = decoded['version'];

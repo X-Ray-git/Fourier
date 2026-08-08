@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/common/constants/constants.dart';
-import 'package:autofolo/services/settings_backup_service.dart';
+import 'package:fourier/common/constants/constants.dart';
+import 'package:fourier/services/settings_backup_service.dart';
 
 void main() {
   group('SettingsBackupService.summarize', () {
@@ -26,10 +26,10 @@ void main() {
   });
 
   group('SettingsBackupService.parseJson', () {
-    test('keeps a version 1 session token for migration', () {
+    test('accepts a Fourier backup', () {
       final payload = SettingsBackupService.parseJson('''
 {
-  "type": "auto_folo_settings",
+  "type": "fourier_settings",
   "version": 1,
   "settings": {
     "session_token": "existing-token",
@@ -45,10 +45,26 @@ void main() {
       expect(payload.summary.hasFoloCredentials, isTrue);
     });
 
+    test('keeps an Auto Folo version 1 session token for migration', () {
+      final payload = SettingsBackupService.parseJson('''
+{
+  "type": "auto_folo_settings",
+  "version": 1,
+  "settings": {
+    "session_token": "legacy-token",
+    "summary_prompt": "legacy-prompt"
+  }
+}
+''');
+
+      expect(payload.sessionToken, 'legacy-token');
+      expect(payload.settings['summary_prompt'], 'legacy-prompt');
+    });
+
     test('rejects unsupported backup versions before applying settings', () {
       expect(
         () => SettingsBackupService.parseJson('''
-{"type":"auto_folo_settings","version":2,"settings":{}}
+{"type":"fourier_settings","version":2,"settings":{}}
 '''),
         throwsFormatException,
       );

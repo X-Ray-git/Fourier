@@ -179,6 +179,33 @@
 - MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“受支持官方视频 iframe”白名单。
 - 无有效 `src/source` 的 audio、video、iframe 不得静默删除，也不得继续伪装成可播放的空播放器。当前保留媒体 chunk，并明确显示“源内容未提供可用的媒体地址”；文章有原始链接时提供“打开原文”。这既暴露源内容/解析问题，又避免误导用户。
 
+## YouTube 客户端回退链（MWEB / IOS）
+
+已确认失败样本 `vO6SWG-jxvE`：WEB 客户端返回 34 个格式但全部只有 SABR 信息（无直接 URL），SABR 报 Shaka 1002 空响应；MWEB 返回 35 个可直接使用的格式，IOS 返回 24 个。
+
+当前实现（`tool/embed_video_player_runtime/src/main.ts`）：
+
+- SABR 仍是 VOD 首选路径。
+- SABR 设置或加载失败后，通过 `innertube.getInfo(videoId, { client: 'MWEB' })` 重新获取信息，再生成 `is_sabr=false` 的普通 DASH 并加载。
+- MWEB 失败后可继续尝试 `client: 'IOS'`；两者均失败才回退官方 YouTube 嵌入（Dart 侧收到 error 后切换 `WebEmbedVideoPlayer`）。
+- 不允许继续用原 WEB/SABR-only response 构建 direct DASH。
+- 直播 / PostLiveDVR 仍走官方 manifest 直连，不进入回退链。
+- 修改 TypeScript 源码后必须运行 `npm run typecheck && npm run build` 并提交生成的 `assets/embed_video_player/` 产物，不直接手改压缩文件。
+
+本地代理 debug 诊断（仅 debug 构建）：记录目标 host、方法、状态码、重定向次数与错误类型；**不记录**完整签名 URL、Token 或请求体。
+
+## 普通视频过期（带时效签名 CDN）
+
+- 部分微博、微信视频使用带时效签名的 CDN URL，过期后返回 401/403；这**不代表视频文件已删除**。
+- `InlineVideoPlayer` 区分错误类型：明确的鉴权/签名失效（401/403/unauthorized/forbidden/signature/expired 等描述）显示“视频链接已过期”并提供“打开原文”；其他播放错误使用通用“视频无法播放”。
+- 文章原始 URL 经校验后安全传入播放器错误界面；不自动重新抓取原网页，不猜测替换媒体地址。
+
+## 文章图片缓存统一成功通知
+
+- 正文图片与全屏图片使用同一缓存键（`article_body_v1:<articleId>:<url>`）。
+- 新增统一成功路径 `ArticleImageCacheService.notifyImageLoadedSuccessfully`：正文内联加载器与全屏查看器（`ImageGalleryPage`）在图片成功就绪后都调用它；通过微任务延迟执行，可安全用于 build 阶段的 imageBuilder 回调。
+- 成功会清除该图的失败登记并推进 success revision，只重建受影响的正文失败占位，不重建整篇文章。
+
 ## 相关页面
 
 - [文章渲染](../features/article-rendering.html)：正文媒体 chunk 的渲染与图片处理。

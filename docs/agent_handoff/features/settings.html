@@ -124,6 +124,17 @@ Android UI：
 - macOS 与移动端的无按钮数字输入复用 `_AutoSavedSettingsTextField`；两端服务认证共用 `_CredentialActions`，避免按钮语义、加载态和提交时机分叉。
 - 自动保存写入必须串行，并以最后一次用户选择为准；正常选择不弹成功提示，失败时恢复上一次持久值并提示。单行文本按 Enter 与点击保存等价。
 
+## Android 触觉反馈
+
+- 新增集中但轻量的 `AndroidHapticsService`（macOS 完全不受影响，非 Android 平台直接禁用）。
+- 设置页新增“交互反馈 > 触觉反馈”开关，默认开启，持久化在 `android_haptics_enabled`。
+- 触发点（只在明确语义动作上振动）：
+  - 文章 PageView 翻页稳定完成：`selectionClick`。
+  - 垃圾拦截侧滑达到阈值且动作确认：`mediumImpact`（只在手势层触发一次，业务层不重复振动）。
+  - 标为已读 / 恢复未读同步成功：`lightImpact`。
+  - 筛选选择（文章范围选择确认）：`selectionClick`。
+- 普通点击、滚动、加载、AI 完成与动画不振动。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

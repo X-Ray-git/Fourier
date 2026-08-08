@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../models/article.dart';
 import 'llm_config.dart';
 import 'summary_service.dart';
+import 'article_relation_service.dart';
 
 /// 后台自动摘要任务队列 — 滚动补位调度
 ///
@@ -87,7 +88,7 @@ abstract final class AutoSummaryWorker {
       return;
     }
     try {
-      await SummaryService.summarizeArticle(article);
+      await SummaryService.summarizeArticle(article, deferRelationTail: true);
     } catch (e) {
       // 静默处理
     }
@@ -97,6 +98,7 @@ abstract final class AutoSummaryWorker {
     if (_queue.isNotEmpty || _running.isNotEmpty) return;
     _processingTimer?.cancel();
     _processingTimer = null;
+    ArticleRelationService.notifySummaryQueueIdle();
   }
 
   static int get queueSize => _queue.length;

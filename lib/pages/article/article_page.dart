@@ -23,6 +23,7 @@ import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/article_image_cache_service.dart';
 import '../../services/article_markdown_export_service.dart';
+import '../../services/article_relation_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/macos_app_menu_service.dart';
 import '../../services/analysis_event_ledger.dart';
@@ -616,6 +617,104 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
 
 // ─── 文章视图（核心） ───────────────────────────
 
+typedef MacArticleDetailRootBuilder =
+    Widget Function(
+      BuildContext context,
+      ValueChanged<ArticleModel> openRelatedArticle,
+    );
+
+/// Keeps relation-driven navigation inside the macOS detail pane.
+///
+/// Each nested route owns its [ArticlePageView], so Esc can pop back while the
+/// previous article's scroll and display state remain mounted and intact.
+class MacArticleDetailStack extends StatefulWidget {
+  const MacArticleDetailStack({
+    super.key,
+    required this.rootBuilder,
+    this.isActive,
+    this.onRelatedNavigationChanged,
+  });
+
+  final MacArticleDetailRootBuilder rootBuilder;
+  final bool Function()? isActive;
+  final ValueChanged<bool>? onRelatedNavigationChanged;
+
+  @override
+  State<MacArticleDetailStack> createState() => _MacArticleDetailStackState();
+}
+
+class _MacArticleDetailStackState extends State<MacArticleDetailStack> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  int _relatedDepth = 0;
+
+  void _openRelatedArticle(ArticleModel article) {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+
+    _relatedDepth += 1;
+    widget.onRelatedNavigationChanged?.call(true);
+    final popped = navigator.push<void>(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 160),
+        reverseTransitionDuration: const Duration(milliseconds: 140),
+        pageBuilder: (_, _, _) => ArticlePageView(
+          article: article,
+          isSplitView: true,
+          isActive: widget.isActive,
+          onClose: _popRelatedArticle,
+          onOpenRelatedArticle: _openRelatedArticle,
+        ),
+        transitionsBuilder: (_, animation, _, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.025, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+    popped.whenComplete(() {
+      _relatedDepth -= 1;
+      widget.onRelatedNavigationChanged?.call(_relatedDepth > 0);
+    });
+  }
+
+  void _popRelatedArticle() {
+    _navigatorKey.currentState?.maybePop();
+  }
+
+  @override
+  void dispose() {
+    if (_relatedDepth > 0) {
+      widget.onRelatedNavigationChanged?.call(false);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      key: _navigatorKey,
+      onGenerateInitialRoutes: (_, _) => [
+        PageRouteBuilder<void>(
+          pageBuilder: (routeContext, _, _) =>
+              widget.rootBuilder(routeContext, _openRelatedArticle),
+        ),
+      ],
+    );
+  }
+}
+
 class ArticlePageView extends StatefulWidget {
   final ArticleModel article;
   final String? pageLabel;
@@ -634,6 +733,7 @@ class ArticlePageView extends StatefulWidget {
   final double? initialScrollOffset;
   final bool? initialShowTranslation;
   final bool? initialShowSummary;
+  final ValueChanged<ArticleModel>? onOpenRelatedArticle;
 
   const ArticlePageView({
     super.key,
@@ -654,6 +754,7 @@ class ArticlePageView extends StatefulWidget {
     this.initialScrollOffset,
     this.initialShowTranslation,
     this.initialShowSummary,
+    this.onOpenRelatedArticle,
   });
 
   @override
@@ -1549,6 +1650,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                           const Divider(height: 24),
 
                           _ToolbarRow(controller: controller),
+                          _ArticleRelationsSection(
+                            article: controller.article,
+                            onOpenArticle: widget.onOpenRelatedArticle,
+                          ),
                           _SummaryCard(controller: controller),
                         ],
                       ),
@@ -2795,6 +2900,231 @@ class _MetadataSection extends StatelessWidget {
               Icons.chevron_right,
               size: 14,
               color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArticleRelationsSection extends StatelessWidget {
+  const _ArticleRelationsSection({required this.article, this.onOpenArticle});
+
+  final ArticleModel article;
+  final ValueChanged<ArticleModel>? onOpenArticle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      ArticleRelationService.recordsVersion.value;
+      ArticleStateNotifier.version.value;
+      final direct = ArticleRelationService.directRelationsFor(article.entryId);
+      if (direct.isEmpty) return const SizedBox.shrink();
+      final component = ArticleRelationService.componentFor(article.entryId);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < direct.length; i++) ...[
+              if (i > 0) const SizedBox(height: 6),
+              _ArticleRelationRow(
+                item: direct[i],
+                onTap: () => _open(context, direct[i]),
+              ),
+            ],
+            if (component.length > direct.length) ...[
+              const SizedBox(height: 6),
+              _RelationGroupButton(
+                count: component.length + 1,
+                onTap: () => _showGroup(context, component),
+              ),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+
+  Future<void> _open(
+    BuildContext context,
+    ArticleRelationDisplayItem item,
+  ) async {
+    final localArticle = item.article;
+    if (localArticle != null) {
+      if (Platform.isMacOS && onOpenArticle != null) {
+        onOpenArticle!(localArticle);
+        return;
+      }
+      await Get.toNamed(Routes.article, arguments: localArticle);
+      return;
+    }
+    await ExternalLinkService.openUrlWithFeedback(item.node.url);
+  }
+
+  Future<void> _showGroup(
+    BuildContext context,
+    List<ArticleRelationDisplayItem> items,
+  ) async {
+    final cs = Theme.of(context).colorScheme;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: cs.surface.withValues(alpha: 0.96),
+        title: const Text('关系组'),
+        content: SizedBox(
+          width: 520,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 520),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
+              itemBuilder: (_, index) {
+                final item = items[index];
+                return _ArticleRelationRow(
+                  item: item,
+                  onTap: () {
+                    Navigator.of(dialogContext).pop();
+                    _open(context, item);
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArticleRelationRow extends StatelessWidget {
+  const _ArticleRelationRow({required this.item, required this.onTap});
+
+  final ArticleRelationDisplayItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final local = item.article;
+    final status = local == null
+        ? '仅保留原文链接'
+        : local.isRejectedByAi
+        ? '垃圾拦截'
+        : local.isRead
+        ? '已读'
+        : '未读';
+    final imageUrl = item.node.feedImage;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.52),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: Image(
+                    image: CachedNetworkImageProvider(
+                      ArticleImageService.toProxiedUrl(imageUrl) ?? imageUrl,
+                    ),
+                    width: 18,
+                    height: 18,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Icon(
+                      Icons.hub_outlined,
+                      size: 16,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  Icons.hub_outlined,
+                  size: 16,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.node.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${item.node.feedTitle} · $status',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.78),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right,
+              size: 15,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RelationGroupButton extends StatelessWidget {
+  const _RelationGroupButton({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.account_tree_outlined, size: 15, color: cs.primary),
+            const SizedBox(width: 7),
+            Text(
+              '查看关系组（$count 篇）',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],
         ),

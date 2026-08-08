@@ -31,7 +31,7 @@ render "fourier-android-legacy.svg" 96 "$android_res/mipmap-xhdpi/ic_launcher.pn
 render "fourier-android-legacy.svg" 144 "$android_res/mipmap-xxhdpi/ic_launcher.png"
 render "fourier-android-legacy.svg" 192 "$android_res/mipmap-xxxhdpi/ic_launcher.png"
 
-mkdir -p "$android_res/drawable-nodpi"
+mkdir -p "$android_res/drawable-xxxhdpi"
 render "fourier-android-foreground.svg" 432 \
-  "$android_res/drawable-nodpi/ic_launcher_foreground.png"
+  "$android_res/drawable-xxxhdpi/ic_launcher_foreground.png"
 render "fourier-macos.svg" 1024 "$root/assets/icon.png"

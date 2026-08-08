@@ -57,6 +57,7 @@ Android 正在按现有 macOS 设计语言做类比迁移，但不是照搬 AppK
 - `AppGlassSurface`、`AppMobileGlassSheet` 等纯 Flutter 组件可以跨平台复用；`NSGlassEffectView`、窗口后方取样和红黄绿等 AppKit 能力仍只属于 macOS。
 - 少量固定浮动控件可以使用真实 Flutter 模糊玻璃；时间线卡片等密集重复元素继续使用轻量外壳，避免重演 macOS 列表玻璃造成的性能回退。
 - package id 已迁移到 `io.github.xraygit.fourier`。安装签名 key 不同但包名相同的 APK 会和现有安装冲突；GitHub 内部构建使用已约定的签名设置。
+- Android 8+ launcher 使用自适应图标：橙色背景保持全幅，Fourier 前景标志按 `2/3` 围绕画布中心缩放到中央安全区域，使其相对底板的大小和视觉重心接近 macOS 图标。前景 `432px` 资源属于 `drawable-xxxhdpi`（即 `108dp`），不得放回 `drawable-nodpi`；所有修改应落在 `assets/branding/fourier-android-foreground.svg` 后运行 `tool/generate_fourier_icons.sh`，避免手改生成 PNG。
 
 截至 2026-07-19 已完成的迁移：
 

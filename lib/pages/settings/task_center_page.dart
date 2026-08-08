@@ -14,6 +14,8 @@ import '../../router/app_pages.dart';
 import '../../services/auto_filter_worker.dart';
 import '../../services/auto_summary_worker.dart';
 import '../../services/auto_translation_worker.dart';
+import '../../services/article_relation_service.dart';
+import '../../services/article_relation_worker.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/summary_service.dart';
@@ -202,6 +204,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
                   )
                 : null,
           ),
+          const SizedBox(height: 8),
+          _buildRelationTaskCard(),
         ],
       ),
     );
@@ -330,12 +334,43 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
                         )
                       : null,
                 ),
+                const SizedBox(height: 8),
+                _buildRelationTaskCard(),
               ],
             ),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildRelationTaskCard() {
+    return Obx(() {
+      // recordsVersion 让落盘后的 pending/history/group 变化触发刷新。
+      ArticleRelationService.recordsVersion.value;
+      final queued = ArticleRelationService.pendingCount;
+      final running = ArticleRelationWorker.processingCount.value;
+      final currentNew = ArticleRelationWorker.currentNewCount.value;
+      final currentHistory = ArticleRelationWorker.currentHistoryCount.value;
+      final completed = ArticleRelationWorker.completedThisSession.value;
+      final failed = ArticleRelationWorker.failedThisSession.value;
+      final error = ArticleRelationWorker.lastError.value;
+      final runningLabel = running > 0
+          ? '当前批次 $currentNew + $currentHistory'
+          : '历史 ${ArticleRelationService.historyCount}/256';
+      return _TaskStatusCard(
+        icon: Icons.hub_outlined,
+        title: '关系建立',
+        subtitle:
+            '$runningLabel · 本次完成 $completed 批 · ${ArticleRelationService.groupCount} 组关系',
+        queued: queued,
+        processing: running,
+        failed: failed,
+        failureHint: error == null ? null : '最近失败：$error。待处理摘要仍保留，可安全重试。',
+        actionLabel: error == null ? null : '重试',
+        onAction: error == null ? null : ArticleRelationWorker.retryPending,
+      );
+    });
   }
 }
 
@@ -361,7 +396,7 @@ class _TaskCenterTitle extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          '查看已读同步、AI 过滤、翻译和摘要任务状态。',
+          '查看已读同步、AI 过滤、翻译、摘要和关系建立任务状态。',
           style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
         ),
       ],
@@ -772,7 +807,9 @@ class _OverviewCard extends StatelessWidget {
         AutoTranslationWorker.queueSize +
         AutoTranslationWorker.processingCount.value +
         AutoSummaryWorker.queueSize +
-        AutoSummaryWorker.processingCount.value;
+        AutoSummaryWorker.processingCount.value +
+        ArticleRelationService.pendingCount +
+        ArticleRelationWorker.processingCount.value;
     final cs = Theme.of(context).colorScheme;
 
     return _TaskPanel(

@@ -9,6 +9,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
 import 'account_session_guard.dart';
+import 'article_relation_service.dart';
 
 enum SummaryStatus { idle, pending, done, error }
 
@@ -175,6 +176,7 @@ abstract final class SummaryService {
     ArticleModel article, {
     String targetLang = '简体中文',
     String? overrideContent,
+    bool deferRelationTail = false,
   }) {
     ensureHydrated();
     final existing = _inFlight[article.entryId];
@@ -186,6 +188,7 @@ abstract final class SummaryService {
       targetLang,
       overrideContent,
       accountRevision,
+      deferRelationTail,
     );
     _inFlight[article.entryId] = future;
     future.whenComplete(() {
@@ -201,6 +204,7 @@ abstract final class SummaryService {
     String targetLang,
     String? overrideContent,
     int accountRevision,
+    bool deferRelationTail,
   ) async {
     final apiKey = getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -298,7 +302,12 @@ abstract final class SummaryService {
           summaryText: summaryText,
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         );
-        _writeRecord(article.entryId, record, accountRevision: accountRevision);
+        await _writeCompletedRecord(
+          article,
+          record,
+          accountRevision: accountRevision,
+          deferRelationTail: deferRelationTail,
+        );
         return record;
       } catch (e) {
         if (e is _StaleAccountOperation ||
@@ -397,6 +406,28 @@ abstract final class SummaryService {
     ensureHydrated();
     _records[entryId] = record;
     GStorage.summaries.put(entryId, record.toJson());
+  }
+
+  static Future<void> _writeCompletedRecord(
+    ArticleModel article,
+    SummaryRecord record, {
+    required int accountRevision,
+    required bool deferRelationTail,
+  }) async {
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
+    ensureHydrated();
+    _records[article.entryId] = record;
+    await GStorage.summaries.put(article.entryId, record.toJson());
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
+    try {
+      await ArticleRelationService.onSummaryCompleted(article, record);
+      if (!deferRelationTail) {
+        ArticleRelationService.notifySummaryQueueIdle();
+      }
+    } catch (error) {
+      // 关系建立是摘要之上的增益功能；其存储异常不能把已成功的摘要改判为失败。
+      debugPrint('[ArticleRelation] summary enqueue failed: $error');
+    }
   }
 
   static String? _extractMessageContent(dynamic data) {

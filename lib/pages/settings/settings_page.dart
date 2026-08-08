@@ -1045,7 +1045,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         key: _macAiKey,
                         icon: Icons.auto_awesome_rounded,
                         title: 'AI 服务与模型参数',
-                        subtitle: '分别调整翻译、摘要和过滤任务的模型参数。',
+                        subtitle: '分别调整翻译、摘要、过滤和关系判断任务的模型参数。',
                         child: Column(
                           children: [
                             _LlmConfigCard(
@@ -1070,6 +1070,15 @@ class _SettingsPageState extends State<SettingsPage> {
                               loadConfig: LlmConfig.loadFilter,
                               saveConfig: LlmConfig.saveFilter,
                               resetConfig: LlmConfig.resetFilter,
+                            ),
+                            const SizedBox(height: 10),
+                            _LlmConfigCard(
+                              title: '关系判断 LLM 参数',
+                              defaultConfig: LlmConfig.relationDefault,
+                              loadConfig: LlmConfig.loadRelation,
+                              saveConfig: LlmConfig.saveRelation,
+                              resetConfig: LlmConfig.resetRelation,
+                              showConcurrency: false,
                             ),
                           ],
                         ),
@@ -1599,6 +1608,15 @@ class _SettingsPageState extends State<SettingsPage> {
               saveConfig: LlmConfig.saveFilter,
               resetConfig: LlmConfig.resetFilter,
             ),
+            const SizedBox(height: 10),
+            _LlmConfigCard(
+              title: '关系判断 LLM 参数',
+              defaultConfig: LlmConfig.relationDefault,
+              loadConfig: LlmConfig.loadRelation,
+              saveConfig: LlmConfig.saveRelation,
+              resetConfig: LlmConfig.resetRelation,
+              showConcurrency: false,
+            ),
             const SizedBox(height: 24),
             const MobileSettingsSectionHeader(
               icon: Icons.notes_rounded,
@@ -2109,6 +2127,17 @@ class _SettingsPageState extends State<SettingsPage> {
             loadConfig: LlmConfig.loadFilter,
             saveConfig: LlmConfig.saveFilter,
             resetConfig: LlmConfig.resetFilter,
+          ),
+
+          const SizedBox(height: 12),
+
+          _LlmConfigCard(
+            title: '关系判断 LLM 参数',
+            defaultConfig: LlmConfig.relationDefault,
+            loadConfig: LlmConfig.loadRelation,
+            saveConfig: LlmConfig.saveRelation,
+            resetConfig: LlmConfig.resetRelation,
+            showConcurrency: false,
           ),
 
           const SizedBox(height: 12),
@@ -3977,6 +4006,7 @@ class _LlmConfigCard extends StatefulWidget {
   final LlmConfig Function() loadConfig;
   final Future<void> Function(LlmConfig) saveConfig;
   final Future<void> Function() resetConfig;
+  final bool showConcurrency;
 
   const _LlmConfigCard({
     required this.title,
@@ -3984,6 +4014,7 @@ class _LlmConfigCard extends StatefulWidget {
     required this.loadConfig,
     required this.saveConfig,
     required this.resetConfig,
+    this.showConcurrency = true,
   });
 
   @override
@@ -4129,7 +4160,9 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
     if (isMac) {
       return _MacInlineExpansion(
         title: widget.title,
-        subtitle: '${_config.model}  |  并发 ${_config.concurrency}',
+        subtitle: widget.showConcurrency
+            ? '${_config.model}  |  并发 ${_config.concurrency}'
+            : '${_config.model}  |  单批串行',
         child: content,
       );
     }
@@ -4139,7 +4172,11 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
         widget.title,
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
-      subtitle: Text('${_config.model}  |  并发 ${_config.concurrency}'),
+      subtitle: Text(
+        widget.showConcurrency
+            ? '${_config.model}  |  并发 ${_config.concurrency}'
+            : '${_config.model}  |  单批串行',
+      ),
       children: [
         Padding(
           // 顶部预留 10px：第一个子项是带浮动 label 的下拉框（InputDecorator +
@@ -4207,16 +4244,18 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
           onChanged: (value) =>
               _saveImmediately(_config.copyWith(maxTokens: value)),
         ),
-        const SizedBox(height: 10),
-        _AutoSavedSettingsTextField(
-          controller: _concurrencyController,
-          focusNode: _concurrencyFocusNode,
-          label: '并发数',
-          useGlass: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onCommit: _saveConcurrency,
-        ),
+        if (widget.showConcurrency) ...[
+          const SizedBox(height: 10),
+          _AutoSavedSettingsTextField(
+            controller: _concurrencyController,
+            focusNode: _concurrencyFocusNode,
+            label: '并发数',
+            useGlass: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onCommit: _saveConcurrency,
+          ),
+        ],
         const SizedBox(height: 14),
         Align(
           alignment: Alignment.centerRight,
@@ -4276,16 +4315,18 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
           onChanged: (value) =>
               _saveImmediately(_config.copyWith(maxTokens: value)),
         ),
-        const SizedBox(height: 12),
-        _AutoSavedSettingsTextField(
-          controller: _concurrencyController,
-          focusNode: _concurrencyFocusNode,
-          label: '并发数',
-          useGlass: false,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onCommit: _saveConcurrency,
-        ),
+        if (widget.showConcurrency) ...[
+          const SizedBox(height: 12),
+          _AutoSavedSettingsTextField(
+            controller: _concurrencyController,
+            focusNode: _concurrencyFocusNode,
+            label: '并发数',
+            useGlass: false,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onCommit: _saveConcurrency,
+          ),
+        ],
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,

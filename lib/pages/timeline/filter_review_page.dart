@@ -163,6 +163,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final Map<String, UndoRestoreEvent> _deferredTrackpadRestores = {};
   final Map<String, ArticleModel> _pendingOriginalOpenAfterRemoval = {};
   bool _reloadAfterPendingReviewAction = false;
+  bool _isViewingRelatedArticle = false;
   late final MacSplitArticleListCoordinator _listCoordinator;
   Worker? _articleStateWorker;
   Worker? _filterCountWorker;
@@ -271,6 +272,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     if (event is! KeyDownEvent) return false;
 
     if (!Platform.isMacOS || !_isActiveMacReviewPage) return false;
+    if (_isViewingRelatedArticle) return false;
     if (MacArticleShortcutService.hasNonShiftModifier) {
       return false;
     }
@@ -908,43 +910,51 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                   focusNode: _emptyDetailFocusNode,
                 );
               }
-              return ArticlePageView(
+              bool isDetailActive() =>
+                  !Get.isRegistered<MainController>() ||
+                  Get.find<MainController>().currentIndex.value == 1;
+              return MacArticleDetailStack(
                 key: ValueKey(selected.entryId),
-                article: selected,
-                isSplitView: true,
-                isActive: () =>
-                    !Get.isRegistered<MainController>() ||
-                    Get.find<MainController>().currentIndex.value == 1,
-                isSelectedArticle: (entryId) =>
-                    _selectedArticle.value?.entryId == entryId,
-                isReviewContext: true,
-                onKeepReviewArticle: () {
-                  final currentSelected = _selectedArticle.value;
-                  if (currentSelected != null) {
-                    _keep(currentSelected, source: 'menuKeep');
-                  }
+                isActive: isDetailActive,
+                onRelatedNavigationChanged: (isViewingRelated) {
+                  _isViewingRelatedArticle = isViewingRelated;
                 },
-                onMisclassifyKeyPressed: () {
-                  final currentSelected = _selectedArticle.value;
-                  if (currentSelected != null) {
-                    _misclassifyKeep(currentSelected, source: 'keyN');
-                  }
-                },
-                onClose: _clearSelectionAndFocusEmptyDetail,
-                onPrevious: () => _selectRelativeArticle(-1),
-                onNext: () => _selectRelativeArticle(1),
-                onMKeyPressed: () {
-                  final currentSelected = _selectedArticle.value;
-                  if (currentSelected != null) {
-                    _reject(currentSelected, source: 'keyM');
-                  }
-                },
-                onOpenOriginalAndMarkRead: () {
-                  final currentSelected = _selectedArticle.value;
-                  if (currentSelected != null) {
-                    _rejectAndOpenOriginal(currentSelected);
-                  }
-                },
+                rootBuilder: (_, openRelatedArticle) => ArticlePageView(
+                  article: selected,
+                  isSplitView: true,
+                  isActive: isDetailActive,
+                  isSelectedArticle: (entryId) =>
+                      _selectedArticle.value?.entryId == entryId,
+                  isReviewContext: true,
+                  onKeepReviewArticle: () {
+                    final currentSelected = _selectedArticle.value;
+                    if (currentSelected != null) {
+                      _keep(currentSelected, source: 'menuKeep');
+                    }
+                  },
+                  onMisclassifyKeyPressed: () {
+                    final currentSelected = _selectedArticle.value;
+                    if (currentSelected != null) {
+                      _misclassifyKeep(currentSelected, source: 'keyN');
+                    }
+                  },
+                  onClose: _clearSelectionAndFocusEmptyDetail,
+                  onPrevious: () => _selectRelativeArticle(-1),
+                  onNext: () => _selectRelativeArticle(1),
+                  onMKeyPressed: () {
+                    final currentSelected = _selectedArticle.value;
+                    if (currentSelected != null) {
+                      _reject(currentSelected, source: 'keyM');
+                    }
+                  },
+                  onOpenRelatedArticle: openRelatedArticle,
+                  onOpenOriginalAndMarkRead: () {
+                    final currentSelected = _selectedArticle.value;
+                    if (currentSelected != null) {
+                      _rejectAndOpenOriginal(currentSelected);
+                    }
+                  },
+                ),
               );
             }),
           ),

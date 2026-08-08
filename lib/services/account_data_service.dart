@@ -4,6 +4,8 @@ import '../utils/storage.dart';
 import 'account_session_guard.dart';
 import 'analysis_event_ledger.dart';
 import 'article_image_cache_service.dart';
+import 'article_relation_service.dart';
+import 'article_relation_worker.dart';
 import 'article_state_notifier.dart';
 import 'auto_filter_worker.dart';
 import 'auto_readability_worker.dart';
@@ -23,6 +25,7 @@ abstract final class AccountDataService {
 
     AutoFilterWorker.cancelProcessing();
     AutoReadabilityWorker.cancelProcessing();
+    ArticleRelationWorker.cancelProcessing();
     AutoSummaryWorker.cancelProcessing();
     AutoTranslationWorker.cancelProcessing();
     ReadSyncService.clear();
@@ -36,6 +39,8 @@ abstract final class AccountDataService {
       GStorage.translations.clear(),
       GStorage.summaries.clear(),
       GStorage.readHistory.clear(),
+      GStorage.articleRelations.clear(),
+      GStorage.relationBatches.clear(),
     ]);
 
     final transientSettingKeys = GStorage.setting.keys
@@ -51,6 +56,7 @@ abstract final class AccountDataService {
 
     LocalArticleDbService.invalidateCache();
     SummaryService.resetForAccountChange();
+    ArticleRelationService.resetForAccountChange();
     TranslationService.resetForAccountChange();
     SubscriptionCatalogService.reset();
     ArticleContentUtils.clearCache();

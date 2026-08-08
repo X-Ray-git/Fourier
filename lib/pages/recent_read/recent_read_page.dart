@@ -210,20 +210,25 @@ class _RecentReadPageState extends State<RecentReadPage> {
                       focusNode: _emptyDetailFocusNode,
                     );
                   }
-                  return ArticlePageView(
+                  bool isDetailActive() => _isActiveMacRecentRead;
+                  return MacArticleDetailStack(
                     key: ValueKey(selected.entryId),
-                    article: selected,
-                    isSplitView: true,
-                    isActive: () => _isActiveMacRecentRead,
-                    isSelectedArticle: (entryId) =>
-                        selectedArticle.value?.entryId == entryId,
-                    onClose: _clearSelectionAndFocusEmptyDetail,
-                    onPrevious: () => _selectRelativeArticle(-1),
-                    onNext: () => _selectRelativeArticle(1),
-                    onOpenOriginalAndMarkRead: () {
-                      final current = selectedArticle.value;
-                      if (current != null) _openOriginalAndMarkRead(current);
-                    },
+                    isActive: isDetailActive,
+                    rootBuilder: (_, openRelatedArticle) => ArticlePageView(
+                      article: selected,
+                      isSplitView: true,
+                      isActive: isDetailActive,
+                      isSelectedArticle: (entryId) =>
+                          selectedArticle.value?.entryId == entryId,
+                      onClose: _clearSelectionAndFocusEmptyDetail,
+                      onPrevious: () => _selectRelativeArticle(-1),
+                      onNext: () => _selectRelativeArticle(1),
+                      onOpenRelatedArticle: openRelatedArticle,
+                      onOpenOriginalAndMarkRead: () {
+                        final current = selectedArticle.value;
+                        if (current != null) _openOriginalAndMarkRead(current);
+                      },
+                    ),
                   );
                 }),
               ),

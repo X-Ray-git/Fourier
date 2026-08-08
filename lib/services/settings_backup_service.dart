@@ -49,7 +49,12 @@ abstract final class SettingsBackupService {
   static const _summaryPrompt = 'summary_prompt';
   static const _filterPrompt = 'filter_prompt';
 
-  static const _llmPrefixes = ['llm_translate_', 'llm_summary_', 'llm_filter_'];
+  static const _llmPrefixes = [
+    'llm_translate_',
+    'llm_summary_',
+    'llm_filter_',
+    'llm_relation_',
+  ];
   static const _feedPreferencePrefixes = [
     'feed_auto_translate_',
     'feed_silent_',

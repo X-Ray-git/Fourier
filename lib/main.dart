@@ -24,6 +24,7 @@ import 'pages/timeline/timeline_controller.dart';
 import 'services/account_service.dart';
 import 'services/app_license_service.dart';
 import 'services/app_version_service.dart';
+import 'services/article_relation_worker.dart';
 import 'services/mac_article_shortcut_service.dart';
 import 'utils/storage.dart';
 import 'services/undo_service.dart';
@@ -81,6 +82,7 @@ void main() async {
 
   // 初始化存储
   await GStorage.init();
+  await ArticleRelationWorker.initialize();
 
   // 初始化运行时版本信息，供请求头与设置页统一读取 pubspec 版本
   await AppVersionService.init();

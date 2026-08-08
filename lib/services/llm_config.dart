@@ -15,7 +15,7 @@ class LlmConfig {
     required this.reasoningEffort,
     required this.temperature,
     required this.maxTokens,
-    this.concurrency = 16,
+    this.concurrency = 32,
   });
 
   LlmConfig copyWith({
@@ -38,6 +38,7 @@ class LlmConfig {
 
   static const _translatePrefix = 'llm_translate_';
   static const _summaryPrefix = 'llm_summary_';
+  static const _relationPrefix = 'llm_relation_';
 
   // ─── 默认值 ───
 
@@ -47,25 +48,34 @@ class LlmConfig {
     reasoningEffort: 'high',
     temperature: 0.2,
     maxTokens: 131072,
-    concurrency: 16,
+    concurrency: 32,
   );
 
   static const LlmConfig summaryDefault = LlmConfig(
-    model: 'deepseek-v4-pro',
+    model: 'deepseek-v4-flash',
     thinking: true,
-    reasoningEffort: 'high',
+    reasoningEffort: 'max',
     temperature: 0.2,
     maxTokens: 2048,
-    concurrency: 16,
+    concurrency: 32,
   );
 
   static const LlmConfig filterDefault = LlmConfig(
-    model: 'deepseek-v4-pro',
-    thinking: false,
-    reasoningEffort: 'high',
+    model: 'deepseek-v4-flash',
+    thinking: true,
+    reasoningEffort: 'max',
     temperature: 0.1,
     maxTokens: 2048,
-    concurrency: 16,
+    concurrency: 32,
+  );
+
+  static const LlmConfig relationDefault = LlmConfig(
+    model: 'deepseek-v4-flash',
+    thinking: true,
+    reasoningEffort: 'max',
+    temperature: 0,
+    maxTokens: 8192,
+    concurrency: 1,
   );
 
   static const _filterPrefix = 'llm_filter_';
@@ -73,6 +83,11 @@ class LlmConfig {
   static LlmConfig loadFilter() => _load(_filterPrefix, filterDefault);
   static Future<void> saveFilter(LlmConfig c) => _save(_filterPrefix, c);
   static Future<void> resetFilter() => _clear(_filterPrefix);
+  static LlmConfig loadRelation() =>
+      _load(_relationPrefix, relationDefault).copyWith(concurrency: 1);
+  static Future<void> saveRelation(LlmConfig c) =>
+      _save(_relationPrefix, c.copyWith(concurrency: 1));
+  static Future<void> resetRelation() => _clear(_relationPrefix);
 
   // ─── 读写 ───
 

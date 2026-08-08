@@ -15,7 +15,10 @@
       <stop offset="1" stop-color="#ffffff"/>
     </linearGradient>
   </defs>
-  <path d="M728 912 813.5 570 1835 570 1749.5 912Z" fill="#ffffff"/>
-  <path d="M63 1355 148.5 1013 1559 1013 1473.5 1355Z" fill="url(#middle-bar)"/>
-  <path d="M670 1798 755.5 1456 1127 1456 1041.5 1798Z" fill="#ffffff"/>
+  <!-- Keep the full mark inside Android's centered 66dp adaptive-icon safe zone. -->
+  <g transform="translate(1127.5 1127.5) scale(0.6666667) translate(-1127.5 -1127.5)">
+    <path d="M728 912 813.5 570 1835 570 1749.5 912Z" fill="#ffffff"/>
+    <path d="M63 1355 148.5 1013 1559 1013 1473.5 1355Z" fill="url(#middle-bar)"/>
+    <path d="M670 1798 755.5 1456 1127 1456 1041.5 1798Z" fill="#ffffff"/>
+  </g>
 </svg>

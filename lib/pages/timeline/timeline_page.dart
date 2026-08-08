@@ -1274,30 +1274,35 @@ class _TimelinePageState extends State<TimelinePage> {
                     );
                   }
                   final restore = _takeArticleRestore(selected.entryId);
-                  return ArticlePageView(
+                  bool isDetailActive() =>
+                      !Get.isRegistered<MainController>() ||
+                      Get.find<MainController>().currentIndex.value == 0;
+                  return MacArticleDetailStack(
                     key: ValueKey(selected.entryId),
-                    article: selected,
-                    isSplitView: true,
-                    isActive: () =>
-                        !Get.isRegistered<MainController>() ||
-                        Get.find<MainController>().currentIndex.value == 0,
-                    isSelectedArticle: (entryId) =>
-                        controller.selectedArticle.value?.entryId == entryId,
-                    onClose: _clearSelectionAndFocusEmptyDetail,
-                    onOpenSource: _openArticleSource,
-                    initialScrollOffset: restore?.scrollOffset,
-                    initialShowTranslation: restore?.showTranslation,
-                    initialShowSummary: restore?.showSummary,
-                    onPrevious: () => _selectRelativeArticle(-1),
-                    onNext: () => _selectRelativeArticle(1),
-                    onMKeyPressed: _handleMacReadShortcut,
-                    onMisclassifyKeyPressed: _handleMacMisclassifyShortcut,
-                    onOpenOriginalAndMarkRead: () {
-                      final current = controller.selectedArticle.value;
-                      if (current != null) {
-                        _openOriginalAndMarkRead(current, source: 'shiftB');
-                      }
-                    },
+                    isActive: isDetailActive,
+                    rootBuilder: (_, openRelatedArticle) => ArticlePageView(
+                      article: selected,
+                      isSplitView: true,
+                      isActive: isDetailActive,
+                      isSelectedArticle: (entryId) =>
+                          controller.selectedArticle.value?.entryId == entryId,
+                      onClose: _clearSelectionAndFocusEmptyDetail,
+                      onOpenSource: _openArticleSource,
+                      initialScrollOffset: restore?.scrollOffset,
+                      initialShowTranslation: restore?.showTranslation,
+                      initialShowSummary: restore?.showSummary,
+                      onPrevious: () => _selectRelativeArticle(-1),
+                      onNext: () => _selectRelativeArticle(1),
+                      onMKeyPressed: _handleMacReadShortcut,
+                      onMisclassifyKeyPressed: _handleMacMisclassifyShortcut,
+                      onOpenRelatedArticle: openRelatedArticle,
+                      onOpenOriginalAndMarkRead: () {
+                        final current = controller.selectedArticle.value;
+                        if (current != null) {
+                          _openOriginalAndMarkRead(current, source: 'shiftB');
+                        }
+                      },
+                    ),
                   );
                 }),
               ),

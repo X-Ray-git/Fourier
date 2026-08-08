@@ -11,6 +11,8 @@ abstract final class GStorage {
   static late Box<dynamic> summaries;
   static late Box<dynamic> readHistory;
   static late Box<dynamic> analysisEvents;
+  static late Box<dynamic> articleRelations;
+  static late Box<dynamic> relationBatches;
 
   static Future<void> init() async {
     final appDir = await getApplicationDocumentsDirectory();
@@ -40,6 +42,9 @@ abstract final class GStorage {
     );
     // 本地分析事件账本：版本化、追加式，账号退出时随账号数据清理。
     analysisEvents = await Hive.openBox('analysisEvents');
+    // 文章关系属于账号级派生数据，不进入设置导入导出。
+    articleRelations = await Hive.openBox('articleRelations');
+    relationBatches = await Hive.openBox('relationBatches');
   }
 
   static Future<void> close() async {
@@ -52,6 +57,8 @@ abstract final class GStorage {
       summaries.close(),
       readHistory.close(),
       analysisEvents.close(),
+      articleRelations.close(),
+      relationBatches.close(),
     ]);
   }
 }

@@ -4,17 +4,30 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../services/article_image_service.dart';
+import '../../../services/external_link_service.dart';
 import '../../../utils/duration_extension.dart';
 import 'article_video_playback_shortcut.dart';
 import 'fullscreen_video_page.dart';
 import 'media_play_button.dart';
+
+/// 普通视频播放错误的分类。
+enum _InlineVideoErrorKind { none, authExpiry, generic }
 
 /// 内联视频播放器 — poster → 加载 → 播放（含进度条 + 拖拽定位）
 class InlineVideoPlayer extends StatefulWidget {
   final String videoUrl;
   final String? posterUrl;
 
-  const InlineVideoPlayer({super.key, required this.videoUrl, this.posterUrl});
+  /// 文章原始 URL：带时效签名的 CDN 地址失效（401/403）时，
+  /// 在错误界面安全地提供「打开原文」入口。
+  final String? articleUrl;
+
+  const InlineVideoPlayer({
+    super.key,
+    required this.videoUrl,
+    this.posterUrl,
+    this.articleUrl,
+  });
 
   @override
   State<InlineVideoPlayer> createState() => _InlineVideoPlayerState();
@@ -24,6 +37,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
   VideoPlayerController? _controller;
   bool _isInitializing = false;
   bool _hasError = false;
+  _InlineVideoErrorKind _errorKind = _InlineVideoErrorKind.none;
   bool _showControls = true;
   Timer? _hideTimer;
   final FocusNode _focusNode = FocusNode();
@@ -88,12 +102,16 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     setState(() {
       _isInitializing = true;
       _hasError = false;
+      _errorKind = _InlineVideoErrorKind.none;
     });
 
     try {
       final uri = Uri.tryParse(widget.videoUrl);
       if (uri == null) {
-        setState(() => _hasError = true);
+        setState(() {
+          _hasError = true;
+          _errorKind = _InlineVideoErrorKind.generic;
+        });
         return;
       }
 
@@ -108,10 +126,30 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       setState(() {});
       _startHideTimer();
     } catch (e) {
-      setState(() => _hasError = true);
+      // 带时效签名的 CDN 地址失效通常表现为 401/403 鉴权错误；
+      // 其余播放错误走通用文案。
+      final errorText = _controller?.value.errorDescription ?? e.toString();
+      setState(() {
+        _hasError = true;
+        _errorKind = _isAuthOrSignatureExpiry(errorText)
+            ? _InlineVideoErrorKind.authExpiry
+            : _InlineVideoErrorKind.generic;
+      });
       _controller?.dispose();
       _controller = null;
     }
+  }
+
+  /// 识别明确的鉴权 / 签名失效（HTTP 401/403 或平台层 unauthorized 描述）。
+  static bool _isAuthOrSignatureExpiry(String text) {
+    final lowered = text.toLowerCase();
+    return lowered.contains('401') ||
+        lowered.contains('403') ||
+        lowered.contains('unauthorized') ||
+        lowered.contains('forbidden') ||
+        lowered.contains('access denied') ||
+        lowered.contains('signature') ||
+        lowered.contains('expired');
   }
 
   Future<void> _togglePlayPause() async {
@@ -138,6 +176,12 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     if (mounted) _focusNode.requestFocus();
     setState(() => _showControls = !_showControls);
     _startHideTimer();
+  }
+
+  String? get _articleUrl {
+    final raw = widget.articleUrl;
+    if (raw == null || raw.trim().isEmpty) return null;
+    return raw;
   }
 
   @override
@@ -310,30 +354,64 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
 
     // 错误态
     if (_hasError) {
+      final isAuthExpiry = _errorKind == _InlineVideoErrorKind.authExpiry;
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: AspectRatio(
           aspectRatio: 16 / 9,
           child: Container(
             color: cs.surfaceContainerHighest,
-            child: Center(
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _hasError = false;
-                    _isInitializing = false;
-                  });
-                  _initAndPlay();
-                },
-                child: const Column(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 36,
+                  color: isAuthExpiry ? cs.error : cs.onSurfaceVariant,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isAuthExpiry ? '视频链接已过期' : '视频无法播放',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isAuthExpiry ? cs.error : cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isAuthExpiry ? '带时效的播放地址可能已失效' : '点击重试或稍后再试',
+                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 10),
+                Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.error_outline, size: 36),
-                    SizedBox(height: 8),
-                    Text('播放失败，点击重试', style: TextStyle(fontSize: 13)),
+                    if (isAuthExpiry && _articleUrl != null) ...[
+                      TextButton.icon(
+                        onPressed: () =>
+                            ExternalLinkService.openUrlWithFeedback(
+                              _articleUrl,
+                            ),
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: const Text('打开原文'),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _hasError = false;
+                          _isInitializing = false;
+                          _errorKind = _InlineVideoErrorKind.none;
+                        });
+                        _initAndPlay();
+                      },
+                      child: const Text('重试'),
+                    ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
         ),

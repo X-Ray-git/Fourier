@@ -26,7 +26,10 @@ import '../../services/article_image_cache_service.dart';
 import '../../services/article_markdown_export_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/macos_app_menu_service.dart';
+import '../../services/analysis_event_ledger.dart';
+import '../../services/android_haptics_service.dart';
 import '../../services/auto_ai_queue_coordinator.dart';
+import '../../services/external_link_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/translation_service.dart';
 import '../../services/summary_service.dart';
@@ -296,7 +299,10 @@ class ArticleController extends GetxController {
     // 同步结束后移出待同步队列；本地已读覆盖保留到未读快照确认。
     ReadSyncService.removeMany([article.entryId]);
 
-    if (!ok) {
+    if (ok) {
+      // 标为已读成功：轻反馈。
+      await AndroidHapticsService.lightImpact();
+    } else {
       // 5 次失败 → 恢复本地未读，与服务器保持一致
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsUnreadLocal(article.entryId);
@@ -329,7 +335,10 @@ class ArticleController extends GetxController {
       maxRetries: 5,
     );
 
-    if (!ok) {
+    if (ok) {
+      // 恢复未读成功：轻反馈。
+      await AndroidHapticsService.lightImpact();
+    } else {
       // 5 次失败 → 恢复本地已读
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsReadLocal(
@@ -448,32 +457,12 @@ class ArticleController extends GetxController {
 
   Future<void> openInBrowser() async {
     if (article.url.isEmpty) return;
-
-    final uri = SecurityUtils.parseHttpUrl(article.url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(article.url);
   }
 
   Future<void> openLink(String? url) async {
     if (url == null || url.isEmpty) return;
-    final uri = SecurityUtils.parseHttpUrl(url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(url);
   }
 
   Future<void> openSource() async {
@@ -593,6 +582,10 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
     super.initState();
     _currentIndex = widget.request.index;
     _pageController = PageController(initialPage: _currentIndex);
+    // 打开事件只记录实际进入的文章（含分页器初始页），相邻预构建页不记录。
+    AnalysisEventLedger.recordArticleOpen(
+      widget.request.sequence![_currentIndex],
+    );
   }
 
   @override
@@ -610,6 +603,9 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
       itemCount: articles.length,
       onPageChanged: (index) {
         _currentIndex = index;
+        AnalysisEventLedger.recordArticleOpen(articles[index]);
+        // 翻页稳定完成后提供轻微反馈。
+        AndroidHapticsService.selectionClick();
       },
       itemBuilder: (context, index) => ArticlePageView(
         key: ValueKey(articles[index].entryId),
@@ -683,6 +679,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   final ValueNotifier<double> _headerCollapseProgress = ValueNotifier(0.0);
   final ValueNotifier<String?> _hoveredUrl = ValueNotifier<String?>(null);
   final ValueNotifier<String?> _activeTocId = ValueNotifier<String?>(null);
+
+  /// hover 预览写入守卫：dispose 开始后禁止任何写入，避免旧的
+  /// TextSpan/MouseRegion 回调在 notifier 销毁后触发断言。
+  bool _hoverUrlWritable = true;
   double _articleTitleHeight = 30.0;
   bool _articleTitleMeasurementScheduled = false;
   bool _allowBodyBuild = Platform.isMacOS;
@@ -723,6 +723,11 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _focusNode = FocusNode();
     LocalArticleDbService.recordReadHistory(widget.article.entryId);
     ArticleImageCacheService.markArticleActive(widget.article.entryId);
+    // 非分页器模式（单篇路由 / macOS 分栏）下，进入视图即记录打开事件；
+    // 分页器模式由 _ArticlePagerPageState 在初始页与翻页时记录。
+    if (widget.pageLabel == null) {
+      AnalysisEventLedger.recordArticleOpen(widget.article);
+    }
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     }
@@ -775,6 +780,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
   @override
   void dispose() {
+    // 先关闭 hover 写入守卫再销毁 notifier：切换文章、YouTube 回退或
+    // 快速移动鼠标时，旧 span 的 onExit 回调不会写入已销毁的 notifier。
+    _hoverUrlWritable = false;
     if (_usesGlobalShortcuts) {
       HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     }
@@ -797,6 +805,20 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   }
 
   bool get _usesGlobalShortcuts => Platform.isMacOS && widget.isSplitView;
+
+  /// 生命周期安全的链接 hover 回调（由活动 State 提供）。
+  /// 进入/离开成对触发，离开时只在预览仍指向该链接时才清空，
+  /// 避免快速跨链接移动时清掉更新的预览。
+  void _handleLinkHover(String? url, bool isExit) {
+    if (!mounted || !_hoverUrlWritable) return;
+    if (isExit) {
+      if (_hoveredUrl.value == url) {
+        _hoveredUrl.value = null;
+      }
+    } else {
+      _hoveredUrl.value = url;
+    }
+  }
 
   void _restoreInitialViewState() {
     if (!mounted || controller.isParsingContent.value) return;
@@ -1296,9 +1318,12 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                                       fontWeight: active
                                           ? FontWeight.w700
                                           : FontWeight.w500,
+                                      // 未选中项提高对比度，选中态保持主题色。
                                       color: active
                                           ? cs.primary
-                                          : cs.onSurfaceVariant,
+                                          : cs.onSurface.withValues(
+                                              alpha: 0.88,
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -1660,7 +1685,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                               articleId: controller.article.entryId,
                               articleUrl: controller.article.url,
                               maxWidth: maxWidth,
-                              hoveredUrl: _hoveredUrl,
+                              onLinkHover: _handleLinkHover,
                               contentAnchorKey:
                                   chunk.type == HtmlChunkType.heading
                                   ? _headingKeyFor(showTrans, idx)
@@ -1997,9 +2022,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 ? true
                 : !isRead && !widget.article.isRejectedByAi;
             final tooltip = widget.isReviewContext
-                ? '误分类：保留并标为已读 (N)'
+                ? '保留并标为已读 (N)'
                 : enabled
-                ? '误分类：移入垃圾拦截 (N)'
+                ? '移入垃圾拦截并标为已读 (N)'
                 : isRead
                 ? '已读文章不可标记为误分类'
                 : '已在垃圾拦截中，请前往垃圾拦截页面标记误分类';
@@ -3055,13 +3080,7 @@ class _SummaryCard extends StatelessWidget {
                 },
                 onLinkTap: (url, attributes, element) async {
                   if (url != null && url.isNotEmpty) {
-                    final uri = Uri.tryParse(url);
-                    if (uri != null && await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
+                    await ExternalLinkService.openUrlWithFeedback(url);
                   }
                 },
               ),

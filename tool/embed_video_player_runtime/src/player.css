@@ -13,6 +13,7 @@
 .shaka-video-container .fourier-danmaku-button {
   min-width: 34px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: rgba(255, 255, 255, 0.45);
   font-family:
@@ -20,10 +21,13 @@
   font-size: 16px;
   font-weight: 700;
   line-height: 24px;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
+/* 开启态：橙色图标/文字 + 轻微深色选中底色（无昂贵玻璃效果） */
 .shaka-video-container .fourier-danmaku-button.is-active {
-  color: rgba(255, 255, 255, 0.92);
+  color: #ff8a3d;
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .shaka-video-container .shaka-scrim-container {

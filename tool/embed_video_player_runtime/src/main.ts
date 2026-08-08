@@ -325,127 +325,196 @@ async function loadVideo(videoId: string) {
     const isPostLiveDVR = !!videoInfo.basic_info.is_post_live_dvr ||
       (videoInfo.basic_info.is_live_content && !!(videoInfo.streaming_data?.dash_manifest_url || videoInfo.streaming_data?.hls_manifest_url));
 
-    // Initialize and attach SABR adapter.
-    console.log('[SABR]', 'Creating adapter');
-    playerAdapter = new ShakaPlayerAdapter();
-    sabrAdapter = new SabrStreamingAdapter({
-      playerAdapter,
-      clientInfo: {
-        osName: innertube.session.context.client.osName,
-        osVersion: innertube.session.context.client.osVersion,
-        clientName: parseInt(Constants.CLIENT_NAME_IDS[innertube.session.context.client.clientName as keyof typeof Constants.CLIENT_NAME_IDS]),
-        clientVersion: innertube.session.context.client.clientVersion
-      }
-    });
-    console.log('[SABR]', 'Adapter created');
-
-    sabrAdapter.onMintPoToken(async () => {
-      if (!playbackWebPoToken) {
-        // For live streams, we must block and wait for the PO token as it's sometimes required for playback to start.
-        // For VODs, we can mint the token in the background to avoid delaying playback, as it's not immediately required.
-        // While BotGuard is pretty darn fast, it still makes a difference in user experience (from my own testing).
-        if (isLive) {
-          await mintContentWebPO();
-        } else {
-          mintContentWebPO().then();
-        }
-      }
-
-      return playbackWebPoToken || coldStartToken || '';
-    });
-
-    sabrAdapter.onReloadPlayerResponse(async (reloadContext) => {
-      console.log('[SABR]', 'Reloading player response...');
-
-      const reloadedInfo = await innertube.actions.execute('/player', {
-        videoId,
-        contentCheckOk: true,
-        racyCheckOk: true,
-        playbackContext: {
-          adPlaybackContext: {
-            pyv: true
-          },
-          contentPlaybackContext: {
-            signatureTimestamp: innertube.session.player?.signature_timestamp
-          },
-          reloadPlaybackContext: reloadContext
-        }
-      });
-
-      const parsedInfo = new YT.VideoInfo([ reloadedInfo ], innertube.actions, cpn);
-      sabrAdapter.setStreamingURL(await innertube.session.player!.decipher(parsedInfo.streaming_data?.server_abr_streaming_url));
-      sabrAdapter.setUstreamerConfig(videoInfo.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config);
-    });
-
-    console.log('[SABR]', 'Attaching adapter');
-    sabrAdapter.attach(player);
-    console.log('[SABR]', 'Adapter attached');
-
+    // 播放主路径：SABR 首选（VOD），失败后回退 MWEB / IOS 普通 DASH；
+    // 直播 / PostLiveDVR 走官方 manifest 直连，不进入回退链。
+    let playbackSource: string;
     if (videoInfo.streaming_data && !isPostLiveDVR && !isLive) {
-      console.log('[SABR]', 'Deciphering streaming URL');
-      sabrAdapter.setStreamingURL(await innertube.session.player!.decipher(videoInfo.streaming_data?.server_abr_streaming_url));
-      console.log('[SABR]', 'Streaming URL configured');
-      sabrAdapter.setUstreamerConfig(videoInfo.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config);
-      sabrAdapter.setServerAbrFormats(videoInfo.streaming_data.adaptive_formats.map(buildSabrFormat));
-      console.log('[SABR]', 'Formats configured');
-    }
-
-    let manifestUri: string | undefined;
-    if (videoInfo.streaming_data) {
-      if (isLive) {
-        manifestUri = videoInfo.streaming_data.dash_manifest_url ? `${videoInfo.streaming_data.dash_manifest_url}/mpd_version/7` : videoInfo.streaming_data.hls_manifest_url;
-      } else if (isPostLiveDVR) {
-        manifestUri = videoInfo.streaming_data.hls_manifest_url || `${videoInfo.streaming_data.dash_manifest_url}/mpd_version/7`;
-      } else {
-        console.log('[SABR]', 'Building DASH manifest');
-        manifestUri = `data:application/dash+xml;base64,${btoa(await videoInfo.toDash({
-          manifest_options: {
-            is_sabr: true,
-            captions_format: 'vtt',
-            include_thumbnails: false
-          }
-        }))}`;
-        console.log('[SABR]', 'DASH manifest built');
-      }
-    }
-
-    if (!manifestUri)
-      throw new Error('Could not find a valid manifest URI.');
-
-    console.log('[Player]', 'Loading DASH manifest');
-    try {
+      playbackSource = await playVodWithSabrFallback(videoId, videoInfo, cpn);
+    } else if (videoInfo.streaming_data) {
+      const manifestUri = isLive
+        ? videoInfo.streaming_data.dash_manifest_url ? `${videoInfo.streaming_data.dash_manifest_url}/mpd_version/7` : videoInfo.streaming_data.hls_manifest_url
+        : videoInfo.streaming_data.hls_manifest_url || `${videoInfo.streaming_data.dash_manifest_url}/mpd_version/7`;
+      if (!manifestUri)
+        throw new Error('Could not find a valid manifest URI.');
+      playbackSource = 'official-manifest';
       await player.load(manifestUri);
-      console.log('[Player]', 'SABR DASH manifest loaded');
-    } catch (sabrError) {
-      if (isLive || isPostLiveDVR) throw sabrError;
-
-      console.warn(
-        '[Player]',
-        'SABR load failed; trying direct adaptive DASH:',
-        describePlayerError(sabrError)
-      );
-      await player.unload();
-      playerAdapter.disableSabrInterceptors();
-
-      const directManifest = `data:application/dash+xml;base64,${btoa(await videoInfo.toDash({
-        manifest_options: {
-          is_sabr: false,
-          captions_format: 'vtt',
-          include_thumbnails: false
-        }
-      }))}`;
-      await player.load(directManifest);
-      console.log('[Player]', 'Direct adaptive DASH manifest loaded');
+    } else {
+      throw new Error('Could not find a valid manifest URI.');
     }
 
     await videoElement.play();
     notify('playing', videoInfo.basic_info.title);
-    console.log('[Player]', `Now playing: ${videoInfo.basic_info.title}`);
+    console.log('[Player]', `Now playing: ${videoInfo.basic_info.title} (${playbackSource})`);
   } catch (e: any) {
     const detail = describePlayerError(e);
     console.error('[Player]', 'Error:', detail, e?.stack || '');
     notify('error', detail);
   }
+}
+
+/**
+ * VOD 播放主路径：SABR 为首选。SABR 设置或加载失败后，重新通过
+ * getInfo(videoId, { client: 'MWEB' }) 获取可直连格式并生成 is_sabr=false
+ * 的普通 DASH；MWEB 失败后可尝试 IOS。两者均失败才抛出，由 Dart 侧回退
+ * 官方 YouTube 嵌入。不允许继续用原 WEB/SABR-only response 构建 direct DASH。
+ */
+async function playVodWithSabrFallback(videoId: string, videoInfo: Awaited<ReturnType<typeof innertube.getInfo>>, cpn: string): Promise<string> {
+  try {
+    const sabrManifest = await setupSabrFlow(videoId, videoInfo, cpn);
+    console.log('[Player]', 'Loading SABR DASH manifest');
+    await player.load(sabrManifest);
+    console.log('[Player]', 'SABR DASH manifest loaded');
+    return 'sabr';
+  } catch (sabrError) {
+    console.warn(
+      '[Player]',
+      'SABR failed; falling back to client re-fetch (MWEB → IOS):',
+      describePlayerError(sabrError)
+    );
+    await teardownSabrFlow();
+  }
+
+  const clients: Array<'MWEB' | 'IOS'> = ['MWEB', 'IOS'];
+  let lastError: unknown = sabrErrorFallbackMessage();
+  for (const client of clients) {
+    try {
+      const directManifest = await buildDirectDashForClient(videoId, client);
+      console.log(`[Player] Loading ${client} direct adaptive DASH manifest`);
+      await player.load(directManifest);
+      console.log(`[Player] ${client} direct adaptive DASH manifest loaded`);
+      return client;
+    } catch (clientError) {
+      lastError = clientError;
+      console.warn(
+        `[Player] ${client} fallback failed:`,
+        describePlayerError(clientError)
+      );
+    }
+  }
+  throw lastError;
+}
+
+function sabrErrorFallbackMessage() {
+  return new Error('SABR playback failed and no direct streaming client worked.');
+}
+
+async function teardownSabrFlow() {
+  try {
+    await player.unload();
+  } catch (_) {
+    // SABR 设置阶段失败时可能尚无内容可卸载。
+  }
+  try {
+    playerAdapter?.disableSabrInterceptors();
+  } catch (_) {
+    // 拦截器可能尚未安装。
+  }
+  if (sabrAdapter) {
+    try {
+      sabrAdapter.dispose();
+    } catch (_) {
+      // 忽略释放阶段异常。
+    }
+  }
+}
+
+/**
+ * 用指定 client 重新获取视频信息并生成 is_sabr=false 的普通 DASH。
+ * WEB 响应可能只含 SABR 信息（没有直接 URL），因此绝不复用该响应
+ * 生成 direct DASH。
+ */
+async function buildDirectDashForClient(videoId: string, client: 'MWEB' | 'IOS'): Promise<string> {
+  console.log('[Player]', `Requesting video info with ${client} client`);
+  const info = await innertube.getInfo(videoId, { client });
+  console.log('[Player]', `${client} video info received`);
+  if (info.playability_status?.status !== 'OK') {
+    throw new Error(`Cannot play video: ${info.playability_status?.reason}`);
+  }
+  if (!info.streaming_data) {
+    throw new Error(`Cannot play video: ${client} response has no streaming data`);
+  }
+  const dash = await info.toDash({
+    manifest_options: {
+      is_sabr: false,
+      captions_format: 'vtt',
+      include_thumbnails: false
+    }
+  });
+  return `data:application/dash+xml;base64,${btoa(dash)}`;
+}
+
+/**
+ * SABR 设置与 DASH manifest 构建（VOD）。任何一步失败都会抛出，
+ * 由调用方进入 MWEB / IOS 回退链。
+ */
+async function setupSabrFlow(videoId: string, videoInfo: Awaited<ReturnType<typeof innertube.getInfo>>, cpn: string): Promise<string> {
+  console.log('[SABR]', 'Creating adapter');
+  playerAdapter = new ShakaPlayerAdapter();
+  sabrAdapter = new SabrStreamingAdapter({
+    playerAdapter,
+    clientInfo: {
+      osName: innertube.session.context.client.osName,
+      osVersion: innertube.session.context.client.osVersion,
+      clientName: parseInt(Constants.CLIENT_NAME_IDS[innertube.session.context.client.clientName as keyof typeof Constants.CLIENT_NAME_IDS]),
+      clientVersion: innertube.session.context.client.clientVersion
+    }
+  });
+  console.log('[SABR]', 'Adapter created');
+
+  sabrAdapter.onMintPoToken(async () => {
+    if (!playbackWebPoToken) {
+      // For VODs we can mint the token in the background to avoid delaying playback,
+      // as it's not immediately required. While BotGuard is pretty darn fast, it
+      // still makes a difference in user experience (from my own testing).
+      mintContentWebPO().then();
+    }
+    return playbackWebPoToken || coldStartToken || '';
+  });
+
+  sabrAdapter.onReloadPlayerResponse(async (reloadContext) => {
+    console.log('[SABR]', 'Reloading player response...');
+
+    const reloadedInfo = await innertube.actions.execute('/player', {
+      videoId,
+      contentCheckOk: true,
+      racyCheckOk: true,
+      playbackContext: {
+        adPlaybackContext: {
+          pyv: true
+        },
+        contentPlaybackContext: {
+          signatureTimestamp: innertube.session.player?.signature_timestamp
+        },
+        reloadPlaybackContext: reloadContext
+      }
+    });
+
+    const parsedInfo = new YT.VideoInfo([ reloadedInfo ], innertube.actions, cpn);
+    sabrAdapter.setStreamingURL(await innertube.session.player!.decipher(parsedInfo.streaming_data?.server_abr_streaming_url));
+    sabrAdapter.setUstreamerConfig(videoInfo.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config);
+  });
+
+  console.log('[SABR]', 'Attaching adapter');
+  sabrAdapter.attach(player);
+  console.log('[SABR]', 'Adapter attached');
+
+  console.log('[SABR]', 'Deciphering streaming URL');
+  sabrAdapter.setStreamingURL(await innertube.session.player!.decipher(videoInfo.streaming_data?.server_abr_streaming_url));
+  console.log('[SABR]', 'Streaming URL configured');
+  sabrAdapter.setUstreamerConfig(videoInfo.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config);
+  sabrAdapter.setServerAbrFormats(videoInfo.streaming_data!.adaptive_formats.map(buildSabrFormat));
+  console.log('[SABR]', 'Formats configured');
+
+  console.log('[SABR]', 'Building DASH manifest');
+  const manifestUri = `data:application/dash+xml;base64,${btoa(await videoInfo.toDash({
+    manifest_options: {
+      is_sabr: true,
+      captions_format: 'vtt',
+      include_thumbnails: false
+    }
+  }))}`;
+  console.log('[SABR]', 'DASH manifest built');
+  return manifestUri;
 }
 
 async function mintContentWebPO() {

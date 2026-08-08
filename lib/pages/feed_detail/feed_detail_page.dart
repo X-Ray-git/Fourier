@@ -6,7 +6,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/constants/constants.dart';
 import '../../http/feed_http.dart';
@@ -14,7 +13,7 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../models/feed.dart';
 import '../../router/app_pages.dart';
-import '../../utils/security_utils.dart';
+import '../../services/external_link_service.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
@@ -141,18 +140,7 @@ class FeedDetailController extends GetxController {
 
   Future<void> openOriginalArticle(ArticleModel article) async {
     if (article.url.isEmpty) return;
-
-    final uri = SecurityUtils.parseHttpUrl(article.url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(article.url);
   }
 
   void handleMacArticleTap(ArticleModel article) {

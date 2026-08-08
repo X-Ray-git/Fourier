@@ -15,6 +15,7 @@ import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../models/folo_account_profile.dart';
 import '../../services/account_service.dart';
+import '../../services/android_haptics_service.dart';
 import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/llm_config.dart';
@@ -65,6 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _appearanceMode;
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
+  late bool _androidHapticsEnabled;
 
   void _showOpenSourceLicenses() {
     showLicensePage(
@@ -123,6 +125,7 @@ class _SettingsPageState extends State<SettingsPage> {
       'auto_retry_max_count',
       defaultValue: 3,
     );
+    _androidHapticsEnabled = AndroidHapticsService.isEnabled;
   }
 
   @override
@@ -811,7 +814,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _buildShortcutItem(context, 'Cmd + R', '刷新文章列表'),
     _buildShortcutItem(context, 'M', '时间线切换已读；垃圾拦截移除'),
     _buildShortcutItem(context, 'K', '垃圾拦截保留文章'),
-    _buildShortcutItem(context, 'N', '误分类：时间线移入垃圾拦截；垃圾拦截保留并标为已读'),
+    _buildShortcutItem(context, 'N', '纠正分类：时间线移入垃圾拦截；垃圾拦截保留文章（同时标为已读）'),
     _buildShortcutItem(context, 'B', '在浏览器中打开原文'),
     _buildShortcutItem(context, 'Shift + B', '标为已读并打开；垃圾拦截移除并打开'),
     _buildShortcutItem(context, 'C', '复制原文全文为 Markdown'),
@@ -1903,6 +1906,41 @@ class _SettingsPageState extends State<SettingsPage> {
               if (val != null) _setBadgeStrategy(val);
             },
           ),
+
+          const SizedBox(height: 32),
+
+          // 交互反馈（仅 Android）
+          if (Platform.isAndroid) ...[
+            Text(
+              '交互反馈',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '文章翻页、垃圾拦截侧滑确认、已读切换等关键动作的触觉反馈',
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: SwitchListTile(
+                title: const Text('触觉反馈'),
+                subtitle: const Text('开启后关键操作会轻微振动'),
+                value: _androidHapticsEnabled,
+                onChanged: (enabled) {
+                  setState(() => _androidHapticsEnabled = enabled);
+                  unawaited(AndroidHapticsService.setEnabled(enabled));
+                },
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
 
           const SizedBox(height: 32),
 

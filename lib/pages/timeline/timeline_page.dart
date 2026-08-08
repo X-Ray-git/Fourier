@@ -8,7 +8,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/refresh_aware_scroll_physics.dart';
@@ -21,6 +20,7 @@ import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
 
@@ -30,8 +30,8 @@ import '../../router/app_pages.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/article_markdown_export_service.dart';
+import '../../services/external_link_service.dart';
 import '../../services/undo_service.dart';
-import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
 import '../main/main_controller.dart';
 import '../subscriptions/subscriptions_controller.dart';
@@ -833,18 +833,7 @@ class _TimelinePageState extends State<TimelinePage> {
 
   Future<void> _openOriginalArticle(ArticleModel article) async {
     if (article.url.isEmpty) return;
-
-    final uri = SecurityUtils.parseHttpUrl(article.url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(article.url);
   }
 
   Map<String, Object?> _timelineProbeFields({ArticleModel? article}) {
@@ -1379,11 +1368,8 @@ class _TimelinePageState extends State<TimelinePage> {
         content = ListView(
           physics: _refreshPhysics,
           padding: EdgeInsets.only(
-            top: MediaQuery.paddingOf(context).top,
-            bottom:
-                8 +
-                kBottomNavigationBarHeight +
-                MediaQuery.of(context).padding.bottom,
+            top: MobileViewportInsets.listTopInset(context).top,
+            bottom: MobileViewportInsets.listBottomInset(context).bottom,
           ),
           children: [
             Padding(
@@ -1400,11 +1386,8 @@ class _TimelinePageState extends State<TimelinePage> {
           physics: _refreshPhysics,
           controller: _scrollController,
           padding: EdgeInsets.only(
-            top: MediaQuery.paddingOf(context).top,
-            bottom:
-                8 +
-                kBottomNavigationBarHeight +
-                MediaQuery.of(context).padding.bottom,
+            top: MobileViewportInsets.listTopInset(context).top,
+            bottom: MobileViewportInsets.listBottomInset(context).bottom,
           ),
           itemCount: controller.articles.length,
           itemBuilder: (context, index) {
@@ -1419,12 +1402,18 @@ class _TimelinePageState extends State<TimelinePage> {
               article: article,
               isSelected: false,
               onTap: () {
+                final sequence = controller.articles.toList();
+                // PageView 索引按 entryId 重新查找，禁止使用可能已过期的
+                // 旧下标（点击前固定当前可见顺序）。
+                final resolvedIndex = sequence.indexWhere(
+                  (candidate) => candidate.entryId == article.entryId,
+                );
                 Get.toNamed(
                   Routes.article,
                   arguments: {
                     'article': article,
-                    'sequence': controller.articles.toList(),
-                    'index': articleIndex,
+                    'sequence': sequence,
+                    'index': resolvedIndex < 0 ? 0 : resolvedIndex,
                   },
                 );
               },
@@ -1601,7 +1590,9 @@ class _LocalTimelineSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 与真实列表共用共享顶部 inset，避免骨架卡片埋入毛玻璃 AppBar。
     return ShimmerFadeList(
+      padding: MobileViewportInsets.listTopInset(context),
       itemCount: 6,
       itemBuilder: (context, index) => Padding(
         padding: ArticleCardChrome.outerPadding,

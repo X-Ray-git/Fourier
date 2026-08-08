@@ -49,7 +49,7 @@ class MacOSArticleMenuTarget {
   }
 
   String get misclassifyLabel {
-    return isReviewContext ? '误分类：保留并标为已读' : '误分类：移入垃圾拦截';
+    return isReviewContext ? '保留并标为已读' : '移入垃圾拦截并标为已读';
   }
 
   String get misclassifyDisabledLabel {

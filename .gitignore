@@ -58,6 +58,10 @@ android/build/
 # Local agent/tool configuration
 .antigravitycli/
 
+# Local Hive databases
+*.hive
+*.hive.lock
+
 # Local scratch/playground directory for temporary scripts and data
 scratch/*
 !scratch/.gitkeep

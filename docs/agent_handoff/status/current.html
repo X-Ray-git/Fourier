@@ -54,7 +54,7 @@
 
 - `main` 是当前集成分支。
 - Fourier 品牌迁移与离线工程 Wiki 已通过独立 merge commit 合入 `main`。应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和图标均已迁移；旧 Auto Folo 名称只允许存在于历史证据、旧设置导入与明确的迁移兼容说明中。
-- GitHub 仓库名称和远端 URL 仍保持 `X-Ray-git/auto-folo`，本地目录名也暂未调整；这两项是后续独立迁移，不得为了“清零搜索结果”提前改坏有效链接或现有 worktree。
+- GitHub 仓库、本地目录和 `origin` 已统一迁移为大写品牌名 `Fourier`：远端是 `X-Ray-git/Fourier`，本地 clone 目录名是 `Fourier`。旧仓库 URL 只依赖 GitHub 重定向，不得再作为当前链接写入代码或文档。
 - Wiki 采用可离线双击的单文件 HTML 页面体系，正文以 Markdown 语法内嵌；`index.html` 是阅读入口，维护规则见 `meta/site-guide.html`。
 - Android 设计迁移已通过 merge commit `bd8c1b8` 合入 `main`；新代理应以 `main` 中的移动端实现为当前事实，不再等待旧 `android` 分支。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。

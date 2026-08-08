@@ -10,7 +10,7 @@ class BilibiliEmbedInfo {
     required this.page,
   });
 
-  static const clientBaseUrl = 'https://github.com/X-Ray-git/auto-folo/';
+  static const clientBaseUrl = 'https://github.com/X-Ray-git/Fourier/';
 
   final String? bvid;
   final int? aid;

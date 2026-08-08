@@ -3,7 +3,7 @@ import 'dart:convert';
 class YouTubeEmbedInfo {
   const YouTubeEmbedInfo._(this.videoId);
 
-  static const clientBaseUrl = 'https://github.com/X-Ray-git/auto-folo/';
+  static const clientBaseUrl = 'https://github.com/X-Ray-git/Fourier/';
 
   final String videoId;
 

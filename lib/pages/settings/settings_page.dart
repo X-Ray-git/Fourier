@@ -18,6 +18,8 @@ import '../../services/account_service.dart';
 import '../../services/android_haptics_service.dart';
 import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
+import '../../services/article_relation_prompt_service.dart';
+import '../../services/article_relation_service.dart';
 import '../../services/llm_config.dart';
 import '../../services/settings_backup_service.dart';
 import '../../services/folo_auth_service.dart';
@@ -1078,7 +1080,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               loadConfig: LlmConfig.loadRelation,
                               saveConfig: LlmConfig.saveRelation,
                               resetConfig: LlmConfig.resetRelation,
-                              showConcurrency: false,
+                              concurrencyEditable: false,
+                              showRelationSchedule: true,
                             ),
                           ],
                         ),
@@ -1088,7 +1091,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         key: _macPromptKey,
                         icon: Icons.edit_note_rounded,
                         title: 'Prompt',
-                        subtitle: '自定义摘要、翻译和 AI 过滤规则。修改后从下一次请求开始生效。',
+                        subtitle: '自定义摘要、翻译、质量过滤和关系判断规则。修改后从下一次请求开始生效。',
                         child: Column(
                           children: [
                             _PromptCard(
@@ -1129,6 +1132,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               savePrompt: ArticleFilterService.setPrompt,
                               resetPrompt: ArticleFilterService.resetPrompt,
                             ),
+                            const SizedBox(height: 10),
+                            _RelationPromptCard(),
                           ],
                         ),
                       ),
@@ -1615,13 +1620,14 @@ class _SettingsPageState extends State<SettingsPage> {
               loadConfig: LlmConfig.loadRelation,
               saveConfig: LlmConfig.saveRelation,
               resetConfig: LlmConfig.resetRelation,
-              showConcurrency: false,
+              concurrencyEditable: false,
+              showRelationSchedule: true,
             ),
             const SizedBox(height: 24),
             const MobileSettingsSectionHeader(
               icon: Icons.notes_rounded,
               title: 'Prompt',
-              subtitle: '大段文本保留明确的保存与重置操作',
+              subtitle: '自定义摘要、翻译、质量过滤和关系判断规则',
             ),
             _PromptCard(
               title: '摘要 AI Prompt',
@@ -1657,6 +1663,8 @@ class _SettingsPageState extends State<SettingsPage> {
               savePrompt: ArticleFilterService.setPrompt,
               resetPrompt: ArticleFilterService.resetPrompt,
             ),
+            const SizedBox(height: 10),
+            _RelationPromptCard(),
             const SizedBox(height: 24),
             const MobileSettingsSectionHeader(
               icon: Icons.info_outline_rounded,
@@ -2137,7 +2145,8 @@ class _SettingsPageState extends State<SettingsPage> {
             loadConfig: LlmConfig.loadRelation,
             saveConfig: LlmConfig.saveRelation,
             resetConfig: LlmConfig.resetRelation,
-            showConcurrency: false,
+            concurrencyEditable: false,
+            showRelationSchedule: true,
           ),
 
           const SizedBox(height: 12),
@@ -2179,6 +2188,8 @@ class _SettingsPageState extends State<SettingsPage> {
             savePrompt: ArticleFilterService.setPrompt,
             resetPrompt: ArticleFilterService.resetPrompt,
           ),
+          const SizedBox(height: 12),
+          _RelationPromptCard(),
 
           const SizedBox(height: 24),
 
@@ -3881,6 +3892,53 @@ class _PromptCardState extends State<_PromptCard> {
   }
 }
 
+class _RelationPromptCard extends StatelessWidget {
+  const _RelationPromptCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _PromptCard(
+      title: '关系判断 Prompt',
+      subtitle: '自定义相关文章关系判断规则（返回必须是特定 JSON 格式）',
+      hintText: '输入关系判断规则...',
+      emptyWarning: '请保留默认的 JSON 结构和关系组约束',
+      savedMessage: '新关系批次将从下次请求生效',
+      helpText: '程序会自动提供新摘要、历史摘要和文章元信息；Prompt 不应依赖正文或当前已读状态。',
+      loadPrompt: ArticleRelationPromptService.getPrompt,
+      savePrompt: ArticleRelationPromptService.setPrompt,
+      resetPrompt: ArticleRelationPromptService.resetPrompt,
+    );
+  }
+}
+
+class _LockedRelationParameter extends StatelessWidget {
+  const _LockedRelationParameter({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    if (Platform.isMacOS) {
+      return AppGlassTextField(
+        initialValue: value,
+        label: label,
+        helper: '当前版本不建议修改',
+        enabled: false,
+      );
+    }
+    return TextFormField(
+      initialValue: value,
+      enabled: false,
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: '当前版本不建议修改',
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+}
+
 class _ConnectionTestResult {
   final bool ok;
   final String message;
@@ -3954,6 +4012,7 @@ class _AutoSavedSettingsTextField extends StatelessWidget {
   final String? helper;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
+  final bool enabled;
 
   const _AutoSavedSettingsTextField({
     required this.controller,
@@ -3965,6 +4024,7 @@ class _AutoSavedSettingsTextField extends StatelessWidget {
     this.helper,
     this.keyboardType,
     this.inputFormatters,
+    this.enabled = true,
   });
 
   @override
@@ -3979,6 +4039,7 @@ class _AutoSavedSettingsTextField extends StatelessWidget {
         textInputAction: TextInputAction.done,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
+        enabled: enabled,
         onFieldSubmitted: (_) => onCommit(),
       );
     }
@@ -3995,6 +4056,7 @@ class _AutoSavedSettingsTextField extends StatelessWidget {
       textInputAction: TextInputAction.done,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
+      enabled: enabled,
       onSubmitted: (_) => onCommit(),
     );
   }
@@ -4006,7 +4068,8 @@ class _LlmConfigCard extends StatefulWidget {
   final LlmConfig Function() loadConfig;
   final Future<void> Function(LlmConfig) saveConfig;
   final Future<void> Function() resetConfig;
-  final bool showConcurrency;
+  final bool concurrencyEditable;
+  final bool showRelationSchedule;
 
   const _LlmConfigCard({
     required this.title,
@@ -4014,7 +4077,8 @@ class _LlmConfigCard extends StatefulWidget {
     required this.loadConfig,
     required this.saveConfig,
     required this.resetConfig,
-    this.showConcurrency = true,
+    this.concurrencyEditable = true,
+    this.showRelationSchedule = false,
   });
 
   @override
@@ -4160,9 +4224,7 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
     if (isMac) {
       return _MacInlineExpansion(
         title: widget.title,
-        subtitle: widget.showConcurrency
-            ? '${_config.model}  |  并发 ${_config.concurrency}'
-            : '${_config.model}  |  单批串行',
+        subtitle: '${_config.model}  |  并发 ${_config.concurrency}',
         child: content,
       );
     }
@@ -4172,11 +4234,7 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
         widget.title,
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
-      subtitle: Text(
-        widget.showConcurrency
-            ? '${_config.model}  |  并发 ${_config.concurrency}'
-            : '${_config.model}  |  单批串行',
-      ),
+      subtitle: Text('${_config.model}  |  并发 ${_config.concurrency}'),
       children: [
         Padding(
           // 顶部预留 10px：第一个子项是带浮动 label 的下拉框（InputDecorator +
@@ -4244,17 +4302,21 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
           onChanged: (value) =>
               _saveImmediately(_config.copyWith(maxTokens: value)),
         ),
-        if (widget.showConcurrency) ...[
-          const SizedBox(height: 10),
-          _AutoSavedSettingsTextField(
-            controller: _concurrencyController,
-            focusNode: _concurrencyFocusNode,
-            label: '并发数',
-            useGlass: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onCommit: _saveConcurrency,
-          ),
+        const SizedBox(height: 10),
+        _AutoSavedSettingsTextField(
+          controller: _concurrencyController,
+          focusNode: _concurrencyFocusNode,
+          label: '并发数',
+          useGlass: true,
+          helper: widget.concurrencyEditable ? null : '当前版本固定为单批串行',
+          enabled: widget.concurrencyEditable,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onCommit: _saveConcurrency,
+        ),
+        if (widget.showRelationSchedule) ...[
+          const SizedBox(height: 14),
+          _buildRelationScheduleFields(isMac: true),
         ],
         const SizedBox(height: 14),
         Align(
@@ -4315,23 +4377,60 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
           onChanged: (value) =>
               _saveImmediately(_config.copyWith(maxTokens: value)),
         ),
-        if (widget.showConcurrency) ...[
-          const SizedBox(height: 12),
-          _AutoSavedSettingsTextField(
-            controller: _concurrencyController,
-            focusNode: _concurrencyFocusNode,
-            label: '并发数',
-            useGlass: false,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onCommit: _saveConcurrency,
-          ),
+        const SizedBox(height: 12),
+        _AutoSavedSettingsTextField(
+          controller: _concurrencyController,
+          focusNode: _concurrencyFocusNode,
+          label: '并发数',
+          useGlass: false,
+          helper: widget.concurrencyEditable ? null : '当前版本固定为单批串行',
+          enabled: widget.concurrencyEditable,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onCommit: _saveConcurrency,
+        ),
+        if (widget.showRelationSchedule) ...[
+          const SizedBox(height: 16),
+          _buildRelationScheduleFields(isMac: false),
         ],
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,
           child: OutlinedButton(onPressed: _reset, child: const Text('重置默认')),
         ),
+      ],
+    );
+  }
+
+  Widget _buildRelationScheduleFields({required bool isMac}) {
+    final fields = [
+      const _LockedRelationParameter(
+        label: '每批新摘要',
+        value: '${ArticleRelationService.batchSize}',
+      ),
+      const _LockedRelationParameter(
+        label: '历史摘要窗口',
+        value: '${ArticleRelationService.historyLimit}',
+      ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('调度参数（当前固定）', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 10),
+        if (isMac)
+          Row(
+            children: [
+              Expanded(child: fields.first),
+              const SizedBox(width: 10),
+              Expanded(child: fields.last),
+            ],
+          )
+        else ...[
+          fields.first,
+          const SizedBox(height: 12),
+          fields.last,
+        ],
       ],
     );
   }

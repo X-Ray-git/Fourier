@@ -13,6 +13,7 @@ abstract final class GStorage {
   static late Box<dynamic> analysisEvents;
   static late Box<dynamic> articleRelations;
   static late Box<dynamic> relationBatches;
+  static late Box<dynamic> llmUsageEvents;
 
   static Future<void> init() async {
     final appDir = await getApplicationDocumentsDirectory();
@@ -45,6 +46,8 @@ abstract final class GStorage {
     // 文章关系属于账号级派生数据，不进入设置导入导出。
     articleRelations = await Hive.openBox('articleRelations');
     relationBatches = await Hive.openBox('relationBatches');
+    // 请求级 LLM 元数据，不保存 Prompt、正文、输出或思维链。
+    llmUsageEvents = await Hive.openBox('llmUsageEvents');
   }
 
   static Future<void> close() async {
@@ -59,6 +62,7 @@ abstract final class GStorage {
       analysisEvents.close(),
       articleRelations.close(),
       relationBatches.close(),
+      llmUsageEvents.close(),
     ]);
   }
 }

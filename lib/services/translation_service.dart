@@ -9,6 +9,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/html_entity_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
+import 'llm_usage_ledger.dart';
 import 'account_session_guard.dart';
 
 enum TranslationStatus { idle, pending, done, error }
@@ -311,11 +312,18 @@ abstract final class TranslationService {
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
     for (int attempt = 1; attempt <= totalAttempts; attempt++) {
+      final llmConfig = LlmConfig.loadTranslate();
+      final trace = LlmRequestTrace(
+        task: LlmTaskType.translation,
+        config: llmConfig,
+        prompt: systemPrompt,
+        articleId: article.entryId,
+        attempt: attempt,
+      );
       try {
         _dio.options.headers['Authorization'] = 'Bearer $apiKey';
         _dio.options.headers['Content-Type'] = 'application/json';
 
-        final llmConfig = LlmConfig.loadTranslate();
         final requestBody = <String, dynamic>{
           'messages': [
             {'role': 'system', 'content': systemPrompt},
@@ -329,6 +337,10 @@ abstract final class TranslationService {
         final response = await _dio.post(
           '/chat/completions',
           data: requestBody,
+        );
+        await trace.recordResponse(
+          response.data,
+          httpStatus: response.statusCode,
         );
         if (!AccountSessionGuard.isCurrent(accountRevision)) {
           throw const _StaleAccountOperation();
@@ -379,8 +391,10 @@ abstract final class TranslationService {
           record,
           accountRevision: accountRevision,
         );
+        await trace.complete();
         return record;
       } catch (e) {
+        await trace.fail(e);
         if (e is _StaleAccountOperation ||
             !AccountSessionGuard.isCurrent(accountRevision)) {
           rethrow;
@@ -498,10 +512,12 @@ abstract final class TranslationService {
         i: i,
         total: chunks.length,
         chunkHtml: chunks[i],
+        articleId: article.entryId,
         articleTitle: article.title,
         apiKey: apiKey,
         targetLang: targetLang,
         llmConfig: llmConfig,
+        attempt: attempt,
       );
     });
 
@@ -544,10 +560,12 @@ abstract final class TranslationService {
     required int i,
     required int total,
     required String chunkHtml,
+    required String articleId,
     required String articleTitle,
     required String apiKey,
     required String targetLang,
     required LlmConfig llmConfig,
+    required int attempt,
   }) async {
     final isFirst = i == 0;
     final systemPrompt = getPrompt(targetLang);
@@ -558,6 +576,16 @@ abstract final class TranslationService {
         : '这是文章的第 ${i + 1}/$total 段。\n'
               'JSON 结构必须是：{"translated_html":"..."}，不要返回标题。\n\n'
               'HTML：\n<html>$chunkHtml</html>';
+
+    final trace = LlmRequestTrace(
+      task: LlmTaskType.translation,
+      config: llmConfig,
+      prompt: systemPrompt,
+      articleId: articleId,
+      chunkIndex: i,
+      chunkCount: total,
+      attempt: attempt,
+    );
 
     try {
       // 每个并发请求用独立 header，避免共享 Dio 实例的状态竞争
@@ -580,10 +608,14 @@ abstract final class TranslationService {
         },
         options: options,
       );
+      await trace.recordResponse(
+        response.data,
+        httpStatus: response.statusCode,
+      );
 
       final content = _extractMessageContent(response.data);
       if (content == null || content.trim().isEmpty) {
-        return _ChunkResult(i, error: '空响应');
+        throw StateError('空响应');
       }
 
       Map<String, dynamic> parsed;
@@ -599,7 +631,7 @@ abstract final class TranslationService {
           final reason = finishReason == 'length'
               ? '响应被截断'
               : 'JSON 解析失败：${_compactFormatException(e)}';
-          return _ChunkResult(i, error: reason);
+          throw FormatException(reason);
         }
       }
 
@@ -610,14 +642,17 @@ abstract final class TranslationService {
           : null;
       final html = (parsed['translated_html'] ?? '').toString().trim();
       if (html.isEmpty) {
-        return _ChunkResult(i, error: '缺少 translated_html');
+        throw StateError('缺少 translated_html');
       }
-      return _ChunkResult(
+      final result = _ChunkResult(
         i,
         title: (title?.isNotEmpty == true) ? title : null,
         html: html,
       );
+      await trace.complete();
+      return result;
     } catch (e) {
+      await trace.fail(e);
       return _ChunkResult(i, error: e.toString());
     }
   }

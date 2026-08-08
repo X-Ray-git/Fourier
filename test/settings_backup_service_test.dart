@@ -45,6 +45,18 @@ void main() {
       expect(payload.summary.hasFoloCredentials, isTrue);
     });
 
+    test('keeps the configurable relation prompt', () {
+      final payload = SettingsBackupService.parseJson('''
+{
+  "type": "fourier_settings",
+  "version": 1,
+  "settings": {"relation_prompt": "relation rules"}
+}
+''');
+
+      expect(payload.settings['relation_prompt'], 'relation rules');
+    });
+
     test('keeps an Auto Folo version 1 session token for migration', () {
       final payload = SettingsBackupService.parseJson('''
 {

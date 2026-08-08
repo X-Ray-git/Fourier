@@ -48,6 +48,7 @@ abstract final class SettingsBackupService {
   static const _translationPrompt = 'translation_prompt';
   static const _summaryPrompt = 'summary_prompt';
   static const _filterPrompt = 'filter_prompt';
+  static const _relationPrompt = 'relation_prompt';
 
   static const _llmPrefixes = [
     'llm_translate_',
@@ -73,6 +74,7 @@ abstract final class SettingsBackupService {
     _translationPrompt,
     _summaryPrompt,
     _filterPrompt,
+    _relationPrompt,
   };
 
   static const _stringKeys = {
@@ -83,6 +85,7 @@ abstract final class SettingsBackupService {
     _translationPrompt,
     _summaryPrompt,
     _filterPrompt,
+    _relationPrompt,
   };
 
   static const _intKeys = {

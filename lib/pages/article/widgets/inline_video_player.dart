@@ -77,8 +77,7 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       ArticleVideoPlaybackShortcut.deactivate(this);
     }
 
-    await Navigator.push(
-      context,
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (_) => FullscreenVideoPage(controller: _controller!),
       ),

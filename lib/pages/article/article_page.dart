@@ -19,6 +19,7 @@ import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
+import '../../common/widgets/pill_tag.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
 import '../../services/article_image_cache_service.dart';
@@ -478,7 +479,7 @@ class ArticleController extends GetxController {
   }
 
   void openImagePreview(String imageUrl, BuildContext context) {
-    Navigator.of(context).push(
+    Navigator.of(context, rootNavigator: true).push(
       HeroDialogRoute(
         builder: (context) => ImageGalleryPage(
           articleId: article.entryId,
@@ -1846,6 +1847,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     }
 
     final usesCollapsibleMacHeader = Platform.isMacOS && widget.isSplitView;
+    final showsRelatedArticleBackButton =
+        usesCollapsibleMacHeader && Navigator.of(context).canPop();
     final headerRule = Stack(
       fit: StackFit.expand,
       children: [
@@ -1865,6 +1868,21 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
     Widget scaffold = Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: !usesCollapsibleMacHeader,
+        leadingWidth: showsRelatedArticleBackButton ? 45 : null,
+        leading: showsRelatedArticleBackButton
+            ? Padding(
+                padding: const EdgeInsets.only(left: 11),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppGlassIconButton(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    tooltip: '返回上一篇文章 (Esc)',
+                    onPressed: _closeArticle,
+                  ),
+                ),
+              )
+            : null,
         title: MacOSWindowDragArea(
           child: usesCollapsibleMacHeader
               ? ValueListenableBuilder<double>(
@@ -3015,13 +3033,13 @@ class _ArticleRelationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final local = item.article;
-    final status = local == null
-        ? '仅保留原文链接'
+    final (status, handled) = local == null
+        ? ('仅原文', true)
         : local.isRejectedByAi
-        ? '垃圾拦截'
+        ? (local.isRead ? '已移除' : '待审核', local.isRead)
         : local.isRead
-        ? '已读'
-        : '未读';
+        ? ('已读', true)
+        : ('未读', false);
     final imageUrl = item.node.feedImage;
     return InkWell(
       onTap: onTap,
@@ -3078,14 +3096,35 @@ class _ArticleRelationRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    '${item.node.feedTitle} · $status',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.78),
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.node.feedTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.78),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      PillTag(
+                        label: status,
+                        backgroundColor: handled
+                            ? cs.onSurface.withValues(alpha: 0.07)
+                            : cs.primary.withValues(alpha: 0.12),
+                        foregroundColor: handled
+                            ? cs.onSurfaceVariant.withValues(alpha: 0.78)
+                            : cs.primary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        fontSize: 10,
+                      ),
+                    ],
                   ),
                 ],
               ),

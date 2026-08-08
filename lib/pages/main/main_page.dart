@@ -151,9 +151,7 @@ class _MainPageState extends State<MainPage> {
           title: Obx(() {
             final index = controller.currentIndex.value;
             if (index == 1) {
-              return FilterReviewStatusTitle(
-                humanCount: _timelineController.filterCount.value,
-              );
+              return const FilterReviewStatusTitle();
             }
             return Text(
               _mobileTitles[index],

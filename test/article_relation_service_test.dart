@@ -123,6 +123,21 @@ void main() {
     expect(ArticleRelationService.historyCount, 256);
   });
 
+  test('历史窗口超限时固定淘汰 32 篇以稳定后续请求前缀', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+
+    for (var batch = 0; batch < 8; batch++) {
+      await _enqueueAndComplete(batch * 32, 32);
+    }
+    expect(ArticleRelationService.historyCount, 256);
+
+    await _enqueueAndComplete(256, 1, flushPartial: true);
+    expect(ArticleRelationService.historyCount, 225);
+
+    await _enqueueAndComplete(257, 20, flushPartial: true);
+    expect(ArticleRelationService.historyCount, 245);
+  });
+
   test('尾批只有显式 flushPartial 时才发车', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
     for (var i = 0; i < 7; i++) {
@@ -146,6 +161,29 @@ void main() {
     expect(tail?.newNodes.length, 7);
     expect(ArticleRelationService.pendingCount, 7);
   });
+}
+
+Future<void> _enqueueAndComplete(
+  int start,
+  int count, {
+  bool flushPartial = false,
+}) async {
+  for (var offset = 0; offset < count; offset++) {
+    final index = start + offset;
+    await ArticleRelationService.onSummaryCompleted(
+      _article(index),
+      SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '摘要 $index',
+        updatedAt: 1000 + index,
+      ),
+    );
+  }
+  final input = await ArticleRelationService.prepareNextBatch(
+    flushPartial: flushPartial,
+  );
+  expect(input, isNotNull);
+  await ArticleRelationService.completeBatch(input!, const []);
 }
 
 ArticleModel _article(int index) {

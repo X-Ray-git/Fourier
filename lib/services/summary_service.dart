@@ -8,6 +8,7 @@ import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
+import 'llm_usage_ledger.dart';
 import 'account_session_guard.dart';
 import 'article_relation_service.dart';
 
@@ -246,11 +247,18 @@ abstract final class SummaryService {
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
     for (int attempt = 1; attempt <= totalAttempts; attempt++) {
+      final llmConfig = LlmConfig.loadSummary();
+      final trace = LlmRequestTrace(
+        task: LlmTaskType.summary,
+        config: llmConfig,
+        prompt: systemPrompt,
+        articleId: article.entryId,
+        attempt: attempt,
+      );
       try {
         _dio.options.headers['Authorization'] = 'Bearer $apiKey';
         _dio.options.headers['Content-Type'] = 'application/json';
 
-        final llmConfig = LlmConfig.loadSummary();
         final requestBody = <String, dynamic>{
           'messages': [
             {'role': 'system', 'content': systemPrompt},
@@ -268,6 +276,10 @@ abstract final class SummaryService {
         final response = await _dio.post(
           '/chat/completions',
           data: requestBody,
+        );
+        await trace.recordResponse(
+          response.data,
+          httpStatus: response.statusCode,
         );
         if (!AccountSessionGuard.isCurrent(accountRevision)) {
           throw const _StaleAccountOperation();
@@ -308,8 +320,10 @@ abstract final class SummaryService {
           accountRevision: accountRevision,
           deferRelationTail: deferRelationTail,
         );
+        await trace.complete();
         return record;
       } catch (e) {
+        await trace.fail(e);
         if (e is _StaleAccountOperation ||
             !AccountSessionGuard.isCurrent(accountRevision)) {
           rethrow;

@@ -12,6 +12,8 @@ import 'package:get/get.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/auto_filter_worker.dart';
+import '../../services/article_relation_service.dart';
+import '../../services/article_relation_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/android_haptics_service.dart';
 import '../../services/external_link_service.dart';
@@ -38,6 +40,7 @@ import '../../common/widgets/mobile_blur_app_bar.dart';
 import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
+import 'widgets/filter_review_pipeline_status.dart';
 
 class _ReviewAnimProbe {
   static const bool _requested = bool.fromEnvironment(
@@ -740,13 +743,17 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     final body = Obx(() {
       final q = AutoFilterWorker.queuedCount.value;
       final p = AutoFilterWorker.processingCount.value;
-      final llmActive = q > 0 || p > 0;
+      ArticleRelationService.recordsVersion.value;
+      final relationActive =
+          ArticleRelationService.pendingCount > 0 ||
+          ArticleRelationWorker.processingCount.value > 0;
+      final llmActive = q > 0 || p > 0 || relationActive;
 
       return Column(
         children: [
           Expanded(
             child: _articles.isEmpty
-                ? _buildEmptyState(cs, llmActive: llmActive, llmCount: q + p)
+                ? _buildEmptyState(cs, llmActive: llmActive)
                 : ListView.builder(
                     padding: EdgeInsets.only(
                       top:
@@ -830,9 +837,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
 
     return Scaffold(
-      appBar: MobileBlurAppBar(
-        title: Obx(() => FilterReviewStatusTitle(humanCount: _articles.length)),
-      ),
+      appBar: MobileBlurAppBar(title: const FilterReviewStatusTitle()),
       body: body,
     );
   }
@@ -855,7 +860,11 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
               body: Obx(() {
                 final q = AutoFilterWorker.queuedCount.value;
                 final p = AutoFilterWorker.processingCount.value;
-                final llmActive = q > 0 || p > 0;
+                ArticleRelationService.recordsVersion.value;
+                final relationActive =
+                    ArticleRelationService.pendingCount > 0 ||
+                    ArticleRelationWorker.processingCount.value > 0;
+                final llmActive = q > 0 || p > 0 || relationActive;
 
                 return ScrollbarTheme(
                   data: MacGlassScrollbarStyle.articlePaneTheme(context),
@@ -882,11 +891,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                             child: DelayedVisibility(
                               visible: _articles.isEmpty,
                               delay: const Duration(milliseconds: 220),
-                              child: _buildEmptyState(
-                                cs,
-                                llmActive: llmActive,
-                                llmCount: q + p,
-                              ),
+                              child: _buildEmptyState(cs, llmActive: llmActive),
                             ),
                           ),
                       ],
@@ -963,11 +968,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     );
   }
 
-  Widget _buildEmptyState(
-    ColorScheme cs, {
-    required bool llmActive,
-    required int llmCount,
-  }) {
+  Widget _buildEmptyState(ColorScheme cs, {required bool llmActive}) {
     final bool allDone = !llmActive;
     return Center(
       child: Column(
@@ -980,7 +981,17 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
           ),
           if (llmActive) ...[
             const SizedBox(height: 16),
-            _LlmPill(cs: cs, count: llmCount),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const FilterReviewPipelineStatus(
+                layout: FilterReviewPipelineLayout.column,
+                fontSize: 11,
+              ),
+            ),
           ],
         ],
       ),
@@ -1072,92 +1083,23 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 }
 
 class FilterReviewStatusTitle extends StatelessWidget {
-  final int humanCount;
-
-  const FilterReviewStatusTitle({super.key, required this.humanCount});
+  const FilterReviewStatusTitle({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Obx(() {
-      final q = AutoFilterWorker.queuedCount.value;
-      final p = AutoFilterWorker.processingCount.value;
-      final llmActive = q > 0 || p > 0;
-      final llmCount = q + p;
-
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            '垃圾拦截',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (humanCount == 0 && !llmActive) ...[
-                  Icon(
-                    Icons.check_circle,
-                    size: 12,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '全部处理完毕',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ] else ...[
-                  if (humanCount > 0) ...[
-                    Icon(Icons.touch_app, size: 12, color: cs.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$humanCount 篇待处理',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: cs.primary,
-                      ),
-                    ),
-                  ],
-                  if (humanCount > 0 && llmActive)
-                    Text(
-                      '  ·  ',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  if (llmActive) ...[
-                    SizedBox(
-                      width: 10,
-                      height: 10,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$llmCount 篇判定中',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-        ],
-      );
-    });
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '垃圾拦截',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        Padding(
+          padding: EdgeInsets.only(top: 2),
+          child: FilterReviewPipelineStatus(fontSize: 9.5),
+        ),
+      ],
+    );
   }
 }
 
@@ -1637,10 +1579,6 @@ class _MacReviewHeader extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 0, 0),
             child: Obx(() {
               final humanCount = articles.length;
-              final q = AutoFilterWorker.queuedCount.value;
-              final p = AutoFilterWorker.processingCount.value;
-              final llmActive = q > 0 || p > 0;
-              final llmCount = q + p;
               final timelineController = Get.isRegistered<TimelineController>()
                   ? Get.find<TimelineController>()
                   : null;
@@ -1648,12 +1586,6 @@ class _MacReviewHeader extends StatelessWidget {
 
               return Row(
                 children: [
-                  Icon(
-                    Icons.shield_outlined,
-                    size: 17,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: MacOSWindowDragArea(
                       child: Column(
@@ -1671,11 +1603,7 @@ class _MacReviewHeader extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            llmActive
-                                ? '$humanCount 篇待处理 · $llmCount 篇判定中'
-                                : humanCount == 0
-                                ? '全部处理完毕'
-                                : '$humanCount 篇待处理',
+                            humanCount == 0 ? '全部处理完毕' : '$humanCount 篇待处理',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1687,15 +1615,9 @@ class _MacReviewHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (llmActive)
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                  const FilterReviewPipelineStatus(
+                    layout: FilterReviewPipelineLayout.column,
+                  ),
                   const SizedBox(width: 10),
                   AppGlassSyncButton(
                     syncing: syncing,
@@ -1936,47 +1858,6 @@ class _ReviewInfoBlock extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── 状态药片行 ──────────
-class _LlmPill extends StatelessWidget {
-  final ColorScheme cs;
-  final int count;
-
-  const _LlmPill({required this.cs, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 10,
-            height: 10,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '$count 篇判定中',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -119,6 +119,7 @@
 - inline player 和全屏 player 都支持空格播放/暂停，但同一时刻只能由当前可见播放器处理全局按键。
 - 普通 inline video 与 YouTube 自定义播放器共用 `ArticleVideoPlaybackShortcut`：开始播放或点击播放器会把它设为当前播放器，裸 `Space`/媒体播放键在文章其他区域仍控制当前播放器；切到另一播放器时转移归属，widget dispose 时释放。YouTube 的 WKWebView 焦点内外会走同一通道并做短时间去重，不得再分别维护两套全局快捷键。
 - 进入全屏前，inline player 如果是 `activePlayer`，应暂时释放该身份；全屏页在首帧后请求焦点并接管空格。退出全屏后，inline player 再恢复 `activePlayer` 和焦点。
+- 普通视频全屏页与图片画廊必须通过 root navigator 打开，避免 macOS 分栏详情区的嵌套路由把全屏内容限制在右栏。YouTube/Bilibili 的 WebView 元素全屏继续由系统原生全屏能力接管，不走 Flutter 嵌套路由。
 - 不要让 inline 与全屏页面同时响应同一次空格事件，否则可能发生连续切换两次、视觉上像“空格无效”。也不要在全屏 widget 尚未挂载完成前同步请求焦点。
 
 ## 普通视频

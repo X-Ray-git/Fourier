@@ -69,6 +69,8 @@ abstract final class ArticleRelationService {
       GStorage.articleRelations.get(_activationKey) as int?;
 
   static int get pendingCount => _readIds(_pendingKey).length;
+  static List<String> get pendingArticleIds =>
+      List.unmodifiable(_readIds(_pendingKey));
   static int get historyCount => _readIds(_historyKey).length;
   static int get groupCount => GStorage.articleRelations.keys
       .whereType<String>()
@@ -93,9 +95,6 @@ abstract final class ArticleRelationService {
       return;
     }
     await recoverCompletedSummaries();
-    if (pendingCount >= batchSize) {
-      _scheduler?.call(flushPartial: false);
-    }
   }
 
   /// 摘要完成并落盘后的唯一正常入队入口。
@@ -244,8 +243,9 @@ abstract final class ArticleRelationService {
       final history = _readIds(_historyKey)
         ..removeWhere(newIds.contains)
         ..addAll(input.newNodes.map((node) => node.articleId));
-      if (history.length > historyLimit) {
-        history.removeRange(0, history.length - historyLimit);
+      while (history.length > historyLimit) {
+        final evictionCount = batchSize.clamp(0, history.length);
+        history.removeRange(0, evictionCount);
       }
 
       final staleGroupKeys = <String>[];

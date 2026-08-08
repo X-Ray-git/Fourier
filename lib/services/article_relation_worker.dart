@@ -9,7 +9,9 @@ import '../models/article_relation.dart';
 import '../utils/storage.dart';
 import 'account_session_guard.dart';
 import 'article_relation_service.dart';
+import 'article_relation_prompt_service.dart';
 import 'llm_config.dart';
+import 'llm_usage_ledger.dart';
 
 class ArticleRelationApiResult {
   const ArticleRelationApiResult({
@@ -36,7 +38,8 @@ class ArticleRelationApiResult {
 abstract final class ArticleRelationWorker {
   static const Duration _timeout = Duration(seconds: 300);
   static const int _maxAttempts = 3;
-  static const String promptVersion = 'relation-v1';
+  static String get promptVersion =>
+      'relation-v1@${ArticleRelationPromptService.promptFingerprint}';
 
   static final Dio _dio = Dio(
     BaseOptions(
@@ -58,6 +61,7 @@ abstract final class ArticleRelationWorker {
   static bool _running = false;
   static bool _scheduled = false;
   static bool _flushPartialRequested = false;
+  static bool _retryRequired = false;
   static int _generation = 0;
 
   @visibleForTesting
@@ -69,14 +73,22 @@ abstract final class ArticleRelationWorker {
   static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    ArticleRelationService.registerScheduler(schedule);
     await ArticleRelationService.initialize();
-    if (ArticleRelationService.pendingCount > 0) {
-      schedule(flushPartial: true);
+    ArticleRelationService.registerScheduler(schedule);
+    final failedBatch = _latestFailedPendingBatch();
+    if (failedBatch != null) {
+      _retryRequired = true;
+      lastError.value = failedBatch.error ?? '上次关系请求失败';
+      return;
+    }
+    if (ArticleRelationService.pendingCount >=
+        ArticleRelationService.batchSize) {
+      schedule(flushPartial: false);
     }
   }
 
   static void schedule({required bool flushPartial}) {
+    if (_retryRequired) return;
     _flushPartialRequested = _flushPartialRequested || flushPartial;
     if (_running || _scheduled) return;
     _scheduled = true;
@@ -87,6 +99,7 @@ abstract final class ArticleRelationWorker {
   }
 
   static void retryPending() {
+    _retryRequired = false;
     lastError.value = null;
     schedule(flushPartial: true);
   }
@@ -162,6 +175,7 @@ abstract final class ArticleRelationWorker {
                 expandOutputBudget && config.maxTokens < 32768
                     ? config.copyWith(maxTokens: 32768)
                     : config,
+                attempt,
               )
             : await override(input);
         if (generation != _generation ||
@@ -231,6 +245,8 @@ abstract final class ArticleRelationWorker {
       ),
     );
     failedThisSession.value++;
+    _retryRequired = true;
+    _flushPartialRequested = false;
     lastError.value = message;
     return false;
   }
@@ -238,6 +254,7 @@ abstract final class ArticleRelationWorker {
   static Future<ArticleRelationApiResult> _request(
     ArticleRelationBatchInput input,
     LlmConfig config,
+    int attempt,
   ) async {
     final apiKey =
         GStorage.setting.get('deepseek_api_key', defaultValue: '') as String;
@@ -252,43 +269,62 @@ abstract final class ArticleRelationWorker {
       labels['H${(i + 1).toString().padLeft(3, '0')}'] = input.historyNodes[i];
     }
 
-    final response = await _dio.post(
-      '/chat/completions',
-      options: Options(
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-      ),
-      data: {
-        'messages': [
-          {'role': 'system', 'content': _prompt},
-          {
-            'role': 'user',
-            'content': jsonEncode({
-              // 稳定历史放在前缀位置，便于 DeepSeek 自动前缀缓存命中；
-              // 本批变化的 new 放在最后。
-              'history': [
-                for (final entry in labels.entries.where(
-                  (entry) => entry.key.startsWith('H'),
-                ))
-                  _nodePayload(entry.key, entry.value),
-              ],
-              'new': [
-                for (final entry in labels.entries.where(
-                  (entry) => entry.key.startsWith('N'),
-                ))
-                  _nodePayload(entry.key, entry.value),
-              ],
-            }),
-          },
-        ],
-        'response_format': {'type': 'json_object'},
-        'stream': false,
-        ...config.toRequestBody(),
-      },
+    final prompt = ArticleRelationPromptService.getPrompt();
+    final trace = LlmRequestTrace(
+      task: LlmTaskType.relation,
+      config: config,
+      prompt: prompt,
+      batchId: input.id,
+      attempt: attempt,
     );
-    return parseResponse(response.data, labels);
+    try {
+      final response = await _dio.post(
+        '/chat/completions',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+        ),
+        data: {
+          'messages': [
+            {'role': 'system', 'content': prompt},
+            {
+              'role': 'user',
+              'content': jsonEncode({
+                // 稳定历史放在前缀位置，便于 DeepSeek 自动前缀缓存命中；
+                // 本批变化的 new 放在最后。
+                'history': [
+                  for (final entry in labels.entries.where(
+                    (entry) => entry.key.startsWith('H'),
+                  ))
+                    _nodePayload(entry.key, entry.value),
+                ],
+                'new': [
+                  for (final entry in labels.entries.where(
+                    (entry) => entry.key.startsWith('N'),
+                  ))
+                    _nodePayload(entry.key, entry.value),
+                ],
+              }),
+            },
+          ],
+          'response_format': {'type': 'json_object'},
+          'stream': false,
+          ...config.toRequestBody(),
+        },
+      );
+      await trace.recordResponse(
+        response.data,
+        httpStatus: response.statusCode,
+      );
+      final result = parseResponse(response.data, labels);
+      await trace.complete();
+      return result;
+    } catch (error) {
+      await trace.fail(error);
+      rethrow;
+    }
   }
 
   @visibleForTesting
@@ -378,19 +414,6 @@ abstract final class ArticleRelationWorker {
     };
   }
 
-  static const String _prompt = '''
-你是文章信息关系分析器。输入包含本批新文章 new 与历史文章 history，每篇只有元信息和摘要。
-
-请找出“信息内容高度重合、阅读其中任意一篇后其余文章基本不再提供明显新增信息”的稀疏关系组。判断只基于内容可替代性，与文章是否已读、用户兴趣或质量无关。即使组内文章当前都未读，只要信息高度可替代，也应建立关系。
-
-不要为仅主题相近、同一人物、同一产品或同一领域的文章建立关系。不要处理日报、周报、链接合集、综合摘要、纯图片或有效摘要不足的文章；不确定时不建立关系。每个输出组必须至少包含一个 N 开头的新文章 ID。
-
-只返回 JSON 对象，不要 Markdown、解释或代码块。结构必须是：
-{"groups":[{"members":["N001","H003"],"reason":"简短说明重合的具体信息","confidence":0.0}]}
-
-没有可靠关系时返回：{"groups":[]}
-''';
-
   static String _normalizeJson(String raw) {
     var value = raw.trim();
     if (value.startsWith('```')) {
@@ -407,6 +430,22 @@ abstract final class ArticleRelationWorker {
     return GStorage.relationBatches.put(record.id, record.toJson());
   }
 
+  static ArticleRelationBatchRecord? _latestFailedPendingBatch() {
+    ArticleRelationBatchRecord? latest;
+    for (final value in GStorage.relationBatches.values) {
+      if (value is! Map) continue;
+      final record = ArticleRelationBatchRecord.fromJson(
+        value.cast<dynamic, dynamic>(),
+      );
+      if (latest == null || record.startedAt > latest.startedAt) {
+        latest = record;
+      }
+    }
+    if (latest?.status != 'failed') return null;
+    final pendingIds = ArticleRelationService.pendingArticleIds.toSet();
+    return latest!.newArticleIds.any(pendingIds.contains) ? latest : null;
+  }
+
   static String _errorMessage(Object? error) {
     if (error is DioException) return error.message ?? '关系请求失败';
     if (error is StateError) return error.message;
@@ -418,6 +457,7 @@ abstract final class ArticleRelationWorker {
     _generation++;
     _scheduled = false;
     _flushPartialRequested = false;
+    _retryRequired = false;
     processingCount.value = 0;
     currentNewCount.value = 0;
     currentHistoryCount.value = 0;

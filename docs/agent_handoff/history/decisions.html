@@ -1044,11 +1044,11 @@
 
 后果：滚动位置与选中卡片稳定，打开文章不再错位。
 
-## Android 大面板用原生 backdrop，骨架共用 inset
+## Android 目录面板用原生 backdrop，骨架共用完整 AppBar inset
 
 背景：大面积目录面板误用适合小控件的 shader，产生细网格纹理；时间线骨架屏缺少顶部 inset 埋入 AppBar。
 
-决策：大面板（`AppMobileGlassSheet`）改用 shader-free 原生 backdrop，小控件保留 shader；提高未选中目录文字对比度；提取共享 `MobileViewportInsets` 供真实列表与所有骨架屏共用。
+决策：仅文章目录面板显式改用 shader-free 原生 backdrop；`AppMobileGlassSheet` 默认仍保持既有 shader 路径，文章操作、设置选择器、图片菜单和订阅源设置等已验证面板不得被目录修复连带改变。提高未选中目录文字对比度；提取共享 `MobileViewportInsets` 供真实列表与所有骨架屏共用。主导航 body 位于 AppBar 后方时，初始内容 inset 必须包含状态栏和 `48px` 工具栏；独立 Scaffold 已由框架避开 AppBar，不重复增加。
 
 后果：深浅色、长标题、滚动与 Android 性能一致，无复制魔法数字。
 
@@ -1075,6 +1075,22 @@
 决策：生成后的旧 TextSpan/MouseRegion 不再直接持有 ValueNotifier，改为活动 State 提供的生命周期安全回调；写入前检查 mounted 与 dispose 守卫；保留预览与点击行为。
 
 后果：切换文章、YouTube 回退、快速移动鼠标不再产生 MouseTracker 连锁断言。
+
+## 账号切换隔离 Worker 完成回调
+
+背景：清空 `_running` 不能取消已经发出的 Future。若新账号在旧任务完成前启动同一 entryId，旧任务的 `whenComplete` 会误删新任务运行标记；全文抓取的旧失败结果还可能在账号数据清理后重新写入失败状态并安排重试。
+
+决策：翻译、摘要、过滤和全文抓取 Worker 各自维护运行代次；取消时推进代次，完成回调只允许修改自己启动时的同一代次。业务结果继续使用 `AccountSessionGuard`，全文抓取所有失败登记入口也必须校验账号 revision。
+
+后果：账号切换不需要强行终止底层网络请求，但旧任务无法污染新账号的队列、并发计数、失败状态或重试计时器。
+
+## 分析账本只记录真实状态变化
+
+背景：刷新未读快照时会反复对已经已读的本地文章调用 `setReadState(true)`；若每次调用都追加事件，账本会被大量伪“标为已读”记录污染，无法作为未来统计中心的数据源。
+
+决策：`LocalArticleDbService.setReadState` 仅在持久化状态真实变化时记录并改写文章；已读事件携带 `ReadStateChangeSource.user` 或 `syncInference`。刷新和订阅源详情的服务端快照推断显式使用 `syncInference`，用户操作默认使用 `user`。
+
+后果：重复刷新不再增加已读事件，未来分析可以区分用户动作与服务端同步推断。
 
 </script>
 <script src="../assets/wiki-common.js"></script>

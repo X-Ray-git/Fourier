@@ -24,6 +24,7 @@ abstract final class AutoReadabilityWorker {
   static final _queue = <ArticleModel>[];
   static final _queuedIds = <String>{};
   static final _running = <String>{};
+  static int _generation = 0;
 
   /// 最大并发请求数
   static const int _concurrency = 3;
@@ -92,9 +93,11 @@ abstract final class AutoReadabilityWorker {
 
   static void _start(ArticleModel article) {
     final accountRevision = AccountSessionGuard.revision;
+    final generation = _generation;
     _running.add(article.entryId);
     unawaited(
       _processArticle(article).whenComplete(() {
+        if (generation != _generation) return;
         _running.remove(article.entryId);
         if (AccountSessionGuard.isCurrent(accountRevision)) {
           _queuedIds.remove(article.entryId);
@@ -199,7 +202,11 @@ abstract final class AutoReadabilityWorker {
       if (override != null) {
         final result = await override(article);
         if (result == null) {
-          _markFetchFailure(entryId, 'fetch returned no content');
+          _markFetchFailure(
+            entryId,
+            'fetch returned no content',
+            accountRevision: accountRevision,
+          );
           return null;
         }
         html = result;
@@ -213,13 +220,21 @@ abstract final class AutoReadabilityWorker {
       final document = html_parser.parse(html);
       final node = ArticleContentUtils.getReadabilityContent(document);
       if (node == null) {
-        _markFetchFailure(entryId, 'no readability content parsed');
+        _markFetchFailure(
+          entryId,
+          'no readability content parsed',
+          accountRevision: accountRevision,
+        );
         return null;
       }
       final newHtml = node.outerHtml;
       // 只有当抓取到的长文确实比摘要长时，才替换并入库
       if (newHtml.length <= rawContent.length) {
-        _markFetchFailure(entryId, 'parsed content is not longer than summary');
+        _markFetchFailure(
+          entryId,
+          'parsed content is not longer than summary',
+          accountRevision: accountRevision,
+        );
         return null;
       }
 
@@ -250,7 +265,11 @@ abstract final class AutoReadabilityWorker {
       _markFetchSuccess(entryId);
       return processedArticle;
     } catch (e) {
-      _markFetchFailure(entryId, e.toString());
+      _markFetchFailure(
+        entryId,
+        e.toString(),
+        accountRevision: accountRevision,
+      );
       return null;
     }
   }
@@ -265,7 +284,12 @@ abstract final class AutoReadabilityWorker {
   }
 
   /// 登记一次抓取失败：记录可诊断状态并安排有限次数 + 指数退避的重试。
-  static void _markFetchFailure(String entryId, String error) {
+  static void _markFetchFailure(
+    String entryId,
+    String error, {
+    required int accountRevision,
+  }) {
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
     final previous = _fetchStateOf(entryId);
     final attempts = ((previous?['attempts'] as int?) ?? 0) + 1;
     unawaited(
@@ -304,7 +328,11 @@ abstract final class AutoReadabilityWorker {
     unawaited(GStorage.setting.delete(_stateKey(entryId)));
   }
 
+  @visibleForTesting
+  static int get runningCount => _running.length;
+
   static void cancelProcessing() {
+    _generation++;
     for (final timer in _fetchRetryTimers.values) {
       timer.cancel();
     }

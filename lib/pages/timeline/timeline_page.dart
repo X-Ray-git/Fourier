@@ -1225,7 +1225,9 @@ class _TimelinePageState extends State<TimelinePage> {
         final state = controller.loadingState.value;
 
         final content = switch (state) {
-          Loading() => const _LocalTimelineSkeleton(), // 使用定制化的优雅骨架屏
+          Loading() => _LocalTimelineSkeleton(
+            bodyExtendsBehindAppBar: !widget.showAppBar,
+          ),
           LoadError(:final errMsg) => _ErrorView(
             message: errMsg,
             onRetry: controller.loadFeedsThenArticles,
@@ -1368,7 +1370,10 @@ class _TimelinePageState extends State<TimelinePage> {
         content = ListView(
           physics: _refreshPhysics,
           padding: EdgeInsets.only(
-            top: MobileViewportInsets.listTopInset(context).top,
+            top: MobileViewportInsets.listTopInset(
+              context,
+              bodyExtendsBehindAppBar: !widget.showAppBar,
+            ).top,
             bottom: MobileViewportInsets.listBottomInset(context).bottom,
           ),
           children: [
@@ -1386,7 +1391,10 @@ class _TimelinePageState extends State<TimelinePage> {
           physics: _refreshPhysics,
           controller: _scrollController,
           padding: EdgeInsets.only(
-            top: MobileViewportInsets.listTopInset(context).top,
+            top: MobileViewportInsets.listTopInset(
+              context,
+              bodyExtendsBehindAppBar: !widget.showAppBar,
+            ).top,
             bottom: MobileViewportInsets.listBottomInset(context).bottom,
           ),
           itemCount: controller.articles.length,
@@ -1586,13 +1594,18 @@ class _TimelineRemovalAnimationProbeState
 // ─── 优雅的加载骨架屏（与新版卡片像素级对齐） ───
 
 class _LocalTimelineSkeleton extends StatelessWidget {
-  const _LocalTimelineSkeleton();
+  final bool bodyExtendsBehindAppBar;
+
+  const _LocalTimelineSkeleton({required this.bodyExtendsBehindAppBar});
 
   @override
   Widget build(BuildContext context) {
     // 与真实列表共用共享顶部 inset，避免骨架卡片埋入毛玻璃 AppBar。
     return ShimmerFadeList(
-      padding: MobileViewportInsets.listTopInset(context),
+      padding: MobileViewportInsets.listTopInset(
+        context,
+        bodyExtendsBehindAppBar: bodyExtendsBehindAppBar,
+      ),
       itemCount: 6,
       itemBuilder: (context, index) => Padding(
         padding: ArticleCardChrome.outerPadding,

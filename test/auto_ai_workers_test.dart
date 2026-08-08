@@ -167,6 +167,34 @@ void main() {
         if (!c.isCompleted) c.complete();
       }
     });
+
+    test('旧账号任务完成不会移除新账号同 entryId 的运行标记', () async {
+      await GStorage.setting.put('llm_translate_concurrency', 1);
+      final completers = <Completer<void>>[];
+      AutoTranslationWorker.debugRunOverride = (_) {
+        final completer = Completer<void>();
+        completers.add(completer);
+        return completer.future;
+      };
+
+      AutoTranslationWorker.enqueueIfEnabled(_article(20));
+      expect(AutoTranslationWorker.runningCount, 1);
+
+      AccountSessionGuard.beginAccountChange();
+      AutoTranslationWorker.cancelProcessing();
+      TranslationService.resetForAccountChange();
+      AccountSessionGuard.finishAccountChange();
+      AutoTranslationWorker.enqueueIfEnabled(_article(20));
+      expect(completers, hasLength(2));
+
+      completers.first.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(AutoTranslationWorker.runningCount, 1);
+
+      completers.last.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(AutoTranslationWorker.runningCount, 0);
+    });
   });
 
   group('AutoSummaryWorker 滚动补位调度', () {
@@ -198,6 +226,29 @@ void main() {
       }
       expect(AutoSummaryWorker.runningCount, 0);
       expect(AutoSummaryWorker.queueSize, 0);
+    });
+
+    test('取消前任务完成不会干扰新代次同 entryId 任务', () async {
+      await GStorage.setting.put('llm_summary_concurrency', 1);
+      final completers = <Completer<void>>[];
+      AutoSummaryWorker.debugRunOverride = (_) {
+        final completer = Completer<void>();
+        completers.add(completer);
+        return completer.future;
+      };
+
+      AutoSummaryWorker.enqueueIfNeeded(_article(21));
+      AutoSummaryWorker.cancelProcessing();
+      AutoSummaryWorker.enqueueIfNeeded(_article(21));
+      expect(completers, hasLength(2));
+
+      completers.first.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(AutoSummaryWorker.runningCount, 1);
+
+      completers.last.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(AutoSummaryWorker.runningCount, 0);
     });
   });
 
@@ -265,6 +316,30 @@ void main() {
       for (final c in blocked) {
         if (!c.isCompleted) c.complete();
       }
+    });
+
+    test('旧过滤任务完成不会移除新代次同 entryId 的运行标记', () async {
+      await GStorage.setting.put('llm_filter_concurrency', 1);
+      final completers = <Completer<void>>[];
+      AutoFilterWorker.debugRunOverride = (_) {
+        final completer = Completer<void>();
+        completers.add(completer);
+        return completer.future;
+      };
+
+      LocalArticleDbService.upsertOne(_article(22));
+      AutoFilterWorker.enqueue(_article(22));
+      AutoFilterWorker.cancelProcessing();
+      AutoFilterWorker.enqueue(_article(22));
+      expect(completers, hasLength(2));
+
+      completers.first.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(AutoFilterWorker.runningCount, 1);
+
+      completers.last.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(AutoFilterWorker.runningCount, 0);
     });
   });
 }

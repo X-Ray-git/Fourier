@@ -1,5 +1,5 @@
 /* 由 scripts/docs-index.js 生成，随内容提交；阅读端零生成。 */
-window.WIKI_SEARCH_MANIFEST = "3d29a2f379140bbe";
+window.WIKI_SEARCH_MANIFEST = "97cd4831ad4fd149";
 window.WIKI_SEARCH_INDEX = [
  {
   "path": "architecture/networking.html",
@@ -131,7 +131,7 @@ window.WIKI_SEARCH_INDEX = [
     "text": "相关页面"
    }
   ],
-  "text": "后台任务 任务中心在 macOS 和 Android 上都可见，用于展示正在进行或排队中的工作。 当前设计 应和设置页共享同一种轻量面板语言。 列表内部避免密集 Liquid Glass 表面；使用简单描边和微弱 hover 状态。 作为 overlay 打开时，背景应保证可读。 Scrollbar 不应造成左右 padding 不对称或出现重复条。 Android 保持设置页进入的二级页面，使用 MobileBlurAppBar 、 12px 页面边距和 MobileSettingsPanel 轻量外壳。AI 失败记录继续作为下一级页面；不要用旧式透明 Card 或密集实时玻璃重做。 交互注意点 macOS 如需保留上下文可以继续使用 overlay；Android 已确认采用完整二级页面，不应为了跨平台形式一致强行改成 overlay。 “去审核”等操作应符合当前 macOS 控件语言，不要使用旧的移动端按钮样式。 如果某个操作被刻意隐藏或移除，应记录产品原因；否则把它当作 bug。 AI 队列：滚动补位调度 三个 AI worker（自动翻译 / 自动摘要 / AI 过滤）与全文抓取队列采用 滚动补位 调度： 任一任务完成后 立即 补充一个新任务，运行中数量始终不超过各自并发配置；不再整批取并发数后 Future.wait ，慢任务不再阻塞后续任务。 三个 worker 保持完全独立：独立的队列、独立的并发配置（ LlmConfig 的 translate / summary / filter 前缀）与独立生命周期，不合并成共享调度器。 并发数在每次补位时按最新配置读取；运行中修改并发数在后续补位时生效，不中断正在运行的任务。 取消（账号切换时由 AccountDataService 调用）清空队列与运行中集合；账号 revision 失效后的在途结果不落库。 AI 过滤出队时按最新持久化状态跳过已读 / 已判定 / 已捞回文章。 全文抓取（ AutoReadabilityWorker ）为并发 3 的滚动补位队列。 全文抓取成功标记与重试 成功标记 readability_fetched_<entryId> 只在成功解析并持久化有效正文后写入 ；失败不再写标记，因此可重试。 失败登记可诊断状态 readability_fetch_state_<entryId> （attempts / lastError / lastAt），自动重试有限次数 + 指数退避（2s / 5s），达到上限后停止并保留失败状态。 旧版本在请求前就打标记的历史数据 不批量清除 ；只有正文为空或明确失败且文章仍未读时进入有限次兼容重试。 已开始抓取的文章即使完成前被标为已读，也允许这一条已开始的流水线继续进入翻译和摘要（ AutoAiQueueCoordinator.onArticleContentAvailable(allowRead: true) ）；尚未开始的等待任务在出队时若已标为已读则移除。 打开文章只记录最近阅读，不得因此标记已读。 本地分析事件账本 AnalysisEventLedger 是版本化、追加式、本地 Hive 事件账本（box analysisEvents ），作为未来统计中心和 JSON 导出的唯一数据来源： 记录 AI 分类结果、理由与时间；用户 M/K/N 操作及操作前后状态快照；标为已读 / 恢复未读；文章打开事件；事件含 articleId、feedId、订阅源名称、标题与必要状态。 语义：K 表示「保留或稍后确认」，不能自动解释为 AI 分类错误；N（n_spam）把漏网文章移入垃圾拦截，才是明确纠正信号。 从新版本开始记录，不伪造历史事件； article.userAction 等现有字段继续兼容，不移除。 不保存正文、摘要、翻译、Prompt、API key、Session Token。 数据属于当前活动账号，退出或切换账号时随账号数据清理；暂不限制事件数量、不做统计中心与导出 UI。 事件写入集中在操作服务（过滤 worker、UndoService、LocalArticleDbService、文章页打开入口），不在页面重复拼装。 相关页面 features/settings.md design/macos-ui.md design/liquid-glass.md"
+  "text": "后台任务 任务中心在 macOS 和 Android 上都可见，用于展示正在进行或排队中的工作。 当前设计 应和设置页共享同一种轻量面板语言。 列表内部避免密集 Liquid Glass 表面；使用简单描边和微弱 hover 状态。 作为 overlay 打开时，背景应保证可读。 Scrollbar 不应造成左右 padding 不对称或出现重复条。 Android 保持设置页进入的二级页面，使用 MobileBlurAppBar 、 12px 页面边距和 MobileSettingsPanel 轻量外壳。AI 失败记录继续作为下一级页面；不要用旧式透明 Card 或密集实时玻璃重做。 交互注意点 macOS 如需保留上下文可以继续使用 overlay；Android 已确认采用完整二级页面，不应为了跨平台形式一致强行改成 overlay。 “去审核”等操作应符合当前 macOS 控件语言，不要使用旧的移动端按钮样式。 如果某个操作被刻意隐藏或移除，应记录产品原因；否则把它当作 bug。 AI 队列：滚动补位调度 三个 AI worker（自动翻译 / 自动摘要 / AI 过滤）与全文抓取队列采用 滚动补位 调度： 任一任务完成后 立即 补充一个新任务，运行中数量始终不超过各自并发配置；不再整批取并发数后 Future.wait ，慢任务不再阻塞后续任务。 三个 worker 保持完全独立：独立的队列、独立的并发配置（ LlmConfig 的 translate / summary / filter 前缀）与独立生命周期，不合并成共享调度器。 并发数在每次补位时按最新配置读取；运行中修改并发数在后续补位时生效，不中断正在运行的任务。 取消（账号切换时由 AccountDataService 调用）清空队列与运行中集合，并推进各 Worker 自己的运行代次；旧代次任务可以自然结束，但其完成回调不得删除新代次的同 entryId 运行标记或触发补位。账号 revision 失效后的在途结果不落库，全文抓取的旧失败结果也不得写失败状态或安排重试。 AI 过滤出队时按最新持久化状态跳过已读 / 已判定 / 已捞回文章。 全文抓取（ AutoReadabilityWorker ）为并发 3 的滚动补位队列。 全文抓取成功标记与重试 成功标记 readability_fetched_<entryId> 只在成功解析并持久化有效正文后写入 ；失败不再写标记，因此可重试。 失败登记可诊断状态 readability_fetch_state_<entryId> （attempts / lastError / lastAt），自动重试有限次数 + 指数退避（2s / 5s），达到上限后停止并保留失败状态。 旧版本在请求前就打标记的历史数据 不批量清除 ；只有正文为空或明确失败且文章仍未读时进入有限次兼容重试。 已开始抓取的文章即使完成前被标为已读，也允许这一条已开始的流水线继续进入翻译和摘要（ AutoAiQueueCoordinator.onArticleContentAvailable(allowRead: true) ）；尚未开始的等待任务在出队时若已标为已读则移除。 打开文章只记录最近阅读，不得因此标记已读。 本地分析事件账本 AnalysisEventLedger 是版本化、追加式、本地 Hive 事件账本（box analysisEvents ），作为未来统计中心和 JSON 导出的唯一数据来源： 记录 AI 分类结果、理由与时间；用户 M/K/N 操作及操作前后状态快照；真实发生的已读 / 未读状态变化；文章打开事件；事件含 articleId、feedId、订阅源名称、标题与必要状态。 已读状态事件携带 user / syncInference 来源；服务器快照推断与用户动作必须可区分。状态没有变化时不得重复记账，避免每次刷新污染未来统计。 语义：K 表示「保留或稍后确认」，不能自动解释为 AI 分类错误；N（n_spam）把漏网文章移入垃圾拦截，才是明确纠正信号。 从新版本开始记录，不伪造历史事件； article.userAction 等现有字段继续兼容，不移除。 不保存正文、摘要、翻译、Prompt、API key、Session Token。 数据属于当前活动账号，退出或切换账号时随账号数据清理；暂不限制事件数量、不做统计中心与导出 UI。 事件写入集中在操作服务（过滤 worker、UndoService、LocalArticleDbService、文章页打开入口），不在页面重复拼装。 相关页面 features/settings.md design/macos-ui.md design/liquid-glass.md"
  },
  {
   "path": "features/filter-review.html",
@@ -3676,8 +3676,8 @@ window.WIKI_SEARCH_INDEX = [
     "text": "最近阅读点击不立即重排"
    },
    {
-    "id": "android-大面板用原生-backdrop骨架共用-inset",
-    "text": "Android 大面板用原生 backdrop，骨架共用 inset"
+    "id": "android-目录面板用原生-backdrop骨架共用完整-appbar-inset",
+    "text": "Android 目录面板用原生 backdrop，骨架共用完整 AppBar inset"
    },
    {
     "id": "android-集中式触觉反馈策略",
@@ -3690,6 +3690,14 @@ window.WIKI_SEARCH_INDEX = [
    {
     "id": "文章链接-hover-使用生命周期安全回调",
     "text": "文章链接 hover 使用生命周期安全回调"
+   },
+   {
+    "id": "账号切换隔离-worker-完成回调",
+    "text": "账号切换隔离 Worker 完成回调"
+   },
+   {
+    "id": "分析账本只记录真实状态变化",
+    "text": "分析账本只记录真实状态变化"
    }
   ],
   "text": "决策日志 应用整体迁移为 Fourier 背景：旧名称 Auto Folo 容易把个人二次开发客户端与 Folo 官方品牌混在一起，且旧应用身份、图标和包名已经不适合作为长期公开工程标识。 决策：应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和视觉素材统一迁移为 Fourier；旧配置导入与历史内容保留明确兼容。GitHub 仓库名称、远端 URL 和本地目录另行迁移，当前不伪造已经完成的状态。 后果：Fourier 会被 Android 和 macOS 视为新的应用身份。迁移前必须从旧版导出设置，安装后再导入；旧 Auto Folo 名称不得重新出现在当前产品文案或命名空间中。 Wiki 使用内嵌 Markdown 的离线单页结构 背景：目标要求克隆后直接双击 index.html 阅读，无服务、无构建步骤、无外部依赖，同时正文仍尽量保持 Markdown 编辑体验。浏览器在 file:// 下不能可靠地由入口页读取独立 .md 文件。 决策：每个专题使用自包含 .html ，正文写在 script[type=\"text/markdown\"] 中并由仓库内置 markdown-it 渲染； index.html 负责入口，搜索索引作为已提交静态数据。正文允许内嵌可信 HTML 和 SVG，不使用 Mermaid。 后果：编辑和阅读是同一个文件，双击即可使用；修改内容后只需运行索引和一致性检查。不得重新引入必须启动服务器、CDN、ES Module 或运行时 fetch() 的方案。 保留根目录 AGENT_HANDOFF.md 作为入口 背景：后续 agent 会预期根目录存在交接文件。 决策：保留 AGENT_HANDOFF.md 作为短入口，把详细知识迁移到 docs/agent_handoff/ 。 后果：agent 能快速起步，同时完整历史仍然可查。 完整历史按主题归档 背景：旧的单文件交接文档包含重要历史讨论，但 8,000 余行内容集中在一个文件中，不适合作为 wiki 证据库继续维护。 决策：完整历史按主题迁移到 history/archive/ ，每个旧编号章节只归入一个主主题； history/chronology.md 保留原始出现顺序和稳定 legacy-xxx 锚点。 history/timeline.md 只保留兼容入口。 后果：专题页可以保持简洁，历史仍可按主题或旧编号追溯，也不会继续形成新的巨型单文件。 不使用数字文件前缀 背景：开发顺序不遵循固定计划。 决策：使用语义化 wiki 路径，由 README 描述推荐阅读顺序。 后果：新增主题时无需重命名文件，也不会暗示优先级。 文章正文保留 Column 背景：Sliver 虚拟化可能提升性能，但会影响选择、目录锚点、图片生命周期和滚动行为。 决策：不要随意切换到 SliverList.builder 。 后果：除非进行专门重构，否则围绕当前结构优化。 不要回退 保留全文选择行为。 保留目录锚点准确性。 保留图片预览/光标/菜单行为。 保留当前滚动位置语义。 畸形文章修复保持保守 背景：少数真实文章出现异常空白、表格渲染、空代码块或交互组件文本问题。有些问题来自上游内容本身畸形。 决策：添加宽泛渲染启发式规则前，先检查真实源内容。优先做窄修复，或接受罕见上游边缘情况。 后果：渲染保持可预测，不为了少数坏文章牺牲常见正确文章。 不裁剪宽表格 scroll viewport 背景：在横向表格 scroll viewport 外包圆角 ClipRRect ，会在表格宽于文章栏时切掉矩形表格四角。 决策：不要仅为视觉一致性而给表格 viewport 加圆角裁剪。 后果：宽表格保持正确的直角边框，同时仍可横向滚动。 无 <th> 的稳定网格仍属于数据表 背景：阿里技术文章《为什么大模型的缓存命中率能到 90%？》包含 7×5 和 4×2 两个结构完整的数据表，但首行使用 <td> 而不是 <th> 。旧规范化规则把所有无 <th> 表格当成 Newsletter 布局容器，导致两张表在渲染前被摊平成正文。 决策：布局表格清理改用保守的结构判断。有 <th> 的表格直接保留；无 <th> 时，至少两行两列、列数稳定、无嵌套、文本单元格占主导且非媒体主导的网格也保留。其余明确像布局容器的表格继续扁平化。 后果：修复不依赖订阅源、文章标题或具体文本，正确的 td-only 数据表可以进入现有表格渲染器，Newsletter 单单元格/嵌套布局仍保持轻量。 未来方向：如果表格与其他富文本清洗需求继续分化，应把阅读渲染规范化和 LLM 输入清洗拆成独立管线与缓存；本轮不扩大到该架构重构。 避免会改变布局的图片 hover 背景：macOS 图片 hover 缩小/边框效果会移动后续文字，造成明显布局不稳定。 决策：macOS 图片 hover 不应改变图片布局尺寸；用光标表达可点击。 后果：文章文字保持稳定，同时图片仍有可点击提示。 选择性使用 Liquid Glass 背景：全局铺开 Liquid Glass 会造成可读性和 macOS 性能问题，尤其是在密集重复 UI 中。 决策：有意义的浮动控件/表面可以使用玻璃；密集设置、任务中心、未读标签和重复装饰使用轻量描边/静态样式。 后果：应用保留设计方向，同时避免重现 v1.1.25 风格的性能回归。 不在 Flutter 中追求真实外部背景取色边框 背景：用户希望边框高光颜色来自应用窗口后方真实内容。Flutter 绘制无法可靠采样这些像素；NSVisualEffectView/系统 compositor 才拥有这部分模糊。 决策：放弃 Flutter-only 的真实外部背景取色边框。未来如果要做，应作为 native/AppKit renderer 实验。 后果：当前玻璃边框使用实用的白色/高光样式，不假装采样不可得像素。 macOS 中间 header 保持轻量 背景：中间时间线/列表 header 的玻璃背景增加视觉重量，也可能影响性能。后续细线分隔也被取消。 决策：除非明确重新讨论，否则 macOS 中间栏 header 不使用玻璃背景。 后果：中间列表 chrome 保持安静且不显示底部分隔线；文章详情独立保留细分隔线和阅读进度。 macOS 圆角收敛按层级联动 背景：用户希望 macOS 整体圆角略微变小，同时文章卡片圆角略微增大。此前调研 Apple 官方资料后，没有找到普通 macOS app 的固定圆角数值规范；官方更强调圆角同心性、容器关系和系统控件自适应。 决策：第一阶段只收敛主几何层和大面板：窗口/Flutter 外框 24 ，红黄绿圆心 24 ，侧边栏面板 18 ， AppGlassSurface 默认 16 ， AppGlassPanel 默认 18 ，突出面板 20 ，macOS 文章卡片 10 。分屏文章右下角安全裁剪同步外框半径。 后果：红黄绿、外框、侧边栏和右下角文章裁剪必须联动维护。不要把“圆角收敛”扩展成全局搜索替换。 不要回退"

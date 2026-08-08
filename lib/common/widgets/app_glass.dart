@@ -960,7 +960,7 @@ class AppMobileGlassSheet extends StatelessWidget {
     this.height,
     this.borderRadius = 32,
     this.padding = EdgeInsets.zero,
-    this.nativeBackdrop = true,
+    this.nativeBackdrop = false,
   });
 
   @override

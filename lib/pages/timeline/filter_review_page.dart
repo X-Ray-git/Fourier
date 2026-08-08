@@ -8,11 +8,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
-import '../../common/widgets/feedback_toast.dart';
 import '../../services/auto_filter_worker.dart';
 import '../../services/article_state_notifier.dart';
 import '../../services/android_haptics_service.dart';

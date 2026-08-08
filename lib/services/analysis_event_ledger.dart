@@ -6,6 +6,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/article.dart';
 import '../utils/storage.dart';
 
+enum ReadStateChangeSource { user, syncInference }
+
 /// 本地分析事件账本 — 版本化、追加式、账号级。
 ///
 /// 作为未来统计中心和 JSON 导出的唯一数据来源。从本版本开始记录，
@@ -100,11 +102,13 @@ abstract final class AnalysisEventLedger {
     required String entryId,
     required bool isRead,
     required ArticleModel before,
+    required ReadStateChangeSource source,
   }) {
     record(
       type: isRead ? 'mark_read' : 'mark_unread',
       article: before,
       data: {
+        'source': source.name,
         'after': {'isRead': isRead},
       },
     );

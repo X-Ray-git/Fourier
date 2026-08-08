@@ -11,8 +11,6 @@ void main() {
     test('正文失败状态记录后，外部/全屏成功写入缓存会清除失败并推进 revision', () async {
       const articleId = 'entry-img';
       const imageUrl = 'https://example.com/image.jpg';
-      final key = ArticleImageCacheService.cacheKey(articleId, imageUrl);
-
       // 正文加载失败登记。
       ArticleImageCacheService.recordFailure(articleId, imageUrl);
 

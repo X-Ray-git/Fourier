@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/services/account_session_guard.dart';
-import 'package:fourier/services/auto_ai_queue_coordinator.dart';
 import 'package:fourier/services/auto_filter_worker.dart';
 import 'package:fourier/services/auto_readability_worker.dart';
 import 'package:fourier/services/auto_summary_worker.dart';
@@ -192,6 +191,48 @@ void main() {
       expect(((persisted as Map)['content'] as String? ?? ''), isEmpty);
       expect(GStorage.setting.get('readability_fetched_entry-4'), isNull);
       AccountSessionGuard.finishAccountChange();
+    });
+
+    test('旧账号失败结果不写状态也不安排重试', () async {
+      final releaseFetch = Completer<String?>();
+      AutoReadabilityWorker.debugFetchOverride = (_) => releaseFetch.future;
+      LocalArticleDbService.upsertOne(_article(5));
+
+      AutoReadabilityWorker.enqueueOne(_article(5));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      AccountSessionGuard.beginAccountChange();
+      AutoReadabilityWorker.cancelProcessing();
+      releaseFetch.complete(null);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(GStorage.setting.get('readability_fetch_state_entry-5'), isNull);
+      AccountSessionGuard.finishAccountChange();
+    });
+
+    test('旧抓取完成不会移除新代次同 entryId 的运行标记', () async {
+      final completers = <Completer<String?>>[];
+      AutoReadabilityWorker.debugFetchOverride = (_) {
+        final completer = Completer<String?>();
+        completers.add(completer);
+        return completer.future;
+      };
+      LocalArticleDbService.upsertOne(_article(6));
+
+      AutoReadabilityWorker.enqueueOne(_article(6));
+      AccountSessionGuard.beginAccountChange();
+      AutoReadabilityWorker.cancelProcessing();
+      AccountSessionGuard.finishAccountChange();
+      AutoReadabilityWorker.enqueueOne(_article(6));
+      expect(completers, hasLength(2));
+
+      completers.first.complete(_longHtml);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(AutoReadabilityWorker.runningCount, 1);
+
+      completers.last.complete(_longHtml);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(AutoReadabilityWorker.runningCount, 0);
     });
   });
 }

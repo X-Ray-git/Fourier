@@ -9,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import '../../http/feed_http.dart';
@@ -36,7 +35,6 @@ import '../../services/summary_service.dart';
 import '../../services/article_state_notifier.dart';
 import '../../utils/article_content_utils.dart';
 import '../../utils/html_chunk_parser.dart';
-import '../../utils/security_utils.dart';
 import '../../utils/storage.dart';
 import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
@@ -1243,6 +1241,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         final controls = appGlassControlPalette(sheetContext);
         return AppMobileGlassSheet(
           height: panelHeight,
+          nativeBackdrop: true,
           child: Column(
             children: [
               Padding(

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/services/analysis_event_ledger.dart';
+import 'package:fourier/services/local_article_db_service.dart';
 import 'package:fourier/utils/storage.dart';
 
 import 'support/hive_test_helper.dart';
@@ -78,11 +79,13 @@ void main() {
       entryId: article.entryId,
       isRead: true,
       before: article,
+      source: ReadStateChangeSource.user,
     );
     AnalysisEventLedger.recordReadStateChange(
       entryId: article.entryId,
       isRead: false,
       before: article,
+      source: ReadStateChangeSource.syncInference,
     );
 
     final first = Map<String, dynamic>.from(
@@ -93,6 +96,8 @@ void main() {
     );
     expect(first['type'], 'mark_read');
     expect(second['type'], 'mark_unread');
+    expect((first['data'] as Map)['source'], 'user');
+    expect((second['data'] as Map)['source'], 'syncInference');
   });
 
   test('记录文章打开事件', () async {
@@ -101,6 +106,28 @@ void main() {
     final event = Map<String, dynamic>.from(raw as Map);
     expect(event['type'], 'article_open');
     expect(event['articleId'], 'entry-1');
+  });
+
+  test('只记录真实读状态变化并保留来源', () {
+    final article = _article();
+    LocalArticleDbService.upsertOne(article);
+
+    LocalArticleDbService.setReadState(article.entryId, false);
+    expect(AnalysisEventLedger.count, 0);
+
+    LocalArticleDbService.setReadState(
+      article.entryId,
+      true,
+      source: ReadStateChangeSource.syncInference,
+    );
+    expect(AnalysisEventLedger.count, 1);
+    final event = Map<String, dynamic>.from(
+      GStorage.analysisEvents.get('000000000001') as Map,
+    );
+    expect((event['data'] as Map)['source'], 'syncInference');
+
+    LocalArticleDbService.setReadState(article.entryId, true);
+    expect(AnalysisEventLedger.count, 1);
   });
 
   test('事件追加式编号递增，清空后从新版本开始', () async {

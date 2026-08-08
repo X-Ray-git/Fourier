@@ -28,6 +28,7 @@ import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_service.dart';
+import '../../services/analysis_event_ledger.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
@@ -397,7 +398,11 @@ class FeedDetailController extends GetxController {
         GStorage.readStatus.delete(local.entryId);
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
-      LocalArticleDbService.setReadState(local.entryId, true);
+      LocalArticleDbService.setReadState(
+        local.entryId,
+        true,
+        source: ReadStateChangeSource.syncInference,
+      );
     }
 
     // 未读请求可能早于 mark-read 请求发出，返回的仍是旧快照。

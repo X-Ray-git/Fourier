@@ -19,6 +19,7 @@ import 'local_article_db_service.dart';
 abstract final class AutoFilterWorker {
   static final _queue = <ArticleModel>[];
   static final _running = <String>{};
+  static int _generation = 0;
   static Timer? _processingTimer;
   static const Duration _processingInterval = Duration(milliseconds: 500);
 
@@ -101,11 +102,13 @@ abstract final class AutoFilterWorker {
   }
 
   static void _start(ArticleModel article) {
+    final generation = _generation;
     _running.add(article.entryId);
     processingCount.value = _running.length;
     doneCount.value = 0;
     unawaited(
       _runTask(article).whenComplete(() {
+        if (generation != _generation) return;
         _running.remove(article.entryId);
         processingCount.value = _running.length;
         queuedCount.value = _queue.length;
@@ -198,6 +201,7 @@ abstract final class AutoFilterWorker {
   static int get runningCount => _running.length;
 
   static void cancelProcessing() {
+    _generation++;
     _processingTimer?.cancel();
     _processingTimer = null;
     _queue.clear();

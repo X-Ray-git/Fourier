@@ -15,7 +15,6 @@ import '../../services/local_article_db_service.dart';
 import '../../services/external_link_service.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/undo_service.dart';
-import '../../common/widgets/feedback_toast.dart';
 import '../article/article_page.dart';
 import '../main/main_controller.dart';
 import '../widgets/article_card.dart';

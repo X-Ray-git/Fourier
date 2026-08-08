@@ -1942,8 +1942,6 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 32),
           ],
 
-          const SizedBox(height: 32),
-
           // 阅读排版
           Text(
             '阅读排版',

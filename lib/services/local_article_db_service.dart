@@ -147,6 +147,7 @@ abstract final class LocalArticleDbService {
     String entryId,
     bool isRead, {
     bool recordHistory = false,
+    ReadStateChangeSource source = ReadStateChangeSource.user,
   }) {
     if (isRead) {
       if (recordHistory) recordReadHistory(entryId);
@@ -159,10 +160,12 @@ abstract final class LocalArticleDbService {
     if (raw is! Map) return;
 
     final old = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
+    if (old.isRead == isRead) return;
     AnalysisEventLedger.recordReadStateChange(
       entryId: entryId,
       isRead: isRead,
       before: old,
+      source: source,
     );
     final updated = ArticleModel(
       entryId: old.entryId,

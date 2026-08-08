@@ -972,6 +972,126 @@
 - 不要恢复向 `releases.md` 追加的逻辑（双份维护）。
 - 修改 `releases.html` 或页面模板时，不要移除 `id="wiki-content"` 或在正文块前插入其他 `<\/script>`。
 
+## AI 队列改用滚动补位调度
+
+背景：三个 AI worker（翻译/摘要/过滤）按并发数整批取出并 `Future.wait`，慢任务阻塞后续任务；全文抓取也有三篇一批的屏障问题。
+
+决策：各 worker 独立改为滚动补位调度——任一任务完成后立即补位一个新任务，运行中数量始终不超过各自并发配置；不合并成共享调度器，队列、并发配置与生命周期各自独立。动态并发修改在后续补位时生效，不中断运行任务。
+
+后果：慢任务不再拖住整批；全文抓取改为并发 3 的滚动补位队列。
+
+## 全文抓取成功标记语义
+
+背景：旧实现请求前写 `readability_fetched=true`，失败被静默吞掉导致永久不重试。
+
+决策：成功标记只在成功解析并持久化有效正文后写入；失败登记可诊断状态（attempts/lastError/lastAt）并做有限次数 + 指数退避重试。旧数据不批量清除，只在正文为空或明确失败且仍未读时进入有限次兼容重试。已开始抓取的文章即使完成前被标为已读，也允许已开始的流水线继续进入翻译与摘要；等待中的任务出队时若已标为已读则移除。
+
+后果：失败可重试、可诊断；每次刷新请求次数有界。
+
+## 本地分析事件账本（未来统计中心唯一数据源）
+
+背景：需要为未来统计中心与 JSON 导出积累本地证据，同时不能牺牲现有 `article.userAction` 兼容性。
+
+决策：建立版本化、追加式、本地 Hive 事件账本（`AnalysisEventLedger` / box `analysisEvents`），记录 AI 分类结果、用户 M/K/N 操作前后状态、已读/未读切换与文章打开事件。语义上 K 只表示“保留或稍后确认”，N（n_spam）移入垃圾拦截才是明确纠正信号。不保存正文/摘要/翻译/Prompt/凭据；账号退出或切换时随账号数据清理；暂不限制数量、不做统计中心与导出 UI。
+
+后果：事件写入集中在操作服务；新版本开始记录，不伪造历史。
+
+## 翻译完成态必须先持久化再上报
+
+背景：`_writeRecord` 未等待 Hive put，完成后立即退出可能丢失译文。
+
+决策：done/error 状态在对外返回与更新最终 UI 前必须等待持久化成功（普通与分块翻译都覆盖）；pending 仍只在内存中。
+
+后果：临时 Hive box 的重启/重新 hydrate 测试保证完成即退不丢翻译。
+
+## 全屏图片成功写入统一缓存通知
+
+背景：全屏图片成功下载后未调用 `recordSuccess`，正文失败占位不重建。
+
+决策：正文与全屏共用同一缓存键；新增统一成功通知路径 `notifyImageLoadedSuccessfully`，全屏成功时只刷新受影响图片，不重建整篇文章。
+
+后果：正文/全屏/后台预取三条加载路径共享同一失败清除与 revision 语义。
+
+## Android 外链不再依赖 canLaunchUrl 预检
+
+背景：Android 11+ 未声明 queries 时 `canLaunchUrl` 恒为 false，被误报为“未找到默认浏览器”。
+
+决策：建立共享 `ExternalLinkService`：校验 http/https 后直接 `launchUrl(externalApplication)`，按真实 false 返回值或异常区分 URL 非法、无处理程序、平台拒绝与其他错误；AndroidManifest 的 queries 增加 HTTP/HTTPS VIEW 查询；时间线、最近阅读、正文、订阅源详情、HTML 链接、文章卡片等重复入口统一迁移。
+
+后果：错误提示不再误报；入口逻辑收敛到单一服务。
+
+## YouTube 播放失败回退 MWEB / IOS 客户端
+
+背景：已确认样本 `vO6SWG-jxvE` 的 WEB 响应只有 SABR 信息（无直接 URL），SABR 报 Shaka 1002 空响应；旧代码继续用同一份 WEB 数据生成普通 DASH，必然报 No valid URL to decipher。
+
+决策：SABR 仍为首选；失败后 `getInfo(videoId, { client: 'MWEB' })` 重新取信息并生成 `is_sabr=false` 普通 DASH，MWEB 失败再尝试 IOS，两者均失败才回退官方嵌入；不允许用原 WEB/SABR-only 响应构建 direct DASH。本地代理增加安全 debug 诊断（host/方法/状态码/重定向次数/错误类型），不记录签名 URL、Token 或请求体。
+
+后果：SABR 不可用样本可经 MWEB/IOS 直连播放；回退链有界。
+
+## 普通视频区分签名过期与通用错误
+
+背景：微博/微信带时效签名 CDN 过期返回 401/403，不代表视频被删除。
+
+决策：明确鉴权/签名失效显示“视频链接已过期”并提供“打开原文”；其他错误显示通用“视频无法播放”；不自动重抓网页、不猜测替换媒体地址，文章原始 URL 校验后传入错误界面。
+
+后果：用户获得可操作的过期提示，不再误以为文件已删除。
+
+## 最近阅读点击不立即重排
+
+背景：点击文章立即更新 readHistory 并重排，列表跳到顶部；Android 用刷新后的列表配旧 index 打开错误文章。
+
+决策：点击只记录最近阅读，本次会话不重排，下次重新进入或明确刷新时再排序；PageView 索引按 entryId 重新查找。
+
+后果：滚动位置与选中卡片稳定，打开文章不再错位。
+
+## Android 目录面板用原生 backdrop，骨架共用完整 AppBar inset
+
+背景：大面积目录面板误用适合小控件的 shader，产生细网格纹理；时间线骨架屏缺少顶部 inset 埋入 AppBar。
+
+决策：仅文章目录面板显式改用 shader-free 原生 backdrop；`AppMobileGlassSheet` 默认仍保持既有 shader 路径，文章操作、设置选择器、图片菜单和订阅源设置等已验证面板不得被目录修复连带改变。提高未选中目录文字对比度；提取共享 `MobileViewportInsets` 供真实列表与所有骨架屏共用。主导航 body 位于 AppBar 后方时，初始内容 inset 必须包含状态栏和 `48px` 工具栏；独立 Scaffold 已由框架避开 AppBar，不重复增加。
+
+后果：深浅色、长标题、滚动与 Android 性能一致，无复制魔法数字。
+
+## Android 集中式触觉反馈策略
+
+背景：振动散落且语义不清。
+
+决策：新建轻量 `AndroidHapticsService`（不影响 macOS），设置页增加默认开启的开关；翻页稳定 `selectionClick`、垃圾拦截侧滑确认 `mediumImpact`、已读切换成功 `lightImpact`、筛选选择 `selectionClick`；普通点击/滚动/加载/AI 完成/动画不振动；手势层与业务层不重复振动。
+
+后果：触觉反馈语义集中、可配置、可测试。
+
+## 订阅抓取错误不误报 URL 无效
+
+背景：Medium 有效 RSS 被 Folo 服务端抓取时遇 Cloudflare 挑战，返回 Feed fetch error。
+
+决策：保留 Folo API 流程，不实现本地订阅；服务端抓取失败消息统一转译为“Folo 暂时无法抓取该订阅源，源站可能阻止服务端访问”。
+
+后果：不误导用户删除有效订阅。
+
+## 文章链接 hover 使用生命周期安全回调
+
+背景：日志确认 `ValueNotifier<String?> was used after being disposed`，位于 `_InteractiveLinkExtension` onExit。
+
+决策：生成后的旧 TextSpan/MouseRegion 不再直接持有 ValueNotifier，改为活动 State 提供的生命周期安全回调；写入前检查 mounted 与 dispose 守卫；保留预览与点击行为。
+
+后果：切换文章、YouTube 回退、快速移动鼠标不再产生 MouseTracker 连锁断言。
+
+## 账号切换隔离 Worker 完成回调
+
+背景：清空 `_running` 不能取消已经发出的 Future。若新账号在旧任务完成前启动同一 entryId，旧任务的 `whenComplete` 会误删新任务运行标记；全文抓取的旧失败结果还可能在账号数据清理后重新写入失败状态并安排重试。
+
+决策：翻译、摘要、过滤和全文抓取 Worker 各自维护运行代次；取消时推进代次，完成回调只允许修改自己启动时的同一代次。业务结果继续使用 `AccountSessionGuard`，全文抓取所有失败登记入口也必须校验账号 revision。
+
+后果：账号切换不需要强行终止底层网络请求，但旧任务无法污染新账号的队列、并发计数、失败状态或重试计时器。
+
+## 分析账本只记录真实状态变化
+
+背景：刷新未读快照时会反复对已经已读的本地文章调用 `setReadState(true)`；若每次调用都追加事件，账本会被大量伪“标为已读”记录污染，无法作为未来统计中心的数据源。
+
+决策：`LocalArticleDbService.setReadState` 仅在持久化状态真实变化时记录并改写文章；已读事件携带 `ReadStateChangeSource.user` 或 `syncInference`。刷新和订阅源详情的服务端快照推断显式使用 `syncInference`，用户操作默认使用 `user`。
+
+后果：重复刷新不再增加已读事件，未来分析可以区分用户动作与服务端同步推断。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

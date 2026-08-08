@@ -2,6 +2,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/article_length_estimator.dart';
 import '../utils/storage.dart';
 import 'account_session_guard.dart';
+import 'analysis_event_ledger.dart';
 import 'article_image_cache_service.dart';
 import 'article_state_notifier.dart';
 import 'auto_filter_worker.dart';
@@ -27,6 +28,7 @@ abstract final class AccountDataService {
     ReadSyncService.clear();
 
     await ArticleImageCacheService.resetForAccountChange();
+    await AnalysisEventLedger.clear();
     await Future.wait([
       GStorage.localCache.clear(),
       GStorage.readStatus.clear(),
@@ -41,6 +43,7 @@ abstract final class AccountDataService {
         .where(
           (key) =>
               key.startsWith('readability_fetched_') ||
+              key.startsWith('readability_fetch_state_') ||
               key.startsWith('inbox_detail_fetched_'),
         )
         .toList(growable: false);

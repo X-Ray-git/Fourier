@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/article_card_chrome.dart';
@@ -13,6 +12,7 @@ import '../../common/widgets/pill_tag.dart';
 import '../../common/widgets/card_press_effect.dart';
 import '../../models/article.dart';
 import '../../services/article_image_service.dart';
+import '../../services/external_link_service.dart';
 import '../../services/translation_service.dart';
 import '../../services/summary_service.dart';
 import '../../utils/source_taxonomy.dart';
@@ -504,13 +504,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                       },
                       onLinkTap: (url, attributes, element) async {
                         if (url != null && url.isNotEmpty) {
-                          final uri = Uri.tryParse(url);
-                          if (uri != null && await canLaunchUrl(uri)) {
-                            await launchUrl(
-                              uri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          }
+                          await ExternalLinkService.openUrlWithFeedback(url);
                         }
                       },
                     )

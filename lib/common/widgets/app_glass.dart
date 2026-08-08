@@ -950,12 +950,17 @@ class AppMobileGlassSheet extends StatelessWidget {
   final double borderRadius;
   final EdgeInsetsGeometry padding;
 
+  /// 大面板使用平滑、shader-free 的原生 backdrop（BackdropFilter）路径，
+  /// 避免大面积 shader 产生细网格纹理；小控件按钮仍保留 shader 渲染。
+  final bool nativeBackdrop;
+
   const AppMobileGlassSheet({
     super.key,
     required this.child,
     this.height,
     this.borderRadius = 32,
     this.padding = EdgeInsets.zero,
+    this.nativeBackdrop = false,
   });
 
   @override
@@ -969,6 +974,7 @@ class AppMobileGlassSheet extends StatelessWidget {
           borderRadius: borderRadius,
           padding: padding,
           tone: AppGlassTone.panel,
+          nativeBackdrop: nativeBackdrop,
           child: child,
         ),
       ),

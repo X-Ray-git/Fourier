@@ -16,6 +16,7 @@ import '../../common/widgets/feedback_toast.dart';
 import '../../services/account_session_guard.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_cache_service.dart';
+import '../../services/analysis_event_ledger.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/feed_silent_settings_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -282,7 +283,11 @@ class TimelineController extends GetxController {
         GStorage.readStatus.delete(local.entryId);
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
-      LocalArticleDbService.setReadState(local.entryId, true);
+      LocalArticleDbService.setReadState(
+        local.entryId,
+        true,
+        source: ReadStateChangeSource.syncInference,
+      );
     }
 
     // 未读请求可能早于 mark-read 请求发出，返回的仍是旧快照。

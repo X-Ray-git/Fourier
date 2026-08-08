@@ -2,13 +2,15 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 abstract final class GStorage {
-  static late final Box<dynamic> setting;
-  static late final Box<dynamic> localCache;
-  static late final Box<dynamic> readStatus;
-  static late final Box<dynamic> articleDb;
-  static late final Box<dynamic> translations;
-  static late final Box<dynamic> summaries;
-  static late final Box<dynamic> readHistory;
+  // 非 final：测试中每个用例在独立临时目录重新 init（关闭旧 box 后重开）。
+  static late Box<dynamic> setting;
+  static late Box<dynamic> localCache;
+  static late Box<dynamic> readStatus;
+  static late Box<dynamic> articleDb;
+  static late Box<dynamic> translations;
+  static late Box<dynamic> summaries;
+  static late Box<dynamic> readHistory;
+  static late Box<dynamic> analysisEvents;
 
   static Future<void> init() async {
     final appDir = await getApplicationDocumentsDirectory();
@@ -36,6 +38,8 @@ abstract final class GStorage {
       'readHistory',
       compactionStrategy: (entries, deletedEntries) => deletedEntries > 50,
     );
+    // 本地分析事件账本：版本化、追加式，账号退出时随账号数据清理。
+    analysisEvents = await Hive.openBox('analysisEvents');
   }
 
   static Future<void> close() async {
@@ -47,6 +51,7 @@ abstract final class GStorage {
       translations.close(),
       summaries.close(),
       readHistory.close(),
+      analysisEvents.close(),
     ]);
   }
 }

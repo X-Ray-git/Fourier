@@ -1,5 +1,5 @@
 /* 由 scripts/docs-index.js 生成，随内容提交；阅读端零生成。 */
-window.WIKI_SEARCH_MANIFEST = "5e6bf2e844caf192";
+window.WIKI_SEARCH_MANIFEST = "97cd4831ad4fd149";
 window.WIKI_SEARCH_INDEX = [
  {
   "path": "architecture/networking.html",
@@ -82,7 +82,24 @@ window.WIKI_SEARCH_INDEX = [
  {
   "path": "features/article-rendering.html",
   "title": "文章渲染",
-  "headings": [],
+  "headings": [
+   {
+    "id": "目录面板大面板原生-backdrop",
+    "text": "目录面板：大面板原生 backdrop"
+   },
+   {
+    "id": "macos-行内代码",
+    "text": "macOS 行内代码"
+   },
+   {
+    "id": "文章链接-hover-生命周期",
+    "text": "文章链接 hover 生命周期"
+   },
+   {
+    "id": "android-骨架与共享-inset",
+    "text": "Android 骨架与共享 inset"
+   }
+  ],
   "text": "文章渲染 文章处理流水线 正文从抓取到渲染与导出的阶段划分：抓取、规范化、解析、缓存、渲染、导出与 AI 队列；修复应尽量放在问题所属阶段。 抓取 readability 详情页补抓 规范化 normalizeHtml 来源兼容层 chunk 解析 HtmlChunkParser 规范化缓存 entryId + 正文 SHA-256 指纹 渲染 Column Markdown 导出 ArticleMarkdownExportService · isolate 单篇复制 / 批量导出共用 AI 队列资格 onArticleContentAvailable 未读 → 摘要 / 订阅源开关 → 翻译 渲染输出 标题折叠/目录锚点/图片 右下角圆角安全裁剪 分层原则 渲染器刻意拆分规范化 / 解析 / widget 渲染 修复应尽量放在问题所属阶段 保留 Column 选择 / 目录锚点 / 图片生命周期 / 滚动稳定 不随意切换 SliverList.builder 相关文件： lib/pages/article/article_page.dart lib/pages/article/widgets/html_chunk_card.dart lib/services/article_markdown_export_service.dart lib/utils/article_content_utils.dart lib/utils/article_content_compatibility.dart lib/utils/html_chunk_parser.dart 当前设计： HTML 在渲染前会先规范化。 解析后的 chunk 在文章 scroll 内通过 Column 渲染。 不要随意把文章正文切换到 SliverList.builder ：此前讨论后保留 Column ，原因是选择、目录锚点 key、图片生命周期和滚动稳定性。 渲染器刻意拆分 HTML 规范化、chunk 解析、widget 渲染。修复应尽量放在问题所属阶段。 ArticleController 初始化右上角已读/未读按钮时，必须使用 LocalArticleDbService.readOverrideOf(article.entryId) ?? article.isRead 。不要只读 GStorage.readStatus ，因为最近阅读页传入的文章本身已经是已读，而同步成功后本地覆盖状态可能不存在。 HTML 空段规范化： ArticleContentUtils._removeEmptyBlocks() 会删除没有可见文本、没有媒体、仅由 <br> 和 span/strong/em 等格式包装组成的空块。 <p><span><br></span></p> 与 <p><br></p> 语义相同，不应因多一层无意义包装而逃过清洗。 带 id 或 name 的空元素可能是目录/页面锚点，必须保留；图片、视频、表格、代码、引用和列表等媒体/结构内容也必须保留。新增格式标签时，只有确定其在无文本时没有独立语义，才能加入格式包装白名单。 新智元文章《奥特曼回斯坦福认错：思考外包给AI，一代人大脑正在萎缩》的源 HTML 把几乎每句话放在独立 <p> 中，并在段落间插入 <p><span><br></span></p> 。旧清洗在 152 个段落中残留 82 个这种空段，chunk 合并又在每个段落之间添加 <br><br> ，最终相邻句子间最多叠加 5 个 <br> 。当前窄修复只删除空格式段，使其回到标准段落间距。 不要自动合并该类“一句话一个 <p> ”的正常非空段落。这是上游排版语义；可靠合并需要复杂启发式，会增加误伤和维护成本，用户已明确暂不考虑。 来源兼容规则： 依赖站点 CSS 才能成立的窄兼容修复集中放在 ArticleContentCompatibility ，由 ArticleContentUtils.normalizeHtml() 在通用安全清洗后、图片 URL 规范化前调用。不要把来源判断散落到 HtmlChunkParser 或普通图片 widget，也不要为单一规则引入动态规则引擎。 Hugging Face Blog 的作者头像没有 width/height ，只使用 Tailwind 的 size-9 sm:size-12 或父容器 h-5/w-5 控制显示尺寸。图片文件的固有像素不能代表网页显示尺寸；不应直接按正文最大宽度放大，也不应加载上游整套 CSS。 官方作者区有稳定的 data-target=\"BlogAuthorsByline\" 。兼容层将其转换为内部 fourier-author-list/fourier-author 语义结构，解析器继续兼容旧缓存中的 auto-folo-* 标签； HtmlChunkParser 生成单个 authorList chunk， HtmlChunkCard 以 36px 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。 作者区之外的 Hugging Face 头像堆叠属于站点装饰信息，仍按明确的 cdn-avatars.huggingface.co 或 /avatars/ 头像语义移除；普通正文图片和其他来源即使带有 avatar /圆形类名也不能被误删。 已保存译文此前直接进入 HtmlChunkParser ，会绕过正文规范化。当前原文、历史译文和新生成译文在展示前都统一经过 normalizeHtml() ；历史数据不需要批量迁移，重新构建文章 Controller 即可生效。 normalizeHtml() 接受文章原文 URL 作为来源上下文；来源规则按 URL host 分派，不依赖可变的订阅源标题或 feed ID。MarkTechPost 会移除上游依赖网页脚本的 dm-copy-raw-code 控件；若 Interactive Explainer 后出现被 Folo 展开到正文中的完整内嵌文档（以残留 <title> 为确定边界），则把该尾部替换为“交互内容仅在原文网页中可用”及原文链接。不要据此放宽到任意 iframe、任意 Interactive 文本或其他来源。 来源规则必须依赖稳定的来源标记、域名或明确语义，并配正向/反向最小 HTML 测试。不要按文章标题、订阅源 ID、图片是否圆形或图片固有尺寸做宽泛判断。 超链接： macOS 正文链接保留主题色、手型光标、点击打开和底部 URL 预览，但 hover 时不再动态增加下划线。 底部 URL 预览继续由文章页共享的 _hoveredUrl 驱动；它是 Stack 中的局部覆盖层，不改变正文布局。 HtmlChunkCard 不得监听共享 _hoveredUrl 并把 URL 变化作为 HTML widget 缓存失效条件。旧实现会在鼠标进入/离开任意链接时通知所有 chunk，导致全篇 flutter_html 重新解析和文本布局，滚动经过链接时产生瞬时卡顿。 如果未来重新设计 hover 视觉反馈，必须保证不重新解析全"
  },
  {
@@ -98,16 +115,33 @@ window.WIKI_SEARCH_INDEX = [
     "text": "交互注意点"
    },
    {
+    "id": "ai-队列滚动补位调度",
+    "text": "AI 队列：滚动补位调度"
+   },
+   {
+    "id": "全文抓取成功标记与重试",
+    "text": "全文抓取成功标记与重试"
+   },
+   {
+    "id": "本地分析事件账本",
+    "text": "本地分析事件账本"
+   },
+   {
     "id": "相关页面",
     "text": "相关页面"
    }
   ],
-  "text": "后台任务 任务中心在 macOS 和 Android 上都可见，用于展示正在进行或排队中的工作。 当前设计 应和设置页共享同一种轻量面板语言。 列表内部避免密集 Liquid Glass 表面；使用简单描边和微弱 hover 状态。 作为 overlay 打开时，背景应保证可读。 Scrollbar 不应造成左右 padding 不对称或出现重复条。 Android 保持设置页进入的二级页面，使用 MobileBlurAppBar 、 12px 页面边距和 MobileSettingsPanel 轻量外壳。AI 失败记录继续作为下一级页面；不要用旧式透明 Card 或密集实时玻璃重做。 交互注意点 macOS 如需保留上下文可以继续使用 overlay；Android 已确认采用完整二级页面，不应为了跨平台形式一致强行改成 overlay。 “去审核”等操作应符合当前 macOS 控件语言，不要使用旧的移动端按钮样式。 如果某个操作被刻意隐藏或移除，应记录产品原因；否则把它当作 bug。 相关页面 features/settings.md design/macos-ui.md design/liquid-glass.md"
+  "text": "后台任务 任务中心在 macOS 和 Android 上都可见，用于展示正在进行或排队中的工作。 当前设计 应和设置页共享同一种轻量面板语言。 列表内部避免密集 Liquid Glass 表面；使用简单描边和微弱 hover 状态。 作为 overlay 打开时，背景应保证可读。 Scrollbar 不应造成左右 padding 不对称或出现重复条。 Android 保持设置页进入的二级页面，使用 MobileBlurAppBar 、 12px 页面边距和 MobileSettingsPanel 轻量外壳。AI 失败记录继续作为下一级页面；不要用旧式透明 Card 或密集实时玻璃重做。 交互注意点 macOS 如需保留上下文可以继续使用 overlay；Android 已确认采用完整二级页面，不应为了跨平台形式一致强行改成 overlay。 “去审核”等操作应符合当前 macOS 控件语言，不要使用旧的移动端按钮样式。 如果某个操作被刻意隐藏或移除，应记录产品原因；否则把它当作 bug。 AI 队列：滚动补位调度 三个 AI worker（自动翻译 / 自动摘要 / AI 过滤）与全文抓取队列采用 滚动补位 调度： 任一任务完成后 立即 补充一个新任务，运行中数量始终不超过各自并发配置；不再整批取并发数后 Future.wait ，慢任务不再阻塞后续任务。 三个 worker 保持完全独立：独立的队列、独立的并发配置（ LlmConfig 的 translate / summary / filter 前缀）与独立生命周期，不合并成共享调度器。 并发数在每次补位时按最新配置读取；运行中修改并发数在后续补位时生效，不中断正在运行的任务。 取消（账号切换时由 AccountDataService 调用）清空队列与运行中集合，并推进各 Worker 自己的运行代次；旧代次任务可以自然结束，但其完成回调不得删除新代次的同 entryId 运行标记或触发补位。账号 revision 失效后的在途结果不落库，全文抓取的旧失败结果也不得写失败状态或安排重试。 AI 过滤出队时按最新持久化状态跳过已读 / 已判定 / 已捞回文章。 全文抓取（ AutoReadabilityWorker ）为并发 3 的滚动补位队列。 全文抓取成功标记与重试 成功标记 readability_fetched_<entryId> 只在成功解析并持久化有效正文后写入 ；失败不再写标记，因此可重试。 失败登记可诊断状态 readability_fetch_state_<entryId> （attempts / lastError / lastAt），自动重试有限次数 + 指数退避（2s / 5s），达到上限后停止并保留失败状态。 旧版本在请求前就打标记的历史数据 不批量清除 ；只有正文为空或明确失败且文章仍未读时进入有限次兼容重试。 已开始抓取的文章即使完成前被标为已读，也允许这一条已开始的流水线继续进入翻译和摘要（ AutoAiQueueCoordinator.onArticleContentAvailable(allowRead: true) ）；尚未开始的等待任务在出队时若已标为已读则移除。 打开文章只记录最近阅读，不得因此标记已读。 本地分析事件账本 AnalysisEventLedger 是版本化、追加式、本地 Hive 事件账本（box analysisEvents ），作为未来统计中心和 JSON 导出的唯一数据来源： 记录 AI 分类结果、理由与时间；用户 M/K/N 操作及操作前后状态快照；真实发生的已读 / 未读状态变化；文章打开事件；事件含 articleId、feedId、订阅源名称、标题与必要状态。 已读状态事件携带 user / syncInference 来源；服务器快照推断与用户动作必须可区分。状态没有变化时不得重复记账，避免每次刷新污染未来统计。 语义：K 表示「保留或稍后确认」，不能自动解释为 AI 分类错误；N（n_spam）把漏网文章移入垃圾拦截，才是明确纠正信号。 从新版本开始记录，不伪造历史事件； article.userAction 等现有字段继续兼容，不移除。 不保存正文、摘要、翻译、Prompt、API key、Session Token。 数据属于当前活动账号，退出或切换账号时随账号数据清理；暂不限制事件数量、不做统计中心与导出 UI。 事件写入集中在操作服务（过滤 worker、UndoService、LocalArticleDbService、文章页打开入口），不在页面重复拼装。 相关页面 features/settings.md design/macos-ui.md design/liquid-glass.md"
  },
  {
   "path": "features/filter-review.html",
   "title": "垃圾拦截与审核",
-  "headings": [],
+  "headings": [
+   {
+    "id": "文案语义与事件账本",
+    "text": "文案语义与事件账本"
+   }
+  ],
   "text": "垃圾拦截与审核 垃圾拦截审核流转 文章经 AI 判定进入审核页，K/M/N 三种动作写入 userAction 统计信号；误分类是保留或拒绝与已读的原子组合。 文章流 时间线 / 订阅源 AI 过滤判定 DeepSeek · 可编辑 Prompt 被拒绝？ 保留在 普通时间线 垃圾拦截审核页 独立审核队列 · 横滑 / 快捷键 / 右键 K 保留 写 userAction='k' 保留 filterReason M 确认拒绝 写 userAction='m' 弱信号 N 误分类（旗帜） 拦截页 n_keep / 时间线 n_spam 原子撤销：分类 + 已读 垃圾拦截/审核页用于审核被 AI 拒绝的文章。 关键预期： 用户可以审核被拒绝文章。 Android 将垃圾拦截作为四项底部主导航中的一级入口；常驻实例使用嵌入模式，不创建第二层 AppBar。独立路由继续可用，但时间线顶部不再保留重复的“AI 智能过滤”入口卡片。 Android 时间线角标与垃圾拦截角标允许重叠：被 AI 拒绝的未读文章仍按既有逻辑留在普通时间线，同时进入待审核列表。时间线数字使用非静默未读总数，垃圾拦截数字使用 isRejectedByAi && !isRead ；这不是互斥队列。 移除/通过条目后，应跳转到下一篇合适文章，并在 macOS 上保持焦点行为可用。 Header 和面板样式应遵循当前 macOS 轻量面板语言。 文章卡片/审核行应保持和时间线卡片一致的交互反馈。 垃圾拦截页不应成为一套完全分叉的时间线实现；能和普通时间线共享的时间线级操作、按钮和文章动作菜单应尽量共享。 状态字段： ArticleModel.isRejectedByAi ArticleModel.filterReason ArticleModel.filterReviewed ArticleModel.filteredAt ArticleModel.userAction ：用户动作标记，事后统计误分类用。取值 'k' （拦截页保留）、 'm' （拦截页确认拒绝）、 'n_keep' （拦截页误分类：保留+已读）、 'n_spam' （常规页误分类：拒绝+已读）、null（未表态）。同一文章多次动作时 latest wins。 统计仅覆盖当前 articleDb 中仍保留的近期文章，不是永久操作历史。它受 5000 篇缓存上限和账号数据清理约束；这是用户确认的产品边界，不要为此另建长期日志或把记录加入设置备份。 本地数据库 merge 时不要丢失这些字段。 误分类（ N / 右上角旗帜按钮）： 拦截页语义：当前文章应该保留，但用户已读完 → 保留 + 标为已读，写 userAction='n_keep' ；复用 _keep 的 pending/退场/后继选中机制。 常规时间线语义：标为已读且应放进垃圾拦截 → 拒绝 + 标为已读，写 userAction='n_spam' ；复用 M 的列表离场/后继选择路径。已读或已在拦截中的文章按钮置灰。 两类误分类都是一条原子 UndoAction，撤销/重做同时恢复分类与已读状态。 所有过滤动作的撤销路径（ filterKeep / filterReject / misclassifyKeep / misclassifySpam ）都使用 upsertOne(forceReplace: true) 整条还原动作前快照；不能用普通 merge， item.userAction ?? existing?.userAction 会把动作标记留在已回滚的文章上。 LocalArticleDbService.setReadState 重建文章时必须保留 userAction （及全部过滤字段），否则标已读/未读会把标记覆盖成 null。 macOS 拦截页的 K/M/N 由页面级 HardwareKeyboard 处理器执行（ _handleHardwareKeyEvent ），不依赖详情面板是否挂载； ArticlePageView 在 isReviewContext 下对 M/N 只消费按键不执行回调，避免与页面级处理器双触发。 HardwareKeyboard 会调用全部注册处理器，不能依赖返回 true 短路。 页面级 K/M/N 必须在 Alt/Control/Command 按下时放行，尤其不能让 Cmd+M 、 Cmd+N 同时触发业务操作。统一使用 MacArticleShortcutService.hasNonShiftModifier 判断。 统计口径：FP = 'k' + 'n_keep' ，FN = 'n_spam' ， 'm' 是弱信号（可能同意也可能懒得分辨），null 无信号。 保留动作（ K 、 'n_keep' ）不再清空 filterReason / filteredAt ，供事后按 AI 原判理由聚合 FP；UI 已按 isRejectedByAi 隐藏显示，不受影响。 upsertMany 合并使用 item.userAction ?? existing?.userAction ，网络同步数据不得覆盖本地动作标记；旧版本二进制重写文章时会丢弃该字段（不可修复），统计语义为\"只有真的没有假的\"。 所有从现有 ArticleModel 重建新实例的路径都必须复制 userAction 。数据库 merge 能保护落盘值，但内存模型丢字段会让后续 Undo 快照无法精确恢复上一个动作。 时间线 N 复用已读退场的帧边界通知； applyMisclassify 不得在 applyReadLocally(...deferTimelineVisualUpdate: true) 后额外立即调用 ArticleStateNotifier.tick ，否则会绕过动画保护。 N 撤销时可先将动作前的完整快照写回数据库，但时间线内存快照必须暂时保持已读，再由 markAsUnreadLocal 完成唯一一次未读插入。如果内存也提前恢复为未读，标准恢复路径会提前返回，后续数据库通知只能通过整表结构刷新重插卡片，并会取消进场动画。 与普通时间线的复用边界： 同步按钮使用 AppGlassSyncButton ，避免时间线和垃圾拦截页各维护一套旋转、tooltip、hover 和玻璃样式。 右键/长按文章 AI 操作使用 ArticleActionsMenu ，普通时间线卡片和垃圾拦截审核行共享翻译、删除翻译、生成摘要、删除摘要等入口。 macOS 垃圾拦截左栏审核行也应复用 ArticleCardChrome 的基础卡片外壳样式，保持和普通时间线卡片一致的轻填充、选中态和无普通边框。不要再在 _MacReviewRow 里单独手写透明/选中背景。 macOS _MacReviewRow 保留拒绝理由和摘要等独立结构，但订阅源行右侧的预计内容高度必须复用 ArticleLengthLabel ；Android 审核卡片通过共享 ArticleCard 自动获得同一标签。不要复制估算或格式化规则。 垃圾拦截页同步时可以复用 TimelineController.loadFeedsThenAr"
  },
  {
@@ -135,7 +169,7 @@ window.WIKI_SEARCH_INDEX = [
     "text": "回归风险"
    }
   ],
-  "text": "快捷键与焦点 快捷键支持主要是 macOS 功能。 重要行为 M 根据当前页面改变语义：普通时间线切换当前文章的已读/未读状态，其中标为已读后继续选中下一篇；垃圾拦截页则表示移除当前文章。 K 仅用于垃圾拦截页，表示保留当前文章。垃圾拦截中的 M/K 都会在操作完成后继续选中下一篇。 N 表示误分类（右上角旗帜按钮）：垃圾拦截页中保留当前文章并标为已读（等效于先 K 再在常规列表 M ）；常规时间线中标为已读并移入垃圾拦截。这是一条原子业务动作， Cmd+Z 一次撤销同时恢复分类与已读状态。常规时间线中已读或已在拦截中的文章不响应 N （按钮置灰）。 Cmd+N 是 macOS 系统新建窗口，必须继续放行，不能被应用快捷键抢走。 无修饰键 C 在当前 macOS 文章详情中复制已加载原文的 Markdown； Command-C 必须继续交给系统复制正文选区。 无修饰键 B 在默认浏览器打开当前原文； Shift+B 是确保已读后打开原文，已经已读时不能反向恢复未读。垃圾拦截页中 Shift+B 复用该页的 M 语义，即移除当前文章并在退场动画结束后打开原文。 Command-B 保留给 macOS 的常规文本语义，不作为应用快捷键。 Cmd+1 回到无订阅源/分类/静默筛选的“全部文章”， Cmd+2 打开垃圾拦截， Cmd+0 打开静默订阅源。键盘页面切换不能复用侧边栏双击计时，否则连续按键可能意外触发时间线回顶。 垃圾拦截/审核页快捷键不能被主时间线抢走。 Cmd+Z 使用最多 50 项的业务历史连续撤销“标为已读、垃圾拦截保留、垃圾拦截移除、静默文章整批标为已读”； Shift+Cmd+Z 按相反顺序连续重做。新的业务动作会清空 redo 栈；导航、切换时间线范围、订阅源、分类或静默 scope 不清空历史。业务栈在应用本次运行期间保持一致，只有进程彻底退出才自然消失，不持久化到下次启动。 文本输入框继续使用 Flutter 自身的文本 Undo/Redo。原生“编辑”菜单与全局快捷键必须先检查当前焦点，不能让文章业务历史抢走输入框里的 Cmd+Z / Shift+Cmd+Z 。 Cmd+R 触发全局刷新。 Cmd+W 关闭当前主窗口，行为与点击红色按钮相同：隐藏窗口但不退出应用。 当前 inline 视频由 activePlayer 归属空格和媒体键；全屏视频独占这些按键。 全屏视频中 Left / Right 分别后退/前进 5 秒， Esc 退出；这些行为只在全屏视频路由存在时接管，不应影响文章列表的左右导航。 Escape 关闭全屏图片预览。 静默订阅源批量选择模式中， Esc 等效于右上角“退出批量选择”，并清空本次勾选；该模式的处理优先于底层文章详情的关闭行为。批量导出正在提交时，关闭入口和 Esc 都不应中断操作。 macOS 从文章来源进入具体订阅源后， Esc 可以回到跳转前的文章与阅读位置。优先级为：批量选择先退出；目标订阅源中已打开文章时先关闭该文章；详情为空时再消费临时来源返回点。该返回点属于导航上下文，不进入 Cmd+Z /Redo 业务历史，并在用户手动切换其他时间线 scope 后失效。 焦点规则 在垃圾拦截/审核页执行移除/标记操作后，焦点必须仍可用于键盘导航。 避免焦点落入非命令区域，导致 Flutter 文本选择光标出现。 Esc 关闭分栏文章后，焦点必须落到当前页面不可见的空详情焦点节点，不能让 Flutter 自动恢复到此前点击过的侧边栏条目，否则“全部文章”等入口会残留灰色键盘焦点高亮。 卡片右键菜单操作后，详情页控件应立即更新，不需要先点别的文章再回来。 导航规则 macOS 分栏应保持中间列表和右侧文章详情同步。 当前列表没有选中文章时， Right 选择当前可见列表第一篇， Left 选择最后一篇；页面必须在文章详情尚未挂载时消费该事件，不能让方向键落到侧边栏并留下错误的焦点高亮。该规则覆盖主时间线及其订阅源/静默 scope、垃圾拦截和最近阅读；设置等没有文章列表的页面不接管裸方向键。 键盘移动列表时，应自动滚动选中卡片到可见区域。 双击和快捷键触发的切换应保留卡片进出场动画，除非出于性能原因明确绕过。 实现结构 macOS 菜单栏由 MacOSAppMenu 的 PlatformMenuBar 管理，结构为 Fourier / 编辑 / 显示 / 文章 / 窗口 / 帮助 。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 PlatformProvidedMenuItem ；XIB 只为这些系统项提供本地化标题和 AppKit selector，不要恢复 Flutter 模板中未使用的拼写、替换、语音等菜单。 “编辑”菜单的业务动作名必须始终放在长标题之前，单篇格式为 撤销“动作” · 《截断标题…》 / 重做“动作” · 《截断标题…》 。整批静默文章使用 撤销“批量标为已读” · N 篇 ，不显示任意一篇文章标题。完整 50 项栈不暴露成菜单列表，只展示下一项。 UndoAction.actionName 是菜单动作名， description 用于反馈正文，不要再把完整句子整体截断。 UndoService 使用 BoundedHistory 保存 undo/redo 双栈，并串行执行撤销/重做，避免快速连续按键造成网络回滚乱序。 UndoAction 可以承载单篇或不可拆分的一批文章；页面只通过 redo preparation 在数据变化前登记列表离场；数据变更集中复用单篇或批量本地状态入口，不能在重做路径复制数据库规则。业务栈是进程级内存状态，不得在 scope 切换时调用 UndoService.clear() 。 当前分栏文章通过 MacOSAppMenuService 注册原文、复制 Markdown、已读/审核动作、前后导航、翻译和摘要能力。注册者必须同时验证 route、当前 macOS 页面和当前选中文章，并在销毁时注销，避免 IndexedStack 中隐藏文章污染“文章”菜单。 应用级组合键和无选中文章时的裸方向键定义在 main.dart 的 Shortcuts/Actions 。主时间线、垃圾拦截和最近阅读通过 MacArticleShortcutService 注册当前页面是否激活、是否已有选择以及首末选择动作。裸方向键必须在 Flutter 默认方向焦点移动之前被消费；不要退回到每个页面各挂一套 HardwareKeyboard 方向键监听，否则侧边栏可能已经先获得灰色焦点高亮。 注册器只在当前 macOS 页面、当前 route、没有文章选中且焦点不在 EditableText 时启用。选择前会释放侧边栏旧焦点；有文章选中时，左右键继续由当前 ArticlePageView 处理。页面销毁时必须注销注册，避免 IndexedStack 中失活页面抢按键。 Shift+B 在普通时间线复用双击的 _openOriginalAndMarkRead 路径，保持帧边界持久化、列表退场、后继选择和退场结束后打开浏览器的既有顺序。垃圾拦截复用 _reject ，并同样等真实 r"
+  "text": "快捷键与焦点 快捷键支持主要是 macOS 功能。 重要行为 M 根据当前页面改变语义：普通时间线切换当前文章的已读/未读状态，其中标为已读后继续选中下一篇；垃圾拦截页则表示移除当前文章。 K 仅用于垃圾拦截页，表示保留当前文章。垃圾拦截中的 M/K 都会在操作完成后继续选中下一篇。 N 表示纠正分类（右上角旗帜按钮）：垃圾拦截页中保留当前文章并标为已读（等效于先 K 再在常规列表 M ）；常规时间线中标为已读并移入垃圾拦截。这是一条原子业务动作， Cmd+Z 一次撤销同时恢复分类与已读状态。常规时间线中已读或已在拦截中的文章不响应 N （按钮置灰）。 Cmd+N 是 macOS 系统新建窗口，必须继续放行，不能被应用快捷键抢走。“误分类”只作为内部分析语义，不作为按钮文案。 无修饰键 C 在当前 macOS 文章详情中复制已加载原文的 Markdown； Command-C 必须继续交给系统复制正文选区。 无修饰键 B 在默认浏览器打开当前原文； Shift+B 是确保已读后打开原文，已经已读时不能反向恢复未读。垃圾拦截页中 Shift+B 复用该页的 M 语义，即移除当前文章并在退场动画结束后打开原文。 Command-B 保留给 macOS 的常规文本语义，不作为应用快捷键。 Cmd+1 回到无订阅源/分类/静默筛选的“全部文章”， Cmd+2 打开垃圾拦截， Cmd+0 打开静默订阅源。键盘页面切换不能复用侧边栏双击计时，否则连续按键可能意外触发时间线回顶。 垃圾拦截/审核页快捷键不能被主时间线抢走。 Cmd+Z 使用最多 50 项的业务历史连续撤销“标为已读、垃圾拦截保留、垃圾拦截移除、静默文章整批标为已读”； Shift+Cmd+Z 按相反顺序连续重做。新的业务动作会清空 redo 栈；导航、切换时间线范围、订阅源、分类或静默 scope 不清空历史。业务栈在应用本次运行期间保持一致，只有进程彻底退出才自然消失，不持久化到下次启动。 文本输入框继续使用 Flutter 自身的文本 Undo/Redo。原生“编辑”菜单与全局快捷键必须先检查当前焦点，不能让文章业务历史抢走输入框里的 Cmd+Z / Shift+Cmd+Z 。 Cmd+R 触发全局刷新。 Cmd+W 关闭当前主窗口，行为与点击红色按钮相同：隐藏窗口但不退出应用。 当前 inline 视频由 activePlayer 归属空格和媒体键；全屏视频独占这些按键。 全屏视频中 Left / Right 分别后退/前进 5 秒， Esc 退出；这些行为只在全屏视频路由存在时接管，不应影响文章列表的左右导航。 Escape 关闭全屏图片预览。 静默订阅源批量选择模式中， Esc 等效于右上角“退出批量选择”，并清空本次勾选；该模式的处理优先于底层文章详情的关闭行为。批量导出正在提交时，关闭入口和 Esc 都不应中断操作。 macOS 从文章来源进入具体订阅源后， Esc 可以回到跳转前的文章与阅读位置。优先级为：批量选择先退出；目标订阅源中已打开文章时先关闭该文章；详情为空时再消费临时来源返回点。该返回点属于导航上下文，不进入 Cmd+Z /Redo 业务历史，并在用户手动切换其他时间线 scope 后失效。 焦点规则 在垃圾拦截/审核页执行移除/标记操作后，焦点必须仍可用于键盘导航。 避免焦点落入非命令区域，导致 Flutter 文本选择光标出现。 Esc 关闭分栏文章后，焦点必须落到当前页面不可见的空详情焦点节点，不能让 Flutter 自动恢复到此前点击过的侧边栏条目，否则“全部文章”等入口会残留灰色键盘焦点高亮。 卡片右键菜单操作后，详情页控件应立即更新，不需要先点别的文章再回来。 导航规则 macOS 分栏应保持中间列表和右侧文章详情同步。 当前列表没有选中文章时， Right 选择当前可见列表第一篇， Left 选择最后一篇；页面必须在文章详情尚未挂载时消费该事件，不能让方向键落到侧边栏并留下错误的焦点高亮。该规则覆盖主时间线及其订阅源/静默 scope、垃圾拦截和最近阅读；设置等没有文章列表的页面不接管裸方向键。 键盘移动列表时，应自动滚动选中卡片到可见区域。 双击和快捷键触发的切换应保留卡片进出场动画，除非出于性能原因明确绕过。 实现结构 macOS 菜单栏由 MacOSAppMenu 的 PlatformMenuBar 管理，结构为 Fourier / 编辑 / 显示 / 文章 / 窗口 / 帮助 。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 PlatformProvidedMenuItem ；XIB 只为这些系统项提供本地化标题和 AppKit selector，不要恢复 Flutter 模板中未使用的拼写、替换、语音等菜单。 “编辑”菜单的业务动作名必须始终放在长标题之前，单篇格式为 撤销“动作” · 《截断标题…》 / 重做“动作” · 《截断标题…》 。整批静默文章使用 撤销“批量标为已读” · N 篇 ，不显示任意一篇文章标题。完整 50 项栈不暴露成菜单列表，只展示下一项。 UndoAction.actionName 是菜单动作名， description 用于反馈正文，不要再把完整句子整体截断。 UndoService 使用 BoundedHistory 保存 undo/redo 双栈，并串行执行撤销/重做，避免快速连续按键造成网络回滚乱序。 UndoAction 可以承载单篇或不可拆分的一批文章；页面只通过 redo preparation 在数据变化前登记列表离场；数据变更集中复用单篇或批量本地状态入口，不能在重做路径复制数据库规则。业务栈是进程级内存状态，不得在 scope 切换时调用 UndoService.clear() 。 当前分栏文章通过 MacOSAppMenuService 注册原文、复制 Markdown、已读/审核动作、前后导航、翻译和摘要能力。注册者必须同时验证 route、当前 macOS 页面和当前选中文章，并在销毁时注销，避免 IndexedStack 中隐藏文章污染“文章”菜单。 应用级组合键和无选中文章时的裸方向键定义在 main.dart 的 Shortcuts/Actions 。主时间线、垃圾拦截和最近阅读通过 MacArticleShortcutService 注册当前页面是否激活、是否已有选择以及首末选择动作。裸方向键必须在 Flutter 默认方向焦点移动之前被消费；不要退回到每个页面各挂一套 HardwareKeyboard 方向键监听，否则侧边栏可能已经先获得灰色焦点高亮。 注册器只在当前 macOS 页面、当前 route、没有文章选中且焦点不在 EditableText 时启用。选择前会释放侧边栏旧焦点；有文章选中时，左右键继续由当前 ArticlePageView 处理。页面销毁时必须注销注册，避免 IndexedStack 中失活页面抢按键。 Shift+B 在普通时间线复用双击的 _openOriginalAndMarkRead 路径，保持帧边界持久化、列表退场、后继选择和退场结束后打开浏览器的既有顺序。"
  },
  {
   "path": "features/media-playback.html",
@@ -178,6 +212,18 @@ window.WIKI_SEARCH_INDEX = [
     "text": "已确认但暂不修复的源内容边界"
    },
    {
+    "id": "youtube-客户端回退链mweb-ios",
+    "text": "YouTube 客户端回退链（MWEB / IOS）"
+   },
+   {
+    "id": "普通视频过期带时效签名-cdn",
+    "text": "普通视频过期（带时效签名 CDN）"
+   },
+   {
+    "id": "文章图片缓存统一成功通知",
+    "text": "文章图片缓存统一成功通知"
+   },
+   {
     "id": "相关页面",
     "text": "相关页面"
    }
@@ -218,26 +264,46 @@ window.WIKI_SEARCH_INDEX = [
  {
   "path": "features/settings.html",
   "title": "设置",
-  "headings": [],
+  "headings": [
+   {
+    "id": "android-触觉反馈",
+    "text": "Android 触觉反馈"
+   }
+  ],
   "text": "设置 设置页有 macOS 和移动端布局。 重要设置： 服务认证：Folo Session Token，以及 DeepSeek API Key。 LLM 模型/配置值。 Prompt 模板。 已读同步窗口。 角标策略。 文章内容最大宽度。 macOS max fling velocity。 外观模式： system 、 light 、 dark 。 任何会改变持久用户偏好的设置，都应考虑是否加入备份导出。 导入/导出： 使用剪贴板 JSON。 由 SettingsBackupService 白名单管理。 如果新增持久设置需要跨设备迁移，应加入导出/导入。 导出内容可能包含敏感值；UI 应提醒用户。 备份格式继续保持 version: 1 ，并继续导出长期 session_token ，因此旧备份和当前备份都可以在重新安装后恢复登录，不需要强制重新走浏览器。 导入必须先完整解析并验证候选 Session Token，验证通过后才能替换当前账号数据。无效或过期 Token 不能先覆盖当前设置，也不能触发本地账号数据清理。 Folo 登录与退出： macOS 首选 Folo 官方网页登录。实现对标 Folo CLI：应用在 127.0.0.1 随机端口启动临时 callback，在系统浏览器打开 https://app.folo.is/login?cli_callback=... ，收到一次性 token 后调用 Better Auth one-time-token/apply （404 时兼容 verify ），最后用 /better-auth/get-session 验证长期 Session Token。 Folo 官网在生成 CLI 回调期间仍会显示通用的“打开 Folo”按钮，点击会唤起官方客户端，Fourier 无法从系统浏览器中隐藏它。macOS 等待框必须提示用户无需点击该按钮；localhost 回调一旦验证成功，应立即在后台完成登录，不能等待 Fourier 重新获得焦点。Android 深链仍需等待应用恢复前台后再关闭登录界面。 Android 点击“登录 Folo”后动态读取并显示服务端提供方。当前 Folo 返回 Google、GitHub、Apple、Email；Android 与官方移动端一致地排除 Apple。Google/GitHub 在真实系统浏览器中完成，最终通过仅匹配 folo://fourier-auth 的深链返回；Email 使用本地邮箱/密码表单，并支持 TOTP 二步验证码。不要恢复移动 /login 页面或登录 WebView；前者会跳官网，后者会被 Google 拒绝。 社交登录已有对应网页会话时可能直接返回；Fourier 不读取系统浏览器 cookie，只接收 Better Auth Expo proxy 返回的会话 cookie。Email 密码与 TOTP 只在内存中提交，不写入设置、日志或配置备份。 手动 Session Token 入口继续保留。手动保存同样必须先调用 /better-auth/get-session 验证，不能把任意字符串直接写成已登录状态。 当前采用“单一活动账号”，不维护多账号档案，也不尝试识别不同 Session Token 是否属于同一用户。Token 实际变化时一律重建账号内容；完全相同的 Token 重复保存不清理数据。 “退出账号”是本地退出：删除 Fourier 的 Token 和账号内容，但不调用 Folo 远端 sign-out，也不退出系统浏览器。这样旧配置备份中的长期 Token 仍可导入。若要测试账号密码页面，需要用户自行在浏览器退出 Folo。 浏览器登录、手动 Token、配置导入三条入口最终必须汇入 AccountService.applyAccountChange() ，不要分别维护数据清理逻辑。 登录状态的主视觉使用 Folo 返回的头像和用户名，不再用“已配置 Token”代表用户身份。 /better-auth/get-session 返回的 id/name/email/image 会以轻量资料缓存在本机；旧安装仅在有 Token 但缺少资料时补查一次，头像失败则回退为用户名首字符。账号资料不进入 version 1 配置导出，导入 Token 时利用既有在线验证结果重新生成；切换或退出必须和 Token 一起替换或清除，不能残留上一个账号的头像。 macOS UI： 设置/任务中心已经从重型玻璃面板转向轻量描边面板，以改善性能/可读性。 Scrollbar 不应和内容重叠，也不应出现重复条。 设置顶部 chrome 已简化：不再保留大块冗余标题/说明/版本号区域。 设置底部/右侧 padding 应尽量保持和 macOS frame/侧边栏一致的边缘节奏。 Segmented 控件应使用当前 hover/cursor 行为，中性控件避免橙色 hover。 macOS 设置页 segmented 保留自身极弱主色 tint 和主色文字。时间线 未读/全部 已迁移为圆形 morph 选择按钮，不再和设置 segmented 共用 switch 视觉参数；不要为了机械统一把 header 选择器重新改回 segmented/switch。 macOS 自定义下拉菜单使用 _MacGlassSelectField 。下拉 overlay 不能完全透明：菜单面板需要局部静态底色遮住背后内容，且底色圆角必须和外框圆角对齐。 下拉 overlay 的可读性修复是局部处理，不应通过全局提高 AppGlassSurface 不透明度解决，否则会影响其他已经验证过的玻璃控件。 三选一的外观 segmented 高度和普通下拉/文本输入结构不同，应在“阅读与后台偏好”中独占完整一行；不要为了机械配对压缩其已验证的动画和玻璃规格。其余普通设置再进入响应式两列网格，窄窗口回落为单列。 macOS 的 Folo 与 DeepSeek 凭据位于同一个“服务认证”容器，底部右侧共用紧凑的“测试连接 + 保存认证”按钮行；Prompt 保存/重置仍位于各自容器底部右侧。不要把保存按钮挤在输入框右侧或横向撑满卡片。 Android UI： Android 设置页使用独立的移动端分组布局，但继续复用相同保存语义与业务组件。页面水平边距为 12px ，大面板使用 MobileSettingsPanel 的 24px 连续圆角和轻量静态材质；不要把 macOS 双栏设置布局压缩后直接搬到手机。 服务认证卡提供动态登录方式选择、手动长期 Session Token 和本地退出。所有登录方式最终都必须经过 /better-auth/get-session 验证，不能仅凭 OAuth 回调、Email 200 响应或 cookie 存在就切换账号。 点击登录后，provider 请求期间按钮显示旋转进度和“正在连接 Folo…”，但仍等待官方 provider 响应后再打开选择面板；不要用无反馈的禁用按钮让网络等待看起来像点击失效。 账号切换、退出、配置导入/导出等确认面板在 Android 使用 Material 3"
  },
  {
   "path": "features/subscriptions.html",
   "title": "订阅源",
-  "headings": [],
+  "headings": [
+   {
+    "id": "订阅错误文案区分源站阻止与url-无效",
+    "text": "订阅错误文案：区分“源站阻止”与“URL 无效”"
+   }
+  ],
   "text": "订阅源 订阅源侧边栏结构 分类行、展开箭头与订阅源行职责分离；当前订阅源临时锁定父分类展开；静默订阅源作为独立分组。 分类行 点击 = 切换分类筛选 hover/press 整行单一反馈 展开箭头 独立点击 · 只改展开 临时锁定时 no-op 订阅源行 点击 = 选择具体源 右键编辑 / 取消订阅 当前源 父分类 临时锁定 SubscriptionCatalogService 共享权威目录 · 分区快照 · 失败保留缓存 侧边栏与时间线 feed mapping 同一份数据 静默订阅源分组 独立分组 · 点击只进入静默时间线 不因“被选中”自动展开 真实总高度滚动区（SingleChildScrollView + Column） 订阅管理写操作（添加/编辑/取消 · 可撤销） 订阅源数据支撑时间线过滤和展示。 当前行为： macOS 已提供第一轮订阅管理： 订阅源 section 标题右侧的 + 直接通过 RSS URL 添加普通订阅。该入口使用紧贴 18px 图标的 20px 点击区，静止时不绘制玻璃底板、边框或圆形轮廓，只在 hover/press 时显示轻量中性反馈，避免透明大点击框造成视觉错位；其右缘使用侧边栏普通行数量气泡的 24px 基准线，不改变 section 标题原有位置和信息密度。普通订阅源行右键可编辑或取消订阅；普通分类行右键可重命名或取消分组。Inbox 不是普通 RSS 订阅，不进入这些写操作。 添加与编辑共用同一套表单状态和校验。添加时 RSS URL 可编辑，编辑时 URL 只读；两种模式都可设置自定义标题、分类和内容类型（ Articles / Social Media ）。第一轮不做关键词发现、推荐、RSSHub 浏览、OPML、私密订阅或“从 Folo 总时间线隐藏”。 远端订阅元数据与 Fourier 本地偏好必须分层：自定义标题、分类和内容类型写入 Folo；静默、自动翻译、自动全文仍是本地设置，不得伪装成 Folo 订阅字段。“从总时间线隐藏”不引入本项目，现有静默机制继续承担对应的个人工作流。 FeedModel.title 是最终显示标题，优先使用订阅关系的自定义标题； sourceTitle 保留 RSS 源标题， customTitle 保留用户覆盖值。编辑表单清空自定义标题后必须恢复显示源标题。 订阅写操作集中在 SubscriptionManagementService ，HTTP 细节集中在 FeedHttp 。服务端变更成功后先更新共享目录并同步缓存，再通过 SubscriptionCatalogService 通知侧边栏和时间线；页面不得分别维护自己的订阅副本。 取消订阅需要确认，并作为自定义命令进入全局 50 项 Undo/Redo 历史。撤销会使用原 URL、标题、分类和内容类型重新订阅，重做再次取消；应用彻底关闭前应与其他已读/垃圾拦截动作共享同一条历史栈。 取消订阅只删除远端订阅关系及共享目录条目。不得删除历史文章、正文/图片缓存以及按 feed id 保存的静默、自动翻译和自动全文偏好；重新订阅同一 feed id 后这些本地偏好可以继续生效。 如果取消的是当前正在查看的具体订阅源，macOS 时间线立即回到“全部文章”，避免保留指向已不存在目录项的 scope。 订阅源会被缓存，但缓存不是永久并集。 SubscriptionCatalogService 是时间线 feed mapping 与侧边栏订阅树的共享目录；启动和手动刷新都先同步目录，再加载文章，两处不得各自维护独立请求和合并规则。 普通订阅和 Inbox 分区独立同步：某分区成功时，返回结果是该分区的权威快照，新订阅立即加入、已取消订阅立即移除；某分区失败时，只保留该分区旧缓存，不能因为另一分区成功而误删。成功的空列表同样表示该分区应清空。 共享目录只更新订阅元数据及侧边栏，不删除本地历史文章，也不删除按 feed id 保存的静默、自动翻译或自动全文设置。以后重新订阅同一 feed id 时，这些本地设置仍可继续生效。 订阅源/分类过滤应保持文章计数和 header 副标题准确。 静默订阅源设置会影响普通时间线计数和可见性。 macOS 侧边栏里，静默订阅源属于订阅源体系，不是主导航入口。普通订阅源树会排除静默源，静默源作为 订阅源 section 滚动内容末尾的特殊分组展示，避免重复。 macOS 静默订阅源分组的筛选与展开状态相互独立：点击分组行只切换到静默时间线，不应自动展开；只有用户点击展开/折叠按钮时才改变子列表可见性。 macOS 普通订阅源分类必须区分导航选择、用户手动展开和临时可见性。分类主体只切换分类筛选，箭头只改变手动展开状态，订阅源行只选择具体订阅源；不要让这些点击互相附带副作用。 分类行的 hover/press 必须是覆盖整行的单一视觉反馈。展开箭头仍保留独立点击语义和 tooltip，但自身 IconButton overlay 应透明，由外层行统一绘制反馈；箭头点击只展开/折叠，行主体点击只选择分类。临时锁定导致箭头不可折叠时，箭头区域仍应消费点击并保持 no-op，不能穿透成分类选择。 当前时间线正在查看某个具体订阅源时，其父分类临时锁定展开，保证当前项可见；该临时状态不能覆盖用户原来的展开偏好。切换到最近阅读、垃圾拦截或设置后解除锁定：原来手动展开的继续展开并可折叠，原来折叠的恢复折叠。 macOS 从文章元数据点击来源进入具体订阅源时，时间线保存一层临时返回上下文。目标订阅源中没有打开文章时按 Esc ，应恢复此前 scope、原文章、时间线滚动位置、正文滚动位置以及译文/摘要显隐；如果先打开了目标订阅源中的文章，第一次 Esc 仍只关闭该文章，第二次才返回。用户手动切到其他订阅源、分类或静默范围后返回上下文失效；同一订阅源内点击来源不建立返回点。 临时锁定期间，折叠箭头不应暗中写入折叠状态，tooltip 应说明当前订阅源位于该分组。将来若侧边栏加入搜索，搜索期间的临时展开也应遵循同一规则，清除搜索后恢复手动状态。 macOS 订阅源侧边栏使用独立 ScrollController 、单一显式 Scrollbar 和可一次得到真实总高度的 SingleChildScrollView + Column 。不要恢复成“一个 view/category 大组对应一个 ListView.builder item”的粗粒度懒加载：展开后的分组高度差异很大，Flutter 会在滑动到新组时反复修正 maxScrollExtent ，导致 scrollbar 拇指长短剧烈变化并前后跳跃。折叠分类仍只构建标题，只有展开分类才构建订阅源行。 Folo 官方来源类型展示名按英文保留： Articles 、 Social Media 、 Inbox 。不要再把 social 显示成“社交”，也不要使用 Social Inbox Feed 这类官方不存在的组合名。 相关服务： FeedTranslationSettingsService FeedReadabilitySettingsService FeedSilentSettingsSer"
  },
  {
   "path": "features/timeline.html",
   "title": "时间线",
-  "headings": [],
+  "headings": [
+   {
+    "id": "最近阅读点击不再立即重排",
+    "text": "最近阅读：点击不再立即重排"
+   }
+  ],
   "text": "时间线 相关文件： lib/pages/timeline/timeline_controller.dart lib/pages/timeline/timeline_page.dart lib/pages/widgets/article_card.dart lib/common/widgets/article_card_chrome.dart lib/common/widgets/article_length_label.dart lib/utils/article_length_estimator.dart lib/common/widgets/app_glass_sync_button.dart lib/common/widgets/app_glass_selection_button.dart lib/pages/widgets/article_actions_menu.dart lib/common/widgets/mac_split_article_list_coordinator.dart 当前行为： 模式：未读、全部、已读。 macOS 中间 header 的文章范围只暴露未读/全部，并使用与排序统一的圆形 morph 选择按钮，而不是完整 segment 或二态 switch。 Android 主时间线 header 与订阅源详情复用圆形文章范围按钮，点击后从玻璃底部面板选择 未读/全部 ；已读文章仍通过最近阅读等独立入口访问，不等于删除已读能力。 macOS 中间栏 header 不显示底部分隔线；当前视觉依赖卡片间距和轻填充区分层级。这个规则包括主时间线、订阅源详情、最近阅读和垃圾拦截，不要只在某个页面单独处理。 macOS 文章卡片普通态使用极轻中性色填充，统一由 ArticleCardChrome 控制；当前深色模式 alpha 为 0.018 ，浅色模式为 0.012 。时间线、最近阅读和垃圾拦截不要分别覆盖该值。 macOS 与 Android 的普通文章卡片、垃圾拦截审核卡片共用标题字号 14 和辅助正文 12 ，统一由 ArticleCardChrome.titleFontSize/bodyFontSize 提供，不要在页面中分别硬编码。 普通文章卡片在最下方订阅源行右侧显示预计内容高度；共享 ArticleLengthLabel 使用弱化 12px 文字，不增加卡片高度、胶囊、图标或平台分支。macOS 垃圾拦截虽然保留独立 _MacReviewRow ，也必须调用同一个标签组件。后台任务失败卡片不属于正常阅读列表，不显示长度。 macOS 主时间线和垃圾拦截列表共用 MacArticleListChrome 的两层下边距： viewportPadding 是滚动过程中始终存在的窗口下边界， contentPadding 是滚到列表末尾后出现的内容留白。不要只增加 ListView.padding.bottom 来替代视口边界，也不要在两个页面分别硬编码。 macOS 主时间线、垃圾拦截、最近阅读和订阅源详情通过 MacHeaderPane 共享固定 header/body 几何。内容和 scrollbar 自然从 header 下方开始；thumb 宽度及右侧 margin 继续由 MacGlassScrollbarStyle.articlePaneTheme 提供（ 8px 、 1px ）， MacArticleListChrome.contentPadding 另保留 2px 右侧内容间隔。 macOS 订阅源详情页的 header 筛选复用同一个文章范围 morph 组件；不要重新引入 仅已读 入口。 已读模式/页面仍在其他入口存在，不应删除。 过滤支持选中订阅源、分类和静默订阅源。 本地文章库支撑时间线状态。 已读/未读变化会更新本地状态并通知其他视图。 时间线和最近阅读列表合并本地已读状态时，使用 LocalArticleDbService.readOverrideOf(entryId) ，没有覆盖时保留 ArticleModel.isRead 。该规则同时支持本地标为已读和恢复未读，不要退回到只处理 readStatus == true 的旧逻辑。 本地标为已读后的 readStatus == true 是跨请求竞态保护，不能在 mark-read HTTP 成功时立即删除。未读请求可能比 mark-read 更早发出并返回旧快照；只在后续成功未读快照明确不再包含该文章时，才清除覆盖并以本地数据库中的已读状态继续。主时间线和订阅源详情必须遵循同一规则。 垃圾拦截/审核这类列表如果语义要求稳定追加，新文章应稳定附加。 macOS 静默订阅源批量导出： 批量入口只出现在“静默订阅源”汇总视图，不出现在单个静默订阅源中。进入批量模式时默认不选文章；卡片本体仍用于打开阅读，右上角独立的轻量标识负责切换勾选，不能复用当前文章的选中描边。 全选/全不选作用于当前筛选后的整个静默文章集合，不局限于当前视口。离开静默汇总 scope 时退出批量模式并清空勾选。 动作只有“复制 Markdown”“保存 Markdown”“复制并标为已读”“保存并标为已读”，不提供单独的批量标为已读。纯导出成功后保留批量模式和勾选；组合动作成功后退出批量模式并清空右侧详情。 批量导出入口与文章范围、排序入口共用锚定在右上角的液态玻璃 morph 展开组件；它是命令菜单，不显示持久选中项或勾号。批量模式下按 Esc 必须复用右上角关闭按钮的退出路径，同时清空本次勾选；处理中的批量动作仍禁止中途退出。 单篇复制和批量导出统一调用 ArticleMarkdownExportService ，页面不得自行维护 Markdown 转换器。批量保持当前列表顺序，文章之间只用 --- 分隔，不添加“静默订阅源导出”总标题或批次元数据。正文尚未缓存时仍输出标题、来源、链接，并写入 > 正文尚未缓存 ，不能为了导出临时联网拉正文。 组合动作必须先完成剪贴板写入或文件保存，之后才标为已读；文件保存取消、写入失败或复制失败都不能改变读状态。整批标为已读只占一个业务撤销项，撤销时整批恢复未读，重做时整批重新标为已读。 批量本地状态通过 TimelineController.setManyReadStatesLocal() 一次合并列表、计数和跨页面通知，不逐篇触发全量过滤或卡片动画。 BatchReadSyncService 逐篇追踪前向成功、补偿成功和最终仍改变的文章：部分请求失败后补偿已确认成功的请求；补偿全部成功时本地和历史都不变，补偿仍有失败时只把最终改变的子集写入本地并登记为可撤销批次。部分 Undo/Redo 同样拆分成功与未成功的子集，使两侧历史始终对应最终远端状态。 macOS 分栏选择与移除协调： MacSplitArticleListCoordinator 统一承载分栏文章列表中的稳定 item key、删除前后继项计算、删除期间选择保持、 onRemoveEnd 后详情切换、相对导航和 reveal 回调。页面继续负责已读、审核、数据库和网络等业务动作，不要把这些业务塞进协调器"
  },
  {
   "path": "features/translation-summary.html",
   "title": "翻译与摘要",
-  "headings": [],
-  "text": "翻译与摘要 自动 AI 队列调度 正文持久化后经 onArticleContentAvailable 统一入队：只服务当时仍未读的文章，按订阅源开关决定翻译，Worker 并发执行并写入 Hive；手动操作不受限制。 正文已持久化 Readability / 详情页补抓 onArticleContentAvailable 唯一自动入队门卫 当时仍未读？ 已读则不排队 摘要队列 全部未读文章 翻译队列 按订阅源开关 入队后 不追已读 手动翻译/摘要 不受队列限制 AutoAiWorker 并发执行 · 原地重试 Hive 记录 translations / summaries 页面 立即可见 自动任务只在入队时检查文章的最新已读状态。已经是已读的文章不进入自动翻译和摘要队列；以未读状态入队后，后续即使标记为已读也不追踪取消，任务照常完成。这是经长期使用后确认的取舍：旧取消机制只能命中尚未被高并发 Worker 取入批次的少量任务，收益不足以支撑额外状态分支。手动翻译/摘要和垃圾拦截判定均不受影响。 新正文可用后的自动 AI 流转由 AutoAiQueueCoordinator.onArticleContentAvailable() 统一负责。后台 Readability、文章详情页直接补抓全文和 Inbox 详情补正文都必须在成功持久化正文后调用该入口；入口读取数据库中的最新已读状态，只给当时仍未读的文章排摘要，并按订阅源自动翻译开关排翻译。不要让详情页只更新显示和数据库而遗漏 AI 队列，也不要在 setReadState() 中重新加入队列取消副作用。 相关服务： lib/services/translation_service.dart lib/services/summary_service.dart lib/services/llm_config.dart 存储： 翻译记录在 GStorage.translations 。 摘要记录在 GStorage.summaries 。 LLM 默认取向： 翻译：flash、低 temperature、大输出。 摘要：pro、按配置启用 thinking、紧凑输出。 过滤：独立配置；仓库默认只做保守、通用的内容质量审核，不表达特定用户的主题或来源偏好。用户保存/导入的自定义过滤 Prompt 优先于默认值。 重试： 翻译和摘要使用由 auto_retry_max_count 控制的原地重试。 重试期间 pending 状态应可见。 UI 注意点： macOS 翻译/摘要工具栏按钮是普通胶囊控件，不是重型 Liquid Glass。 灰色非激活按钮 hover 时不应闪烁；hover 只轻微改变边框。 从卡片右键菜单删除摘要后，文章详情必须立即更新。 SummaryService 记录删除后，不要回退到过期 controller summary text。 卡片右键操作会直接调用 service 方法；确保跨页面 UI 观察 service 状态或 notifier 状态。 文章在详情页打开后，后台译文仍可能稍后完成。 ArticleController 监听 TranslationService.recordsVersion ，只为当前文章解析最终译文并刷新 translatedChunks ；删除译文也必须清理详情页旧状态。不要重新把是否已有译文只固定在控制器初始化时判断。 文章列表里的长按/右键 AI 菜单由 lib/pages/widgets/article_actions_menu.dart 统一维护。 普通时间线卡片和垃圾拦截审核行都应通过 ArticleActionsMenu 提供翻译、删除翻译、生成摘要、删除摘要。这样新增或修复文章级 AI 动作时不需要同时改两套页面。 ArticleActionsMenu 只封装文章级动作和反馈，不拥有文章详情状态；删除翻译/摘要后的可见刷新仍依赖 service/notifier 和页面已有观察链路。"
+  "headings": [
+   {
+    "id": "翻译持久化时序",
+    "text": "翻译持久化时序"
+   }
+  ],
+  "text": "翻译与摘要 自动 AI 队列调度 正文持久化后经 onArticleContentAvailable 统一入队：只服务当时仍未读的文章，按订阅源开关决定翻译，Worker 并发执行并写入 Hive；手动操作不受限制。 正文已持久化 Readability / 详情页补抓 onArticleContentAvailable 唯一自动入队门卫 当时仍未读？ 已读则不排队 摘要队列 全部未读文章 翻译队列 按订阅源开关 入队后 不追已读 手动翻译/摘要 不受队列限制 AutoAiWorker 并发执行 · 原地重试 Hive 记录 translations / summaries 页面 立即可见 自动任务只在入队时检查文章的最新已读状态。已经是已读的文章不进入自动翻译和摘要队列；以未读状态入队后，后续即使标记为已读也不追踪取消，任务照常完成。这是经长期使用后确认的取舍：旧取消机制只能命中尚未被高并发 Worker 取入批次的少量任务，收益不足以支撑额外状态分支。手动翻译/摘要和垃圾拦截判定均不受影响。 新正文可用后的自动 AI 流转由 AutoAiQueueCoordinator.onArticleContentAvailable() 统一负责。后台 Readability、文章详情页直接补抓全文和 Inbox 详情补正文都必须在成功持久化正文后调用该入口；入口读取数据库中的最新已读状态，只给当时仍未读的文章排摘要，并按订阅源自动翻译开关排翻译。不要让详情页只更新显示和数据库而遗漏 AI 队列，也不要在 setReadState() 中重新加入队列取消副作用。 相关服务： lib/services/translation_service.dart lib/services/summary_service.dart lib/services/llm_config.dart 存储： 翻译记录在 GStorage.translations 。 摘要记录在 GStorage.summaries 。 LLM 默认取向： 翻译：flash、低 temperature、大输出。 摘要：pro、按配置启用 thinking、紧凑输出。 过滤：独立配置；仓库默认只做保守、通用的内容质量审核，不表达特定用户的主题或来源偏好。用户保存/导入的自定义过滤 Prompt 优先于默认值。 重试： 翻译和摘要使用由 auto_retry_max_count 控制的原地重试。 重试期间 pending 状态应可见。 UI 注意点： macOS 翻译/摘要工具栏按钮是普通胶囊控件，不是重型 Liquid Glass。 灰色非激活按钮 hover 时不应闪烁；hover 只轻微改变边框。 从卡片右键菜单删除摘要后，文章详情必须立即更新。 SummaryService 记录删除后，不要回退到过期 controller summary text。 卡片右键操作会直接调用 service 方法；确保跨页面 UI 观察 service 状态或 notifier 状态。 文章在详情页打开后，后台译文仍可能稍后完成。 ArticleController 监听 TranslationService.recordsVersion ，只为当前文章解析最终译文并刷新 translatedChunks ；删除译文也必须清理详情页旧状态。不要重新把是否已有译文只固定在控制器初始化时判断。 文章列表里的长按/右键 AI 菜单由 lib/pages/widgets/article_actions_menu.dart 统一维护。 普通时间线卡片和垃圾拦截审核行都应通过 ArticleActionsMenu 提供翻译、删除翻译、生成摘要、删除摘要。这样新增或修复文章级 AI 动作时不需要同时改两套页面。 ArticleActionsMenu 只封装文章级动作和反馈，不拥有文章详情状态；删除翻译/摘要后的可见刷新仍依赖 service/notifier 和页面已有观察链路。 翻译持久化时序 完成态（done）与错误态（error）记录 必须等待 Hive 持久化成功后 再对外返回 / 更新最终 UI 状态： TranslationService._writeRecord 会 await GStorage.translations.put ，并只在写入完成后推进 recordsVersion 。 覆盖普通翻译与分块翻译两条路径（含失败恢复 _restoreAfterFailure ）；完成后立即退出应用也不会丢失译文（有临时 Hive box 的重启/重新 hydrate 测试覆盖）。 pending 仍是瞬态，只存在内存中，不落盘；重启后残留 pending 会被清理。 删除译文（ deleteTranslation ）同样等待落盘完成。"
  },
  {
   "path": "features/undo-redo.html",
@@ -3572,6 +3638,66 @@ window.WIKI_SEARCH_INDEX = [
    {
     "id": "发布足迹直接追加进-releaseshtml-的内嵌-markdown",
     "text": "发布足迹直接追加进 releases.html 的内嵌 Markdown"
+   },
+   {
+    "id": "ai-队列改用滚动补位调度",
+    "text": "AI 队列改用滚动补位调度"
+   },
+   {
+    "id": "全文抓取成功标记语义",
+    "text": "全文抓取成功标记语义"
+   },
+   {
+    "id": "本地分析事件账本未来统计中心唯一数据源",
+    "text": "本地分析事件账本（未来统计中心唯一数据源）"
+   },
+   {
+    "id": "翻译完成态必须先持久化再上报",
+    "text": "翻译完成态必须先持久化再上报"
+   },
+   {
+    "id": "全屏图片成功写入统一缓存通知",
+    "text": "全屏图片成功写入统一缓存通知"
+   },
+   {
+    "id": "android-外链不再依赖-canlaunchurl-预检",
+    "text": "Android 外链不再依赖 canLaunchUrl 预检"
+   },
+   {
+    "id": "youtube-播放失败回退-mweb-ios-客户端",
+    "text": "YouTube 播放失败回退 MWEB / IOS 客户端"
+   },
+   {
+    "id": "普通视频区分签名过期与通用错误",
+    "text": "普通视频区分签名过期与通用错误"
+   },
+   {
+    "id": "最近阅读点击不立即重排",
+    "text": "最近阅读点击不立即重排"
+   },
+   {
+    "id": "android-目录面板用原生-backdrop骨架共用完整-appbar-inset",
+    "text": "Android 目录面板用原生 backdrop，骨架共用完整 AppBar inset"
+   },
+   {
+    "id": "android-集中式触觉反馈策略",
+    "text": "Android 集中式触觉反馈策略"
+   },
+   {
+    "id": "订阅抓取错误不误报-url-无效",
+    "text": "订阅抓取错误不误报 URL 无效"
+   },
+   {
+    "id": "文章链接-hover-使用生命周期安全回调",
+    "text": "文章链接 hover 使用生命周期安全回调"
+   },
+   {
+    "id": "账号切换隔离-worker-完成回调",
+    "text": "账号切换隔离 Worker 完成回调"
+   },
+   {
+    "id": "分析账本只记录真实状态变化",
+    "text": "分析账本只记录真实状态变化"
    }
   ],
   "text": "决策日志 应用整体迁移为 Fourier 背景：旧名称 Auto Folo 容易把个人二次开发客户端与 Folo 官方品牌混在一起，且旧应用身份、图标和包名已经不适合作为长期公开工程标识。 决策：应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和视觉素材统一迁移为 Fourier；旧配置导入与历史内容保留明确兼容。GitHub 仓库名称、远端 URL 和本地目录另行迁移，当前不伪造已经完成的状态。 后果：Fourier 会被 Android 和 macOS 视为新的应用身份。迁移前必须从旧版导出设置，安装后再导入；旧 Auto Folo 名称不得重新出现在当前产品文案或命名空间中。 Wiki 使用内嵌 Markdown 的离线单页结构 背景：目标要求克隆后直接双击 index.html 阅读，无服务、无构建步骤、无外部依赖，同时正文仍尽量保持 Markdown 编辑体验。浏览器在 file:// 下不能可靠地由入口页读取独立 .md 文件。 决策：每个专题使用自包含 .html ，正文写在 script[type=\"text/markdown\"] 中并由仓库内置 markdown-it 渲染； index.html 负责入口，搜索索引作为已提交静态数据。正文允许内嵌可信 HTML 和 SVG，不使用 Mermaid。 后果：编辑和阅读是同一个文件，双击即可使用；修改内容后只需运行索引和一致性检查。不得重新引入必须启动服务器、CDN、ES Module 或运行时 fetch() 的方案。 保留根目录 AGENT_HANDOFF.md 作为入口 背景：后续 agent 会预期根目录存在交接文件。 决策：保留 AGENT_HANDOFF.md 作为短入口，把详细知识迁移到 docs/agent_handoff/ 。 后果：agent 能快速起步，同时完整历史仍然可查。 完整历史按主题归档 背景：旧的单文件交接文档包含重要历史讨论，但 8,000 余行内容集中在一个文件中，不适合作为 wiki 证据库继续维护。 决策：完整历史按主题迁移到 history/archive/ ，每个旧编号章节只归入一个主主题； history/chronology.md 保留原始出现顺序和稳定 legacy-xxx 锚点。 history/timeline.md 只保留兼容入口。 后果：专题页可以保持简洁，历史仍可按主题或旧编号追溯，也不会继续形成新的巨型单文件。 不使用数字文件前缀 背景：开发顺序不遵循固定计划。 决策：使用语义化 wiki 路径，由 README 描述推荐阅读顺序。 后果：新增主题时无需重命名文件，也不会暗示优先级。 文章正文保留 Column 背景：Sliver 虚拟化可能提升性能，但会影响选择、目录锚点、图片生命周期和滚动行为。 决策：不要随意切换到 SliverList.builder 。 后果：除非进行专门重构，否则围绕当前结构优化。 不要回退 保留全文选择行为。 保留目录锚点准确性。 保留图片预览/光标/菜单行为。 保留当前滚动位置语义。 畸形文章修复保持保守 背景：少数真实文章出现异常空白、表格渲染、空代码块或交互组件文本问题。有些问题来自上游内容本身畸形。 决策：添加宽泛渲染启发式规则前，先检查真实源内容。优先做窄修复，或接受罕见上游边缘情况。 后果：渲染保持可预测，不为了少数坏文章牺牲常见正确文章。 不裁剪宽表格 scroll viewport 背景：在横向表格 scroll viewport 外包圆角 ClipRRect ，会在表格宽于文章栏时切掉矩形表格四角。 决策：不要仅为视觉一致性而给表格 viewport 加圆角裁剪。 后果：宽表格保持正确的直角边框，同时仍可横向滚动。 无 <th> 的稳定网格仍属于数据表 背景：阿里技术文章《为什么大模型的缓存命中率能到 90%？》包含 7×5 和 4×2 两个结构完整的数据表，但首行使用 <td> 而不是 <th> 。旧规范化规则把所有无 <th> 表格当成 Newsletter 布局容器，导致两张表在渲染前被摊平成正文。 决策：布局表格清理改用保守的结构判断。有 <th> 的表格直接保留；无 <th> 时，至少两行两列、列数稳定、无嵌套、文本单元格占主导且非媒体主导的网格也保留。其余明确像布局容器的表格继续扁平化。 后果：修复不依赖订阅源、文章标题或具体文本，正确的 td-only 数据表可以进入现有表格渲染器，Newsletter 单单元格/嵌套布局仍保持轻量。 未来方向：如果表格与其他富文本清洗需求继续分化，应把阅读渲染规范化和 LLM 输入清洗拆成独立管线与缓存；本轮不扩大到该架构重构。 避免会改变布局的图片 hover 背景：macOS 图片 hover 缩小/边框效果会移动后续文字，造成明显布局不稳定。 决策：macOS 图片 hover 不应改变图片布局尺寸；用光标表达可点击。 后果：文章文字保持稳定，同时图片仍有可点击提示。 选择性使用 Liquid Glass 背景：全局铺开 Liquid Glass 会造成可读性和 macOS 性能问题，尤其是在密集重复 UI 中。 决策：有意义的浮动控件/表面可以使用玻璃；密集设置、任务中心、未读标签和重复装饰使用轻量描边/静态样式。 后果：应用保留设计方向，同时避免重现 v1.1.25 风格的性能回归。 不在 Flutter 中追求真实外部背景取色边框 背景：用户希望边框高光颜色来自应用窗口后方真实内容。Flutter 绘制无法可靠采样这些像素；NSVisualEffectView/系统 compositor 才拥有这部分模糊。 决策：放弃 Flutter-only 的真实外部背景取色边框。未来如果要做，应作为 native/AppKit renderer 实验。 后果：当前玻璃边框使用实用的白色/高光样式，不假装采样不可得像素。 macOS 中间 header 保持轻量 背景：中间时间线/列表 header 的玻璃背景增加视觉重量，也可能影响性能。后续细线分隔也被取消。 决策：除非明确重新讨论，否则 macOS 中间栏 header 不使用玻璃背景。 后果：中间列表 chrome 保持安静且不显示底部分隔线；文章详情独立保留细分隔线和阅读进度。 macOS 圆角收敛按层级联动 背景：用户希望 macOS 整体圆角略微变小，同时文章卡片圆角略微增大。此前调研 Apple 官方资料后，没有找到普通 macOS app 的固定圆角数值规范；官方更强调圆角同心性、容器关系和系统控件自适应。 决策：第一阶段只收敛主几何层和大面板：窗口/Flutter 外框 24 ，红黄绿圆心 24 ，侧边栏面板 18 ， AppGlassSurface 默认 16 ， AppGlassPanel 默认 18 ，突出面板 20 ，macOS 文章卡片 10 。分屏文章右下角安全裁剪同步外框半径。 后果：红黄绿、外框、侧边栏和右下角文章裁剪必须联动维护。不要把“圆角收敛”扩展成全局搜索替换。 不要回退"

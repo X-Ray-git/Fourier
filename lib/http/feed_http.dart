@@ -488,8 +488,19 @@ class FeedHttp {
   }) {
     final message = body['message'];
     if (message is String && message.trim().isNotEmpty) {
-      return message;
+      return _normalizeServerMessage(message);
     }
     return fallback;
+  }
+
+  /// 服务端抓取失败（如源站 Cloudflare 挑战）不代表订阅 URL 无效，
+  /// 统一转成可操作的提示，避免误报「URL 无效」。
+  static String _normalizeServerMessage(String message) {
+    final lowered = message.toLowerCase();
+    if (lowered.contains('feed fetch error') ||
+        lowered.contains('fetch error')) {
+      return 'Folo 暂时无法抓取该订阅源，源站可能阻止服务端访问';
+    }
+    return message;
   }
 }

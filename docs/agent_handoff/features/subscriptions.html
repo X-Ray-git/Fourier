@@ -164,6 +164,13 @@ Android 导航与状态：
 - 移动端订阅源详情使用紧凑 `68px` header，显示头像、标题、未读数和总数；不要恢复旧 `220px` 杂志式 hero。
 - 静默订阅源的未读数仍显示为零，但 `SubscriptionsController.unreadFor()` 必须在静默判断前读取 `_unreadCounts`，保证外层 `Obx` 始终建立 Rx 依赖。提前返回会在 Debug 触发 GetX misuse，在 Release 表现为展开 Inbox 后的灰色色块。
 
+## 订阅错误文案：区分“源站阻止”与“URL 无效”
+
+- 案例：`https://medium.com/@vishalmisra/feed` 本身是有效 RSS，但 Folo 服务端抓取时遇到 Medium Cloudflare 挑战并返回 `Feed fetch error`。
+- 不实现本地订阅架构，保留 Folo API 流程。
+- `FeedHttp` 对服务端返回的 `Feed fetch error` 等抓取失败消息统一转译为“Folo 暂时无法抓取该订阅源，源站可能阻止服务端访问”，不误报 URL 无效。
+- 保持 URL 校验错误（“请输入有效的 http 或 https RSS 地址”）与源站抓取错误文案分离。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

@@ -156,6 +156,13 @@ UI 注意点：
 - 普通时间线卡片和垃圾拦截审核行都应通过 `ArticleActionsMenu` 提供翻译、删除翻译、生成摘要、删除摘要。这样新增或修复文章级 AI 动作时不需要同时改两套页面。
 - `ArticleActionsMenu` 只封装文章级动作和反馈，不拥有文章详情状态；删除翻译/摘要后的可见刷新仍依赖 service/notifier 和页面已有观察链路。
 
+## 翻译持久化时序
+
+- 完成态（done）与错误态（error）记录**必须等待 Hive 持久化成功后**再对外返回 / 更新最终 UI 状态：`TranslationService._writeRecord` 会 `await` `GStorage.translations.put`，并只在写入完成后推进 `recordsVersion`。
+- 覆盖普通翻译与分块翻译两条路径（含失败恢复 `_restoreAfterFailure`）；完成后立即退出应用也不会丢失译文（有临时 Hive box 的重启/重新 hydrate 测试覆盖）。
+- pending 仍是瞬态，只存在内存中，不落盘；重启后残留 pending 会被清理。
+- 删除译文（`deleteTranslation`）同样等待落盘完成。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

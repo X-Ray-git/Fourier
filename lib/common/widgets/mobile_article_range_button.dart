@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/android_haptics_service.dart';
 import 'app_glass.dart';
 
 class MobileArticleRangeButton extends StatelessWidget {
@@ -105,7 +106,11 @@ class _MobileArticleRangeOption extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: onTap,
+          onTap: () {
+            // 筛选选择：确认选择时提供轻微反馈。
+            AndroidHapticsService.selectionClick();
+            onTap();
+          },
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 58),
             child: Padding(

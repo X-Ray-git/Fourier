@@ -10,6 +10,7 @@ import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/refresh_aware_scroll_physics.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
+import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../http/init.dart';
 import '../../models/feed.dart';
 import '../../router/app_pages.dart';
@@ -222,7 +223,9 @@ class _SubscriptionsSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return ShimmerFadeList(
-      padding: const EdgeInsets.only(top: 16),
+      padding: EdgeInsets.only(
+        top: MobileViewportInsets.listTopInset(context).top + 8,
+      ),
       itemCount: 4,
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 abstract final class YouTubePlaybackServer {
@@ -197,59 +198,107 @@ abstract final class YouTubePlaybackServer {
     List<int> body, {
     required int redirectsRemaining,
   }) async {
-    final upstream = await _client.openUrl(localRequest.method, target);
-    upstream.followRedirects = false;
-    localRequest.headers.forEach((name, values) {
-      if (_requestHeadersToDrop.contains(name.toLowerCase())) return;
-      for (final value in values) {
-        upstream.headers.add(name, value);
-      }
-    });
-    upstream.headers.set(HttpHeaders.userAgentHeader, _browserUserAgent);
-    if (body.isNotEmpty) upstream.add(body);
+    final method = localRequest.method;
+    final host = target.host;
+    try {
+      final upstream = await _client.openUrl(method, target);
+      upstream.followRedirects = false;
+      localRequest.headers.forEach((name, values) {
+        if (_requestHeadersToDrop.contains(name.toLowerCase())) return;
+        for (final value in values) {
+          upstream.headers.add(name, value);
+        }
+      });
+      upstream.headers.set(HttpHeaders.userAgentHeader, _browserUserAgent);
+      if (body.isNotEmpty) upstream.add(body);
 
-    final upstreamResponse = await upstream.close();
-    final redirectLocation = upstreamResponse.headers.value(
-      HttpHeaders.locationHeader,
-    );
-    if (_isRedirect(upstreamResponse.statusCode) && redirectLocation != null) {
-      if (redirectsRemaining <= 0) {
-        await upstreamResponse.drain<void>();
-        await _sendStatus(localRequest.response, HttpStatus.badGateway);
-        return;
-      }
-      final redirectedTarget = target.resolve(redirectLocation);
-      await upstreamResponse.drain<void>();
-      if (!isAllowedProxyTarget(redirectedTarget)) {
-        await _sendStatus(localRequest.response, HttpStatus.badGateway);
-        return;
-      }
-      await _forward(
-        localRequest,
-        redirectedTarget,
-        body,
-        redirectsRemaining: redirectsRemaining - 1,
+      final upstreamResponse = await upstream.close();
+      final redirectLocation = upstreamResponse.headers.value(
+        HttpHeaders.locationHeader,
       );
-      return;
-    }
-
-    final response = localRequest.response;
-    response.statusCode = upstreamResponse.statusCode;
-    upstreamResponse.headers.forEach((name, values) {
-      if (_responseHeadersToDrop.contains(name.toLowerCase())) return;
-      for (final value in values) {
-        response.headers.add(name, value);
+      if (_isRedirect(upstreamResponse.statusCode) &&
+          redirectLocation != null) {
+        _debugProxyLog(
+          'redirect',
+          fields: {
+            'method': method,
+            'host': host,
+            'statusCode': upstreamResponse.statusCode,
+            'redirectsRemaining': redirectsRemaining,
+          },
+        );
+        if (redirectsRemaining <= 0) {
+          await upstreamResponse.drain<void>();
+          await _sendStatus(localRequest.response, HttpStatus.badGateway);
+          return;
+        }
+        final redirectedTarget = target.resolve(redirectLocation);
+        await upstreamResponse.drain<void>();
+        if (!isAllowedProxyTarget(redirectedTarget)) {
+          await _sendStatus(localRequest.response, HttpStatus.badGateway);
+          return;
+        }
+        await _forward(
+          localRequest,
+          redirectedTarget,
+          body,
+          redirectsRemaining: redirectsRemaining - 1,
+        );
+        return;
       }
-    });
-    response.headers
-      ..set(HttpHeaders.cacheControlHeader, 'no-store')
-      ..set('X-Content-Type-Options', 'nosniff');
-    if (localRequest.method == 'HEAD') {
-      await upstreamResponse.drain<void>();
-      await response.close();
-      return;
+
+      _debugProxyLog(
+        'response',
+        fields: {
+          'method': method,
+          'host': host,
+          'statusCode': upstreamResponse.statusCode,
+          'redirectsRemaining': redirectsRemaining,
+        },
+      );
+      final response = localRequest.response;
+      response.statusCode = upstreamResponse.statusCode;
+      upstreamResponse.headers.forEach((name, values) {
+        if (_responseHeadersToDrop.contains(name.toLowerCase())) return;
+        for (final value in values) {
+          response.headers.add(name, value);
+        }
+      });
+      response.headers
+        ..set(HttpHeaders.cacheControlHeader, 'no-store')
+        ..set('X-Content-Type-Options', 'nosniff');
+      if (localRequest.method == 'HEAD') {
+        await upstreamResponse.drain<void>();
+        await response.close();
+        return;
+      }
+      await upstreamResponse.pipe(response);
+    } catch (e) {
+      // 只记录安全诊断信息：目标 host、方法、重定向次数与错误类型，
+      // 不记录完整签名 URL、Token 或请求体。
+      _debugProxyLog(
+        'error',
+        fields: {
+          'method': method,
+          'host': host,
+          'redirectsRemaining': redirectsRemaining,
+          'errorType': e.runtimeType.toString(),
+        },
+      );
+      rethrow;
     }
-    await upstreamResponse.pipe(response);
+  }
+
+  /// 本地代理的安全 debug 诊断日志（仅 debug 构建，不记录敏感内容）。
+  static void _debugProxyLog(
+    String event, {
+    required Map<String, Object> fields,
+  }) {
+    if (!kDebugMode) return;
+    final details = fields.entries
+        .map((entry) => '${entry.key}=${entry.value}')
+        .join(' ');
+    debugPrint('[YouTubeProxy] $event $details');
   }
 
   static bool isAllowedProxyTarget(Uri target) {

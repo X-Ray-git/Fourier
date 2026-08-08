@@ -6,7 +6,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/constants/constants.dart';
 import '../../http/feed_http.dart';
@@ -14,7 +13,7 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../models/feed.dart';
 import '../../router/app_pages.dart';
-import '../../utils/security_utils.dart';
+import '../../services/external_link_service.dart';
 import '../../utils/source_taxonomy.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
@@ -29,6 +28,7 @@ import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_service.dart';
+import '../../services/analysis_event_ledger.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
@@ -141,18 +141,7 @@ class FeedDetailController extends GetxController {
 
   Future<void> openOriginalArticle(ArticleModel article) async {
     if (article.url.isEmpty) return;
-
-    final uri = SecurityUtils.parseHttpUrl(article.url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(article.url);
   }
 
   void handleMacArticleTap(ArticleModel article) {
@@ -409,7 +398,11 @@ class FeedDetailController extends GetxController {
         GStorage.readStatus.delete(local.entryId);
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
-      LocalArticleDbService.setReadState(local.entryId, true);
+      LocalArticleDbService.setReadState(
+        local.entryId,
+        true,
+        source: ReadStateChangeSource.syncInference,
+      );
     }
 
     // 未读请求可能早于 mark-read 请求发出，返回的仍是旧快照。

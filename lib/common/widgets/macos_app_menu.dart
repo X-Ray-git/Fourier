@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../common/constants/constants.dart';
 import '../../pages/main/main_controller.dart';
 import '../../pages/timeline/timeline_controller.dart';
 import '../../router/app_pages.dart';
+import '../../services/external_link_service.dart';
 import '../../services/macos_app_menu_service.dart';
 import '../../services/undo_service.dart';
 
@@ -575,7 +575,6 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
   }
 
   Future<void> _openUrl(String rawUrl) async {
-    final uri = Uri.parse(rawUrl);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await ExternalLinkService.openUrlWithFeedback(rawUrl);
   }
 }

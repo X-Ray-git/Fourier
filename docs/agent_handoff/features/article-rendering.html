@@ -253,6 +253,30 @@ HTML entity 解码：
 - 如果上游文章内容本身畸形，或包含自定义交互组件，优先做窄修复，或接受该边缘情况。
 - 除非失败模式明确反复出现，否则不要为了罕见畸形文章加入复杂通用解析规则。
 
+## 目录面板：大面板原生 backdrop
+
+- 大面积目录面板（`AppMobileGlassSheet`）改用平滑、shader-free 的原生 backdrop（BackdropFilter）路径（`nativeBackdrop: true`），避免适合小控件的 shader 在大面积上产生细网格纹理。
+- 小控件（玻璃按钮等）仍保留现有 shader 渲染。
+- 未选中目录文字提高对比度（`onSurface`），选中态保持主题色。
+- 验证覆盖深浅色、长标题、滚动与 Android 性能。
+
+## macOS 行内代码
+
+- 行内代码仅 macOS 把 vertical padding 从 2 收窄为 1；Android 保持 2。
+- 字号、baseline、横向 padding 与块级代码不受影响；覆盖中文、英文与混排行内代码。
+
+## 文章链接 hover 生命周期
+
+- 已确认日志：`ValueNotifier<String?> was used after being disposed`，位于 `_InteractiveLinkExtension` 的 onExit。
+- 修复：链接 hover 不再由生成后的旧 TextSpan/MouseRegion 直接持有 ValueNotifier，改为由活动页面 State 提供的生命周期安全回调（`HtmlChunkCard.onLinkHover`）。
+- State 在写入前检查 `mounted` 与 dispose 守卫（`_hoverUrlWritable`），离开时只在预览仍指向该链接时才清空。
+- 保留链接 hover URL 预览与点击行为；切换文章、YouTube 回退、快速移动鼠标不再产生 MouseTracker 连锁断言。
+
+## Android 骨架与共享 inset
+
+- 主 Scaffold 使用 `extendBodyBehindAppBar=true`；真实列表带顶部 inset，骨架屏曾缺失导致卡片埋入 AppBar。
+- 新增共享 `MobileViewportInsets`（顶部/底部 inset），时间线、垃圾拦截、订阅源的真实列表与骨架屏共用，禁止复制魔法数字。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

@@ -8,19 +8,18 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
-import '../../common/widgets/feedback_toast.dart';
 import '../../services/auto_filter_worker.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/android_haptics_service.dart';
+import '../../services/external_link_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
-import '../../utils/security_utils.dart';
 import '../article/article_page.dart';
 import '../main/main_controller.dart';
 import '../timeline/timeline_controller.dart';
@@ -36,6 +35,7 @@ import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 
@@ -681,14 +681,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   }
 
   Future<void> _openOriginalArticle(ArticleModel article) async {
-    final uri = SecurityUtils.parseHttpUrl(article.url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(article.url);
   }
 
   void _handleReviewRemoveStart(ArticleModel article) {
@@ -757,7 +750,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                       top:
                           6 +
                           (widget.embeddedInMainNavigation
-                              ? MediaQuery.paddingOf(context).top
+                              ? MobileViewportInsets.listTopInset(context).top
                               : 0),
                       bottom:
                           16 +
@@ -775,6 +768,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                           key: ValueKey('mobile-swipe-${article.entryId}'),
                           dismissibleKey: ValueKey(article.entryId),
                           confirmDismiss: (direction) async {
+                            // 侧滑达到阈值且动作确认：中等反馈。
+                            // 振动只在手势层触发一次，业务层不再重复。
+                            await AndroidHapticsService.mediumImpact();
                             if (direction == DismissDirection.startToEnd) {
                               _keep(article);
                             } else {
@@ -798,12 +794,20 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                                 if (Platform.isMacOS) {
                                   _selectedArticle.value = article;
                                 } else {
+                                  final sequence = _articles.toList();
+                                  // PageView 索引按 entryId 重新查找。
+                                  final resolvedIndex = sequence.indexWhere(
+                                    (candidate) =>
+                                        candidate.entryId == article.entryId,
+                                  );
                                   Get.toNamed(
                                     Routes.article,
                                     arguments: {
                                       'article': article,
-                                      'sequence': _articles,
-                                      'index': index,
+                                      'sequence': sequence,
+                                      'index': resolvedIndex < 0
+                                          ? 0
+                                          : resolvedIndex,
                                     },
                                   );
                                 }

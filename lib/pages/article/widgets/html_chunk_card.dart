@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html_table/flutter_html_table.dart';
 import 'package:html/dom.dart' as dom;
@@ -23,9 +22,9 @@ import '../../../utils/youtube_embed_utils.dart';
 import '../../../utils/html_contrast_utils.dart';
 import '../../../utils/image_clipboard.dart';
 import '../../../utils/macos_zoom_in_cursor.dart';
-import '../../../utils/security_utils.dart';
 import '../../../services/article_image_service.dart';
 import '../../../services/article_image_cache_service.dart';
+import '../../../services/external_link_service.dart';
 import 'bilibili_embed_player.dart';
 import 'article_svg_image.dart';
 import 'inline_video_player.dart';
@@ -114,7 +113,11 @@ class HtmlChunkCard extends StatefulWidget {
   final double maxWidth;
   final void Function(String imageUrl)? onImageTap;
   final bool keepAlive;
-  final ValueNotifier<String?>? hoveredUrl;
+
+  /// 由活动页面 State 提供的生命周期安全 hover 回调：
+  /// [LinkHoverCallback] 只在 State mounted 时写入预览状态，
+  /// 避免生成后的旧 TextSpan/MouseRegion 持有可能已销毁的 ValueNotifier。
+  final LinkHoverCallback? onLinkHover;
   final Key? contentAnchorKey;
   final ValueChanged<double>? onEmbeddedPointerScroll;
 
@@ -126,7 +129,7 @@ class HtmlChunkCard extends StatefulWidget {
     required this.maxWidth,
     this.onImageTap,
     this.keepAlive = true,
-    this.hoveredUrl,
+    this.onLinkHover,
     this.contentAnchorKey,
     this.onEmbeddedPointerScroll,
   });
@@ -148,9 +151,9 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   bool _codeCopied = false;
 
   HtmlExtension? _getLinkExtension(BuildContext context) {
-    if (widget.hoveredUrl == null) return null;
+    if (widget.onLinkHover == null) return null;
     return _InteractiveLinkExtension(
-      hoveredUrlNotifier: widget.hoveredUrl,
+      onHoverChange: widget.onLinkHover,
       colorScheme: Theme.of(context).colorScheme,
     );
   }
@@ -340,10 +343,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     dynamic element,
   ) async {
     if (url != null && url.isNotEmpty) {
-      final uri = Uri.tryParse(url);
-      if (uri != null && await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
+      await ExternalLinkService.openUrlWithFeedback(url);
     }
   }
 
@@ -737,7 +737,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     if (isVideo) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: InlineVideoPlayer(videoUrl: videoUrl, posterUrl: posterUrl),
+        child: InlineVideoPlayer(
+          videoUrl: videoUrl,
+          posterUrl: posterUrl,
+          articleUrl: widget.articleUrl,
+        ),
       );
     }
 
@@ -824,18 +828,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   }
 
   Future<void> _openExternalUrl(String url) async {
-    final uri = SecurityUtils.parseHttpUrl(url);
-    if (uri == null) {
-      AppFeedback.warning('无法打开链接', '仅支持有效的 HTTP/HTTPS 地址');
-      return;
-    }
-    try {
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        AppFeedback.warning('无法打开链接', '系统未找到可用的浏览器');
-      }
-    } catch (_) {
-      AppFeedback.warning('无法打开链接', '请稍后重试');
-    }
+    await ExternalLinkService.openUrlWithFeedback(url);
   }
 
   Widget _buildIframePlaceholder(
@@ -896,13 +889,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
                     child: InkWell(
                       onTap: () async {
                         if (url != null && url.isNotEmpty) {
-                          final uri = Uri.tryParse(url);
-                          if (uri != null && await canLaunchUrl(uri)) {
-                            await launchUrl(
-                              uri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          }
+                          await ExternalLinkService.openUrlWithFeedback(url);
                         }
                       },
                       child: Container(
@@ -1339,6 +1326,18 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                   maxWidthDiskCache: diskCacheWidth,
                   fadeInDuration: const Duration(milliseconds: 250),
                   fadeOutDuration: const Duration(milliseconds: 80),
+                  // 与全屏查看器共用统一成功通知路径。
+                  imageBuilder: (context, imageProvider) {
+                    ArticleImageCacheService.notifyImageLoadedSuccessfully(
+                      widget.articleId,
+                      widget.imageUrl,
+                    );
+                    return Image(
+                      image: imageProvider,
+                      fit: BoxFit.contain,
+                      width: displayWidth,
+                    );
+                  },
                   placeholder: (context, url) => SizedBox(
                     width: displayWidth,
                     height: displayHeight,
@@ -1547,7 +1546,12 @@ class InlineCodeExtension extends HtmlExtension {
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        // 仅 macOS 收窄行内代码的垂直内边距（2→1），Android 保持不变；
+        // 字号、baseline、横向 padding 与块级代码不受影响。
+        padding: EdgeInsets.symmetric(
+          horizontal: 4,
+          vertical: Platform.isMacOS ? 1 : 2,
+        ),
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
@@ -1576,16 +1580,21 @@ class _ArticleTableCell {
   const _ArticleTableCell(this.text, {this.isHeader = false});
 }
 
+/// hover 回调：[url] 为被悬停链接的 href；[isExit] 为 true 表示
+/// 该链接的 hover 结束（进入/离开成对触发）。
+typedef LinkHoverCallback = void Function(String? url, bool isExit);
+
 /// 自定义 flutter_html 扩展：替换 `<a>` 标签的默认渲染，
 /// 添加鼠标悬停手势 (SystemMouseCursors.click) 和链接 URL 预览回调。
+///
+/// 不直接持有任何 ValueNotifier：预览状态由活动页面 State 提供的
+/// 生命周期安全回调维护，切换文章 / 播放器回退 / 快速移动鼠标时
+/// 不会产生对已销毁 ValueNotifier 的写入。
 class _InteractiveLinkExtension extends HtmlExtension {
-  final ValueNotifier<String?>? hoveredUrlNotifier;
+  final LinkHoverCallback? onHoverChange;
   final ColorScheme colorScheme;
 
-  _InteractiveLinkExtension({
-    this.hoveredUrlNotifier,
-    required this.colorScheme,
-  });
+  _InteractiveLinkExtension({this.onHoverChange, required this.colorScheme});
 
   @override
   Set<String> get supportedTags => {'a'};
@@ -1637,6 +1646,9 @@ class _InteractiveLinkExtension extends HtmlExtension {
       context.node is dom.Element ? context.node as dom.Element : null,
     );
 
+    void handleEnter(PointerEnterEvent _) => onHoverChange?.call(url, false);
+    void handleExit(PointerExitEvent _) => onHoverChange?.call(url, true);
+
     if (childSpan is TextSpan) {
       return TextSpan(
         text: childSpan.text,
@@ -1649,12 +1661,8 @@ class _InteractiveLinkExtension extends HtmlExtension {
         semanticsLabel: childSpan.semanticsLabel,
         locale: childSpan.locale,
         mouseCursor: SystemMouseCursors.click,
-        onEnter: (_) => hoveredUrlNotifier?.value = url,
-        onExit: (_) {
-          if (hoveredUrlNotifier?.value == url) {
-            hoveredUrlNotifier?.value = null;
-          }
-        },
+        onEnter: handleEnter,
+        onExit: handleExit,
         spellOut: childSpan.spellOut,
       );
     } else {
@@ -1668,12 +1676,8 @@ class _InteractiveLinkExtension extends HtmlExtension {
         baseline: TextBaseline.alphabetic,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
-          onEnter: (_) => hoveredUrlNotifier?.value = url,
-          onExit: (_) {
-            if (hoveredUrlNotifier?.value == url) {
-              hoveredUrlNotifier?.value = null;
-            }
-          },
+          onEnter: handleEnter,
+          onExit: handleExit,
           child: GestureDetector(
             onTap: onTap,
             child: (childSpan as WidgetSpan).child,

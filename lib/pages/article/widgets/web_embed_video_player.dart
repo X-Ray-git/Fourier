@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import '../../../services/article_image_service.dart';
+import '../../../services/external_link_service.dart';
 import '../../../utils/macos_webview_controls.dart';
 import 'media_play_button.dart';
 
@@ -106,7 +106,9 @@ class _WebEmbedVideoPlayerState extends State<WebEmbedVideoPlayer> {
               return NavigationDecision.navigate;
             }
             if (uri != null) {
-              unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
+              unawaited(
+                ExternalLinkService.openUrlWithFeedback(uri.toString()),
+              );
             }
             return NavigationDecision.prevent;
           },
@@ -136,7 +138,7 @@ class _WebEmbedVideoPlayerState extends State<WebEmbedVideoPlayer> {
   }
 
   Future<void> _openExternally() =>
-      launchUrl(widget.externalUri, mode: LaunchMode.externalApplication);
+      ExternalLinkService.openUrlWithFeedback(widget.externalUri.toString());
 
   @override
   Widget build(BuildContext context) {

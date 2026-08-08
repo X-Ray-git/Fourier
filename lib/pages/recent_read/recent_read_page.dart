@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
@@ -13,10 +12,9 @@ import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/local_article_db_service.dart';
+import '../../services/external_link_service.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/undo_service.dart';
-import '../../utils/security_utils.dart';
-import '../../common/widgets/feedback_toast.dart';
 import '../article/article_page.dart';
 import '../main/main_controller.dart';
 import '../widgets/article_card.dart';
@@ -117,18 +115,7 @@ class _RecentReadPageState extends State<RecentReadPage> {
 
   Future<void> _openOriginalArticle(ArticleModel article) async {
     if (article.url.isEmpty) return;
-
-    final uri = SecurityUtils.parseHttpUrl(article.url);
-    if (uri == null) {
-      AppFeedback.error('无法打开链接', '链接格式无效或协议不受支持');
-      return;
-    }
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppFeedback.error('无法打开链接', '未找到默认浏览器');
-    }
+    await ExternalLinkService.openUrlWithFeedback(article.url);
   }
 
   void _handleMacArticleTap(ArticleModel article) {
@@ -138,8 +125,9 @@ class _RecentReadPageState extends State<RecentReadPage> {
         _lastArticleTapAt != null &&
         now.difference(_lastArticleTapAt!).inMilliseconds < 300;
 
+    // 只记录最近阅读，不标记已读；本次页面会话不立即按最新阅读时间重排，
+    // 下次重新进入或明确刷新时再排序，避免列表跳动。
     LocalArticleDbService.recordReadHistory(article.entryId);
-    controller.refreshData();
     selectedArticle.value = article;
     _lastArticleTapEntryId = article.entryId;
     _lastArticleTapAt = now;
@@ -296,16 +284,23 @@ class _RecentReadPageState extends State<RecentReadPage> {
                       if (Platform.isMacOS) {
                         _handleMacArticleTap(article);
                       } else {
+                        // 只记录最近阅读；本次会话不重排列表，固定当前可见
+                        // 顺序与选中文章，避免列表跳到顶部。
                         LocalArticleDbService.recordReadHistory(
                           article.entryId,
                         );
-                        controller.refreshData();
+                        final sequence = controller.articles.toList();
+                        // PageView 索引按 entryId 重新查找，禁止使用可能
+                        // 已过期的旧下标。
+                        final resolvedIndex = sequence.indexWhere(
+                          (candidate) => candidate.entryId == article.entryId,
+                        );
                         Get.toNamed(
                           Routes.article,
                           arguments: {
                             'article': article,
-                            'sequence': controller.articles.toList(),
-                            'index': index,
+                            'sequence': sequence,
+                            'index': resolvedIndex < 0 ? 0 : resolvedIndex,
                           },
                         );
                       }

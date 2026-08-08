@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../models/article.dart';
 import '../utils/storage.dart';
+import 'analysis_event_ledger.dart';
 import 'article_image_cache_service.dart';
 
 /// 本地文章库（已读/未读统一持久化）
@@ -146,6 +147,7 @@ abstract final class LocalArticleDbService {
     String entryId,
     bool isRead, {
     bool recordHistory = false,
+    ReadStateChangeSource source = ReadStateChangeSource.user,
   }) {
     if (isRead) {
       if (recordHistory) recordReadHistory(entryId);
@@ -158,6 +160,13 @@ abstract final class LocalArticleDbService {
     if (raw is! Map) return;
 
     final old = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
+    if (old.isRead == isRead) return;
+    AnalysisEventLedger.recordReadStateChange(
+      entryId: entryId,
+      isRead: isRead,
+      before: old,
+      source: source,
+    );
     final updated = ArticleModel(
       entryId: old.entryId,
       feedId: old.feedId,

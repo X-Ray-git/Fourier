@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:autofolo/utils/article_content_utils.dart';
+import 'package:fourier/utils/article_content_utils.dart';
 
 void main() {
   test('normalizeHtml should remove empty blocks and normalize image src', () {
@@ -155,8 +155,8 @@ void main() {
       ArticleContentUtils.normalizeHtml(raw),
     );
 
-    final authorList = fragment.querySelector('auto-folo-author-list');
-    final author = authorList?.querySelector('auto-folo-author');
+    final authorList = fragment.querySelector('fourier-author-list');
+    final author = authorList?.querySelector('fourier-author');
     expect(authorList, isNotNull);
     expect(author?.attributes['name'], 'Jane Doe');
     expect(author?.attributes['handle'], 'jane');

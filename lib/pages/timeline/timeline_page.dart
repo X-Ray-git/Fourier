@@ -162,7 +162,7 @@ class _SilentBatchSelectionIndicator extends StatelessWidget {
 
 class _TimelineAnimationProbe {
   static const bool _requested = bool.fromEnvironment(
-    'AUTO_FOLO_ANIMATION_PROBE',
+    'FOURIER_ANIMATION_PROBE',
   );
   static final Stopwatch _clock = Stopwatch()..start();
   static String? _activeEntryId;
@@ -615,7 +615,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final now = DateTime.now();
     String twoDigits(int value) => value.toString().padLeft(2, '0');
     final suggestedName =
-        'auto-folo-silent-${now.year}-${twoDigits(now.month)}-${twoDigits(now.day)}.md';
+        'fourier-silent-${now.year}-${twoDigits(now.month)}-${twoDigits(now.day)}.md';
     final location = await getSaveLocation(
       suggestedName: suggestedName,
       acceptedTypeGroups: const [

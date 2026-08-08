@@ -1,4 +1,4 @@
-import 'package:autofolo/services/app_license_service.dart';
+import 'package:fourier/services/app_license_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,9 +14,9 @@ void main() {
     expect(
       packages,
       containsAll(<String>{
-        'Auto Folo',
+        'Fourier',
         'Folo',
-        'Auto Folo third-party notices',
+        'Fourier third-party notices',
         'PiliPlus',
         'Flutter',
         'interactiveviewer_gallery',

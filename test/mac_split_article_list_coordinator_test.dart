@@ -1,5 +1,5 @@
-import 'package:autofolo/common/widgets/mac_split_article_list_coordinator.dart';
-import 'package:autofolo/models/article.dart';
+import 'package:fourier/common/widgets/mac_split_article_list_coordinator.dart';
+import 'package:fourier/models/article.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

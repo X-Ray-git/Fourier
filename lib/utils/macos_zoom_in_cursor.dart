@@ -4,7 +4,7 @@ class MacOSZoomInCursor extends MouseCursor {
   const MacOSZoomInCursor._();
 
   static const instance = MacOSZoomInCursor._();
-  static const _channel = MethodChannel('io.github.xraygit.autofolo/cursor');
+  static const _channel = MethodChannel('io.github.xraygit.fourier/cursor');
 
   @override
   MouseCursorSession createSession(int device) {

@@ -8,7 +8,7 @@ import 'package:hive/hive.dart';
 ///   dart run tool/inspect_user_actions.dart [hive目录]
 ///
 /// 默认读取 macOS 沙盒目录
-///   ~/Library/Containers/io.github.xraygit.autofolo/Data/Documents/hive
+///   ~/Library/Containers/io.github.xraygit.fourier/Data/Documents/hive
 ///
 /// 会把 articledb.hive 复制到临时目录后只读检查，应用运行中也可使用；
 /// 复制瞬间之后的最新一条写入可能尚未反映到快照，如需精确结果请稍后再跑一次。
@@ -16,7 +16,7 @@ Future<void> main(List<String> args) async {
   final home = Platform.environment['HOME'] ?? '';
   final path = args.isNotEmpty
       ? args.first
-      : '$home/Library/Containers/io.github.xraygit.autofolo'
+      : '$home/Library/Containers/io.github.xraygit.fourier'
             '/Data/Documents/hive';
 
   final sourceFile = File('$path/articledb.hive');
@@ -25,7 +25,7 @@ Future<void> main(List<String> args) async {
     exit(1);
   }
 
-  final tmpDir = Directory.systemTemp.createTempSync('autofolo_inspect');
+  final tmpDir = Directory.systemTemp.createTempSync('fourier_inspect');
   try {
     sourceFile.copySync('${tmpDir.path}/articledb.hive');
     Hive.init(tmpDir.path);

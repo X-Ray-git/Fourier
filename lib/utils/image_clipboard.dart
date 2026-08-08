@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 class ImageClipboard {
   static const _channel = MethodChannel(
-    'io.github.xraygit.autofolo/image_clipboard',
+    'io.github.xraygit.fourier/image_clipboard',
   );
 
   static Future<Uint8List?> downloadBytes(String url) async {

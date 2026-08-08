@@ -40,7 +40,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
 
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
 
-    let badgeChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/badge", binaryMessenger: controller.engine.binaryMessenger)
+    let badgeChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/badge", binaryMessenger: controller.engine.binaryMessenger)
     badgeChannel.setMethodCallHandler { (call, result) in
       if call.method == "updateBadge" {
         if let args = call.arguments as? [String: Any], let count = args["count"] as? Int {
@@ -57,7 +57,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       }
     }
 
-    let imageChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/image_clipboard", binaryMessenger: controller.engine.binaryMessenger)
+    let imageChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/image_clipboard", binaryMessenger: controller.engine.binaryMessenger)
     imageChannel.setMethodCallHandler { (call, result) in
       if call.method == "copyImage" {
         if let typedData = call.arguments as? FlutterStandardTypedData {
@@ -77,17 +77,17 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       }
     }
 
-    let cursorChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/cursor", binaryMessenger: controller.engine.binaryMessenger)
+    let cursorChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/cursor", binaryMessenger: controller.engine.binaryMessenger)
     cursorChannel.setMethodCallHandler { (call, result) in
       if call.method == "activateZoomInCursor" {
-        AutoFoloCursorFactory.zoomInCursor.set()
+        FourierCursorFactory.zoomInCursor.set()
         result(nil)
       } else {
         result(FlutterMethodNotImplemented)
       }
     }
 
-    let appMenuChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/app_menu", binaryMessenger: controller.engine.binaryMessenger)
+    let appMenuChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/app_menu", binaryMessenger: controller.engine.binaryMessenger)
     appMenuChannel.setMethodCallHandler { (call, result) in
       guard call.method == "setItemStates" else {
         result(FlutterMethodNotImplemented)
@@ -110,7 +110,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       result(nil)
     }
 
-    let windowControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/window_controls", binaryMessenger: controller.engine.binaryMessenger)
+    let windowControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/window_controls", binaryMessenger: controller.engine.binaryMessenger)
     windowControlsChannel.setMethodCallHandler { [weak self] (call, result) in
       if call.method == "setTrafficLightsHidden", let hidden = call.arguments as? Bool {
         (self?.mainFlutterWindow as? MainFlutterWindow)?.setTrafficLightsHidden(hidden)
@@ -151,7 +151,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       }
     }
 
-    let webViewControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.autofolo/webview_controls", binaryMessenger: controller.engine.binaryMessenger)
+    let webViewControlsChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/webview_controls", binaryMessenger: controller.engine.binaryMessenger)
     webViewControlsChannel.setMethodCallHandler { [weak controller] (call, result) in
       guard call.method == "enableElementFullscreen" else {
         result(FlutterMethodNotImplemented)
@@ -192,7 +192,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   }
 }
 
-private enum AutoFoloCursorFactory {
+private enum FourierCursorFactory {
   static let zoomInCursor: NSCursor = {
     if #available(macOS 15.0, *) {
       return NSCursor.zoomIn

@@ -130,7 +130,7 @@ void main() async {
     shouldShowMacWindow = true;
   }
 
-  runApp(const AutoFoloApp());
+  runApp(const FourierApp());
 
   if (shouldShowMacWindow) {
     try {
@@ -145,8 +145,8 @@ void main() async {
 }
 
 /// 应用入口
-class AutoFoloApp extends StatelessWidget {
-  const AutoFoloApp({super.key});
+class FourierApp extends StatelessWidget {
+  const FourierApp({super.key});
 
   @override
   Widget build(BuildContext context) {

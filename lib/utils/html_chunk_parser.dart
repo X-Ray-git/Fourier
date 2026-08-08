@@ -5,6 +5,10 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../services/article_image_service.dart';
 
+// Cached normalized HTML may still contain the pre-Fourier internal tags.
+const _authorListTags = {'fourier-author-list', 'auto-folo-author-list'};
+const _authorTags = 'fourier-author, auto-folo-author';
+
 enum HtmlChunkType {
   heading,
   paragraph,
@@ -286,7 +290,7 @@ abstract final class HtmlChunkParser {
             tag == 'hr' ||
             tag == 'figure' ||
             tag == 'blockquote' ||
-            tag == 'auto-folo-author-list' ||
+            _authorListTags.contains(tag) ||
             _isBlockCode(child);
         if (_mediaTags.contains(tag) ||
             isBlockLike ||
@@ -306,9 +310,9 @@ abstract final class HtmlChunkParser {
   static void _processElement(dom.Element element, List<HtmlChunk> chunks) {
     final tag = element.localName?.toLowerCase() ?? '';
 
-    if (tag == 'auto-folo-author-list') {
+    if (_authorListTags.contains(tag)) {
       final authors = element
-          .querySelectorAll('auto-folo-author')
+          .querySelectorAll(_authorTags)
           .map(
             (author) => HtmlAuthorItem(
               name: (author.attributes['name'] ?? '').trim(),

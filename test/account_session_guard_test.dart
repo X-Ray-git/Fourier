@@ -1,4 +1,4 @@
-import 'package:autofolo/services/account_session_guard.dart';
+import 'package:fourier/services/account_session_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

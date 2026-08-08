@@ -25,7 +25,7 @@ class MacOSAppMenu extends StatefulWidget {
 
 class _MacOSAppMenuState extends State<MacOSAppMenu> {
   static const _menuStateChannel = MethodChannel(
-    'io.github.xraygit.autofolo/app_menu',
+    'io.github.xraygit.fourier/app_menu',
   );
   static const _projectUrl = 'https://github.com/X-Ray-git/auto-folo';
   static const _issuesUrl = 'https://github.com/X-Ray-git/auto-folo/issues';

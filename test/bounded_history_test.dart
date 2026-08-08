@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:autofolo/services/bounded_history.dart';
+import 'package:fourier/services/bounded_history.dart';
 
 void main() {
   group('BoundedHistory', () {

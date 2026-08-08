@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/models/article.dart';
+import 'package:fourier/models/article.dart';
 
 void main() {
   test('fromEntryJson should parse nested entry/feed fields', () {

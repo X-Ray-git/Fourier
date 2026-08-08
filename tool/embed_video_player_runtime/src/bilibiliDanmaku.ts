@@ -53,7 +53,7 @@ export class BilibiliDanmaku {
     const context = this.canvas.getContext('2d');
     if (!context) throw new Error('Canvas 2D is unavailable.');
     this.context = context;
-    this.canvas.className = 'auto-folo-danmaku-canvas';
+    this.canvas.className = 'fourier-danmaku-canvas';
     this.container.append(this.canvas);
 
     this.toggleButton = this.createToggleButton();
@@ -94,7 +94,7 @@ export class BilibiliDanmaku {
   private createToggleButton() {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'auto-folo-danmaku-button';
+    button.className = 'fourier-danmaku-button';
     button.textContent = '弹';
     button.addEventListener('click', (event) => {
       event.preventDefault();

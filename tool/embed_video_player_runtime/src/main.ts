@@ -28,8 +28,8 @@ function notify(
   detail?: string | number
 ) {
   const channel = (globalThis as typeof globalThis & {
-    AutoFoloVideoPlayer?: { postMessage(message: string): void }
-  }).AutoFoloVideoPlayer;
+    FourierVideoPlayer?: { postMessage(message: string): void }
+  }).FourierVideoPlayer;
   channel?.postMessage(JSON.stringify({ type, detail }));
 }
 
@@ -222,8 +222,8 @@ async function main(provider: string) {
     capture: true
   });
   (globalThis as typeof globalThis & {
-    AutoFoloVideoControls?: { togglePlayPause(): void }
-  }).AutoFoloVideoControls = { togglePlayPause };
+    FourierVideoControls?: { togglePlayPause(): void }
+  }).FourierVideoControls = { togglePlayPause };
 
   console.log('[Main] Shaka Player initialized');
   notify('ready');

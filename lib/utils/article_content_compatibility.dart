@@ -3,6 +3,8 @@ import 'package:html/dom.dart' as dom;
 /// Narrow compatibility fixes for source HTML that depends on site CSS which
 /// is not available in the article reader.
 abstract final class ArticleContentCompatibility {
+  static const String authorListTag = 'fourier-author-list';
+  static const String authorTag = 'fourier-author';
   static const Set<String> _emptyWrapperTags = {'a', 'span', 'li', 'ul', 'ol'};
 
   static void apply(dom.DocumentFragment fragment, {String? sourceUrl}) {
@@ -73,7 +75,7 @@ abstract final class ArticleContentCompatibility {
         .toList();
 
     for (final byline in bylines) {
-      final replacement = dom.Element.tag('auto-folo-author-list');
+      final replacement = dom.Element.tag(authorListTag);
       final seen = <String>{};
 
       for (final image in byline.querySelectorAll('img')) {
@@ -101,7 +103,7 @@ abstract final class ArticleContentCompatibility {
         final identity = '$name\u0000$avatarUrl';
         if (!seen.add(identity)) continue;
 
-        final author = dom.Element.tag('auto-folo-author')
+        final author = dom.Element.tag(authorTag)
           ..attributes['name'] = name
           ..attributes['avatar'] = avatarUrl;
         if (handle.isNotEmpty) author.attributes['handle'] = handle;

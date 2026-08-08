@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/models/article.dart';
-import 'package:autofolo/utils/article_length_estimator.dart';
+import 'package:fourier/models/article.dart';
+import 'package:fourier/utils/article_length_estimator.dart';
 
 void main() {
   ArticleModel article({required String id, String? content}) {

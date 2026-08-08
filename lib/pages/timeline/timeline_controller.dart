@@ -34,7 +34,7 @@ enum TimelineSortMode { newest, longest, shortest }
 /// 时间线控制器 — 本地文章库（未读/全部/已读）
 class TimelineController extends GetxController {
   static const bool _animationProbeRequested = bool.fromEnvironment(
-    'AUTO_FOLO_ANIMATION_PROBE',
+    'FOURIER_ANIMATION_PROBE',
   );
 
   final loadingState = Rx<LoadingState<List<ArticleModel>>>(const Loading());

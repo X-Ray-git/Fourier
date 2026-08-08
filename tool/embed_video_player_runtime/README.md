@@ -1,6 +1,6 @@
 # 平台视频播放运行时
 
-此目录包含 Auto Folo 内嵌 YouTube/Bilibili 播放器的可复现构建源。应用不在
+此目录包含 Fourier 内嵌 YouTube/Bilibili 播放器的可复现构建源。应用不在
 运行时依赖 Node.js；Flutter 只打包 `assets/embed_video_player/` 中的生产
 构建产物。
 

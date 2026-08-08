@@ -94,12 +94,12 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/Auto-Folo-android-${GITHUB_REF_NAME}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/Fourier-android-${GITHUB_REF_NAME}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: auto-folo-android
+          name: fourier-android
           path: dist/*.apk
           if-no-files-found: error
 
@@ -141,19 +141,19 @@ jobs:
         run: |
           mkdir -p dist
           ditto --arch arm64 \
-            "build/macos/Build/Products/Release/Auto Folo.app" \
-            "dist/Auto Folo.app"
-          file "dist/Auto Folo.app/Contents/MacOS/Auto Folo" | grep arm64
-          ! file "dist/Auto Folo.app/Contents/MacOS/Auto Folo" | grep x86_64
+            "build/macos/Build/Products/Release/Fourier.app" \
+            "dist/Fourier.app"
+          file "dist/Fourier.app/Contents/MacOS/Fourier" | grep arm64
+          ! file "dist/Fourier.app/Contents/MacOS/Fourier" | grep x86_64
           ditto -c -k --sequesterRsrc --keepParent \
-            "dist/Auto Folo.app" \
-            "dist/Auto-Folo-macOS-arm64-${GITHUB_REF_NAME}.zip"
-          rm -rf "dist/Auto Folo.app"
+            "dist/Fourier.app" \
+            "dist/Fourier-macOS-arm64-${GITHUB_REF_NAME}.zip"
+          rm -rf "dist/Fourier.app"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v7
         with:
-          name: auto-folo-macos
+          name: fourier-macos
           path: dist/*.zip
           if-no-files-found: error
 

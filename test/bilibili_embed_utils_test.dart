@@ -1,4 +1,4 @@
-import 'package:autofolo/utils/bilibili_embed_utils.dart';
+import 'package:fourier/utils/bilibili_embed_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

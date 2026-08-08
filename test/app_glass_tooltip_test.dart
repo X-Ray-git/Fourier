@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/common/widgets/app_glass.dart';
+import 'package:fourier/common/widgets/app_glass.dart';
 
 void main() {
   Future<void> showTooltip(

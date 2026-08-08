@@ -1,4 +1,4 @@
-import 'package:autofolo/common/widgets/mobile_article_range_button.dart';
+import 'package:fourier/common/widgets/mobile_article_range_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

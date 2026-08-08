@@ -1,4 +1,4 @@
-import 'package:autofolo/models/feed.dart';
+import 'package:fourier/models/feed.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -44,10 +44,7 @@ void main() {
       category: 'AI',
     );
 
-    final updated = feed.copyWith(
-      clearCustomTitle: true,
-      clearCategory: true,
-    );
+    final updated = feed.copyWith(clearCustomTitle: true, clearCategory: true);
 
     expect(updated.title, 'Source');
     expect(updated.customTitle, isNull);

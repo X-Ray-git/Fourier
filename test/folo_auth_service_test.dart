@@ -1,4 +1,4 @@
-import 'package:autofolo/services/folo_auth_service.dart';
+import 'package:fourier/services/folo_auth_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -15,6 +15,13 @@ void main() {
   });
 
   group('FoloAuthService Android social login helpers', () {
+    test('uses the Fourier Android callback URI', () {
+      expect(
+        FoloAuthService.androidAuthCallbackUri,
+        Uri.parse('folo://fourier-auth'),
+      );
+    });
+
     test('parses the provider list returned by Folo', () {
       final providers = FoloAuthService.authProvidersFromResponse({
         'google': {'id': 'google', 'name': 'Google'},

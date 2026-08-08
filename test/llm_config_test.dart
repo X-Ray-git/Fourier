@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:autofolo/services/llm_config.dart';
+import 'package:fourier/services/llm_config.dart';
 
 void main() {
   test('copyWith changes one LLM setting without touching the others', () {

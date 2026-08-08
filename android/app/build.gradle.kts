@@ -16,7 +16,7 @@ if (hasReleaseSigning) {
 }
 
 android {
-    namespace = "io.github.xraygit.autofolo"
+    namespace = "io.github.xraygit.fourier"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -30,7 +30,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.github.xraygit.autofolo"
+        applicationId = "io.github.xraygit.fourier"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

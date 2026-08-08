@@ -1,6 +1,6 @@
-import 'package:autofolo/models/article.dart';
-import 'package:autofolo/services/article_markdown_export_service.dart';
-import 'package:autofolo/utils/html_chunk_parser.dart';
+import 'package:fourier/models/article.dart';
+import 'package:fourier/services/article_markdown_export_service.dart';
+import 'package:fourier/utils/html_chunk_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

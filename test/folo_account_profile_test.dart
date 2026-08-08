@@ -1,4 +1,4 @@
-import 'package:autofolo/models/folo_account_profile.dart';
+import 'package:fourier/models/folo_account_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

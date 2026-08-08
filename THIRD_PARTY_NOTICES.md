@@ -103,3 +103,23 @@ copyright and license terms remain applicable to the corresponding portions.
 - License: ISC License
 - Copyright (c) 2019 and later, KFlash and others
 - License text: [`third_party/licenses/ISC-meriyah.txt`](third_party/licenses/ISC-meriyah.txt)
+
+## markdown-it
+
+- Version: 15.0.0
+- Source: https://github.com/markdown-it/markdown-it
+- License: MIT License
+- Copyright (c) 2014 Vitaly Puzrin, Alex Kocharin
+- Usage: Auto Folo Wiki 页面的客户端 Markdown 渲染；UMD 构建内置在
+  `docs/agent_handoff/assets/vendor/`，本 Wiki 离线阅读不依赖网络资源。
+- License text: [`third_party/licenses/MIT-markdown-it.txt`](third_party/licenses/MIT-markdown-it.txt)
+
+## markdown-it-anchor
+
+- Version: 9.2.1
+- Source: https://github.com/valeriangalliat/markdown-it-anchor
+- License: Unlicense（公有领域）
+- Copyright (c) 2014-2015 Vitaly Puzrin, Alex Kocharin; 2016 Valeriu Paloş
+- Usage: Auto Folo Wiki 页面的标题锚点生成；UMD 构建内置在
+  `docs/agent_handoff/assets/vendor/`。
+- License text: [`third_party/licenses/UNLICENSE-markdown-it-anchor.txt`](third_party/licenses/UNLICENSE-markdown-it-anchor.txt)

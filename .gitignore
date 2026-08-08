@@ -62,6 +62,19 @@ android/build/
 *.hive
 *.hive.lock
 
+# Local credentials and databases
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.jks
+*.jks.b64
+*.keystore
+
 # Local scratch/playground directory for temporary scripts and data
 scratch/*
 !scratch/.gitkeep

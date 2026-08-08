@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>设置 · Auto Folo Wiki</title>
+<title>设置 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -76,12 +76,12 @@
 Folo 登录与退出：
 
 - macOS 首选 Folo 官方网页登录。实现对标 Folo CLI：应用在 `127.0.0.1` 随机端口启动临时 callback，在系统浏览器打开 `https://app.folo.is/login?cli_callback=...`，收到一次性 token 后调用 Better Auth `one-time-token/apply`（404 时兼容 `verify`），最后用 `/better-auth/get-session` 验证长期 Session Token。
-- Folo 官网在生成 CLI 回调期间仍会显示通用的“打开 Folo”按钮，点击会唤起官方客户端，Auto Folo 无法从系统浏览器中隐藏它。macOS 等待框必须提示用户无需点击该按钮；localhost 回调一旦验证成功，应立即在后台完成登录，不能等待 Auto Folo 重新获得焦点。Android 深链仍需等待应用恢复前台后再关闭登录界面。
-- Android 点击“登录 Folo”后动态读取并显示服务端提供方。当前 Folo 返回 Google、GitHub、Apple、Email；Android 与官方移动端一致地排除 Apple。Google/GitHub 在真实系统浏览器中完成，最终通过仅匹配 `folo://autofolo-auth` 的深链返回；Email 使用本地邮箱/密码表单，并支持 TOTP 二步验证码。不要恢复移动 `/login` 页面或登录 WebView；前者会跳官网，后者会被 Google 拒绝。
-- 社交登录已有对应网页会话时可能直接返回；Auto Folo 不读取系统浏览器 cookie，只接收 Better Auth Expo proxy 返回的会话 cookie。Email 密码与 TOTP 只在内存中提交，不写入设置、日志或配置备份。
+- Folo 官网在生成 CLI 回调期间仍会显示通用的“打开 Folo”按钮，点击会唤起官方客户端，Fourier 无法从系统浏览器中隐藏它。macOS 等待框必须提示用户无需点击该按钮；localhost 回调一旦验证成功，应立即在后台完成登录，不能等待 Fourier 重新获得焦点。Android 深链仍需等待应用恢复前台后再关闭登录界面。
+- Android 点击“登录 Folo”后动态读取并显示服务端提供方。当前 Folo 返回 Google、GitHub、Apple、Email；Android 与官方移动端一致地排除 Apple。Google/GitHub 在真实系统浏览器中完成，最终通过仅匹配 `folo://fourier-auth` 的深链返回；Email 使用本地邮箱/密码表单，并支持 TOTP 二步验证码。不要恢复移动 `/login` 页面或登录 WebView；前者会跳官网，后者会被 Google 拒绝。
+- 社交登录已有对应网页会话时可能直接返回；Fourier 不读取系统浏览器 cookie，只接收 Better Auth Expo proxy 返回的会话 cookie。Email 密码与 TOTP 只在内存中提交，不写入设置、日志或配置备份。
 - 手动 Session Token 入口继续保留。手动保存同样必须先调用 `/better-auth/get-session` 验证，不能把任意字符串直接写成已登录状态。
 - 当前采用“单一活动账号”，不维护多账号档案，也不尝试识别不同 Session Token 是否属于同一用户。Token 实际变化时一律重建账号内容；完全相同的 Token 重复保存不清理数据。
-- “退出账号”是本地退出：删除 Auto Folo 的 Token 和账号内容，但不调用 Folo 远端 sign-out，也不退出系统浏览器。这样旧配置备份中的长期 Token 仍可导入。若要测试账号密码页面，需要用户自行在浏览器退出 Folo。
+- “退出账号”是本地退出：删除 Fourier 的 Token 和账号内容，但不调用 Folo 远端 sign-out，也不退出系统浏览器。这样旧配置备份中的长期 Token 仍可导入。若要测试账号密码页面，需要用户自行在浏览器退出 Folo。
 - 浏览器登录、手动 Token、配置导入三条入口最终必须汇入 `AccountService.applyAccountChange()`，不要分别维护数据清理逻辑。
 - 登录状态的主视觉使用 Folo 返回的头像和用户名，不再用“已配置 Token”代表用户身份。`/better-auth/get-session` 返回的 `id/name/email/image` 会以轻量资料缓存在本机；旧安装仅在有 Token 但缺少资料时补查一次，头像失败则回退为用户名首字符。账号资料不进入 version 1 配置导出，导入 Token 时利用既有在线验证结果重新生成；切换或退出必须和 Token 一起替换或清除，不能残留上一个账号的头像。
 

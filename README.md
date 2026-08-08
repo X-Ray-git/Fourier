@@ -1,12 +1,12 @@
-# Auto Folo — Folo RSS 阅读器
+# Fourier — Folo RSS 阅读器
 
 <p align="center">
-  <img src="assets/readme-icon.png" alt="Auto Folo" width="256">
+  <img src="assets/icon.png" alt="Fourier" width="256">
 </p>
 
 基于 Flutter 的 Folo RSS 聚合阅读客户端，支持 Android 和 macOS。聚焦高密度信息流阅读：同步 Folo 文章、按源筛选、逐块渲染长文，并用 DeepSeek 完成可配置的翻译、摘要与垃圾拦截判定。
 
-> Auto Folo 是个人用途的非官方二次开发客户端，不隶属于 Folo、RSSNext 或其运营方，也不代表官方发布版本。
+> Fourier 是个人用途的非官方二次开发客户端，不隶属于 Folo、RSSNext 或其运营方，也不代表官方发布版本。
 
 ## 主要功能
 
@@ -59,5 +59,5 @@ flutter test --no-pub
 
 ## 许可证
 
-Auto Folo 按照 [`AGPL-3.0-only`](LICENSE) 授权。第三方版权与许可证见
+Fourier 按照 [`AGPL-3.0-only`](LICENSE) 授权。第三方版权与许可证见
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

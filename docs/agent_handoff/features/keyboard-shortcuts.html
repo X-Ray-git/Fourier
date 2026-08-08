@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>快捷键与焦点 · Auto Folo Wiki</title>
+<title>快捷键与焦点 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -87,7 +87,7 @@
 
 ## 实现结构
 
-- macOS 菜单栏由 `MacOSAppMenu` 的 `PlatformMenuBar` 管理，结构为 `Auto Folo / 编辑 / 显示 / 文章 / 窗口 / 帮助`。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 `PlatformProvidedMenuItem`；XIB 只为这些系统项提供本地化标题和 AppKit selector，不要恢复 Flutter 模板中未使用的拼写、替换、语音等菜单。
+- macOS 菜单栏由 `MacOSAppMenu` 的 `PlatformMenuBar` 管理，结构为 `Fourier / 编辑 / 显示 / 文章 / 窗口 / 帮助`。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 `PlatformProvidedMenuItem`；XIB 只为这些系统项提供本地化标题和 AppKit selector，不要恢复 Flutter 模板中未使用的拼写、替换、语音等菜单。
 - “编辑”菜单的业务动作名必须始终放在长标题之前，单篇格式为 `撤销“动作” · 《截断标题…》` / `重做“动作” · 《截断标题…》`。整批静默文章使用 `撤销“批量标为已读” · N 篇`，不显示任意一篇文章标题。完整 50 项栈不暴露成菜单列表，只展示下一项。`UndoAction.actionName` 是菜单动作名，`description` 用于反馈正文，不要再把完整句子整体截断。
 - `UndoService` 使用 `BoundedHistory` 保存 undo/redo 双栈，并串行执行撤销/重做，避免快速连续按键造成网络回滚乱序。`UndoAction` 可以承载单篇或不可拆分的一批文章；页面只通过 redo preparation 在数据变化前登记列表离场；数据变更集中复用单篇或批量本地状态入口，不能在重做路径复制数据库规则。业务栈是进程级内存状态，不得在 scope 切换时调用 `UndoService.clear()`。
 - 当前分栏文章通过 `MacOSAppMenuService` 注册原文、复制 Markdown、已读/审核动作、前后导航、翻译和摘要能力。注册者必须同时验证 route、当前 macOS 页面和当前选中文章，并在销毁时注销，避免 `IndexedStack` 中隐藏文章污染“文章”菜单。

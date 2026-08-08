@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Auto Folo Wiki — 一致性检查（零依赖，Node 18+）
+ * Fourier Wiki — 一致性检查（零依赖，Node 18+）
  *
  *   node scripts/docs-check.js
  *

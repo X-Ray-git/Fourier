@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>验证记录 · Auto Folo Wiki</title>
+<title>验证记录 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -167,15 +167,15 @@ flutter run -d <device-id> --no-pub
 - 第一版系统浏览器实现已在真机确认失败：Folo 会根据 Android 移动 UA 在到达 SSR 登录页前将请求 `302` 至 `https://folo.is/`。桌面 UA 请求同一 URL 则返回 `200`。
 - 第二版全屏应用内 WebView + 桌面 UA 能加载 Folo 页面，但 Google 在真机明确提示“不安全的浏览器或应用”，因此该实现已撤销。
 - 第三版系统浏览器 + Chrome“桌面版网站”也已真机确认失败：设置发生在重定向后的 `folo.is`，重新打开原始 `app.folo.is` 登录 URL 时仍会按移动 UA 再次跳转。
-- 当前第四版改为官方移动端 Better Auth Expo 同类流程：`sign-in/social` → `expo-authorization-proxy` → Chrome Google 登录 → `folo://autofolo-auth?cookie=...` → `/get-session` 验证。服务端探针已确认 `folo://autofolo-auth` callbackURL 被接受，authorization proxy 能正确写入 OAuth state 并 302 至 Google。
+- 当前第四版改为官方移动端 Better Auth Expo 同类流程：`sign-in/social` → `expo-authorization-proxy` → Chrome Google 登录 → `folo://fourier-auth?cookie=...` → `/get-session` 验证。服务端探针已确认 `folo://fourier-auth` callbackURL 被接受，authorization proxy 能正确写入 OAuth state 并 302 至 Google。
 - 第四版首次真机授权后仍落到 `folo.is`：原因是实现错误地把初始响应中的普通 `better-auth.state` 作为 Expo `oauthState` 传给 proxy。官方 Expo 客户端只转发独立的 `oauth_state`；当前响应没有该 cookie，因此正确行为是省略参数，让 proxy 从 authorization URL 取 raw state 并自行签名。服务端探针已确认省略参数时返回正确的 `__Secure-better-auth.state`。
 - `flutter test --no-pub test/folo_auth_service_test.dart`：5 项通过，覆盖 CLI URL、provider 响应解析、Expo authorization proxy URL、Session Cookie 提取和账号显示名。
 - `dart analyze lib test`：无 error/warning；仅有 59 条已存在的 liquid-glass `prefer_initializing_formals` info。
-- `flutter build apk --debug --no-pub`：构建成功；`apkanalyzer` 确认最终 manifest 只声明 `folo://autofolo-auth` 精确 host。
-- Google 真机流程已确认：浏览器授权返回 Auto Folo，MethodChannel 收到回调，`/get-session` 验证通过，等待窗口关闭，Session Token 持久化，文章数据库与缓存开始重建。此前“闪烁后仍等待”是 Flutter 默认深链与 MethodChannel 双重处理同一 URI，现由 `MainActivity.shouldHandleDeeplinking() = false` 修复。
+- `flutter build apk --debug --no-pub`：构建成功；`apkanalyzer` 确认最终 manifest 只声明 `folo://fourier-auth` 精确 host。
+- Google 真机流程已确认：浏览器授权返回 Fourier，MethodChannel 收到回调，`/get-session` 验证通过，等待窗口关闭，Session Token 持久化，文章数据库与缓存开始重建。此前“闪烁后仍等待”是 Flutter 默认深链与 MethodChannel 双重处理同一 URI，现由 `MainActivity.shouldHandleDeeplinking() = false` 修复。
 - 多方式实现后，`flutter build apk --debug --no-pub` 成功；无效 Email 探针得到 Folo 结构化 `401 INVALID_EMAIL_OR_PASSWORD`，确认接口和移动 fallback header 可被服务端处理。真实 Email/TOTP 和 GitHub 仍需对应账号真机验证。
 - 登录入口新增 provider 等待动画；账号状态改为 macOS `48px`、Android `52px` 的无内描边头像与用户名，图片按约三倍显示尺寸解码，失败时回退首字符。资料编解码、头像字段解析与既有认证测试共 8 项通过，相关文件静态分析无问题。仍需两端视觉确认：旧 Token 启动后能自动补全名字/头像、重新启动无需再次查询、退出后旧资料消失、配置导入后资料正确恢复。
-- macOS 安全日志确认登录 URL 含 `cli_callback`、系统浏览器打开成功、localhost 收到 `GET /callback` 且带一次性 Token。此前必须把焦点切回 Auto Folo 才完成登录，是 Android 共用的生命周期门禁误用于 macOS；现已拆分为 macOS 收到并验证回调后立即后台完成，Android 仍等待应用恢复前台。Folo 官网回调生成期间显示的“打开 Folo”会唤起官方客户端，属于上游通用页面行为；Auto Folo 等待框已明确提示无需点击。保留只记录 host/path/布尔状态而不记录 Token 的 `FoloAuthProbe` 检查点继续观察。
+- macOS 安全日志确认登录 URL 含 `cli_callback`、系统浏览器打开成功、localhost 收到 `GET /callback` 且带一次性 Token。此前必须把焦点切回 Fourier 才完成登录，是 Android 共用的生命周期门禁误用于 macOS；现已拆分为 macOS 收到并验证回调后立即后台完成，Android 仍等待应用恢复前台。Folo 官网回调生成期间显示的“打开 Folo”会唤起官方客户端，属于上游通用页面行为；Fourier 等待框已明确提示无需点击。保留只记录 host/path/布尔状态而不记录 Token 的 `FoloAuthProbe` 检查点继续观察。
 
 ## 常规检查
 
@@ -213,7 +213,7 @@ flutter run -d macos
 
 ```bash
 flutter build macos --debug
-open "build/macos/Build/Products/Debug/Auto Folo.app"
+open "build/macos/Build/Products/Debug/Fourier.app"
 ```
 
 不要把本地 macOS release 构建作为主要 UI 验证目标。本地环境可能把 release 产物视为 ad-hoc 签名或未知证书链，从而造成启动/framework 加载问题；这不一定和当前代码有关。
@@ -226,7 +226,7 @@ flutter pub get
 flutter run -d macos --no-pub
 ```
 
-当前 Debug 配置依赖 `ENABLE_DEBUG_DYLIB = NO` 避免 `Auto Folo.debug.dylib` 被 macOS 系统策略拒载。验证时应看到 `A Dart VM Service on macOS is available at:`。
+当前 Debug 配置依赖 `ENABLE_DEBUG_DYLIB = NO` 避免 `Fourier.debug.dylib` 被 macOS 系统策略拒载。验证时应看到 `A Dart VM Service on macOS is available at:`。
 
 </script>
 <script src="../assets/wiki-common.js"></script>

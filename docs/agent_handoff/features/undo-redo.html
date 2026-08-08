@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>撤销与重做 · Auto Folo Wiki</title>
+<title>撤销与重做 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -122,7 +122,7 @@ macOS 的业务撤销/重做由 `UndoService` + `BoundedHistory` 提供，容量
 
 ## 菜单与反馈
 
-- macOS 菜单栏由 `MacOSAppMenu` 的 `PlatformMenuBar` 管理，结构为 `Auto Folo / 编辑 / 显示 / 文章 / 窗口 / 帮助`。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 `PlatformProvidedMenuItem`；XIB 只为这些系统项提供本地化标题和 AppKit selector。
+- macOS 菜单栏由 `MacOSAppMenu` 的 `PlatformMenuBar` 管理，结构为 `Fourier / 编辑 / 显示 / 文章 / 窗口 / 帮助`。系统 About、Services、隐藏、退出、全屏、最小化和缩放继续使用 `PlatformProvidedMenuItem`；XIB 只为这些系统项提供本地化标题和 AppKit selector。
 - “编辑”菜单的业务动作名必须始终放在长标题之前，单篇格式为 `撤销“动作” · 《截断标题…》` / `重做“动作” · 《截断标题…》`。整批静默文章使用 `撤销“批量标为已读” · N 篇`，不显示任意一篇文章标题。完整 50 项栈不暴露成菜单列表，只展示下一项。`UndoAction.actionName` 是菜单动作名，`description` 用于反馈正文，不要再把完整句子整体截断。
 
 ## 相关页面

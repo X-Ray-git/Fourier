@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Auto Folo Wiki — 命令入口
+# Fourier Wiki — 命令入口
 # 用法：
 #   ./scripts/docs.sh convert   （一次性）把 docs/agent_handoff 下的 .md 转换为 .html
 #   ./scripts/docs.sh index     重新生成搜索索引（内容变更后运行）

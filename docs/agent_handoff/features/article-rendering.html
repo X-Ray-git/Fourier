@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>文章渲染 · Auto Folo Wiki</title>
+<title>文章渲染 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -156,7 +156,7 @@ HTML 空段规范化：
 
 - 依赖站点 CSS 才能成立的窄兼容修复集中放在 `ArticleContentCompatibility`，由 `ArticleContentUtils.normalizeHtml()` 在通用安全清洗后、图片 URL 规范化前调用。不要把来源判断散落到 `HtmlChunkParser` 或普通图片 widget，也不要为单一规则引入动态规则引擎。
 - Hugging Face Blog 的作者头像没有 `width/height`，只使用 Tailwind 的 `size-9 sm:size-12` 或父容器 `h-5/w-5` 控制显示尺寸。图片文件的固有像素不能代表网页显示尺寸；不应直接按正文最大宽度放大，也不应加载上游整套 CSS。
-- 官方作者区有稳定的 `data-target="BlogAuthorsByline"`。兼容层将其转换为内部 `auto-folo-author-list/auto-folo-author` 语义结构，`HtmlChunkParser` 生成单个 `authorList` chunk，`HtmlChunkCard` 以 `36px` 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。
+- 官方作者区有稳定的 `data-target="BlogAuthorsByline"`。兼容层将其转换为内部 `fourier-author-list/fourier-author` 语义结构，解析器继续兼容旧缓存中的 `auto-folo-*` 标签；`HtmlChunkParser` 生成单个 `authorList` chunk，`HtmlChunkCard` 以 `36px` 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。
 - 作者区之外的 Hugging Face 头像堆叠属于站点装饰信息，仍按明确的 `cdn-avatars.huggingface.co` 或 `/avatars/` 头像语义移除；普通正文图片和其他来源即使带有 `avatar`/圆形类名也不能被误删。
 - 已保存译文此前直接进入 `HtmlChunkParser`，会绕过正文规范化。当前原文、历史译文和新生成译文在展示前都统一经过 `normalizeHtml()`；历史数据不需要批量迁移，重新构建文章 Controller 即可生效。
 - `normalizeHtml()` 接受文章原文 URL 作为来源上下文；来源规则按 URL host 分派，不依赖可变的订阅源标题或 feed ID。MarkTechPost 会移除上游依赖网页脚本的 `dm-copy-raw-code` 控件；若 `Interactive Explainer` 后出现被 Folo 展开到正文中的完整内嵌文档（以残留 `<title>` 为确定边界），则把该尾部替换为“交互内容仅在原文网页中可用”及原文链接。不要据此放宽到任意 iframe、任意 `Interactive` 文本或其他来源。

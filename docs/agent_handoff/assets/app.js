@@ -1,5 +1,5 @@
 /*
- * Auto Folo Wiki — 页面运行时
+ * Fourier Wiki — 页面运行时
  * 经典 script：加载后渲染导航、Markdown 正文、目录、搜索与主题切换。
  * 不依赖 ES Module、fetch、Service Worker 或任何网络资源，file:// 下可用。
  */
@@ -72,7 +72,7 @@
     // 文档标题进入 <title>
     var h1 = renderEl.querySelector('h1');
     if (h1) {
-      document.title = h1.textContent + ' · Auto Folo Wiki';
+      document.title = h1.textContent + ' · Fourier Wiki';
     }
   }
 
@@ -808,78 +808,7 @@
     });
   }
 
-  /* ── mockup 流程演示（huashu Dashboard+Cinematic 模式）── */
-
-  function initMockupCinematic() {
-    if (!renderEl) return;
-    var playBtn = renderEl.querySelector('.mock-play');
-    if (!playBtn) return;
-    var win = playBtn.closest('.mock-window');
-    var list = win.querySelector('.mock-list');
-    var article = win.querySelector('.mock-article');
-    var running = false;
-    var html = document.documentElement;
-
-    function buildCard() {
-      var proto = list.querySelector('.mock-card');
-      var card = proto ? proto.cloneNode(true) : document.createElement('div');
-      card.className = 'mock-card enter from';
-      card.classList.remove('read', 'flagged');
-      return card;
-    }
-
-    function addBar() {
-      var b = document.createElement('div');
-      b.className = 'ma-para grow';
-      article.appendChild(b);
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () { b.classList.add('on'); });
-      });
-    }
-
-    function reset() {
-      var temp = list.querySelector('.mock-card.enter');
-      if (temp) temp.remove();
-      article.querySelectorAll('.ma-para.grow').forEach(function (b) { b.remove(); });
-      win.classList.remove('playing');
-      running = false;
-    }
-
-    playBtn.addEventListener('click', function () {
-      if (running) return;
-      running = true;
-      win.classList.add('playing');
-      var card = buildCard();
-      list.insertBefore(card, list.firstChild);
-      var reduced = reducedMotion() || html.classList.contains('no-anim');
-      if (reduced) {
-        // 减动效：直接显示终态，短暂停留后复位
-        card.classList.remove('from');
-        card.classList.add('flagged');
-        addBar(); addBar();
-        card.classList.add('read');
-        setTimeout(reset, 1400);
-        return;
-      }
-      // Scene 1 · 新卡片进入（0s）
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () { card.classList.remove('from'); });
-      });
-      // Scene 2 · AI 判定（1.6s）
-      setTimeout(function () { card.classList.add('flagged'); }, 1600);
-      // Scene 3 · 阅读填充（3.2s / 3.7s）
-      setTimeout(function () { addBar(); }, 3200);
-      setTimeout(function () { addBar(); }, 3600);
-      // Scene 4 · 已读（6.0s）
-      setTimeout(function () {
-        card.classList.add('read');
-      }, 6000);
-      // Scene 5 · 复位（7.6s）
-      setTimeout(reset, 7600);
-    });
-  }
-
-  /* ── 落地页效果（Apple 式滚动叙事）────────────── */
+  /* ── 落地页轻量进入效果 ──────────────────────── */
 
   function reducedMotion() {
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -888,94 +817,33 @@
   function initLandingFx() {
     if (!document.body.classList.contains('wiki-full')) return;
     var html = document.documentElement;
-    var heroH2 = renderEl ? renderEl.querySelector('.hero h2') : null;
+    var reveals = renderEl ? renderEl.querySelectorAll('.hp-reveal') : [];
 
-    // 1) hero 标题随滚动轻微缩放（退场感）
-    if (heroH2 && !reducedMotion()) {
-      var ticking = false;
-      window.addEventListener('scroll', function () {
-        if (ticking) return;
-        ticking = true;
-        requestAnimationFrame(function () {
-          ticking = false;
-          var y = window.scrollY;
-          var scale = Math.max(0.86, 1 - y * 0.00028);
-          var opacity = Math.max(0, 1 - y * 0.0011);
-          heroH2.style.transform = 'scale(' + scale + ')';
-          heroH2.style.opacity = opacity;
-        });
-      }, { passive: true });
-    }
-
-    // 2) 大数字滚动递增
-    var counters = renderEl ? renderEl.querySelectorAll('.stat-num') : [];
-    if (counters.length) {
-      var setNum = function (el, v) {
-        // 只更新首个文本节点，保留 % 等后缀子元素
-        var tn = el.firstChild;
-        if (tn && tn.nodeType === 3) tn.textContent = v;
-        else el.textContent = v;
-      };
-      var animate = function (el) {
-        var target = Number(el.getAttribute('data-count') || 0);
-        var dur = 1200;
-        var t0 = null;
-        function step(ts) {
-          if (!t0) t0 = ts;
-          var p = Math.min(1, (ts - t0) / dur);
-          setNum(el, Math.round(target * EASING.expoOut(p)));
-          if (p < 1) requestAnimationFrame(step);
-        }
-        requestAnimationFrame(step);
-      };
-      var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entries) {
-        entries.forEach(function (en) {
-          if (en.isIntersecting) { animate(en.target); io.unobserve(en.target); }
-        });
-      }, { threshold: 0.4 }) : null;
-      counters.forEach(function (c) {
-        if (reducedMotion() || html.classList.contains('no-anim')) {
-          setNum(c, c.getAttribute('data-count'));
-        } else if (io) {
-          io.observe(c);
-        } else {
-          setNum(c, c.getAttribute('data-count'));
-        }
+    function activateReveal(el) {
+      el.classList.add('revealed');
+      var items = el.querySelectorAll('.highlight-card, .flow-node, .entry-card');
+      items.forEach(function (it, i) {
+        it.classList.add('reveal-item');
+        it.style.transitionDelay = Math.min(i, 5) * 55 + 'ms';
+        requestAnimationFrame(function () { it.classList.add('reveal-item-show'); });
+        setTimeout(function () { it.style.transitionDelay = ''; }, 900);
       });
     }
 
-    // 3) 展示区块：钉住时触发渐显（场景顶部到达视口顶部才 reveal）
-    //    避免进场提前触发——否则会出现"先见标题、钉住后标题+卡片静态出现"
-    var reveals = renderEl ? renderEl.querySelectorAll('.hp-reveal.scene') : [];
-    if (reveals.length && !reducedMotion() && !html.classList.contains('no-anim')) {
-      var pending = Array.prototype.slice.call(reveals);
-      function activateReveal(el) {
-        el.classList.add('revealed');
-        var items = el.querySelectorAll('.highlight-card, .flow-node, .stat, .entry-card');
-        items.forEach(function (it, i) {
-          it.classList.add('reveal-item');
-          it.style.transitionDelay = (Math.floor(i / 3) * 90 + (i % 3) * 50) + 'ms';
-          requestAnimationFrame(function () { it.classList.add('reveal-item-show'); });
-          setTimeout(function () { it.style.transitionDelay = ''; }, 1600);
-        });
-      }
-      function checkReveals() {
-        if (!pending.length) return;
-        pending = pending.filter(function (el) {
-          if (el.getBoundingClientRect().top <= 0) { activateReveal(el); return false; }
-          return true;
-        });
-      }
-      var rticking = false;
-      window.addEventListener('scroll', function () {
-        if (rticking) return;
-        rticking = true;
-        requestAnimationFrame(function () { rticking = false; checkReveals(); });
-      }, { passive: true });
-      checkReveals();
-    } else {
-      reveals.forEach(function (el) { el.classList.add('revealed'); });
+    if (!reveals.length) return;
+    if (reducedMotion() || html.classList.contains('no-anim') || !('IntersectionObserver' in window)) {
+      reveals.forEach(activateReveal);
+      return;
     }
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        activateReveal(entry.target);
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    reveals.forEach(function (el) { observer.observe(el); });
   }
 
   /* ── 启动 ─────────────────────────────────────── */
@@ -997,7 +865,6 @@
     initReadSettings();
     initKeyboardNav();
     initLandingFx();
-    initMockupCinematic();
     requestAnimationFrame(function () { document.body.classList.add('page-ready'); });
   }
 

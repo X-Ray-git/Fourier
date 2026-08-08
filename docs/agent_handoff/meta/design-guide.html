@@ -6,7 +6,7 @@
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
 
-<title>设计规范 · Auto Folo Wiki</title>
+<title>设计规范 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -40,7 +40,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -51,35 +51,35 @@
 <script type="text/markdown" id="wiki-content">
 # 设计规范
 
-本文档是 Auto Folo Wiki 的视觉与交互设计规范，供后续所有页面美化、新增组件与视觉调整遵循。设计方向参考了开源 agent 设计技能与转场参考工程（见文末来源），并结合本项目的"离线、单文件、agent 可读"约束做了取舍。
+本文档是 Fourier Wiki 的视觉与交互设计规范，供后续所有页面美化、新增组件与视觉调整遵循。设计方向参考了开源 agent 设计技能与转场参考工程（见文末来源），并结合本项目的"离线、单文件、agent 可读"约束做了取舍。
 
 ## 设计判读（五维）
 
 当前站点在设计上的定位：
 
-- **产品形态**：产品宣传页（首页）+ 工程手册（57 个专题页）的混合站点。
-- **视觉语言**：现代工具 / Builder SaaS 家族（Linear / Vercel 风格）：细线边框、单一强调色、克制渐变、无衬线中文排版。
+- **产品形态**：产品身份入口 + 工程手册的离线混合站点。
+- **视觉语言**：以 Fourier 的中性深色和品牌橙为基础，强调真实产品画面、清晰层级和克制动效。
 - **信息密度**：高（8/10）——手册为主，允许紧凑列表与代码块。
 - **动效强度**：中（4/10）——只解释状态变化与引导注意，不干扰阅读。
-- **资产依赖**：低（2/10）——不使用截图与位图，图形全部为内联 SVG。
+- **资产依赖**：低（3/10）——首页可使用仓库内真实产品截图，架构图继续使用内联 SVG。
 - **品牌保真**：中（6/10）——品牌橙为唯一强调色，其余色相不做点缀。
 
 ## 设计令牌
 
 ### 色彩
 
-- 强调色（唯一）：品牌橙 `#f59e0b` / `oklch(0.769 0.165 70.1)`，深一档 `#f97316`。
+- 强调色：Fourier 橙 `#ff7626`，强强调 `#ff5d00`；大面积背景保持中性。
 - 语义色：链接蓝 `--link`、代码棕 `--code-text`、危险/保留仅用于语义场景（按钮与横幅）。
 - 中性色阶：浅色主题 9 级（`--bg` 至 `--text`），深色主题对应反转；全部用 CSS 变量，hex 在前作 fallback、oklch 在后覆盖。
 - 分区横幅色：状态蓝 / 产品橙 / 架构靛 / 功能橙红 / 平台绿 / 设计紫 / 操作黄绿 / 历史棕 / 许可绿 / 关于灰——只用于横幅图标与底色，不用于正文。
-- 反俗套：不使用紫→粉→蓝渐变；首页 hero 光晕收敛为品牌橙 + 中性深色。
+- 反俗套：首页不使用装饰性光球、网格或纯概念 mockup，以真实产品截图承担视觉信息。
 - 配色方向（2026-08 决策）：对标 Apple 展示页的高饱和克制风格，**不做印刷质感/压 chroma/奶油纸底**；huashu-design 的"印刷色质感"协议（大面积 chroma 0.01–0.04 等）不适用于本站点，其 chroma 参考仅作为选色常识，不进入令牌。
 
 ### 字体与排印（huashu 排印系统）
 
 - 正文：系统字体栈（PingFang SC / Microsoft YaHei / Noto Sans CJK 等），**17px**（中文建议值 17–18px），行高 1.75（可被阅读设置覆盖）。
 - 等宽：SF Mono / Menlo / Consolas，用于代码与 kbd。
-- 标题：`clamp()` 流式；按 **1.2 音阶**（文档站档）对齐：17 → h3 20 → h2 25 → h1 32；正文标题对比 ≥ 2.5×。
+- 标题按 **1.2 音阶**对齐：17 → h3 20 → h2 25 → h1 32；窄屏使用独立断点，不按 viewport 连续缩放。
 - 行长：正文列 `max-width: 36em` 居中（中文最佳 28–32 字/行）；图形/表格可超出正文列（灯箱承担大图查看）。
 - `text-wrap: pretty`（正文）与 `balance`（标题）提升中文断行。
 - 数字对齐：统计数字、阅读时长徽章等使用 `font-variant-numeric: tabular-nums`。
@@ -87,7 +87,7 @@
 ### 间距与圆角
 
 - 8pt 网格；正文段距 10px、章节间距 34px。
-- 圆角分层：横幅 20 / 卡片 14-16 / 控件 999（胶囊与圆形按钮）/ 图形 14；不做全局搜索替换。
+- 圆角分层：横幅 16 / 普通导航项与卡片不超过 8 / 胶囊与圆形控件 999 / 大型产品截图 14；不做全局搜索替换。
 
 ### 阴影
 
@@ -97,14 +97,14 @@
 
 | 令牌 | cubic-bezier | 用途 |
 |---|---|---|
-| `--ease-expo-out` | `(0.16, 1, 0.3, 1)` | 主缓动：统计数字递增、区块/场景渐显、卡片 hover、灯箱入场 |
+| `--ease-expo-out` | `(0.16, 1, 0.3, 1)` | 主缓动：区块渐显、卡片 hover、横幅和灯箱入场 |
 | `--ease-overshoot` | `(0.34, 1.56, 0.64, 1)` | 弹性弹出：主题图标切换、播放按钮、徽章 pop-in |
 | `--ease-anticipation` | `(0.3, -0.25, 0.6, 1)` | 蓄力：按钮按下、面板入场（当前未启用，预留） |
 
 - 时长：150–700ms（渐显类 500–600ms，微交互 150–250ms）。
-- 触发：hover（卡片上浮、图形描边）、点击（主题切换、复制成功、mockup 播放）、滚动（场景渐显、进度条）、焦点（focus-visible 可见性）。
-- 场景化叙事：四个大类采用"钉住空气时间"（sticky 150vh 容器，内容钉住约半屏滚动后释放）；渐显在钉住时触发（场景顶部到达视口顶部），标题与内容同帧出现并做行级 stagger——不要用 IO 提前触发（会产生"先见标题、内容静态出现"的错位）。
-- mockup 界面演示采用 huashu「Dashboard + Cinematic」模式：默认静态界面，点击 ▶ 播放约 8 秒流程动画后自动复位；reduced-motion 下直接显示终态。
+- 触发：hover（边框或颜色反馈）、点击（主题切换、复制成功）、滚动（轻量区块渐显与进度条）、焦点（focus-visible 可见性）。
+- 首页不钉住滚动，也不让标题随滚动缩放或消失；区块进入视口后只播放一次短渐显，子项可轻微错峰。
+- 首页使用真实产品截图，不维护与实际 UI 容易分叉的纯 CSS mockup 动画。
 - **所有动画必须受 `prefers-reduced-motion` 保护**；阅读设置中"动效关"等价于全局 `no-anim`。
 - View Transitions 只作渐进增强，不支持时静默降级。
 
@@ -117,7 +117,7 @@
 
 ## 组件协议
 
-- **横幅**：运行时由 app.js 生成（图标 + 标题 + 首段摘要 + 专题标签 + 阅读时长徽章），分区配色，含光泽扫过与入场动画。
+- **横幅**：运行时由 app.js 生成（图标 + 标题 + 首段摘要 + 专题标签 + 阅读时长徽章），使用低饱和静态分区底色和一次性轻量入场，不使用循环光泽动画。
 - **图形**：`div.dg` 包裹的内联 SVG，复用 `dg-*` 类与共享箭头 marker；点击打开灯箱（`<dialog>`）。
 - **键帽 kbd**：快捷键一律用 kbd 呈现，样式由 theme.css 统一。
 - **调用框**：语义警示用 `details.dg-callout`（"不要回退"），默认展开。
@@ -143,7 +143,7 @@
 - 语义结构：header/nav/main/article/footer 齐全；对话框（命令面板、阅读设置、灯箱）均带 `aria-label`；导航当前项带 `aria-current`。
 - 键盘可达：复制按钮 hover 显隐但有 `:focus-visible` 兜底；对话框原生支持 Esc；命令面板支持方向键与 Enter；`/ ? n p t` 全局快捷键在输入焦点与 IME 组合时跳过。
 - 焦点管理：dialog 使用原生 showModal（焦点自动进入，关闭后归还）；灯箱关闭按钮可聚焦。
-- 对比度：浅色/深色两套中性色阶满足正文对比；横幅渐变文字用于大标题（对比充足）不用于正文。
+- 对比度：浅色/深色两套中性色阶满足正文对比；横幅标题使用普通正文色，分区色只承担识别作用。
 - 动效降级：全部动画有 `prefers-reduced-motion` 分支；阅读设置提供全局关闭。
 - 触摸目标：移动端主题按钮/阅读设置按钮 ≥ 36px，正文链接行高足够。
 

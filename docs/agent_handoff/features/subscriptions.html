@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>订阅源 · Auto Folo Wiki</title>
+<title>订阅源 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -120,7 +120,7 @@
 
 - macOS 已提供第一轮订阅管理：`订阅源` section 标题右侧的 `+` 直接通过 RSS URL 添加普通订阅。该入口使用紧贴 `18px` 图标的 `20px` 点击区，静止时不绘制玻璃底板、边框或圆形轮廓，只在 hover/press 时显示轻量中性反馈，避免透明大点击框造成视觉错位；其右缘使用侧边栏普通行数量气泡的 `24px` 基准线，不改变 section 标题原有位置和信息密度。普通订阅源行右键可编辑或取消订阅；普通分类行右键可重命名或取消分组。Inbox 不是普通 RSS 订阅，不进入这些写操作。
 - 添加与编辑共用同一套表单状态和校验。添加时 RSS URL 可编辑，编辑时 URL 只读；两种模式都可设置自定义标题、分类和内容类型（`Articles` / `Social Media`）。第一轮不做关键词发现、推荐、RSSHub 浏览、OPML、私密订阅或“从 Folo 总时间线隐藏”。
-- 远端订阅元数据与 Auto Folo 本地偏好必须分层：自定义标题、分类和内容类型写入 Folo；静默、自动翻译、自动全文仍是本地设置，不得伪装成 Folo 订阅字段。“从总时间线隐藏”不引入本项目，现有静默机制继续承担对应的个人工作流。
+- 远端订阅元数据与 Fourier 本地偏好必须分层：自定义标题、分类和内容类型写入 Folo；静默、自动翻译、自动全文仍是本地设置，不得伪装成 Folo 订阅字段。“从总时间线隐藏”不引入本项目，现有静默机制继续承担对应的个人工作流。
 - `FeedModel.title` 是最终显示标题，优先使用订阅关系的自定义标题；`sourceTitle` 保留 RSS 源标题，`customTitle` 保留用户覆盖值。编辑表单清空自定义标题后必须恢复显示源标题。
 - 订阅写操作集中在 `SubscriptionManagementService`，HTTP 细节集中在 `FeedHttp`。服务端变更成功后先更新共享目录并同步缓存，再通过 `SubscriptionCatalogService` 通知侧边栏和时间线；页面不得分别维护自己的订阅副本。
 - 取消订阅需要确认，并作为自定义命令进入全局 50 项 Undo/Redo 历史。撤销会使用原 URL、标题、分类和内容类型重新订阅，重做再次取消；应用彻底关闭前应与其他已读/垃圾拦截动作共享同一条历史栈。

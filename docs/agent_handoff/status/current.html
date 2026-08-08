@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>当前状态 · Auto Folo Wiki</title>
+<title>当前状态 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -50,24 +50,27 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-截至 2026-08-01：
+截至 2026-08-08：
 
 - `main` 是当前集成分支。
+- Fourier 品牌迁移与离线工程 Wiki 已通过独立 merge commit 合入 `main`。应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和图标均已迁移；旧 Auto Folo 名称只允许存在于历史证据、旧设置导入与明确的迁移兼容说明中。
+- GitHub 仓库名称和远端 URL 仍保持 `X-Ray-git/auto-folo`，本地目录名也暂未调整；这两项是后续独立迁移，不得为了“清零搜索结果”提前改坏有效链接或现有 worktree。
+- Wiki 采用可离线双击的单文件 HTML 页面体系，正文以 Markdown 语法内嵌；`index.html` 是阅读入口，维护规则见 `meta/site-guide.html`。
 - Android 设计迁移已通过 merge commit `bd8c1b8` 合入 `main`；新代理应以 `main` 中的移动端实现为当前事实，不再等待旧 `android` 分支。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
 - 最近一批 worktree 功能已经用 merge commit 合入 `main`，保留了分支历史。
 - 除非用户明确要求，否则不要创建 release/tag。
 - `AGENT_HANDOFF.md` 现在只作为短入口。维护型交接知识库位于 `docs/agent_handoff/`。
-- 旧单文件时间线已拆入 `docs/agent_handoff/history/archive/`；`history/chronology.md` 提供全部旧章节索引，`history/timeline.md` 仅保留兼容入口。当前事实不得写入历史归档。
+- 旧单文件时间线已拆入 `docs/agent_handoff/history/archive/`；`history/chronology.html` 提供全部旧章节索引，`history/timeline.html` 仅保留兼容入口。当前事实不得写入历史归档。
 
 当前产品形态：
 
 - Flutter 应用，使用 GetX、Hive、Dio 和本地缓存。
-- 产品名：`Auto Folo`。
-- Dart package 名仍是 `autofolo`。
-- Android application id、macOS bundle id、MethodChannel 命名空间使用 `io.github.xraygit.autofolo`。
+- 产品名：`Fourier`。
+- Dart package 名仍是 `fourier`。
+- Android application id、macOS bundle id、MethodChannel 命名空间使用 `io.github.xraygit.fourier`。
 - 这是 X-Ray 个人使用的软件，围绕 Folo 使用场景构建，但不能暗示官方 Folo 所有权。
-- macOS 使用 Folo 官方网页 + loopback callback；Android 动态提供 Email、Google、GitHub 登录，其中社交方式使用 Better Auth Expo 同类的系统浏览器 + 精确 `folo://autofolo-auth` 回调。手动长期 Session Token 与 version 1 配置导入继续兼容。当前是单一活动账号，本地退出/Token 变化会保留普通设置并重建全部账号内容，不执行 Folo 远端 sign-out。两端设置页使用本地缓存的 Folo 头像和用户名表达登录身份，旧 Token 会按需补全资料，登录入口等待 provider 时有明确加载动画。macOS 与 Android Google 基础链路已由用户确认；Android 多方式选择、GitHub、Email/TOTP 及新账号卡视觉仍待验证。
+- macOS 使用 Folo 官方网页 + loopback callback；Android 动态提供 Email、Google、GitHub 登录，其中社交方式使用 Better Auth Expo 同类的系统浏览器 + 精确 `folo://fourier-auth` 回调。手动长期 Session Token 与 version 1 配置导入继续兼容。当前是单一活动账号，本地退出/Token 变化会保留普通设置并重建全部账号内容，不执行 Folo 远端 sign-out。两端设置页使用本地缓存的 Folo 头像和用户名表达登录身份，旧 Token 会按需补全资料，登录入口等待 provider 时有明确加载动画。macOS 与 Android Google 基础链路已由用户确认；Android 多方式选择、GitHub、Email/TOTP 及新账号卡视觉仍待验证。
 
 用户最近已验证：
 
@@ -150,7 +153,7 @@
 - macOS 正文链接 hover 的瞬时卡顿已修复并经用户验证。根因是所有 `HtmlChunkCard` 监听共享 `_hoveredUrl`，任意链接进入/离开都会让全篇 HTML 缓存失效并重新解析。当前取消动态下划线和 chunk 监听，只保留主题色、手型光标、点击及底部 URL 预览。
 - 详情页补抓普通全文或 Inbox 正文成功后，现已和后台 Readability 共用 `AutoAiQueueCoordinator.onArticleContentAvailable()`：只给最新状态仍为未读的文章排摘要，并按订阅源开关排翻译。打开页面期间后台译文完成后，`ArticleController` 会解析并刷新当前译文，不再要求切走后重开。已读取消策略、已开始请求和手动 AI 操作保持原语义。
 - macOS 阅读快捷键已扩展：`B` 打开原文，`Shift+B` 确保已读并打开（垃圾拦截为移除并打开），`Cmd+1/2/0` 分别导航到全部文章、垃圾拦截和静默订阅源。无选择时 `Right/Left` 分别选择当前列表首篇/末篇；应用级快捷键注册器先于默认焦点移动处理，`Esc` 后使用空详情中立焦点节点，避免侧边栏“全部文章”残留灰色焦点高亮。设置页说明和回归测试已同步。
-- macOS 原生菜单已从 Flutter 模板收敛为 `Auto Folo / 编辑 / 显示 / 文章 / 窗口 / 帮助`。业务 Undo/Redo 使用 50 项双栈，`Cmd+Z`/`Shift+Cmd+Z` 可连续处理标为已读、垃圾拦截保留/移除以及静默文章整批标为已读；输入框保留文本 Undo/Redo。业务栈在整个应用进程中保持一致，不因页面或 scope 切换而清空，也不跨重启持久化。单篇菜单显示动作和截断标题，批量菜单显示动作和篇数。`Cmd+W` 已恢复为与红色按钮一致的隐藏窗口行为。
+- macOS 原生菜单已从 Flutter 模板收敛为 `Fourier / 编辑 / 显示 / 文章 / 窗口 / 帮助`。业务 Undo/Redo 使用 50 项双栈，`Cmd+Z`/`Shift+Cmd+Z` 可连续处理标为已读、垃圾拦截保留/移除以及静默文章整批标为已读；输入框保留文本 Undo/Redo。业务栈在整个应用进程中保持一致，不因页面或 scope 切换而清空，也不跨重启持久化。单篇菜单显示动作和截断标题，批量菜单显示动作和篇数。`Cmd+W` 已恢复为与红色按钮一致的隐藏窗口行为。
 - macOS 静默订阅源汇总视图新增批量导出模式：默认空选，卡片角标独立勾选且卡片本体仍可阅读；支持复制/保存 Markdown 及各自的“并标为已读”组合动作。导出入口与排序控件共用锚定式液态玻璃 morph 展开效果，命令项不显示持久选中态；`Esc` 与右上角关闭按钮共用退出并清空勾选的路径。单篇和批量 Markdown 统一由 `ArticleMarkdownExportService` 生成，不加批次总标题，按列表顺序以 `---` 分隔；正文未缓存时只输出已有元数据和明确提示，不触发网络抓取。组合动作导出成功后才提交读状态；远端分块与补偿结果逐篇追踪，本地和 Undo/Redo 历史只反映最终确认改变的子集。用户已确认 morph 展开与 `Esc` 退出行为符合预期。
 - Android 设计迁移五个阶段已合入主线：主时间线与订阅源详情共享圆形文章范围按钮和玻璃选择面板，最近阅读移入订阅源页，文章已读/目录改为移动端玻璃控件，设置/任务中心和次级页面完成移动端适配。纯 Flutter 玻璃组件跨平台复用，AppKit 原生能力继续隔离。
 - Android 主导航现为时间线、垃圾拦截、订阅源、设置四项。时间线与垃圾拦截显示响应式数字角标；按用户决定继续保留既有重叠口径，被 AI 拒绝但未人工处理的未读文章仍留在普通时间线，并可同时计入两个角标。垃圾拦截常驻实例使用嵌入模式复用主 AppBar，时间线顶部重复审核卡片已删除；用户确认首张审核卡片不再与 AppBar 重叠。

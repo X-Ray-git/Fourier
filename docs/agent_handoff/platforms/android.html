@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>Android 说明 · Auto Folo Wiki</title>
+<title>Android 说明 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -56,7 +56,7 @@ Android 正在按现有 macOS 设计语言做类比迁移，但不是照搬 AppK
 
 - `AppGlassSurface`、`AppMobileGlassSheet` 等纯 Flutter 组件可以跨平台复用；`NSGlassEffectView`、窗口后方取样和红黄绿等 AppKit 能力仍只属于 macOS。
 - 少量固定浮动控件可以使用真实 Flutter 模糊玻璃；时间线卡片等密集重复元素继续使用轻量外壳，避免重演 macOS 列表玻璃造成的性能回退。
-- package id 已迁移到 `io.github.xraygit.autofolo`。安装签名 key 不同但包名相同的 APK 会和现有安装冲突；GitHub 内部构建使用已约定的签名设置。
+- package id 已迁移到 `io.github.xraygit.fourier`。安装签名 key 不同但包名相同的 APK 会和现有安装冲突；GitHub 内部构建使用已约定的签名设置。
 
 截至 2026-07-19 已完成的迁移：
 

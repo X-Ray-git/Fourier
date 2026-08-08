@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>站点指南 · Auto Folo Wiki</title>
+<title>站点指南 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -95,7 +95,7 @@
 
 以下组件由 `assets/app.js` 与 `assets/theme.css` 在阅读时自动生成，不需要在正文中手工编写：
 
-- **页面横幅**：每个专题页顶部自动生成分区配色的横幅（渐变图标 + 标题 + 首段摘要 + 专题标签 + 阅读时长估算徽章，含光泽扫过与入场动画），与首页 hero 同源风格。首页（全宽落地页）不生成横幅。
+- **页面横幅**：每个专题页顶部自动生成静态分区色带（图标 + 标题 + 首段摘要 + 专题标签 + 阅读时长估算徽章），只播放一次轻量入场。首页不生成横幅。
 - **阅读进度条**：页面顶部细进度条，跟随滚动位置。
 - **代码复制按钮**：每个代码块右上角悬停出现“复制”，点击写入剪贴板。
 - **标题锚点提示**：悬停 h2/h3/h4 时左侧出现 `#` 链接标记。
@@ -109,11 +109,11 @@
 - **打印样式**：`@media print` 输出干净的正文排版，可导出 PDF。
 - 所有动画与过渡都受 `prefers-reduced-motion` 保护；视觉与交互规范见 [设计规范](design-guide.html)。
 
-## 首页落地页
+## 首页
 
-根 `index.html` 是“产品宣传 + Wiki 入口”混合页：深色渐变 hero（品牌标识、双行展示标语、CTA、纯 CSS 界面示意窗口 mockup，右下角 ▶ 可播放约 8 秒的界面流程演示动画），中部“核心能力”（6 张亮点卡同屏）、“处理流水线”（横向管道导轨：连续渐变线穿过编号圆点）与“统计带”（深色通栏，专题页/示意图/离线/依赖大数字），下方 Wiki 快速入口与阅读顺序。
+根 `index.html` 是 Fourier 与工程 Wiki 的共同入口。首屏使用新品牌标识、简短定位、当前状态入口和真实产品截图；后续依次呈现核心能力、处理流水线和专题导航。首页不使用虚构统计数字，也不通过超长 sticky 场景制造额外滚动距离。
 
-四个大类使用“钉住空气时间”场景（150vh 容器 + sticky 内容，约半屏滚动内内容钉住不动再释放，Apple 式场景节奏）；场景渐显在钉住时触发（标题与内容同时出现并做行级 stagger），统计带为全出血通栏深色场景。全部动效由 `app.js` 实现并受 `prefers-reduced-motion` 保护（reduced-motion 下场景退化为普通流式）。落地页标记 `wiki-full`，运行时隐藏侧栏与目录；其中链接使用 `docs/agent_handoff/` 前缀（页面位于仓库根）。编辑时不要删除 hero、mockup、播放按钮与各展示区块结构，微调文案即可。
+区块进入视口时使用轻量透明度与位移动画，子项短暂错峰；不对标题做滚动缩放，不使用模糊滤镜。全部动效受 `prefers-reduced-motion` 和阅读设置中的动效开关保护。落地页标记 `wiki-full`，运行时隐藏侧栏与目录；其中链接使用 `docs/agent_handoff/` 前缀（页面位于仓库根）。
 
 ## 导航与搜索
 
@@ -140,7 +140,7 @@
 
 ## 品牌信息
 
-站点名称、标题、仓库链接等品牌信息集中维护在两处：根 `index.html` 与 `assets/theme.css` 的 `:root` 变量区。未来迁移品牌时只需修改这两处，不要在页面正文中散落硬编码。
+页面外壳中的站点名会出现在全部专题 HTML，品牌色和页头标识由 `assets/theme.css` 维护，首页产品文案位于根 `index.html`。变更品牌时必须同时更新页面外壳、当前专题正文、搜索索引和交接入口；历史归档正文保留当时名称作为证据。
 
 </script>
 <script src="../assets/wiki-common.js"></script>

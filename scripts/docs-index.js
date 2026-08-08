@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Auto Folo Wiki — 搜索索引生成器（零依赖，Node 18+）
+ * Fourier Wiki — 搜索索引生成器（零依赖，Node 18+）
  * 扫描 docs/agent_handoff 下所有 .html 与根 index.html，
  * 提取 wiki-content 中的 Markdown，用仓库内置 markdown-it 渲染后抽取标题/锚点/正文，
  * 输出经典脚本数据文件 docs/agent_handoff/assets/data/search-index.js。

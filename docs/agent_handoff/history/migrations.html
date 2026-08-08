@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>迁移 · Auto Folo Wiki</title>
+<title>迁移 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -50,15 +50,28 @@
 <script type="text/markdown" id="wiki-content">
 # 迁移
 
-## 包与命名空间迁移
+## Fourier 品牌与应用身份迁移
 
 当前 app id 命名空间：
+
+- Android namespace/applicationId：`io.github.xraygit.fourier`
+- macOS bundle id：`io.github.xraygit.fourier`
+- MethodChannel 命名空间：`io.github.xraygit.fourier/...`
+- Android 登录回调：`folo://fourier-auth`
+
+应用展示名、Dart package、构建产物和图标也统一为 `Fourier`。旧 `auto_folo_settings` 备份类型继续允许导入，新导出使用 `fourier_settings`；旧内部 HTML 作者标记继续只读兼容。由于应用标识发生变化，旧版与 Fourier 会被系统视为两个应用，正式迁移依赖用户已导出的设置 JSON。
+
+GitHub 仓库 URL 与本地 clone 目录暂时仍使用 `auto-folo`，应在 worktree 清理后作为独立步骤处理，不能与应用身份迁移混为一谈。
+
+## 包与命名空间迁移
+
+以下是 Fourier 之前的 Auto Folo 阶段记录，不再代表当前实现：
 
 - Android namespace/applicationId：`io.github.xraygit.autofolo`
 - macOS bundle id：`io.github.xraygit.autofolo`
 - MethodChannel 命名空间：`io.github.xraygit.autofolo/...`
 
-历史 `com.folo.*` 和 `com.autofolo` 引用已经废弃。
+更早的 `com.folo.*` 和 `com.autofolo` 引用同样已经废弃。
 
 原因：
 

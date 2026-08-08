@@ -1,5 +1,5 @@
 /*
- * Auto Folo Wiki — 共享工具（浏览器与 Node 双端可用）
+ * Fourier Wiki — 共享工具（浏览器与 Node 双端可用）
  * 经典 script 格式：浏览器挂载 window.WikiCommon，Node 通过 require 使用。
  */
 (function (root, factory) {

@@ -1,5 +1,5 @@
 /*
- * Auto Folo Wiki — 导航清单（经典 JS 数据文件）
+ * Fourier Wiki — 导航清单（经典 JS 数据文件）
  * path 相对于 docs/agent_handoff/；首页使用 home:true（相对仓库根解析）。
  * 新增/重命名页面后必须同步更新本文件。
  */

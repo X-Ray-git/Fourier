@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Auto Folo Wiki — 一次性 .md → .html 转换器
+ * Fourier Wiki — 一次性 .md → .html 转换器
  *
  * 用法：
  *   node scripts/convert-docs.js                # 转换 docs/agent_handoff 下全部 .md
@@ -115,7 +115,7 @@ const TEMPLATE = `<!DOCTYPE html>
 <meta name="wiki-base" content="__WIKI_BASE__">
 <meta name="repo-root" content="__REPO_ROOT__">
 __WIKI_FULL__
-<title>__TITLE__ · Auto Folo Wiki</title>
+<title>__TITLE__ · Fourier Wiki</title>
 <link rel="stylesheet" href="__WIKI_BASE__/assets/theme.css">
 </head>
 <body>
@@ -124,7 +124,7 @@ __WIKI_FULL__
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="__REPO_ROOT__/index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -149,7 +149,7 @@ __WIKI_FULL__
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="__REPO_ROOT__/LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="__REPO_ROOT__/LICENSE">AGPL-3.0</a></span>
       <a href="__REPO_ROOT__/docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="__REPO_ROOT__/docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="__REPO_ROOT__/AGENT_HANDOFF.md">交接入口</a>

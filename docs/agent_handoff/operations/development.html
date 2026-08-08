@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>开发流程 · Auto Folo Wiki</title>
+<title>开发流程 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -96,7 +96,7 @@ flutter run -d macos
 
 ```bash
 flutter build macos --debug
-open "build/macos/Build/Products/Debug/Auto Folo.app"
+open "build/macos/Build/Products/Debug/Fourier.app"
 ```
 
 不要把本地 macOS release 构建作为主要 UI 验证目标。本地环境可能把 release 产物视为 ad-hoc 签名或未知证书链，从而造成启动/framework 加载问题；这不一定和当前代码有关。
@@ -109,7 +109,7 @@ flutter pub get
 flutter run -d macos --no-pub
 ```
 
-当前 Debug 配置依赖 `ENABLE_DEBUG_DYLIB = NO` 避免 `Auto Folo.debug.dylib` 被 macOS 系统策略拒载。验证时应看到 `A Dart VM Service on macOS is available at:`。
+当前 Debug 配置依赖 `ENABLE_DEBUG_DYLIB = NO` 避免 `Fourier.debug.dylib` 被 macOS 系统策略拒载。验证时应看到 `A Dart VM Service on macOS is available at:`。
 
 ## 动画诊断
 
@@ -118,7 +118,7 @@ flutter run -d macos --no-pub
 ```bash
 flutter run -d macos --no-pub \
   --dart-define=AUTO_FOLO_ANIMATION_PROBE=true \
-  2>&1 | tee /tmp/auto-folo-animation.log
+  2>&1 | tee /tmp/fourier-animation.log
 ```
 
 按页面过滤 `ReviewAnimProbe`、`TimelineAnimationProbe`、`TimelineTapProbe`、`TimelineListResetProbe`、`TimelineReadStateProbe`。埋点只输出文章 id 末 8 位、动作来源、列表数量、动画阶段和慢帧耗时，不输出标题、正文、凭据或完整文章 id。不要为了普通运行长期打开该开关。

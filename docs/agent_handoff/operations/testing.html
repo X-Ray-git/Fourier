@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>测试 · Auto Folo Wiki</title>
+<title>测试 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -85,17 +85,17 @@ macOS 列表动画诊断埋点默认关闭。普通 Debug/Release 不打印，�
 ```bash
 flutter run -d macos --no-pub \
   --dart-define=AUTO_FOLO_ANIMATION_PROBE=true \
-  2>&1 | tee /tmp/auto-folo-animation.log
+  2>&1 | tee /tmp/fourier-animation.log
 ```
 
 按页面过滤：
 
 ```bash
-grep ReviewAnimProbe /tmp/auto-folo-animation.log
-grep TimelineAnimationProbe /tmp/auto-folo-animation.log
-grep TimelineTapProbe /tmp/auto-folo-animation.log
-grep TimelineListResetProbe /tmp/auto-folo-animation.log
-grep TimelineReadStateProbe /tmp/auto-folo-animation.log
+grep ReviewAnimProbe /tmp/fourier-animation.log
+grep TimelineAnimationProbe /tmp/fourier-animation.log
+grep TimelineTapProbe /tmp/fourier-animation.log
+grep TimelineListResetProbe /tmp/fourier-animation.log
+grep TimelineReadStateProbe /tmp/fourier-animation.log
 ```
 
 `TimelineAnimationProbe` 同时覆盖主时间线的 `M`、双击、退场动画进度和滚动 offset；`TimelineTapProbe` 记录原始点击与双击识别，用于区分手势未识别和动画未绘制；`TimelineListResetProbe` 记录零时长批量同步的明确原因，用于确认单篇读状态是否被错误归入批量路径；`TimelineReadStateProbe` 区分已读状态被未读快照降级与列表组件的纯视觉残影。正常单篇移除应依次出现动画 bucket `4→3→2→1→0`，增量可见列表更新不应触发 list reset，外部浏览器只能在 `remove.end` 后打开。埋点只输出文章 id 的末 8 位、动作来源、列表数量、动画阶段和慢帧耗时，不输出标题、正文、凭据或完整文章 id。不要为了普通运行长期打开该开关；同步 `debugPrintSynchronously` 本身可能轻微干扰 Debug 性能测量。

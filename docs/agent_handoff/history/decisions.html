@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="wiki-base" content="..">
 <meta name="repo-root" content="../../..">
-<title>决策日志 · Auto Folo Wiki</title>
+<title>决策日志 · Fourier Wiki</title>
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="../../../index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -39,7 +39,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="../../../LICENSE">AGPL-3.0</a></span>
       <a href="../../../docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="../../../docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="../../../AGENT_HANDOFF.md">交接入口</a>
@@ -49,6 +49,22 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 # 决策日志
+
+## 应用整体迁移为 Fourier
+
+背景：旧名称 Auto Folo 容易把个人二次开发客户端与 Folo 官方品牌混在一起，且旧应用身份、图标和包名已经不适合作为长期公开工程标识。
+
+决策：应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和视觉素材统一迁移为 Fourier；旧配置导入与历史内容保留明确兼容。GitHub 仓库名称、远端 URL 和本地目录另行迁移，当前不伪造已经完成的状态。
+
+后果：Fourier 会被 Android 和 macOS 视为新的应用身份。迁移前必须从旧版导出设置，安装后再导入；旧 Auto Folo 名称不得重新出现在当前产品文案或命名空间中。
+
+## Wiki 使用内嵌 Markdown 的离线单页结构
+
+背景：目标要求克隆后直接双击 `index.html` 阅读，无服务、无构建步骤、无外部依赖，同时正文仍尽量保持 Markdown 编辑体验。浏览器在 `file://` 下不能可靠地由入口页读取独立 `.md` 文件。
+
+决策：每个专题使用自包含 `.html`，正文写在 `script[type="text/markdown"]` 中并由仓库内置 markdown-it 渲染；`index.html` 负责入口，搜索索引作为已提交静态数据。正文允许内嵌可信 HTML 和 SVG，不使用 Mermaid。
+
+后果：编辑和阅读是同一个文件，双击即可使用；修改内容后只需运行索引和一致性检查。不得重新引入必须启动服务器、CDN、ES Module 或运行时 `fetch()` 的方案。
 
 ## 保留根目录 `AGENT_HANDOFF.md` 作为入口
 

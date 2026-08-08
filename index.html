@@ -6,7 +6,7 @@
 <meta name="wiki-base" content="docs/agent_handoff">
 <meta name="repo-root" content=".">
 <meta name="wiki-full" content="1">
-<title>Auto Folo — 高密度信息流阅读客户端 · Auto Folo Wiki</title>
+<title>Fourier — 高密度信息流阅读客户端 · Fourier Wiki</title>
 <link rel="stylesheet" href="docs/agent_handoff/assets/theme.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
     <button class="nav-toggle" type="button" aria-label="切换导航">☰</button>
     <a class="brand" href="./index.html">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Auto Folo Wiki</span>
+      <span class="brand-name">Fourier Wiki</span>
     </a>
     <div class="header-tools">
       <div class="search-box">
@@ -40,7 +40,7 @@
       </article>
     </main>
     <footer class="wiki-footer">
-      <span>Auto Folo Wiki · <a href="./LICENSE">AGPL-3.0</a></span>
+      <span>Fourier Wiki · <a href="./LICENSE">AGPL-3.0</a></span>
       <a href="./docs/agent_handoff/meta/site-guide.html">站点指南</a>
       <a href="./docs/agent_handoff/meta/migration-map.html">迁移映射</a>
       <a href="./AGENT_HANDOFF.md">交接入口</a>
@@ -49,21 +49,20 @@
   <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
 </div>
 <script type="text/markdown" id="wiki-content">
-# Auto Folo — 高密度信息流阅读客户端
+# Fourier — 高密度信息流阅读客户端
 
 <div class="landing">
 
 <section class="hero">
   <div class="hero-inner">
 <div class="hero-logo">
-  <span class="hero-orb" aria-hidden="true"></span>
-  Auto Folo · 基于 Folo API 与 DeepSeek 驱动
+  <img src="assets/branding/fourier.svg" alt="" aria-hidden="true">
+  Fourier · 非官方 Folo 客户端
 </div>
-<h2>让 AI 替你<br><span class="grad">筛选信息洪流</span></h2>
+<h2>把信息流变成<br><span class="grad">可以专注阅读的内容。</span></h2>
 <p class="hero-sub">
-  Auto Folo 把 <strong>Folo 时间线</strong>、<strong>长文阅读</strong>与<strong>可配置的 AI 工作流</strong>
-  放进同一个客户端：后台翻译与摘要帮助快速浏览，垃圾拦截判定进入独立审核页，
-  最终保留或移除仍由你决定。
+  Fourier 将 <strong>Folo 时间线</strong>、<strong>长文阅读</strong>与<strong>可配置的 AI 工作流</strong>
+  放进同一个 Android 与 macOS 客户端。它负责拉取、整理和辅助判断，最终选择仍由用户完成。
 </p>
 <div class="hero-cta">
   <a class="cta-primary" href="#wiki-entry">开始阅读 Wiki</a>
@@ -73,67 +72,22 @@
   <span>macOS</span>
   <span>Android</span>
   <span>个人非官方客户端</span>
-  <span>AGPL-3.0</span>
-  <span>离线工程 Wiki</span>
+  <span>AGPL-3.0-only</span>
+  <span>离线 Wiki</span>
 </div>
 <p class="hero-note">
   非官方个人二次开发客户端，不隶属于 Folo、RSSNext 或其运营方，也不代表官方发布版本。
 </p>
   </div>
 
-  <div class="app-mockup" role="img" aria-label="Auto Folo 界面示意：左侧订阅源、中间时间线、右侧文章阅读">
-<div class="mock-window">
-  <div class="mock-bar">
-    <i></i><i></i><i></i>
-    <span class="mock-addr">file://index.html · Auto Folo Wiki</span>
-  </div>
-  <div class="mock-body">
-    <div class="mock-side">
-      <div class="ms-item on"></div>
-      <div class="ms-item"></div>
-      <div class="ms-item"></div>
-      <div class="ms-item"></div>
-      <div class="ms-label"></div>
-      <div class="ms-item"></div>
-      <div class="ms-item"></div>
-      <div class="ms-item"></div>
-    </div>
-    <div class="mock-list">
-      <div class="mock-card">
-        <div class="mc-title"></div>
-        <div class="mc-line"></div>
-        <div class="mc-line short"></div>
-      </div>
-      <div class="mock-card">
-        <div class="mc-title"></div>
-        <div class="mc-line"></div>
-        <div class="mc-line short"></div>
-      </div>
-      <div class="mock-card read">
-        <div class="mc-title"></div>
-        <div class="mc-line"></div>
-        <div class="mc-line short"></div>
-      </div>
-    </div>
-    <div class="mock-article">
-      <div class="ma-kicker"></div>
-      <div class="ma-title"></div>
-      <div class="ma-title w2"></div>
-      <div class="ma-para"></div>
-      <div class="ma-para"></div>
-      <div class="ma-para"></div>
-      <div class="ma-para w3"></div>
-    </div>
-    <button class="mock-play" type="button" aria-label="播放界面流程演示">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
-    </button>
-  </div>
-</div>
-  </div>
+  <figure class="app-preview">
+    <img src="assets/article.png" alt="Fourier macOS 界面：订阅源、时间线与文章阅读三栏布局">
+    <figcaption>macOS 三栏阅读界面。真实产品截图，不使用概念性占位图。</figcaption>
+  </figure>
 </section>
 
-<section class="landing-section hp-section hp-reveal scene" id="features-pin">
-<div class="scene-inner">
+<section class="landing-section hp-section hp-reveal" id="features-pin">
+<div class="section-inner">
   <p class="hp-label">核心能力</p>
   <h2 class="hp-display">不止于阅读——<span class="grad">从数据到决策的完整闭环。</span></h2>
   <p class="hp-lead">从数据拉取到 AI 决策，每一层都经过精心设计。</p>
@@ -189,11 +143,10 @@
 
   </div>
 </div>
-</div>
 </section>
 
-<section class="landing-section hp-section hp-reveal scene" id="flow-scene">
-<div class="scene-inner">
+<section class="landing-section hp-section hp-reveal" id="flow-scene">
+<div class="section-inner">
 
   <p class="hp-label">处理流水线</p>
   <h2 class="hp-display">从 API 到你的屏幕，<span class="grad">每一步都可见。</span></h2>
@@ -249,46 +202,15 @@
 
   </div>
   </div>
-</div>
 </section>
 
-<section class="stats-band hp-reveal scene" id="stats-scene">
-<div class="scene-inner">
-  <p class="hp-label">这本 Wiki</p>
-  <h2 class="hp-display" style="color:#f5f6fa">一个文件一页，<span class="grad">零依赖离线可读。</span></h2>
-  <div class="stats-grid">
-
-<div class="stat">
-  <div class="stat-num" data-count="58">0</div>
-  <div class="stat-label">专题页 · 单文件即正文</div>
-</div>
-
-<div class="stat">
-  <div class="stat-num" data-count="12">0</div>
-  <div class="stat-label">架构与流程示意图</div>
-</div>
-
-<div class="stat">
-  <div class="stat-num" data-count="100">0<span>%</span></div>
-  <div class="stat-label">离线可用 · 双击即读</div>
-</div>
-
-<div class="stat">
-  <div class="stat-num" data-count="0">0</div>
-  <div class="stat-label">运行依赖 · 无需安装</div>
-</div>
-
-  </div>
-</div>
-</section>
-
-<section class="landing-section hp-section hp-reveal scene" id="wiki-entry">
-<div class="scene-inner">
+<section class="landing-section hp-section hp-reveal" id="wiki-entry">
+<div class="section-inner">
   <p class="hp-label">工程 Wiki</p>
-  <h2 class="hp-display">技术手册与产品介绍，<span class="grad">同一份文件。</span></h2>
+  <h2 class="hp-display">从当前状态开始，<span class="grad">按问题进入文档。</span></h2>
   <p class="hp-lead">
-每个专题页正文以 Markdown 内嵌在页面中，编辑与阅读是同一个文件；
-克隆仓库后双击本页即可离线浏览全部专题。
+每个专题页正文都以 Markdown 语法内嵌在可直接阅读的 HTML 页面中；
+克隆仓库后双击本页即可离线浏览，无需安装依赖或启动服务。
   </p>
   <div class="entry-grid">
 
@@ -353,7 +275,7 @@
 - 除非用户明确要求，否则不要创建 tag 或发布 release；发布只允许从 `main` 分支通过 `scripts/release.sh` 进行。
 - Flutter 项目健康检查优先使用 `dart analyze lib test`、`flutter analyze lib test` 和有针对性的 `flutter test`；完整 `dart analyze` 会扫描 `reference/` 并报告无关错误。
 - 不要把密钥、API 响应、抓取的真实文章 HTML、临时脚本提交进 git。此类内容放进已忽略的 `scratch/`。
-- 当前应用标识命名空间是 `io.github.xraygit.autofolo`；历史 `com.folo.*` / `com.autofolo` 引用已经废弃。
+- 当前应用标识命名空间是 `io.github.xraygit.fourier`；历史 `io.github.xraygit.autofolo`、`com.folo.*` 与 `com.autofolo` 仅用于迁移兼容或历史记录。
 - macOS 发布产物必须保持 arm64。
 
 ## 维护规则

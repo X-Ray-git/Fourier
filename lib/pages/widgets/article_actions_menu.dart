@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../common/widgets/app_context_menu.dart';
@@ -113,7 +115,9 @@ abstract final class ArticleActionsMenu {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      TranslationService.deleteTranslation(article.entryId);
+                      unawaited(
+                        TranslationService.deleteTranslation(article.entryId),
+                      );
                     },
                   ),
                 if (state.hasSummary)
@@ -214,7 +218,7 @@ abstract final class ArticleActionsMenu {
     } else if (result == 'translate') {
       await translateArticle(article, onTranslateSuccess: onTranslateSuccess);
     } else if (result == 'delete_translation') {
-      TranslationService.deleteTranslation(article.entryId);
+      await TranslationService.deleteTranslation(article.entryId);
     } else if (result == 'summarize') {
       await summarizeArticle(article);
     } else if (result == 'delete_summary') {

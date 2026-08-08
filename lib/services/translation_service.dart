@@ -293,7 +293,11 @@ abstract final class TranslationService {
         errorMessage: '文章内容为空，无法翻译',
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
-      _writeRecord(article.entryId, record, accountRevision: accountRevision);
+      await _writeRecord(
+        article.entryId,
+        record,
+        accountRevision: accountRevision,
+      );
       return record;
     }
 
@@ -370,7 +374,11 @@ abstract final class TranslationService {
           translatedContent: _cleanTranslatedContent(translatedHtml),
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         );
-        _writeRecord(article.entryId, record, accountRevision: accountRevision);
+        await _writeRecord(
+          article.entryId,
+          record,
+          accountRevision: accountRevision,
+        );
         return record;
       } catch (e) {
         if (e is _StaleAccountOperation ||
@@ -396,7 +404,7 @@ abstract final class TranslationService {
           errorMessage = e.toString();
         }
 
-        _restoreAfterFailure(
+        await _restoreAfterFailure(
           article.entryId,
           previous,
           errorMessage,
@@ -451,7 +459,7 @@ abstract final class TranslationService {
         throw const _StaleAccountOperation();
       }
       if (result.record != null) {
-        _writeRecord(
+        await _writeRecord(
           article.entryId,
           result.record!,
           accountRevision: accountRevision,
@@ -464,7 +472,7 @@ abstract final class TranslationService {
     final errorMessage = lastFailureSummary == null
         ? '分块翻译失败，已重试${totalAttempts - 1}次'
         : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：$lastFailureSummary';
-    _restoreAfterFailure(
+    await _restoreAfterFailure(
       article.entryId,
       previous,
       errorMessage,
@@ -650,10 +658,10 @@ abstract final class TranslationService {
 
   // ─── JSON 解析辅助 ───────────────────────────
 
-  static void deleteTranslation(String entryId) {
+  static Future<void> deleteTranslation(String entryId) async {
     ensureHydrated();
     _records.remove(entryId);
-    GStorage.translations.delete(entryId);
+    await GStorage.translations.delete(entryId);
     recordsVersion.value++;
   }
 
@@ -664,14 +672,14 @@ abstract final class TranslationService {
     recordsVersion.value++;
   }
 
-  static void _restoreAfterFailure(
+  static Future<void> _restoreAfterFailure(
     String entryId,
     TranslationRecord? previous,
     String errorMessage,
     int accountRevision,
-  ) {
+  ) async {
     if (previous != null) {
-      _writeRecord(
+      await _writeRecord(
         entryId,
         previous.copyWith(
           status: previous.isTranslated
@@ -688,22 +696,24 @@ abstract final class TranslationService {
         errorMessage: errorMessage,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
-      _writeRecord(entryId, record, accountRevision: accountRevision);
+      await _writeRecord(entryId, record, accountRevision: accountRevision);
     }
   }
 
-  static void _writeRecord(
+  /// 完成态与错误态必须等待持久化成功后再对外报告，避免完成后立即
+  /// 退出应用丢失翻译结果；pending 仍只存在于内存中，不落盘。
+  static Future<void> _writeRecord(
     String entryId,
     TranslationRecord record, {
     int? accountRevision,
-  }) {
+  }) async {
     if (accountRevision != null &&
         !AccountSessionGuard.isCurrent(accountRevision)) {
       return;
     }
     ensureHydrated();
     _records[entryId] = record;
-    GStorage.translations.put(entryId, record.toJson());
+    await GStorage.translations.put(entryId, record.toJson());
     recordsVersion.value++;
   }
 

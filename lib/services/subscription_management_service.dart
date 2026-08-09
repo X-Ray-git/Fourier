@@ -156,35 +156,29 @@ abstract final class SubscriptionManagementService {
     required String newCategory,
   }) async {
     final normalizedCategory = SubscriptionDraft._nullableText(newCategory);
-    var updatedCount = 0;
-    String? firstError;
+    if (normalizedCategory == null) return const LoadError('分类名称不能为空');
+    final feedIds = feeds
+        .map((feed) => feed.feedId)
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+    if (feedIds.isEmpty) return const Success(0);
+
+    final result = await FeedHttp.updateCategory(
+      feedIds: feedIds,
+      category: normalizedCategory,
+    );
+    if (result is LoadError<void>) {
+      return LoadError(result.errMsg ?? '更新分类失败');
+    }
+    if (result is! Success<void>) return const LoadError('更新分类失败');
 
     for (final feed in feeds) {
-      final result = await update(
-        feed,
-        SubscriptionDraft(
-          url: feed.url ?? '',
-          view: feed.view ?? 0,
-          title: feed.customTitle,
-          category: normalizedCategory,
-        ),
-        refreshCatalog: false,
+      SubscriptionCatalogService.upsertLocal(
+        feed.copyWith(category: normalizedCategory),
       );
-      if (result is Success<FeedModel>) {
-        updatedCount++;
-      } else if (firstError == null && result is LoadError<FeedModel>) {
-        firstError = result.errMsg;
-      }
     }
-
     await SubscriptionCatalogService.sync();
-    if (updatedCount != feeds.length) {
-      return LoadError(
-        '已更新 $updatedCount/${feeds.length} 个订阅源'
-        '${firstError == null ? '' : '：$firstError'}',
-      );
-    }
-    return Success(updatedCount);
+    return Success(feedIds.length);
   }
 
   static String _normalizeUrl(String raw) {

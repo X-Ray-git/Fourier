@@ -77,7 +77,7 @@ class ArticleModel {
       url: entry['url'] as String? ?? '',
       content: entry['content'] as String?,
       publishedAt: entry['publishedAt'] as String? ?? '',
-      isRead: entry['read'] as bool? ?? false,
+      isRead: item['read'] as bool? ?? false,
       category: category,
       subscriptionCategory: HtmlEntityUtils.decodeText(
         subscriptionCategory ?? '',
@@ -112,7 +112,7 @@ class ArticleModel {
       url: entry['url'] as String? ?? '',
       content: entry['content'] as String?,
       publishedAt: entry['publishedAt'] as String? ?? '',
-      isRead: entry['read'] as bool? ?? false,
+      isRead: item['read'] as bool? ?? false,
       category: 'inbox',
       subscriptionCategory: HtmlEntityUtils.decodeText(
         subscriptionCategory ?? SourceTaxonomy.inboxShortLabel(item),

@@ -5,12 +5,12 @@ import 'package:fourier/models/article.dart';
 void main() {
   test('fromEntryJson should parse nested entry/feed fields', () {
     final article = ArticleModel.fromEntryJson({
+      'read': true,
       'entries': {
         'id': 'e-1',
         'title': 'Hello',
         'url': 'https://example.com',
         'publishedAt': '2026-01-01T00:00:00.000Z',
-        'read': false,
         'author': 'Tester',
         'media': [
           {'url': 'https://example.com/a.png'},
@@ -24,6 +24,22 @@ void main() {
     expect(article.feedTitle, 'FeedA');
     expect(article.subscriptionCategory, 'Tech');
     expect(article.imageUrl, 'https://example.com/a.png');
+    expect(article.isRead, isTrue);
+  });
+
+  test('fromInboxJson reads status from the list item envelope', () {
+    final article = ArticleModel.fromInboxJson({
+      'read': true,
+      'entries': {
+        'id': 'inbox-entry',
+        'title': 'Inbox item',
+        'url': 'https://example.com/inbox',
+      },
+      'feeds': {'id': 'inbox-source', 'title': 'Inbox'},
+    });
+
+    expect(article.entryId, 'inbox-entry');
+    expect(article.isRead, isTrue);
   });
 
   test(

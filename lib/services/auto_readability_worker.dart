@@ -4,6 +4,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../http/feed_http.dart';
 import '../http/init.dart';
+import '../http/public_content_http.dart';
 
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
@@ -211,7 +212,7 @@ abstract final class AutoReadabilityWorker {
         }
         html = result;
       } else {
-        final response = await Request.dio.get(article.url);
+        final response = await PublicContentHttp.dio.get(article.url);
         html = response.data.toString();
       }
       // 抓取完成后再校验账号会话：过期会话不得解析/持久化结果。

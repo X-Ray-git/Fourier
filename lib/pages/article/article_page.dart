@@ -13,6 +13,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../../http/feed_http.dart';
 import '../../http/init.dart';
+import '../../http/public_content_http.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../common/constants/constants.dart';
@@ -226,7 +227,7 @@ class ArticleController extends GetxController {
     Future.microtask(() async {
       isFetchingReadability.value = true;
       try {
-        final response = await Request.dio.get(article.url);
+        final response = await PublicContentHttp.dio.get(article.url);
         final htmlStr = response.data.toString();
         final document = html_parser.parse(htmlStr);
         final articleNode = ArticleContentUtils.getReadabilityContent(document);
@@ -329,7 +330,10 @@ class ArticleController extends GetxController {
     ArticleStateNotifier.tick(article.entryId);
 
     final ok = await _retrySync(
-      action: () => FeedHttp.markUnread(entryId: article.entryId),
+      action: () => FeedHttp.markUnread(
+        entryId: article.entryId,
+        isInbox: article.category == 'inbox',
+      ),
       successMsg: '已恢复未读',
       maxRetries: 5,
     );

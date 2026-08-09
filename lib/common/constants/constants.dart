@@ -6,6 +6,7 @@ abstract final class ApiConstants {
   static const String entriesInboxDetail = '/entries/inbox'; // GET ?id=
   static const String inboxesList = '/inboxes/list';
   static const String reads = '/reads';
+  static const String categories = '/categories';
 }
 
 abstract final class AppConstants {
@@ -21,6 +22,7 @@ abstract final class AppConstants {
 abstract final class StorageKeys {
   static const String sessionToken = 'session_token';
   static const String foloAccountProfile = 'folo_account_profile';
+  static const String foloClientId = 'folo_client_id_v1';
   // Legacy backup/storage keys. Folo authentication only requires the token.
   static const String clientId = 'client_id';
   static const String sessionId = 'session_id';

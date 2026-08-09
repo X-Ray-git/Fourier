@@ -53,11 +53,13 @@
 Folo API：
 
 - Base URL：`https://api.folo.is`
-- 认证只使用 `__Secure-better-auth.session_token` cookie。2026-07-16
-  以订阅源、文章、收件箱和空写操作做过对照实验：省略或伪造
-  `X-Client-Id`、`X-Session-Id` 均不影响结果，无 token 或伪造 token
-  则返回 `401`，因此请求不再发送这两个无效 header。
-- `lib/http/init.dart` 中的 `Request` 设置通用请求头并安装认证 interceptor。
+- 用户身份认证只依赖 `__Secure-better-auth.session_token` cookie；用户不需要查看、填写或备份 `X-Client-Id`、`X-Session-Id`。后二者是 Folo 客户端协议元数据：Fourier 首次运行时内部生成并持久化 installation-level Client ID，每次进程启动生成新的 Session ID，由 `FoloRequestMetadata` 统一附加。它们不是账号凭据，不进入设置导入导出。
+- 当前接口契约以 2026-08-01 的 Folo 上游提交 `3846c90b67da351b6017cd4fe9d0992b8077224e` 和 `@follow-app/client-sdk 0.3.95` 为审计基线。上游升级后应先核对 SDK 类型与官方调用点，再修改 Fourier，避免根据响应样本猜测字段。
+- `lib/http/init.dart` 中的 `Request` 是只允许访问 `https://api.folo.is` 的认证客户端。interceptor 会拒绝 HTTP、相似域名和任意第三方地址，只有通过域名校验后才注入 Session Cookie。
+- 公共文章网页抓取必须使用 `lib/http/public_content_http.dart` 的无认证客户端。严禁为了复用连接池而用 `Request` 获取文章原文，否则会把 Folo Cookie 发送给第三方站点。
+- `/subscriptions` 返回 feed/list/inbox 联合类型；普通订阅目录只解析带 `feeds` 的成员。创建订阅的 `feed/list/unread` 位于响应顶层，不在 `data` 中；取消普通订阅使用 `feedIdList`。分类改名使用 `/categories` 的批量 `feedIdList + category`，不要逐订阅循环更新。
+- 普通条目与 Inbox 条目的 `read` 都位于列表元素顶层，不在 `entries` 中。Inbox 列表不支持 `withContent`，但支持 `publishedAfter` 分页；恢复未读必须同时传递正确的 `isInbox`。
+- 设置页“测试连接”和保存/导入共用 `/better-auth/get-session` 会话验证，不再单独拼 Cookie 调用订阅接口。
 - macOS 使用 Folo 官方 CLI 同类协议：临时 loopback callback 只绑定 `127.0.0.1` 随机端口；官方网页返回一次性 token 后，应用通过 `/better-auth/one-time-token/apply`（兼容 `/verify`）换取长期 Session Token，再调用 `/better-auth/get-session` 验证。callback 服务等待三分钟后自动关闭，用户取消也必须立即关闭。
 - macOS loopback 回调不依赖应用焦点：候选账号验证完成后必须立即结束等待框并应用账号，即使系统浏览器仍在前台。不要把 Android 为避免深链路由竞态而设置的 `resumed` 生命周期门禁扩散到 macOS。
 - Android 不访问 `/login` 页面：移动 UA 会被重定向至 `folo.is`，而桌面 UA WebView 又会被 Google 拒绝。应用优先从 `/better-auth/get-providers` 动态读取 Folo 当前登录方式，Android 排除需要原生身份令牌的 Apple；provider discovery 是辅助能力而不是登录硬依赖，网络或响应异常时必须回退至 Email、Google、GitHub 本地列表。Google、GitHub 等社交登录复用 Better Auth Expo 浏览器协议，Email 则直接调用 `/better-auth/sign-in/email`，并在需要时携带短期 two-factor cookie 调用 `/better-auth/two-factor/verify-totp`。社交流程通过 `/better-auth/expo-authorization-proxy` 让服务端根据 authorization URL 自行签发 OAuth state，授权完成后由 `folo://fourier-auth` 返回带 Session Cookie 的回调。不要把首个响应中的普通 `better-auth.state` 当成 Expo 专用 `oauth_state` 转发，否则授权后会落回 `folo.is`。

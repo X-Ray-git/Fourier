@@ -492,7 +492,10 @@ class UndoService {
       },
       markUnread: (article) {
         return _retrySync(
-          action: () => FeedHttp.markUnread(entryId: article.entryId),
+          action: () => FeedHttp.markUnread(
+            entryId: article.entryId,
+            isInbox: article.category == 'inbox',
+          ),
         );
       },
     );
@@ -595,7 +598,10 @@ class UndoService {
     _notifyRestored(action);
 
     final ok = await _retrySync(
-      action: () => FeedHttp.markUnread(entryId: article.entryId),
+      action: () => FeedHttp.markUnread(
+        entryId: article.entryId,
+        isInbox: article.category == 'inbox',
+      ),
     );
 
     if (!ok) {

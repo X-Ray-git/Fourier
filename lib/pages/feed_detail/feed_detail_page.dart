@@ -291,7 +291,7 @@ class FeedDetailController extends GetxController {
     final results = await Future.wait([
       FeedHttp.collectEntries(view: 0, withContent: true, feedMap: _feedMap),
       FeedHttp.collectEntries(view: 1, withContent: true, feedMap: _feedMap),
-      FeedHttp.collectAllInboxEntries(limit: 100, withContent: true),
+      FeedHttp.collectAllInboxEntries(limit: 100),
     ]);
 
     final unreadResult = results[0];

@@ -24,6 +24,7 @@ import 'pages/timeline/timeline_controller.dart';
 import 'services/account_service.dart';
 import 'services/app_license_service.dart';
 import 'services/app_version_service.dart';
+import 'services/folo_request_metadata.dart';
 import 'services/article_relation_worker.dart';
 import 'services/mac_article_shortcut_service.dart';
 import 'utils/storage.dart';
@@ -86,6 +87,7 @@ void main() async {
 
   // 初始化运行时版本信息，供请求头与设置页统一读取 pubspec 版本
   await AppVersionService.init();
+  await FoloRequestMetadata.init();
 
   // 初始化网络请求
   Request();

@@ -4,6 +4,7 @@ import '../common/constants/constants.dart';
 import '../models/article.dart';
 import '../models/feed.dart';
 import 'init.dart';
+import 'folo_api_contract.dart';
 
 /// Folo API 封装
 class FeedHttp {
@@ -18,11 +19,7 @@ class FeedHttp {
       final body = _responseMap(response);
       if (response.statusCode == 200 && body != null) {
         if (_isSuccess(body)) {
-          final data = body['data'] as List<dynamic>? ?? [];
-          final feeds = data
-              .whereType<Map>()
-              .map((e) => FeedModel.fromJson(Map<String, dynamic>.from(e)))
-              .toList();
+          final feeds = FoloApiContract.parseFeedSubscriptions(body['data']);
           return Success(feeds);
         }
         return LoadError(_messageOf(body, fallback: '请求失败'));
@@ -43,31 +40,22 @@ class FeedHttp {
     try {
       final response = await Request().post(
         ApiConstants.subscriptions,
-        data: {
-          'type': 'feed',
-          'url': url,
-          'view': view,
-          'title': _nullableText(title),
-          'category': _nullableText(category),
-          'isPrivate': false,
-        },
+        data: FoloApiContract.createSubscriptionRequest(
+          url: url,
+          view: view,
+          title: _nullableText(title),
+          category: _nullableText(category),
+        ),
       );
       final body = _responseMap(response);
       if (_isSuccessfulResponse(response, body)) {
-        final data = body?['data'];
-        final dataMap = data is Map
-            ? Map<String, dynamic>.from(data)
-            : const <String, dynamic>{};
-        final rawFeed = dataMap['feed'];
-        final feed = rawFeed is Map
-            ? FeedModel.fromSubscriptionMutation(
-                Map<String, dynamic>.from(rawFeed),
-                customTitle: _nullableText(title),
-                category: _nullableText(category),
-                view: view,
-                fallbackUrl: url,
-              )
-            : null;
+        final feed = FoloApiContract.parseCreatedFeed(
+          body,
+          customTitle: _nullableText(title),
+          category: _nullableText(category),
+          view: view,
+          fallbackUrl: url,
+        );
         return Success(feed);
       }
       return LoadError(
@@ -90,12 +78,12 @@ class FeedHttp {
     try {
       final response = await Request().patch(
         ApiConstants.subscriptions,
-        data: {
-          'feedId': feedId,
-          'view': view,
-          'title': _nullableText(title),
-          'category': _nullableText(category),
-        },
+        data: FoloApiContract.updateSubscriptionRequest(
+          feedId: feedId,
+          view: view,
+          title: _nullableText(title),
+          category: _nullableText(category),
+        ),
       );
       final body = _responseMap(response);
       if (_isSuccessfulResponse(response, body)) {
@@ -118,7 +106,7 @@ class FeedHttp {
     try {
       final response = await Request().delete(
         ApiConstants.subscriptions,
-        data: {'feedId': feedId},
+        data: FoloApiContract.deleteSubscriptionRequest(feedId),
       );
       final body = _responseMap(response);
       if (_isSuccessfulResponse(response, body)) {
@@ -146,15 +134,13 @@ class FeedHttp {
     Map<String, FeedModel>? feedMap,
   }) async {
     try {
-      final body = <String, dynamic>{
-        'read': read,
-        'limit': limit,
-        'view': view,
-        'withContent': withContent,
-      };
-      if (publishedAfter != null) {
-        body['publishedAfter'] = publishedAfter;
-      }
+      final body = FoloApiContract.entryListRequest(
+        view: view,
+        limit: limit,
+        read: read,
+        withContent: withContent,
+        publishedAfter: publishedAfter,
+      );
 
       final response = await Request().post(ApiConstants.entries, data: body);
 
@@ -246,7 +232,6 @@ class FeedHttp {
   /// 收集所有 inbox 的未读条目。
   static Future<LoadingState<List<ArticleModel>>> collectAllInboxEntries({
     int limit = AppConstants.defaultPageSize,
-    bool withContent = false,
   }) async {
     final inboxesResult = await getInboxes();
     if (inboxesResult is LoadError<List<Map<String, dynamic>>>) {
@@ -264,10 +249,9 @@ class FeedHttp {
       final inboxId = source.feedId;
       if (inboxId.isEmpty) continue;
 
-      final result = await getInboxEntries(
+      final result = await collectInboxEntries(
         inboxId: inboxId,
         limit: limit,
-        withContent: withContent,
         inboxTitle: source.title,
         inboxImage: source.image,
         inboxCategory: source.category,
@@ -314,18 +298,19 @@ class FeedHttp {
   static Future<LoadingState<List<ArticleModel>>> getInboxEntries({
     required String inboxId,
     int limit = AppConstants.defaultPageSize,
-    bool withContent = false,
+    bool read = false,
+    String? publishedAfter,
     String? inboxTitle,
     String? inboxImage,
     String? inboxCategory,
   }) async {
     try {
-      final body = <String, dynamic>{
-        'inboxId': inboxId,
-        'read': false,
-        'limit': limit,
-        'withContent': withContent,
-      };
+      final body = FoloApiContract.inboxEntryListRequest(
+        inboxId: inboxId,
+        limit: limit,
+        read: read,
+        publishedAfter: publishedAfter,
+      );
 
       final response = await Request().post(
         ApiConstants.entriesInbox,
@@ -355,6 +340,59 @@ class FeedHttp {
     } on DioException catch (e) {
       return LoadError('网络错误: ${e.message}');
     }
+  }
+
+  /// 分页收集指定 Inbox 的条目。
+  static Future<LoadingState<List<ArticleModel>>> collectInboxEntries({
+    required String inboxId,
+    int limit = AppConstants.defaultPageSize,
+    bool read = false,
+    String? publishedAfter,
+    String? inboxTitle,
+    String? inboxImage,
+    String? inboxCategory,
+    int? maxPages,
+  }) async {
+    final items = <ArticleModel>[];
+    final seenIds = <String>{};
+    var cursor = publishedAfter;
+    var pages = 0;
+
+    while (true) {
+      if (maxPages != null && pages >= maxPages) break;
+      pages++;
+      final result = await getInboxEntries(
+        inboxId: inboxId,
+        limit: limit,
+        read: read,
+        publishedAfter: cursor,
+        inboxTitle: inboxTitle,
+        inboxImage: inboxImage,
+        inboxCategory: inboxCategory,
+      );
+      if (result is LoadError<List<ArticleModel>>) {
+        return LoadError(result.errMsg ?? '请求失败');
+      }
+      if (result is! Success<List<ArticleModel>>) {
+        return const LoadError('请求失败');
+      }
+
+      final batch = result.response;
+      if (batch.isEmpty) break;
+      var newItems = 0;
+      for (final item in batch) {
+        if (item.entryId.isNotEmpty && seenIds.add(item.entryId)) {
+          items.add(item);
+          newItems++;
+        }
+      }
+      if (newItems == 0 || batch.length < limit) break;
+      final nextCursor = batch.last.publishedAt;
+      if (nextCursor.isEmpty || nextCursor == cursor) break;
+      cursor = nextCursor;
+    }
+
+    return Success(items);
   }
 
   /// 获取指定 inbox 条目的详情（含正文）
@@ -392,7 +430,10 @@ class FeedHttp {
     try {
       final response = await Request().post(
         ApiConstants.reads,
-        data: {'entryIds': entryIds, 'isInbox': isInbox},
+        data: FoloApiContract.markReadRequest(
+          entryIds: entryIds,
+          isInbox: isInbox,
+        ),
       );
       final body = _responseMap(response);
       if (response.statusCode == 200 && body != null) {
@@ -407,32 +448,18 @@ class FeedHttp {
     }
   }
 
-  /// 批量标已读（50 条一批）
-  static Future<LoadingState<Map<String, int>>> batchMarkRead({
-    required List<String> entryIds,
-  }) async {
-    int success = 0;
-    int failed = 0;
-    for (int i = 0; i < entryIds.length; i += 50) {
-      final batch = entryIds.sublist(i, (i + 50).clamp(0, entryIds.length));
-      final result = await markRead(entryIds: batch);
-      if (result is Success) {
-        success += batch.length;
-      } else {
-        failed += batch.length;
-      }
-    }
-    return Success({'success': success, 'failed': failed});
-  }
-
   /// 标未读
   static Future<LoadingState<void>> markUnread({
     required String entryId,
+    bool isInbox = false,
   }) async {
     try {
       final response = await Request().delete(
         ApiConstants.reads,
-        data: {'entryId': entryId},
+        data: FoloApiContract.markUnreadRequest(
+          entryId: entryId,
+          isInbox: isInbox,
+        ),
       );
       final body = _responseMap(response);
       if (response.statusCode == 200 && body != null) {
@@ -444,6 +471,33 @@ class FeedHttp {
       return LoadError('请求失败: ${response.statusCode}');
     } on DioException catch (e) {
       return LoadError('网络错误: ${e.message}');
+    }
+  }
+
+  /// 批量修改订阅分类，对标 Folo categories API。
+  static Future<LoadingState<void>> updateCategory({
+    required List<String> feedIds,
+    required String category,
+  }) async {
+    try {
+      final response = await Request().patch(
+        ApiConstants.categories,
+        data: FoloApiContract.updateCategoryRequest(
+          feedIds: feedIds,
+          category: category,
+        ),
+      );
+      final body = _responseMap(response);
+      if (_isSuccessfulResponse(response, body)) {
+        return const Success(null);
+      }
+      return LoadError(
+        body == null
+            ? '更新分类失败: ${response.statusCode}'
+            : _messageOf(body, fallback: '更新分类失败'),
+      );
+    } on DioException catch (e) {
+      return LoadError(_dioMessage(e, fallback: '更新分类失败'));
     }
   }
 
@@ -463,8 +517,7 @@ class FeedHttp {
   ) {
     final status = response.statusCode ?? 0;
     if (status < 200 || status >= 300) return false;
-    if (body == null || !body.containsKey('code')) return true;
-    return _isSuccess(body);
+    return body != null && _isSuccess(body);
   }
 
   static String? _nullableText(String? value) {

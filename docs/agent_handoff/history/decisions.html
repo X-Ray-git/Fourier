@@ -1111,6 +1111,23 @@
 - 不要在第一阶段偷偷启用关系连带拦截。
 </details>
 
+## Folo 接口以官方 SDK 契约为准并隔离认证域（2026-08-09）
+
+背景：Fourier 曾根据实际响应和旧调用习惯手写部分 Folo 请求，造成订阅创建响应层级、Inbox 参数、顶层 `read` 和恢复未读命名空间等偏差。更严重的是，认证 Dio 还被复用于抓取第三方文章网页，存在把 Folo Session Cookie 发送到外站的风险。
+
+决策：接口契约以 Folo 上游提交 `3846c90b67da351b6017cd4fe9d0992b8077224e` 和 `@follow-app/client-sdk 0.3.95` 为基线。认证 `Request` 只允许访问 HTTPS 的精确主机 `api.folo.is`，公共文章内容使用独立无认证客户端。用户只管理 Session Token；`X-Client-Id` 由安装实例内部持久化，`X-Session-Id` 每次启动生成，二者只作为协议元数据且不进入配置备份。订阅联合响应、创建/删除、分类批量更新、Inbox 分页、顶层读状态和 `isInbox` 均按 SDK 类型实现。
+
+后果：外站无法再收到 Folo 凭据；Folo 协议升级时有清晰的集中核对点。设置页测试与保存共用会话验证，避免另一套 Cookie 和成功判断逻辑。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要用认证 `Request` 抓取文章原文、图片或任意第三方 URL。
+- 不要允许重定向、相似域名或 HTTP 绕过 `api.folo.is` 的精确域边界。
+- 不要把内部 Client/Session ID 暴露成用户配置，也不要重新导出旧 `client_id`、`session_id`。
+- 不要仅凭一份真实响应猜字段；优先核对上游 SDK 类型和官方调用点，并补契约测试。
+</details>
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

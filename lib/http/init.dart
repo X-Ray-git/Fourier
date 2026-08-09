@@ -5,9 +5,10 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../common/constants/constants.dart';
-import '../services/app_version_service.dart';
 import '../services/account_session_guard.dart';
+import '../services/folo_request_metadata.dart';
 import '../utils/storage.dart';
+import 'folo_api_contract.dart';
 
 /// HTTP 请求单例
 class Request {
@@ -22,15 +23,11 @@ class Request {
       connectTimeout: const Duration(milliseconds: AppConstants.defaultTimeout),
       receiveTimeout: const Duration(milliseconds: AppConstants.defaultTimeout),
       sendTimeout: const Duration(milliseconds: AppConstants.defaultTimeout),
+      followRedirects: false,
       headers: {
-        'Origin': 'https://app.folo.is',
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36',
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-App-Platform': 'mobile/android',
-        'X-App-Name': AppConstants.appName,
-        'X-App-Version': AppVersionService.version,
+        ...FoloRequestMetadata.protocolHeaders,
       },
     );
 
@@ -127,6 +124,17 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final uri = options.uri;
+    if (!FoloApiContract.isApiUri(uri)) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+          message: 'Folo API client rejected a non-Folo request',
+        ),
+      );
+      return;
+    }
     if (AccountSessionGuard.isTransitioning) {
       handler.reject(
         DioException(
@@ -142,9 +150,7 @@ class _AuthInterceptor extends Interceptor {
             as String;
 
     if (token.isNotEmpty) {
-      options.headers['Cookie'] =
-          '__Secure-better-auth.session_token=$token; '
-          'better-auth.last_used_login_method=google';
+      options.headers['Cookie'] = FoloApiContract.sessionCookie(token);
     }
 
     options.extra[_accountRevisionKey] = AccountSessionGuard.revision;

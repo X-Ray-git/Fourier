@@ -374,37 +374,13 @@ class _SettingsPageState extends State<SettingsPage> {
       return const _ConnectionTestResult(false, '凭据格式不合法');
     }
 
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: ApiConstants.baseUrl,
-        connectTimeout: const Duration(seconds: 12),
-        receiveTimeout: const Duration(seconds: 12),
-        sendTimeout: const Duration(seconds: 12),
-        headers: {
-          'Accept': 'application/json',
-          'Origin': 'https://app.folo.is',
-          'Cookie':
-              '__Secure-better-auth.session_token=$token; '
-              'better-auth.last_used_login_method=google',
-        },
-      ),
-    );
     try {
-      final response = await dio.get(ApiConstants.subscriptions);
-      final data = response.data;
-      final body = data is Map ? Map<String, dynamic>.from(data) : null;
-      if (response.statusCode == 200 &&
-          body != null &&
-          (body['code'] == 0 || body['code'] == '0')) {
-        return const _ConnectionTestResult(true, '正常');
-      }
-      return const _ConnectionTestResult(false, '服务拒绝了当前凭据');
-    } on DioException catch (error) {
-      return _connectionFailure(error);
+      await FoloAuthService.validateSessionToken(token);
+      return const _ConnectionTestResult(true, '正常');
+    } on FoloAuthException catch (error) {
+      return _ConnectionTestResult(false, error.message);
     } catch (_) {
       return const _ConnectionTestResult(false, '接口返回内容异常');
-    } finally {
-      dio.close(force: true);
     }
   }
 

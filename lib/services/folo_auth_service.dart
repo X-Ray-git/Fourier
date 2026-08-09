@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../common/constants/constants.dart';
 import '../models/folo_account_profile.dart';
 import '../utils/security_utils.dart';
+import 'folo_request_metadata.dart';
 
 class FoloAccountCandidate {
   const FoloAccountCandidate({
@@ -106,8 +107,12 @@ abstract final class FoloAuthService {
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       sendTimeout: const Duration(seconds: 15),
+      followRedirects: false,
       validateStatus: (_) => true,
-      headers: const {'Accept': 'application/json'},
+      headers: {
+        'Accept': 'application/json',
+        ...FoloRequestMetadata.protocolHeaders,
+      },
     ),
   );
 

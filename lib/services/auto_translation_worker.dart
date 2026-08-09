@@ -49,7 +49,9 @@ abstract final class AutoTranslationWorker {
       if (!TranslationService.hasTranslation(article.entryId)) {
         TranslationService.markPending(article.entryId);
       }
-      debugPrint('[AutoTranslation] enqueued: ${article.title}');
+      if (kDebugMode) {
+        debugPrint('[AutoTranslation] enqueued');
+      }
     }
 
     _ensureProcessing();
@@ -103,9 +105,13 @@ abstract final class AutoTranslationWorker {
     }
     try {
       await TranslationService.translateArticle(article, targetLang: '简体中文');
-      debugPrint('[AutoTranslation] Done: ${article.title}');
+      if (kDebugMode) {
+        debugPrint('[AutoTranslation] completed');
+      }
     } catch (e) {
-      debugPrint('[AutoTranslation] Failed: ${article.title}: $e');
+      if (kDebugMode) {
+        debugPrint('[AutoTranslation] failed: ${e.runtimeType}');
+      }
     }
   }
 

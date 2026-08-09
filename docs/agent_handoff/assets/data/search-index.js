@@ -1,5 +1,5 @@
 /* 由 scripts/docs-index.js 生成，随内容提交；阅读端零生成。 */
-window.WIKI_SEARCH_MANIFEST = "2be559d8aa8fd97a";
+window.WIKI_SEARCH_MANIFEST = "96c5519bd78af6a8";
 window.WIKI_SEARCH_INDEX = [
  {
   "path": "architecture/networking.html",
@@ -4126,7 +4126,7 @@ window.WIKI_SEARCH_INDEX = [
   "path": "product/privacy.html",
   "title": "隐私",
   "headings": [],
-  "text": "隐私 规则： 永远不要提交 token、cookie、session id、API key、私有文章原始数据或抓取的 API 响应。 临时脚本和抓取的真实文章 payload 应放在已忽略的 scratch/ 。 GitHub Secrets 不存放在仓库中。 历史敏感信息此前已经清理；不要重新引入到文档、提交、测试 fixture 或日志里。 不要把真实导出设置值粘贴到文档中，只泛化提到设置 key。 不要在 history/archive/ 、 history/chronology.md 或其他交接文档中保存真实文章 HTML/API payload；改为总结观察结果。 发布产物： 旧 GitHub Release assets 可能包含历史签名/构建产物。用户表示可以在未来 release 后手动删除。 除非明确要求，否则不要轮换密钥或清理历史；这是另一个高影响操作。 历史重写上下文： 如果敏感文本存在于旧提交，仅从当前文件删除是不够的。 如果用户要求彻底清理，应使用有针对性的历史重写，并且只在用户确认备份和取舍后 force-push。"
+  "text": "隐私 规则： 永远不要提交 token、cookie、session id、API key、私有文章原始数据或抓取的 API 响应。 临时脚本和抓取的真实文章 payload 应放在已忽略的 scratch/ 。 GitHub Secrets 不存放在仓库中。 历史敏感信息此前已经清理；不要重新引入到文档、提交、测试 fixture 或日志里。 不要把真实导出设置值粘贴到文档中，只泛化提到设置 key。 不要在 history/archive/ 、 history/chronology.md 或其他交接文档中保存真实文章 HTML/API payload；改为总结观察结果。 当前数据边界： Folo Session Token 与 DeepSeek API Key 保存在应用私有目录内的 Hive setting box；当前未使用 Keychain、Android Keystore 或 Hive 加密。这能隔离普通应用，但不能抵御已取得本机用户文件、设备备份、root 权限或恶意软件访问的攻击者。 配置导出是用户确认后触发的迁移功能，会按既定产品要求把 Folo 凭据、DeepSeek API Key、Prompt 与订阅源偏好写入系统剪贴板。界面必须明确警告敏感内容；不要在后台自动导出，也不要把导出值写入日志、文档或测试 fixture。 正文抓取使用不携带 Folo 凭据的独立 HTTP 客户端；认证客户端只允许访问精确的 https://api.folo.is API 边界。不要用认证客户端加载文章原文、图片、视频或任意外部 URL。 远程图片、视频和原文抓取会直接联系相应源站、CDN 或明确配置的代理，因此对方可能观察到用户 IP、请求时间与资源 URL。这是联网阅读的固有边界，不应在未评估信任和可用性取舍时统一改走第三方代理。 Android 浏览器登录回调可能短暂在原生进程内存中包含 Session Token；登录完成、取消或超时后必须同时清除 Dart handler 与原生 pending callback。 日志约束： HTTP 日志不得输出请求/响应 headers、body、cookie、Authorization 或回调 URI。 调试日志也不要输出文章标题、正文、Prompt、模型输出或用户身份信息；诊断优先使用无语义计数、状态名和错误类型。 发布产物： 旧 GitHub Release assets 可能包含历史签名/构建产物。用户表示可以在未来 release 后手动删除。 除非明确要求，否则不要轮换密钥或清理历史；这是另一个高影响操作。 历史重写上下文： 如果敏感文本存在于旧提交，仅从当前文件删除是不够的。 如果用户要求彻底清理，应使用有针对性的历史重写，并且只在用户确认备份和取舍后 force-push。"
  },
  {
   "path": "product/terminology.html",

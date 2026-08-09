@@ -742,5 +742,12 @@ class FoloAndroidSocialLoginSession implements FoloLoginSession {
     _closed = true;
     _timer?.cancel();
     _channel.setMethodCallHandler(null);
+    try {
+      await _channel.invokeMethod<void>('clearPendingAuthCallback');
+    } on PlatformException {
+      // Cleanup must not turn an already completed login result into an error.
+    } on MissingPluginException {
+      // Tests and unsupported platforms do not install the Android channel.
+    }
   }
 }

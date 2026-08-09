@@ -60,12 +60,17 @@ class MainActivity : FlutterActivity() {
             AUTH_CALLBACK_CHANNEL
         ).also { channel ->
             channel.setMethodCallHandler { call, result ->
-                if (call.method == "takePendingAuthCallback") {
-                    val callback = pendingAuthCallback
-                    pendingAuthCallback = null
-                    result.success(callback)
-                } else {
-                    result.notImplemented()
+                when (call.method) {
+                    "takePendingAuthCallback" -> {
+                        val callback = pendingAuthCallback
+                        pendingAuthCallback = null
+                        result.success(callback)
+                    }
+                    "clearPendingAuthCallback" -> {
+                        pendingAuthCallback = null
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
                 }
             }
         }

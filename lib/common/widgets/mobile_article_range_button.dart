@@ -74,6 +74,7 @@ class MobileArticleRangeButton extends StatelessWidget {
       tooltip: unreadOnly ? '范围：未读' : '范围：全部',
       size: size,
       iconSize: 19,
+      nativeBackdrop: true,
       onPressed: () => _showPicker(context),
     );
   }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
@@ -20,6 +19,8 @@ import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/app_glass_selection_button.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/mobile_article_range_button.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_edge_fade.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/refresh_indicator.dart' as custom_refresh;
 import '../../common/widgets/shimmer_card.dart';
@@ -44,6 +45,8 @@ import '../timeline/timeline_controller.dart';
 import '../subscriptions/subscriptions_controller.dart';
 import '../article/article_page.dart';
 import '../../utils/scroll_utils.dart';
+
+const _mobileFeedToolbarHeight = 68.0;
 
 /// Feed 详情控制器 — 按订阅源或分类或 view 筛选文章
 class FeedDetailController extends GetxController {
@@ -541,163 +544,163 @@ class FeedDetailPage extends StatelessWidget {
     }
 
     return Scaffold(
-      body: custom_refresh.RefreshIndicator(
-        displacement: MediaQuery.paddingOf(context).top + kToolbarHeight + 10,
-        onRefresh: controller.loadData,
-        color: cs.primary,
-        backgroundColor: cs.surfaceContainerHighest,
-        child: CustomScrollView(
-          physics: NoOverscrollIndicatorBehavior.applyMacosFlingCap(
-            const AlwaysScrollableScrollPhysics(),
-          ),
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              toolbarHeight: 68,
-              backgroundColor: cs.surface.withValues(alpha: 0.74),
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              iconTheme: IconThemeData(color: cs.onSurface),
-              actionsIconTheme: IconThemeData(color: cs.onSurface),
-              flexibleSpace: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              titleSpacing: 0,
-              title: Row(
+      extendBodyBehindAppBar: true,
+      appBar: MobileBlurAppBar(
+        toolbarHeight: _mobileFeedToolbarHeight,
+        blurBackground: false,
+        clipBehavior: Clip.none,
+        centerTitle: false,
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            _MobileFeedAvatar(imageUrl: safeImageUrl),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _MobileFeedAvatar(imageUrl: safeImageUrl),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          controller.feedTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Obx(() {
-                          final unread = controller.articles
-                              .where((article) => !article.isRead)
-                              .length;
-                          final total = controller.articles.length;
-                          return Text(
-                            unread > 0
-                                ? '$unread 篇未读 · $total 篇当前列表'
-                                : '$total 篇当前列表',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          );
-                        }),
-                      ],
+                  Text(
+                    controller.feedTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ],
-              ),
-              actions: [
-                Obx(
-                  () => MobileArticleRangeButton(
-                    unreadOnly: controller.readFilter.value == 0,
-                    onChanged: (unreadOnly) => controller.setReadFilter(
-                      unreadOnly ? 0 : 1,
-                      clearSelection: true,
-                    ),
-                  ),
-                ),
-                if (controller.filterFeedId != null) ...[
-                  const SizedBox(width: 6),
-                  AppGlassIconButton(
-                    icon: Icons.tune_rounded,
-                    tooltip: '订阅源设置',
-                    size: 36,
-                    iconSize: 19,
-                    onPressed: () =>
-                        _showMobileFeedSettings(context, controller),
-                  ),
-                ],
-                const SizedBox(width: 10),
-              ],
-            ),
-
-            // ─── 文章列表区域 ───
-            Obx(() {
-              final state = controller.loadingState.value;
-
-              return switch (state) {
-                Loading() => const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _FeedDetailSkeleton(),
-                ),
-                LoadError(:final errMsg) => SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _ErrorView(
-                    message: errMsg,
-                    onRetry: controller.loadData,
-                  ),
-                ),
-                Success(:final response) when response.isEmpty =>
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _EmptyView(
-                      onRetry: controller.loadData,
-                      readFilter: controller.readFilter.value,
-                    ),
-                  ),
-                Success() => Obx(() {
-                  final list = controller.articles;
-                  if (list.isEmpty) {
-                    return SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyView(
-                        onRetry: controller.loadData,
-                        readFilter: controller.readFilter.value,
+                  Obx(() {
+                    final unread = controller.articles
+                        .where((article) => !article.isRead)
+                        .length;
+                    final total = controller.articles.length;
+                    return Text(
+                      unread > 0
+                          ? '$unread 篇未读 · $total 篇当前列表'
+                          : '$total 篇当前列表',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
                       ),
                     );
-                  }
-                  return SliverPadding(
-                    padding: EdgeInsets.only(
-                      top: 6,
-                      bottom: 16 + MediaQuery.of(context).padding.bottom,
-                    ),
-                    sliver: SliverList.builder(
-                      itemCount: list.length,
-                      itemBuilder: (context, index) {
-                        final article = list[index];
-                        return ArticleCard(
-                          article: article,
-                          showFeedTitle: true,
-                          onTap: () {
-                            Get.toNamed(
-                              Routes.article,
-                              arguments: {
-                                'article': article,
-                                'sequence': controller.articles.toList(),
-                                'index': index,
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  );
-                }),
-              };
-            }),
+                  }),
+                ],
+              ),
+            ),
           ],
         ),
+        actions: [
+          Obx(
+            () => MobileArticleRangeButton(
+              unreadOnly: controller.readFilter.value == 0,
+              onChanged: (unreadOnly) => controller.setReadFilter(
+                unreadOnly ? 0 : 1,
+                clearSelection: true,
+              ),
+            ),
+          ),
+          if (controller.filterFeedId != null) ...[
+            const SizedBox(width: 6),
+            AppGlassIconButton(
+              icon: Icons.tune_rounded,
+              tooltip: '订阅源设置',
+              size: 36,
+              iconSize: 19,
+              nativeBackdrop: true,
+              onPressed: () => _showMobileFeedSettings(context, controller),
+            ),
+          ],
+          const SizedBox(width: 10),
+        ],
+      ),
+      body: Builder(
+        builder: (bodyContext) {
+          final topInset =
+              MediaQuery.paddingOf(bodyContext).top + mobileEdgeListTopPadding;
+          return MobileEdgeFadeStack(
+            topBarHeight: _mobileFeedToolbarHeight,
+            child: custom_refresh.RefreshIndicator(
+              displacement: topInset + 10,
+              onRefresh: controller.loadData,
+              color: cs.primary,
+              backgroundColor: cs.surfaceContainerHighest,
+              child: CustomScrollView(
+                physics: NoOverscrollIndicatorBehavior.applyMacosFlingCap(
+                  const AlwaysScrollableScrollPhysics(),
+                ),
+                slivers: [
+                  SliverToBoxAdapter(child: SizedBox(height: topInset)),
+                  Obx(() {
+                    final state = controller.loadingState.value;
+                    return switch (state) {
+                      Loading() => const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _FeedDetailSkeleton(),
+                      ),
+                      LoadError(:final errMsg) => SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _ErrorView(
+                          message: errMsg,
+                          onRetry: controller.loadData,
+                        ),
+                      ),
+                      Success(:final response) when response.isEmpty =>
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _EmptyView(
+                            onRetry: controller.loadData,
+                            readFilter: controller.readFilter.value,
+                          ),
+                        ),
+                      Success() => Obx(() {
+                        final list = controller.articles;
+                        if (list.isEmpty) {
+                          return SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _EmptyView(
+                              onRetry: controller.loadData,
+                              readFilter: controller.readFilter.value,
+                            ),
+                          );
+                        }
+                        return SliverPadding(
+                          padding: EdgeInsets.only(
+                            bottom:
+                                16 +
+                                MediaQuery.paddingOf(bodyContext).bottom +
+                                mobileEdgeBottomTransitionExtent,
+                          ),
+                          sliver: SliverList.builder(
+                            itemCount: list.length,
+                            itemBuilder: (context, index) {
+                              final article = list[index];
+                              return ArticleCard(
+                                article: article,
+                                showFeedTitle: true,
+                                onTap: () {
+                                  Get.toNamed(
+                                    Routes.article,
+                                    arguments: {
+                                      'article': article,
+                                      'sequence': controller.articles.toList(),
+                                      'index': index,
+                                    },
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        );
+                      }),
+                    };
+                  }),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

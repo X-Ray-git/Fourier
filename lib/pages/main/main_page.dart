@@ -9,6 +9,7 @@ import '../../common/widgets/continuous_rectangle.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/mobile_article_range_button.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_edge_fade.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
 import '../../services/feed_silent_settings_service.dart';
@@ -128,63 +129,17 @@ class _MainPageState extends State<MainPage> {
       child: Scaffold(
         extendBody: true,
         extendBodyBehindAppBar: true,
-        appBar: MobileBlurAppBar(
-          leadingWidth: 60,
-          leading: Obx(() {
-            if (controller.currentIndex.value != 0) {
-              return const SizedBox.shrink();
-            }
-            final mode = _timelineController.selectedMode.value;
-            return Padding(
-              padding: const EdgeInsets.only(left: 12.0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: MobileArticleRangeButton(
-                  unreadOnly: mode == TimelineViewMode.unread,
-                  onChanged: (unreadOnly) => _timelineController.setViewMode(
-                    unreadOnly ? TimelineViewMode.unread : TimelineViewMode.all,
-                  ),
-                ),
-              ),
-            );
-          }),
-          title: Obx(() {
-            final index = controller.currentIndex.value;
-            if (index == 1) {
-              return const FilterReviewStatusTitle();
-            }
-            return Text(
-              _mobileTitles[index],
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-            );
-          }),
-          actions: [
-            Obx(() {
-              if (controller.currentIndex.value != 0) {
-                return const SizedBox.shrink();
-              }
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppGlassIconButton(
-                    icon: Icons.search_rounded,
-                    tooltip: '搜索',
-                    size: 36,
-                    iconSize: 19,
-                    onPressed: () => _openTimelineSearch(context),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-              );
-            }),
-          ],
+        appBar: _MobileMainAppBar(
+          controller: controller,
+          timelineController: _timelineController,
+          onSearch: () => _openTimelineSearch(context),
         ),
-        body: Obx(
-          () => _FadeIndexedStack(
-            index: controller.currentIndex.value,
-            children: _mobilePages,
-          ),
-        ),
+        body: Obx(() {
+          final index = controller.currentIndex.value;
+          final pages = _FadeIndexedStack(index: index, children: _mobilePages);
+          if (index != 0 && index != 1) return pages;
+          return MobileEdgeFadeStack(child: pages);
+        }),
         bottomNavigationBar: Obx(() {
           final _ = FeedSilentSettingsService.version.value;
           return _MobileFloatingNavigation(
@@ -226,6 +181,73 @@ class _MainPageState extends State<MainPage> {
         'index': index < 0 ? 0 : index,
       },
     );
+  }
+}
+
+class _MobileMainAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _MobileMainAppBar({
+    required this.controller,
+    required this.timelineController,
+    required this.onSearch,
+  });
+
+  final MainController controller;
+  final TimelineController timelineController;
+  final VoidCallback onSearch;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(mobileAppBarToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final index = controller.currentIndex.value;
+      final usesArticleFade = index == 0 || index == 1;
+      final mode = timelineController.selectedMode.value;
+      return MobileBlurAppBar(
+        blurBackground: !usesArticleFade,
+        clipBehavior: usesArticleFade ? Clip.none : Clip.hardEdge,
+        leadingWidth: 60,
+        leading: index == 0
+            ? Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: MobileArticleRangeButton(
+                    unreadOnly: mode == TimelineViewMode.unread,
+                    onChanged: (unreadOnly) => timelineController.setViewMode(
+                      unreadOnly
+                          ? TimelineViewMode.unread
+                          : TimelineViewMode.all,
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
+        title: index == 1
+            ? const FilterReviewStatusTitle()
+            : Text(
+                _MainPageState._mobileTitles[index],
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+        actions: index == 0
+            ? [
+                AppGlassIconButton(
+                  icon: Icons.search_rounded,
+                  tooltip: '搜索',
+                  size: 36,
+                  iconSize: 19,
+                  nativeBackdrop: true,
+                  onPressed: onSearch,
+                ),
+                const SizedBox(width: 12),
+              ]
+            : const [],
+      );
+    });
   }
 }
 

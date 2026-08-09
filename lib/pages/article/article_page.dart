@@ -19,6 +19,8 @@ import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
+import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_edge_fade.dart';
 import '../../common/widgets/pill_tag.dart';
 import '../../common/liquid_glass/liquid_glass.dart' as glass;
 import '../../services/article_image_service.dart';
@@ -1587,9 +1589,23 @@ class _ArticlePageViewState extends State<ArticlePageView> {
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
+              if (!Platform.isMacOS)
+                SliverPadding(
+                  padding: EdgeInsets.only(
+                    top:
+                        MediaQuery.viewPaddingOf(context).top +
+                        mobileAppBarToolbarHeight +
+                        mobileEdgeTopContentGap,
+                  ),
+                ),
               // ─── 元数据区域 ──────────────────────
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(11, 16, 11, 16),
+                padding: EdgeInsets.fromLTRB(
+                  11,
+                  Platform.isMacOS ? 16 : 0,
+                  11,
+                  16,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: Center(
                     child: ConstrainedBox(
@@ -1861,9 +1877,18 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     );
 
     Widget scaffold = Scaffold(
+      extendBodyBehindAppBar: !Platform.isMacOS,
       appBar: AppBar(
-        automaticallyImplyLeading: !usesCollapsibleMacHeader,
-        leadingWidth: showsRelatedArticleBackButton ? 45 : null,
+        automaticallyImplyLeading:
+            Platform.isMacOS && !usesCollapsibleMacHeader,
+        toolbarHeight: Platform.isMacOS
+            ? kToolbarHeight
+            : mobileAppBarToolbarHeight,
+        leadingWidth: showsRelatedArticleBackButton
+            ? 45
+            : Platform.isMacOS
+            ? null
+            : 48,
         leading: showsRelatedArticleBackButton
             ? Padding(
                 padding: const EdgeInsets.only(left: 11),
@@ -1872,6 +1897,21 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   child: AppGlassIconButton(
                     icon: Icons.arrow_back_ios_new_rounded,
                     tooltip: '返回上一篇文章 (Esc)',
+                    onPressed: _closeArticle,
+                  ),
+                ),
+              )
+            : !Platform.isMacOS
+            ? Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppGlassIconButton(
+                    icon: Icons.arrow_back_rounded,
+                    tooltip: '返回',
+                    size: 36,
+                    iconSize: 19,
+                    nativeBackdrop: true,
                     onPressed: _closeArticle,
                   ),
                 ),
@@ -1919,7 +1959,10 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ),
         centerTitle: !usesCollapsibleMacHeader,
         titleSpacing: usesCollapsibleMacHeader ? 11 : null,
-        backgroundColor: colorScheme.surface,
+        backgroundColor: Platform.isMacOS
+            ? colorScheme.surface
+            : Colors.transparent,
+        clipBehavior: Platform.isMacOS ? Clip.hardEdge : Clip.none,
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: Platform.isMacOS
@@ -1969,25 +2012,27 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 }),
               ]
             : const [],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: SizedBox(
-            width: double.infinity,
-            height: 1.0,
-            child: usesCollapsibleMacHeader
-                ? ValueListenableBuilder<double>(
-                    valueListenable: _headerCollapseProgress,
-                    child: headerRule,
-                    builder: (context, progress, child) {
-                      return Opacity(
-                        opacity: Curves.easeOutCubic.transform(progress),
-                        child: child,
-                      );
-                    },
-                  )
-                : headerRule,
-          ),
-        ),
+        bottom: Platform.isMacOS
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(1.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 1.0,
+                  child: usesCollapsibleMacHeader
+                      ? ValueListenableBuilder<double>(
+                          valueListenable: _headerCollapseProgress,
+                          child: headerRule,
+                          builder: (context, progress, child) {
+                            return Opacity(
+                              opacity: Curves.easeOutCubic.transform(progress),
+                              child: child,
+                            );
+                          },
+                        )
+                      : headerRule,
+                ),
+              )
+            : null,
       ),
       floatingActionButton: Platform.isMacOS
           ? null
@@ -2015,31 +2060,47 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  AppGlassIconButton(
-                    icon: isRead ? Symbols.undo_rounded : Symbols.check_rounded,
-                    tooltip: isRead ? '恢复未读' : '标为已读',
-                    selected: !isRead,
-                    size: 48,
-                    iconSize: 24,
-                    iconWeight: 700,
-                    onPressed: isUpdating
-                        ? null
-                        : () {
-                            unawaited(AndroidHapticsService.lightImpact());
-                            if (isRead) {
-                              controller.markAsUnread();
-                            } else if (widget.onMKeyPressed != null) {
-                              widget.onMKeyPressed!();
-                            } else {
-                              controller.markAsRead();
-                              widget.onNext?.call();
-                            }
-                          },
+                  ValueListenableBuilder<double>(
+                    valueListenable: _scrollProgress,
+                    child: AppGlassIconButton(
+                      icon: isRead
+                          ? Symbols.undo_rounded
+                          : Symbols.check_rounded,
+                      tooltip: isRead ? '恢复未读' : '标为已读',
+                      selected: !isRead,
+                      size: 48,
+                      iconSize: 24,
+                      iconWeight: 700,
+                      onPressed: isUpdating
+                          ? null
+                          : () {
+                              unawaited(AndroidHapticsService.lightImpact());
+                              if (isRead) {
+                                controller.markAsUnread();
+                              } else if (widget.onMKeyPressed != null) {
+                                widget.onMKeyPressed!();
+                              } else {
+                                controller.markAsRead();
+                                widget.onNext?.call();
+                              }
+                            },
+                    ),
+                    builder: (context, progress, child) {
+                      return CustomPaint(
+                        foregroundPainter: _MobileReadingProgressPainter(
+                          progress: progress,
+                          color: colorScheme.primary,
+                        ),
+                        child: child,
+                      );
+                    },
                   ),
                 ],
               );
             }),
-      body: articleBody,
+      body: Platform.isMacOS
+          ? articleBody
+          : MobileEdgeFadeStack(showBottom: false, child: articleBody),
     );
 
     final result = Stack(
@@ -2226,6 +2287,42 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             child: result,
           )
         : result;
+  }
+}
+
+class _MobileReadingProgressPainter extends CustomPainter {
+  const _MobileReadingProgressPainter({
+    required this.progress,
+    required this.color,
+  });
+
+  final double progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final value = progress.clamp(0.0, 1.0);
+    if (value <= 0 || size.isEmpty) return;
+
+    const strokeWidth = 1.5;
+    final rect = Offset.zero & size;
+    final arcRect = rect.deflate(strokeWidth / 2);
+    canvas.drawArc(
+      arcRect,
+      -math.pi / 2,
+      math.pi * 2 * value,
+      false,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = value >= 0.999 ? StrokeCap.butt : StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _MobileReadingProgressPainter oldDelegate) {
+    return progress != oldDelegate.progress || color != oldDelegate.color;
   }
 }
 

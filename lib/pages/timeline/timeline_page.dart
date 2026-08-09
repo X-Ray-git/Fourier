@@ -20,6 +20,7 @@ import '../../common/widgets/app_glass_sync_button.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_edge_fade.dart';
 import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../common/widgets/article_card_chrome.dart';
 import '../../common/widgets/mac_split_article_list_coordinator.dart';
@@ -1211,10 +1212,13 @@ class _TimelinePageState extends State<TimelinePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: !Platform.isMacOS && widget.showAppBar,
       appBar: widget.showAppBar
           ? (Platform.isMacOS
                 ? null
                 : MobileBlurAppBar(
+                    blurBackground: false,
+                    clipBehavior: Clip.none,
                     title: GestureDetector(
                       onTap: _onAppBarTap,
                       child: const Text('时间线'),
@@ -1226,7 +1230,7 @@ class _TimelinePageState extends State<TimelinePage> {
 
         final content = switch (state) {
           Loading() => _LocalTimelineSkeleton(
-            bodyExtendsBehindAppBar: !widget.showAppBar,
+            bodyExtendsBehindAppBar: !Platform.isMacOS,
           ),
           LoadError(:final errMsg) => _ErrorView(
             message: errMsg,
@@ -1310,6 +1314,9 @@ class _TimelinePageState extends State<TimelinePage> {
           );
         }
 
+        if (widget.showAppBar) {
+          return MobileEdgeFadeStack(child: content);
+        }
         return content;
       }),
     );
@@ -1375,11 +1382,15 @@ class _TimelinePageState extends State<TimelinePage> {
         content = ListView(
           physics: _refreshPhysics,
           padding: EdgeInsets.only(
-            top: MobileViewportInsets.listTopInset(
-              context,
-              bodyExtendsBehindAppBar: !widget.showAppBar,
-            ).top,
-            bottom: MobileViewportInsets.listBottomInset(context).bottom,
+            top:
+                MobileViewportInsets.listTopInset(
+                  context,
+                  bodyExtendsBehindAppBar: true,
+                ).top +
+                mobileEdgeListTopPadding,
+            bottom:
+                MobileViewportInsets.listBottomInset(context).bottom +
+                mobileEdgeBottomTransitionExtent,
           ),
           children: [
             Padding(
@@ -1396,11 +1407,15 @@ class _TimelinePageState extends State<TimelinePage> {
           physics: _refreshPhysics,
           controller: _scrollController,
           padding: EdgeInsets.only(
-            top: MobileViewportInsets.listTopInset(
-              context,
-              bodyExtendsBehindAppBar: !widget.showAppBar,
-            ).top,
-            bottom: MobileViewportInsets.listBottomInset(context).bottom,
+            top:
+                MobileViewportInsets.listTopInset(
+                  context,
+                  bodyExtendsBehindAppBar: true,
+                ).top +
+                mobileEdgeListTopPadding,
+            bottom:
+                MobileViewportInsets.listBottomInset(context).bottom +
+                mobileEdgeBottomTransitionExtent,
           ),
           itemCount: controller.articles.length,
           itemBuilder: (context, index) {
@@ -1607,10 +1622,12 @@ class _LocalTimelineSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     // 与真实列表共用共享顶部 inset，避免骨架卡片埋入毛玻璃 AppBar。
     return ShimmerFadeList(
-      padding: MobileViewportInsets.listTopInset(
-        context,
-        bodyExtendsBehindAppBar: bodyExtendsBehindAppBar,
-      ),
+      padding:
+          MobileViewportInsets.listTopInset(
+            context,
+            bodyExtendsBehindAppBar: bodyExtendsBehindAppBar,
+          ) +
+          const EdgeInsets.only(top: mobileEdgeListTopPadding),
       itemCount: 6,
       itemBuilder: (context, index) => Padding(
         padding: ArticleCardChrome.outerPadding,

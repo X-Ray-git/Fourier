@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -875,6 +876,7 @@ class AppGlassIconButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool selected;
   final bool useOwnLayer;
+  final bool nativeBackdrop;
   final double size;
   final double iconSize;
   final double? iconWeight;
@@ -886,6 +888,7 @@ class AppGlassIconButton extends StatefulWidget {
     this.onPressed,
     this.selected = false,
     this.useOwnLayer = true,
+    this.nativeBackdrop = false,
     this.size = 34,
     this.iconSize = 18,
     this.iconWeight,
@@ -901,6 +904,7 @@ class AppGlassRoundControlChrome extends StatelessWidget {
   final bool hovered;
   final bool pressed;
   final bool useOwnLayer;
+  final bool nativeBackdrop;
   final double size;
 
   const AppGlassRoundControlChrome({
@@ -910,6 +914,7 @@ class AppGlassRoundControlChrome extends StatelessWidget {
     required this.hovered,
     required this.pressed,
     this.useOwnLayer = true,
+    this.nativeBackdrop = false,
     this.size = 34,
   });
 
@@ -922,6 +927,22 @@ class AppGlassRoundControlChrome extends StatelessWidget {
       hoverAlpha: 0.06,
     );
 
+    final content = AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutCubic,
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: fill,
+      ),
+      child: child,
+    );
+
+    if (nativeBackdrop) {
+      return _NativeBackdropRoundControlChrome(size: size, child: content);
+    }
+
     return AppGlassSurface(
       borderRadius: 999,
       padding: EdgeInsets.zero,
@@ -929,18 +950,152 @@ class AppGlassRoundControlChrome extends StatelessWidget {
       interactive: enabled,
       useOwnLayer: useOwnLayer,
       settingsOverride: appGlassButtonSettingsFor(context),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          color: fill,
-        ),
-        child: child,
+      child: content,
+    );
+  }
+}
+
+/// Small toolbar controls need to sample the scrolling content directly.
+/// Keeping this path local avoids changing the lightweight renderer used by
+/// the rest of the app while guaranteeing a real clipped backdrop blur.
+class _NativeBackdropRoundControlChrome extends StatelessWidget {
+  const _NativeBackdropRoundControlChrome({
+    required this.size,
+    required this.child,
+  });
+
+  final double size;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = appGlassButtonSettingsFor(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final saturation = settings.effectiveSaturation;
+    const rw = 0.2126;
+    const gw = 0.7152;
+    const bw = 0.0722;
+    final saturationFilter = ColorFilter.matrix(<double>[
+      rw + (1 - rw) * saturation,
+      gw - gw * saturation,
+      bw - bw * saturation,
+      0,
+      0,
+      rw - rw * saturation,
+      gw + (1 - gw) * saturation,
+      bw - bw * saturation,
+      0,
+      0,
+      rw - rw * saturation,
+      gw - gw * saturation,
+      bw + (1 - bw) * saturation,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ]);
+    final backdropFilter = ImageFilter.compose(
+      outer: saturationFilter,
+      inner: ImageFilter.blur(
+        sigmaX: settings.effectiveBlur,
+        sigmaY: settings.effectiveBlur,
       ),
     );
+    final tint = settings.effectiveGlassColor;
+
+    return CustomPaint(
+      painter: _OutsideRoundControlShadowPainter(
+        shadows: isDark ? const [] : settings.effectiveShadow,
+      ),
+      child: ClipOval(
+        child: SizedBox.square(
+          dimension: size,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              BackdropFilter(
+                filter: backdropFilter,
+                child: const SizedBox.expand(),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.alphaBlend(
+                        Colors.white.withValues(alpha: isDark ? 0.04 : 0.08),
+                        tint,
+                      ),
+                      tint,
+                    ],
+                  ),
+                ),
+              ),
+              child,
+              IgnorePointer(
+                child: CustomPaint(
+                  painter: _NativeBackdropRimPainter(
+                    radius: size / 2,
+                    lightIntensity:
+                        settings.effectiveLightIntensity *
+                        (isDark ? 0.56 : 0.62),
+                    ambientStrength: settings.effectiveAmbientStrength * 0.24,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OutsideRoundControlShadowPainter extends CustomPainter {
+  const _OutsideRoundControlShadowPainter({required this.shadows});
+
+  final List<BoxShadow> shadows;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (shadows.isEmpty || size.isEmpty) return;
+
+    final bounds = Offset.zero & size;
+    final maxOverflow = shadows.fold<double>(
+      0,
+      (value, shadow) => math.max(
+        value,
+        shadow.blurRadius +
+            shadow.spreadRadius.abs() +
+            math.max(shadow.offset.dx.abs(), shadow.offset.dy.abs()),
+      ),
+    );
+    canvas.saveLayer(bounds.inflate(maxOverflow + 2), Paint());
+    for (final shadow in shadows) {
+      canvas.drawCircle(
+        bounds.center + shadow.offset,
+        size.shortestSide / 2 + shadow.spreadRadius,
+        Paint()
+          ..color = shadow.color
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadow.blurSigma),
+      );
+    }
+    canvas.drawCircle(
+      bounds.center,
+      size.shortestSide / 2,
+      Paint()..blendMode = BlendMode.clear,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _OutsideRoundControlShadowPainter oldDelegate) {
+    return !listEquals(shadows, oldDelegate.shadows);
   }
 }
 
@@ -1016,6 +1171,7 @@ class _AppGlassIconButtonState extends State<AppGlassIconButton> {
               hovered: _hovered,
               pressed: _pressed,
               useOwnLayer: widget.useOwnLayer,
+              nativeBackdrop: widget.nativeBackdrop,
               size: widget.size,
               child: Icon(
                 widget.icon,

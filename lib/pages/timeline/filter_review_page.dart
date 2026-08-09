@@ -37,6 +37,7 @@ import '../../common/widgets/mac_split_article_list_coordinator.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_edge_fade.dart';
 import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
@@ -757,13 +758,12 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 : ListView.builder(
                     padding: EdgeInsets.only(
                       top:
-                          6 +
-                          (widget.embeddedInMainNavigation
-                              ? MobileViewportInsets.listTopInset(context).top
-                              : 0),
+                          MobileViewportInsets.listTopInset(context).top +
+                          mobileEdgeListTopPadding,
                       bottom:
                           16 +
                           MediaQuery.of(context).padding.bottom +
+                          mobileEdgeBottomTransitionExtent +
                           (widget.embeddedInMainNavigation
                               ? kBottomNavigationBarHeight
                               : 0),
@@ -837,8 +837,13 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     }
 
     return Scaffold(
-      appBar: MobileBlurAppBar(title: const FilterReviewStatusTitle()),
-      body: body,
+      extendBodyBehindAppBar: true,
+      appBar: MobileBlurAppBar(
+        blurBackground: false,
+        clipBehavior: Clip.none,
+        title: const FilterReviewStatusTitle(),
+      ),
+      body: MobileEdgeFadeStack(child: body),
     );
   }
 

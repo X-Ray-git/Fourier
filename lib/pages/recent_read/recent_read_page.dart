@@ -8,6 +8,8 @@ import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../common/widgets/mobile_blur_app_bar.dart';
+import '../../common/widgets/mobile_edge_fade.dart';
+import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../router/app_pages.dart';
@@ -150,9 +152,12 @@ class _RecentReadPageState extends State<RecentReadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: !Platform.isMacOS,
       appBar: Platform.isMacOS
           ? null
           : const MobileBlurAppBar(
+              blurBackground: false,
+              clipBehavior: Clip.none,
               title: Text(
                 '最近阅读',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
@@ -236,7 +241,7 @@ class _RecentReadPageState extends State<RecentReadPage> {
           );
         }
 
-        return content;
+        return MobileEdgeFadeStack(child: content);
       }),
     );
   }
@@ -268,8 +273,13 @@ class _RecentReadPageState extends State<RecentReadPage> {
           : ListView.builder(
               controller: _scrollController,
               padding: EdgeInsets.only(
-                top: 0,
-                bottom: 8 + MediaQuery.of(context).padding.bottom,
+                top:
+                    MobileViewportInsets.listTopInset(context).top +
+                    mobileEdgeListTopPadding,
+                bottom:
+                    8 +
+                    MediaQuery.of(context).padding.bottom +
+                    mobileEdgeBottomTransitionExtent,
               ),
               itemCount: controller.articles.length,
               itemBuilder: (context, index) {

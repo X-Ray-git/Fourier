@@ -50,13 +50,14 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-截至 2026-08-08：
+截至 2026-08-09：
 
 - `main` 是当前集成分支。
 - Fourier 品牌迁移与离线工程 Wiki 已通过独立 merge commit 合入 `main`。应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和图标均已迁移；旧 Auto Folo 名称只允许存在于历史证据、旧设置导入与明确的迁移兼容说明中。
 - GitHub 仓库、本地目录和 `origin` 已统一迁移为大写品牌名 `Fourier`：远端是 `X-Ray-git/Fourier`，本地 clone 目录名是 `Fourier`。旧仓库 URL 只依赖 GitHub 重定向，不得再作为当前链接写入代码或文档。
 - Wiki 采用可离线双击的单文件 HTML 页面体系，正文以 Markdown 语法内嵌；`index.html` 是阅读入口，维护规则见 `meta/site-guide.html`。
 - Android 设计迁移已通过 merge commit `bd8c1b8` 合入 `main`；新代理应以 `main` 中的移动端实现为当前事实，不再等待旧 `android` 分支。
+- Android 时间线、垃圾拦截、最近阅读、订阅源详情和文章正文已统一为透明 header + 共享边缘渐隐；顶部圆形工具按钮使用真实局部背景模糊，安全距离和渐隐坐标由 `MobileEdgeFadeStack` 集中维护。文章列表保留底部渐隐，正文不使用底部渐隐。具体参数和回归边界见 `platforms/android.html`。
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
 - 最近一批 worktree 功能已经用 merge commit 合入 `main`，保留了分支历史。
 - 除非用户明确要求，否则不要创建 release/tag。

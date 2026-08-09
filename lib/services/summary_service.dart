@@ -192,11 +192,16 @@ abstract final class SummaryService {
       deferRelationTail,
     );
     _inFlight[article.entryId] = future;
-    future.whenComplete(() {
+    void clearInFlight() {
       if (identical(_inFlight[article.entryId], future)) {
         _inFlight.remove(article.entryId);
       }
-    });
+    }
+
+    future.then<void>(
+      (_) => clearInFlight(),
+      onError: (Object _, StackTrace _) => clearInFlight(),
+    );
     return future;
   }
 
@@ -256,9 +261,6 @@ abstract final class SummaryService {
         attempt: attempt,
       );
       try {
-        _dio.options.headers['Authorization'] = 'Bearer $apiKey';
-        _dio.options.headers['Content-Type'] = 'application/json';
-
         final requestBody = <String, dynamic>{
           'messages': [
             {'role': 'system', 'content': systemPrompt},
@@ -276,6 +278,12 @@ abstract final class SummaryService {
         final response = await _dio.post(
           '/chat/completions',
           data: requestBody,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+          ),
         );
         await trace.recordResponse(
           response.data,

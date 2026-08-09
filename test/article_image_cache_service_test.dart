@@ -90,5 +90,17 @@ void main() {
         'resized_w1440_$first',
       );
     });
+
+    test('article prefixes cannot overlap when IDs contain separators', () {
+      final shortPrefix = ArticleImageCacheService.cacheKeyPrefixForArticle(
+        'entry',
+      );
+      final nestedKey = ArticleImageCacheService.cacheKey(
+        'entry:child',
+        'https://example.com/image.jpg',
+      );
+
+      expect(nestedKey.startsWith(shortPrefix), isFalse);
+    });
   });
 }

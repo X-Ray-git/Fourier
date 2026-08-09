@@ -32,8 +32,6 @@ class AccountService extends GetxController {
     final token =
         GStorage.setting.get(StorageKeys.sessionToken, defaultValue: '')
             as String;
-    GStorage.setting.delete(StorageKeys.clientId);
-    GStorage.setting.delete(StorageKeys.sessionId);
     isLoggedIn.value = token.isNotEmpty;
     profile.value = token.isEmpty
         ? null
@@ -84,12 +82,25 @@ class AccountService extends GetxController {
       return result;
     }
 
+    final previousProfile = profile.value;
+    var nextCredentialsPersisted = false;
+    AccountDataService.beginAccountChange();
     try {
-      await AccountDataService.clearForAccountChange();
-      await _persistProfile(null);
       final result = await persist();
       await _persistProfile(next.isEmpty ? null : nextProfile);
+      nextCredentialsPersisted = true;
+      await AccountDataService.clearForAccountChange();
       return result;
+    } catch (error, stackTrace) {
+      if (!nextCredentialsPersisted) {
+        if (current.isEmpty) {
+          await GStorage.setting.delete(StorageKeys.sessionToken);
+        } else {
+          await GStorage.setting.put(StorageKeys.sessionToken, current);
+        }
+        await _persistProfile(previousProfile);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     } finally {
       // Invalidate again so requests started during the cleanup window with
       // the previous token cannot write into the next account's state.

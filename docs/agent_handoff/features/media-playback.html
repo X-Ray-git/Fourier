@@ -173,6 +173,7 @@
 - Bilibili 使用独立的 `127.0.0.1` 随机能力路径服务。媒体代理只接受当前播放 session 中由官方 API 实际返回的完整 HTTPS URL；重定向还必须落在 `bilivideo.com` 或明确的 Akamai 镜像。请求补充 Bilibili Referer/Origin，Range 响应保持流式转发。不要放宽为通用 URL 代理。
 - loopback 服务只在用户点击播放后启动。macOS Release 需要 `com.apple.security.network.server` 与 `NSAllowsLocalNetworking`；Android 的 network security config 只对 `localhost/127.0.0.1` 允许明文 HTTP，外部目标继续强制 HTTPS。服务不得监听 `0.0.0.0` 或局域网地址。
 - 两条首选链路都必须懒加载。文章初始渲染只显示缩略图，不得静默创建 WebView 或请求 API。
+- 上游连接必须有有限连接超时和响应头等待超时；媒体 body 继续流式转发，不设置会截断正常长视频的整流超时。loopback `HttpServer` 的监听错误只记录安全诊断，不能通过根 Zone 升级为应用级未处理异常。
 
 ## 已确认但暂不修复的源内容边界
 

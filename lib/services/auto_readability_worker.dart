@@ -6,6 +6,7 @@ import '../http/feed_http.dart';
 import '../http/init.dart';
 import '../http/public_content_http.dart';
 
+import '../common/constants/constants.dart';
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
@@ -40,9 +41,6 @@ abstract final class AutoReadabilityWorker {
   ];
 
   static final Map<String, Timer> _fetchRetryTimers = {};
-
-  /// 失败状态诊断 key 前缀（值：{attempts, lastError, lastAt}）
-  static const String _fetchStateKeyPrefix = 'readability_fetch_state_';
 
   /// 测试注入点：替换真实全文抓取调用。返回抓取到的原始 HTML；
   /// 返回 null 表示抓取失败。
@@ -114,7 +112,7 @@ abstract final class AutoReadabilityWorker {
     var rawContent = article.content ?? '';
 
     if (article.category == 'inbox' && rawContent.isEmpty) {
-      final inboxFetchedKey = 'inbox_detail_fetched_${article.entryId}';
+      final inboxFetchedKey = StorageKeys.inboxDetailFetched(article.entryId);
       final hasInboxFetched = GStorage.setting.get(inboxFetchedKey) == true;
       if (!hasInboxFetched) {
         final detailResult = await FeedHttp.getInboxEntryDetail(
@@ -124,26 +122,7 @@ abstract final class AutoReadabilityWorker {
             detailResult.response.isNotEmpty &&
             AccountSessionGuard.isCurrent(accountRevision)) {
           rawContent = detailResult.response;
-          processedArticle = ArticleModel(
-            entryId: article.entryId,
-            feedId: article.feedId,
-            feedTitle: article.feedTitle,
-            feedImage: article.feedImage,
-            title: article.title,
-            url: article.url,
-            content: rawContent,
-            publishedAt: article.publishedAt,
-            isRead: article.isRead,
-            category: article.category,
-            subscriptionCategory: article.subscriptionCategory,
-            author: article.author,
-            imageUrl: article.imageUrl,
-            isRejectedByAi: article.isRejectedByAi,
-            filterReason: article.filterReason,
-            filterReviewed: article.filterReviewed,
-            filteredAt: article.filteredAt,
-            userAction: article.userAction,
-          );
+          processedArticle = article.copyWith(content: rawContent);
           LocalArticleDbService.upsertOne(processedArticle);
           ArticleContentUtils.clearCacheForEntry(article.entryId);
           GStorage.setting.put(inboxFetchedKey, true);
@@ -239,25 +218,8 @@ abstract final class AutoReadabilityWorker {
         return null;
       }
 
-      final processedArticle = ArticleModel(
-        entryId: article.entryId,
-        feedId: article.feedId,
-        feedTitle: article.feedTitle,
-        feedImage: article.feedImage,
-        title: article.title,
-        url: article.url,
+      final processedArticle = article.copyWith(
         content: newHtml, // 替换长文
-        publishedAt: article.publishedAt,
-        isRead: article.isRead,
-        category: article.category,
-        subscriptionCategory: article.subscriptionCategory,
-        author: article.author,
-        imageUrl: article.imageUrl,
-        isRejectedByAi: article.isRejectedByAi,
-        filterReason: article.filterReason,
-        filterReviewed: article.filterReviewed,
-        filteredAt: article.filteredAt,
-        userAction: article.userAction,
       );
       // 将包含长文的新文章存入本地数据库
       LocalArticleDbService.upsertOne(processedArticle);
@@ -275,9 +237,11 @@ abstract final class AutoReadabilityWorker {
     }
   }
 
-  static String _fetchedKey(String entryId) => 'readability_fetched_$entryId';
+  static String _fetchedKey(String entryId) =>
+      StorageKeys.readabilityFetched(entryId);
 
-  static String _stateKey(String entryId) => '$_fetchStateKeyPrefix$entryId';
+  static String _stateKey(String entryId) =>
+      StorageKeys.readabilityFetchState(entryId);
 
   static Map<String, dynamic>? _fetchStateOf(String entryId) {
     final raw = GStorage.setting.get(_stateKey(entryId));

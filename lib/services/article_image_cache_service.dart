@@ -54,7 +54,7 @@ abstract final class ArticleImageCacheService {
     Duration(seconds: 4),
   ];
 
-  static const String _cacheKeyPrefix = 'article_body_v1';
+  static const String _cacheKeyPrefix = 'article_body_v2';
   static const String _registryPrefix = 'articleImageKeys:';
   static const String _failedRegistryPrefix = 'articleImageFailedKeys:';
 
@@ -148,7 +148,12 @@ abstract final class ArticleImageCacheService {
         );
 
   static String cacheKey(String articleId, String imageUrl) {
-    return '$_cacheKeyPrefix:$articleId:$imageUrl';
+    return '${cacheKeyPrefixForArticle(articleId)}$imageUrl';
+  }
+
+  @visibleForTesting
+  static String cacheKeyPrefixForArticle(String articleId) {
+    return '$_cacheKeyPrefix:${articleId.length}:$articleId:';
   }
 
   static String displayCacheKey(String articleId, String imageUrl) {
@@ -244,6 +249,7 @@ abstract final class ArticleImageCacheService {
     }
 
     _removeQueuedTasksForArticle(articleId);
+    _cancelAutoRetryForArticle(articleId);
     final rawTimestamp = GStorage.readHistory.get(articleId);
     if (rawTimestamp is int) {
       _cleanupDueAt[articleId] = DateTime.fromMillisecondsSinceEpoch(
@@ -630,7 +636,7 @@ abstract final class ArticleImageCacheService {
 
   /// 取消某篇自动重试中（等待退避 Timer）的任务，用于清理时停止退避。
   static void _cancelAutoRetryForArticle(String articleId) {
-    final prefix = '$_cacheKeyPrefix:$articleId:';
+    final prefix = cacheKeyPrefixForArticle(articleId);
     _retryScheduler.cancelWhere((key) => key.startsWith(prefix));
   }
 
@@ -820,7 +826,7 @@ abstract final class ArticleImageCacheService {
   }
 
   static bool _hasRunningTasksForArticle(String articleId) {
-    final prefix = '$_cacheKeyPrefix:$articleId:';
+    final prefix = cacheKeyPrefixForArticle(articleId);
     return _runningKeys.any((key) => key.startsWith(prefix));
   }
 }

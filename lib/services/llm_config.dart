@@ -2,6 +2,9 @@ import '../utils/storage.dart';
 
 /// LLM 参数配置（翻译 / 摘要各自独立）
 class LlmConfig {
+  static const int minConcurrency = 1;
+  static const int maxConcurrency = 1024;
+
   final String model;
   final bool thinking;
   final String reasoningEffort; // high / max
@@ -133,9 +136,10 @@ class LlmConfig {
       maxTokens:
           (GStorage.setting.get('${prefix}max_tokens') as int?) ??
           defaults.maxTokens,
-      concurrency:
-          (GStorage.setting.get('${prefix}concurrency') as int?) ??
-          defaults.concurrency,
+      concurrency: _normalizeConcurrency(
+        GStorage.setting.get('${prefix}concurrency'),
+        defaults.concurrency,
+      ),
     );
   }
 
@@ -146,7 +150,9 @@ class LlmConfig {
       '${prefix}reasoning_effort': c.reasoningEffort,
       '${prefix}temperature': c.temperature,
       '${prefix}max_tokens': c.maxTokens,
-      '${prefix}concurrency': c.concurrency,
+      '${prefix}concurrency': c.concurrency
+          .clamp(minConcurrency, maxConcurrency)
+          .toInt(),
     });
   }
 
@@ -159,5 +165,12 @@ class LlmConfig {
       '${prefix}max_tokens',
       '${prefix}concurrency',
     ]);
+  }
+
+  static int _normalizeConcurrency(Object? value, int fallback) {
+    if (value is int && value >= minConcurrency && value <= maxConcurrency) {
+      return value;
+    }
+    return fallback;
   }
 }

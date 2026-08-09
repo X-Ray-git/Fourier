@@ -1,6 +1,8 @@
 import '../utils/source_taxonomy.dart';
 import '../utils/html_entity_utils.dart';
 
+const Object _articleFieldUnset = Object();
+
 class ArticleModel {
   final String entryId;
   final String feedId;
@@ -46,6 +48,62 @@ class ArticleModel {
     this.filteredAt,
     this.userAction,
   });
+
+  ArticleModel copyWith({
+    String? entryId,
+    String? feedId,
+    String? feedTitle,
+    Object? feedImage = _articleFieldUnset,
+    String? title,
+    String? url,
+    Object? content = _articleFieldUnset,
+    String? publishedAt,
+    bool? isRead,
+    String? category,
+    String? subscriptionCategory,
+    Object? author = _articleFieldUnset,
+    Object? imageUrl = _articleFieldUnset,
+    bool? isRejectedByAi,
+    Object? filterReason = _articleFieldUnset,
+    bool? filterReviewed,
+    Object? filteredAt = _articleFieldUnset,
+    Object? userAction = _articleFieldUnset,
+  }) {
+    return ArticleModel(
+      entryId: entryId ?? this.entryId,
+      feedId: feedId ?? this.feedId,
+      feedTitle: feedTitle ?? this.feedTitle,
+      feedImage: identical(feedImage, _articleFieldUnset)
+          ? this.feedImage
+          : feedImage as String?,
+      title: title ?? this.title,
+      url: url ?? this.url,
+      content: identical(content, _articleFieldUnset)
+          ? this.content
+          : content as String?,
+      publishedAt: publishedAt ?? this.publishedAt,
+      isRead: isRead ?? this.isRead,
+      category: category ?? this.category,
+      subscriptionCategory: subscriptionCategory ?? this.subscriptionCategory,
+      author: identical(author, _articleFieldUnset)
+          ? this.author
+          : author as String?,
+      imageUrl: identical(imageUrl, _articleFieldUnset)
+          ? this.imageUrl
+          : imageUrl as String?,
+      isRejectedByAi: isRejectedByAi ?? this.isRejectedByAi,
+      filterReason: identical(filterReason, _articleFieldUnset)
+          ? this.filterReason
+          : filterReason as String?,
+      filterReviewed: filterReviewed ?? this.filterReviewed,
+      filteredAt: identical(filteredAt, _articleFieldUnset)
+          ? this.filteredAt
+          : filteredAt as int?,
+      userAction: identical(userAction, _articleFieldUnset)
+          ? this.userAction
+          : userAction as String?,
+    );
+  }
 
   factory ArticleModel.fromEntryJson(
     Map<String, dynamic> item, {

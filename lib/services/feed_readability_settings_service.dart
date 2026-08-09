@@ -1,8 +1,11 @@
+import 'package:get/get.dart';
+
 import '../utils/storage.dart';
 
 /// 管理每个订阅源的自动提取长文设置
 abstract final class FeedReadabilitySettingsService {
   static const String _keyPrefix = 'feed_auto_readability_';
+  static final RxInt version = 0.obs;
 
   static bool isAutoReadabilityEnabled(String feedId) {
     if (feedId.isEmpty) return false;
@@ -13,6 +16,7 @@ abstract final class FeedReadabilitySettingsService {
   static Future<void> setAutoReadability(String feedId, bool enabled) async {
     if (feedId.isEmpty) return;
     await GStorage.setting.put('$_keyPrefix$feedId', enabled);
+    version.value++;
   }
 
   static Future<void> toggleAutoReadability(String feedId) async {
@@ -31,5 +35,6 @@ abstract final class FeedReadabilitySettingsService {
     for (final key in keysToDelete) {
       await GStorage.setting.delete(key);
     }
+    if (keysToDelete.isNotEmpty) version.value++;
   }
 }

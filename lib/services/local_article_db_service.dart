@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
+import '../common/constants/constants.dart';
 import '../models/article.dart';
 import '../utils/storage.dart';
 import 'analysis_event_ledger.dart';
@@ -42,6 +45,48 @@ abstract final class LocalArticleDbService {
     final raw = GStorage.readStatus.get(entryId);
     if (raw is bool) return raw;
     return null;
+  }
+
+  /// Reconciles a local read-state override with one successful unread
+  /// snapshot. Returns whether the caller should infer the article as read.
+  static bool reconcileUnreadSnapshotEntry(
+    String entryId, {
+    required bool appearsUnread,
+  }) {
+    final override = readOverrideOf(entryId);
+    if (appearsUnread) {
+      if (override == false) GStorage.readStatus.delete(entryId);
+      return false;
+    }
+    if (override == false) return false;
+    if (override == true) GStorage.readStatus.delete(entryId);
+    return true;
+  }
+
+  /// Applies pending local read/unread choices over a server or cache snapshot.
+  static List<ArticleModel> mergeReadOverrides(Iterable<ArticleModel> source) {
+    return source
+        .map((article) {
+          final override = readOverrideOf(article.entryId);
+          if (override == null || override == article.isRead) return article;
+          return article.copyWith(isRead: override);
+        })
+        .toList(growable: false);
+  }
+
+  @visibleForTesting
+  static Future<void> removeArticleTransientState(
+    Iterable<String> entryIds,
+  ) async {
+    final keys = <String>[];
+    for (final entryId in entryIds) {
+      keys.addAll([
+        StorageKeys.readabilityFetched(entryId),
+        StorageKeys.readabilityFetchState(entryId),
+        StorageKeys.inboxDetailFetched(entryId),
+      ]);
+    }
+    if (keys.isNotEmpty) await GStorage.setting.deleteAll(keys);
   }
 
   static void upsertMany(
@@ -167,26 +212,7 @@ abstract final class LocalArticleDbService {
       before: old,
       source: source,
     );
-    final updated = ArticleModel(
-      entryId: old.entryId,
-      feedId: old.feedId,
-      feedTitle: old.feedTitle,
-      feedImage: old.feedImage,
-      title: old.title,
-      url: old.url,
-      content: old.content,
-      publishedAt: old.publishedAt,
-      isRead: isRead,
-      category: old.category,
-      subscriptionCategory: old.subscriptionCategory,
-      author: old.author,
-      imageUrl: old.imageUrl,
-      isRejectedByAi: old.isRejectedByAi,
-      filterReason: old.filterReason,
-      filterReviewed: old.filterReviewed,
-      filteredAt: old.filteredAt,
-      userAction: old.userAction,
-    );
+    final updated = old.copyWith(isRead: isRead);
     GStorage.articleDb.put(entryId, updated.toJson());
     invalidateCache();
     if (!isRead) {
@@ -250,6 +276,7 @@ abstract final class LocalArticleDbService {
 
     if (toDelete.isNotEmpty) {
       GStorage.articleDb.deleteAll(toDelete);
+      unawaited(removeArticleTransientState(toDelete));
       invalidateCache();
     }
   }

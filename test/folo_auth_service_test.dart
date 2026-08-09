@@ -91,4 +91,17 @@ void main() {
     expect(named.profile.imageUrl, 'https://example.com/avatar.png');
     expect(emailOnly.displayName, 'x@example.com');
   });
+
+  test('rejects malformed session tokens as credential errors', () async {
+    await expectLater(
+      FoloAuthService.validateSessionToken('invalid;cookie'),
+      throwsA(
+        isA<FoloAuthException>().having(
+          (error) => error.kind,
+          'kind',
+          FoloAuthFailureKind.invalidCredential,
+        ),
+      ),
+    );
+  });
 }

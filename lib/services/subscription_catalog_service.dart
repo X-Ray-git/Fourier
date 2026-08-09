@@ -30,12 +30,14 @@ abstract final class SubscriptionCatalogService {
   static final version = 0.obs;
   static List<FeedModel> _feeds = ContentCacheService.readSubscriptions();
   static Future<SubscriptionCatalogSyncResult>? _syncInFlight;
+  static int _localMutationRevision = 0;
 
   static List<FeedModel> get feeds => List.unmodifiable(_feeds);
 
   static void reset() {
     _feeds = const [];
     _syncInFlight = null;
+    _localMutationRevision++;
     version.value++;
   }
 
@@ -74,48 +76,56 @@ abstract final class SubscriptionCatalogService {
     final cached = ContentCacheService.readSubscriptions();
     if (_feeds.isEmpty && cached.isNotEmpty) _feeds = cached;
 
-    final results = await Future.wait([
-      FeedHttp.getSubscriptions(),
-      FeedHttp.getInboxes(),
-    ]);
-    if (!AccountSessionGuard.isCurrent(accountRevision)) {
-      return const SubscriptionCatalogSyncResult(
-        feeds: [],
-        subscriptionsSucceeded: false,
-        inboxesSucceeded: false,
+    while (AccountSessionGuard.isCurrent(accountRevision)) {
+      final mutationRevision = _localMutationRevision;
+      final results = await Future.wait([
+        FeedHttp.getSubscriptions(),
+        FeedHttp.getInboxes(),
+      ]);
+      if (!AccountSessionGuard.isCurrent(accountRevision)) break;
+
+      // A local create/update/unsubscribe completed while these requests were
+      // in flight. Their responses may represent the older server state, so
+      // fetch once more instead of publishing a catalog that reverts the UI.
+      if (mutationRevision != _localMutationRevision) continue;
+
+      final subscriptionsResult = results[0];
+      final inboxesResult = results[1];
+
+      final freshSubscriptions = subscriptionsResult is Success<List<FeedModel>>
+          ? subscriptionsResult.response
+          : null;
+      final freshInboxes = inboxesResult is Success<List<Map<String, dynamic>>>
+          ? inboxesResult.response.map(FeedModel.fromInboxJson).toList()
+          : null;
+
+      final reconciled = reconcile(
+        cached: _feeds,
+        freshSubscriptions: freshSubscriptions,
+        freshInboxes: freshInboxes,
+      );
+      _feeds = reconciled;
+      if (freshSubscriptions != null || freshInboxes != null) {
+        ContentCacheService.saveSubscriptions(reconciled);
+      }
+      version.value++;
+
+      return SubscriptionCatalogSyncResult(
+        feeds: feeds,
+        subscriptionsSucceeded: freshSubscriptions != null,
+        inboxesSucceeded: freshInboxes != null,
+        subscriptionsError: subscriptionsResult is LoadError<List<FeedModel>>
+            ? subscriptionsResult.errMsg
+            : null,
+        inboxesError: inboxesResult is LoadError<List<Map<String, dynamic>>>
+            ? inboxesResult.errMsg
+            : null,
       );
     }
-    final subscriptionsResult = results[0];
-    final inboxesResult = results[1];
-
-    final freshSubscriptions = subscriptionsResult is Success<List<FeedModel>>
-        ? subscriptionsResult.response
-        : null;
-    final freshInboxes = inboxesResult is Success<List<Map<String, dynamic>>>
-        ? inboxesResult.response.map(FeedModel.fromInboxJson).toList()
-        : null;
-
-    final reconciled = reconcile(
-      cached: cached,
-      freshSubscriptions: freshSubscriptions,
-      freshInboxes: freshInboxes,
-    );
-    _feeds = reconciled;
-    if (freshSubscriptions != null || freshInboxes != null) {
-      ContentCacheService.saveSubscriptions(reconciled);
-    }
-    version.value++;
-
-    return SubscriptionCatalogSyncResult(
-      feeds: feeds,
-      subscriptionsSucceeded: freshSubscriptions != null,
-      inboxesSucceeded: freshInboxes != null,
-      subscriptionsError: subscriptionsResult is LoadError<List<FeedModel>>
-          ? subscriptionsResult.errMsg
-          : null,
-      inboxesError: inboxesResult is LoadError<List<Map<String, dynamic>>>
-          ? inboxesResult.errMsg
-          : null,
+    return const SubscriptionCatalogSyncResult(
+      feeds: [],
+      subscriptionsSucceeded: false,
+      inboxesSucceeded: false,
     );
   }
 
@@ -148,6 +158,7 @@ abstract final class SubscriptionCatalogService {
 
   static void _replaceLocal(List<FeedModel> feeds) {
     _feeds = feeds;
+    _localMutationRevision++;
     ContentCacheService.saveSubscriptions(_feeds);
     version.value++;
   }

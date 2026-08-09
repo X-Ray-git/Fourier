@@ -3,7 +3,6 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
@@ -53,7 +52,9 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex.clamp(0, widget.imageUrls.length - 1);
+    _currentIndex = widget.imageUrls.isEmpty
+        ? 0
+        : widget.initialIndex.clamp(0, widget.imageUrls.length - 1);
     _pageController = PageController(initialPage: _currentIndex);
     _transformationController = TransformationController();
     _animationController = AnimationController(
@@ -358,24 +359,7 @@ class _ImageGalleryPageState extends State<ImageGalleryPage>
   }
 
   Future<Uint8List?> _downloadBytes(String url) async {
-    try {
-      final dio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 30),
-        ),
-      );
-      final response = await dio.get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      if (response.data != null) {
-        return Uint8List.fromList(response.data!);
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
+    return ImageClipboard.downloadBytes(url);
   }
 
   @override

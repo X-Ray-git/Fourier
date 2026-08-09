@@ -32,13 +32,13 @@ class RecentReadController extends GetxController {
   }
 
   void _loadData() {
-    loadingState.value = const Loading();
+    if (allArticles.isEmpty) loadingState.value = const Loading();
 
     // 获取本地所有文章
     final local = LocalArticleDbService.readAllArticles();
 
     // 过滤出所有已读文章，并合并覆盖状态
-    final readArticles = _mergeLocalReadState(
+    final readArticles = LocalArticleDbService.mergeReadOverrides(
       local,
     ).where((a) => a.isRead).toList();
 
@@ -76,35 +76,5 @@ class RecentReadController extends GetxController {
 
   void refreshData() {
     _loadData();
-  }
-
-  /// 同步合并已读/未读覆盖状态，这和 TimelineController 的逻辑类似
-  List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {
-    return source.map((a) {
-      final readVal = LocalArticleDbService.readOverrideOf(a.entryId);
-      if (readVal != null && readVal != a.isRead) {
-        return ArticleModel(
-          entryId: a.entryId,
-          feedId: a.feedId,
-          feedTitle: a.feedTitle,
-          feedImage: a.feedImage,
-          title: a.title,
-          url: a.url,
-          content: a.content,
-          publishedAt: a.publishedAt,
-          isRead: readVal,
-          category: a.category,
-          subscriptionCategory: a.subscriptionCategory,
-          author: a.author,
-          imageUrl: a.imageUrl,
-          isRejectedByAi: a.isRejectedByAi,
-          filterReason: a.filterReason,
-          filterReviewed: a.filterReviewed,
-          filteredAt: a.filteredAt,
-          userAction: a.userAction,
-        );
-      }
-      return a;
-    }).toList();
   }
 }

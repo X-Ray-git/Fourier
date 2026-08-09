@@ -36,10 +36,16 @@ class FoloAccountCandidate {
   String get displayName => profile.displayName;
 }
 
+enum FoloAuthFailureKind { unknown, invalidCredential, network }
+
 class FoloAuthException implements Exception {
-  const FoloAuthException(this.message);
+  const FoloAuthException(
+    this.message, {
+    this.kind = FoloAuthFailureKind.unknown,
+  });
 
   final String message;
+  final FoloAuthFailureKind kind;
 
   @override
   String toString() => message;
@@ -178,7 +184,10 @@ abstract final class FoloAuthService {
   static Future<FoloAccountCandidate> validateSessionToken(String token) async {
     final normalized = SecurityUtils.normalizeCredential(token);
     if (normalized.isEmpty || !SecurityUtils.isSafeCookieValue(normalized)) {
-      throw const FoloAuthException('Session Token 格式不合法');
+      throw const FoloAuthException(
+        'Session Token 格式不合法',
+        kind: FoloAuthFailureKind.invalidCredential,
+      );
     }
 
     final dio = _createDio();
@@ -198,7 +207,10 @@ abstract final class FoloAuthService {
       final user = _asStringMap(body?['user']);
       final session = _asStringMap(body?['session']);
       if (response.statusCode != 200 || user == null || session == null) {
-        throw const FoloAuthException('Folo 登录凭据无效或已经过期');
+        throw const FoloAuthException(
+          'Folo 登录凭据无效或已经过期',
+          kind: FoloAuthFailureKind.invalidCredential,
+        );
       }
       return FoloAccountCandidate(
         sessionToken: normalized,
@@ -208,7 +220,10 @@ abstract final class FoloAuthService {
         imageUrl: user['image']?.toString(),
       );
     } on DioException catch (error) {
-      throw FoloAuthException(_networkMessage(error));
+      throw FoloAuthException(
+        _networkMessage(error),
+        kind: FoloAuthFailureKind.network,
+      );
     } finally {
       dio.close(force: true);
     }

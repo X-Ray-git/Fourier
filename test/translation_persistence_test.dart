@@ -45,7 +45,10 @@ void main() {
     // 不重试，避免失败路径的 1s 退避拖慢测试。
     await GStorage.setting.put('auto_retry_max_count', 0);
     TranslationService.setApiKey('test-key');
+    TranslationService.debugRetryDelayOverride = (_) async {};
     HttpOverrides.global = _FakeHttpOverrides();
+    _FakeResponseSpec.queued.clear();
+    _FakeResponseSpec.requestCount = 0;
     _FakeResponseSpec.current = const _FakeResponseSpec(
       statusCode: 200,
       body: _successBody,
@@ -55,6 +58,8 @@ void main() {
   tearDown(() async {
     HttpOverrides.global = null;
     _FakeResponseSpec.current = null;
+    _FakeResponseSpec.queued.clear();
+    TranslationService.debugRetryDelayOverride = null;
     TranslationService.resetForAccountChange();
     await HiveTestHelper.tearDown();
   });
@@ -86,6 +91,26 @@ void main() {
     expect(reloaded, isNotNull);
     expect(reloaded!.isTranslated, isTrue);
     expect(reloaded.translatedContent, isNotEmpty);
+  });
+
+  test('分块翻译只重试失败的分块', () async {
+    await GStorage.setting.put('auto_retry_max_count', 1);
+    _FakeResponseSpec.queued.addAll([
+      const _FakeResponseSpec(statusCode: 200, body: _successBody),
+      const _FakeResponseSpec(statusCode: 500, body: '{"error":"retry"}'),
+    ]);
+
+    final paragraph = '<p>${'块内容。' * 1800}</p>';
+    final record = await TranslationService.translateArticle(
+      _article(content: List.filled(6, paragraph).join()),
+    );
+
+    expect(record.isTranslated, isTrue);
+    final translatedChunkCount = RegExp(
+      '译文内容',
+    ).allMatches(record.translatedContent!).length;
+    expect(translatedChunkCount, greaterThan(1));
+    expect(_FakeResponseSpec.requestCount, translatedChunkCount + 1);
   });
 
   test('错误态：完成后立即重启，错误状态不丢失', () async {
@@ -126,6 +151,8 @@ class _FakeResponseSpec {
   const _FakeResponseSpec({required this.statusCode, required this.body});
 
   static _FakeResponseSpec? current;
+  static final List<_FakeResponseSpec> queued = [];
+  static int requestCount = 0;
 }
 
 class _FakeHttpOverrides extends HttpOverrides {
@@ -214,9 +241,11 @@ class _FakeRequest implements HttpClientRequest {
 
   @override
   Future<HttpClientResponse> close() async {
-    final spec =
-        _FakeResponseSpec.current ??
-        const _FakeResponseSpec(statusCode: 500, body: 'no fake spec');
+    _FakeResponseSpec.requestCount++;
+    final spec = _FakeResponseSpec.queued.isNotEmpty
+        ? _FakeResponseSpec.queued.removeAt(0)
+        : _FakeResponseSpec.current ??
+              const _FakeResponseSpec(statusCode: 500, body: 'no fake spec');
     return _FakeResponse(statusCode: spec.statusCode, body: spec.body);
   }
 

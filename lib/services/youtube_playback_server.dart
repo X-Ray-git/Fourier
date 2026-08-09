@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 abstract final class YouTubePlaybackServer {
   static const _assetRoot = 'assets/embed_video_player';
   static const _maxProxyRequestBytes = 2 * 1024 * 1024;
+  static const _upstreamResponseTimeout = Duration(seconds: 20);
   static const _browserUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -31,7 +32,9 @@ abstract final class YouTubePlaybackServer {
     'transfer-encoding',
   };
 
-  static final HttpClient _client = HttpClient()..autoUncompress = false;
+  static final HttpClient _client = HttpClient()
+    ..autoUncompress = false
+    ..connectionTimeout = const Duration(seconds: 12);
   static Future<_ServerState>? _starting;
 
   static Future<Uri> playerUri(String videoId) async {
@@ -60,7 +63,7 @@ abstract final class YouTubePlaybackServer {
     server.listen(
       (request) => _handleRequest(state, request),
       onError: (Object error, StackTrace stackTrace) {
-        Zone.current.handleUncaughtError(error, stackTrace);
+        debugPrint('[YouTubePlaybackServer] local server error: $error');
       },
       cancelOnError: false,
     );
@@ -212,7 +215,9 @@ abstract final class YouTubePlaybackServer {
       upstream.headers.set(HttpHeaders.userAgentHeader, _browserUserAgent);
       if (body.isNotEmpty) upstream.add(body);
 
-      final upstreamResponse = await upstream.close();
+      final upstreamResponse = await upstream.close().timeout(
+        _upstreamResponseTimeout,
+      );
       final redirectLocation = upstreamResponse.headers.value(
         HttpHeaders.locationHeader,
       );

@@ -406,6 +406,7 @@ class UndoService {
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsUnreadLocal(article.entryId);
       } else {
+        GStorage.readStatus.put(article.entryId, false);
         LocalArticleDbService.setReadState(article.entryId, false);
         ArticleStateNotifier.tick(article.entryId);
       }
@@ -457,7 +458,7 @@ class UndoService {
         if (isRead) {
           GStorage.readStatus.put(article.entryId, true);
         } else {
-          GStorage.readStatus.delete(article.entryId);
+          GStorage.readStatus.put(article.entryId, false);
         }
         LocalArticleDbService.setReadState(
           article.entryId,
@@ -592,6 +593,7 @@ class UndoService {
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsUnreadLocal(article.entryId);
     } else {
+      GStorage.readStatus.put(article.entryId, false);
       LocalArticleDbService.setReadState(article.entryId, false);
       ArticleStateNotifier.tick(article.entryId);
     }
@@ -611,6 +613,7 @@ class UndoService {
           recordHistory: false,
         );
       } else {
+        GStorage.readStatus.put(article.entryId, true);
         LocalArticleDbService.setReadState(article.entryId, true);
         ArticleStateNotifier.tick(article.entryId);
       }
@@ -823,24 +826,10 @@ class UndoService {
     bool? isRejectedByAi,
     String? userAction,
   }) {
-    return ArticleModel(
-      entryId: article.entryId,
-      feedId: article.feedId,
-      feedTitle: article.feedTitle,
-      feedImage: article.feedImage,
-      title: article.title,
-      url: article.url,
-      content: article.content,
-      publishedAt: article.publishedAt,
+    return article.copyWith(
       isRead: isRead,
-      category: article.category,
-      subscriptionCategory: article.subscriptionCategory,
-      author: article.author,
-      imageUrl: article.imageUrl,
       isRejectedByAi: isRejectedByAi ?? article.isRejectedByAi,
-      filterReason: article.filterReason,
       filterReviewed: filterReviewed,
-      filteredAt: article.filteredAt,
       userAction: userAction ?? article.userAction,
     );
   }

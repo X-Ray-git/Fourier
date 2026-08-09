@@ -28,6 +28,7 @@ import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
 import '../../services/account_service.dart';
+import '../../services/account_session_guard.dart';
 import '../../services/article_image_service.dart';
 import '../../services/analysis_event_ledger.dart';
 import '../../services/content_cache_service.dart';
@@ -61,6 +62,8 @@ class FeedDetailController extends GetxController {
   final Map<String, FeedModel> _feedMap = {};
   bool _feedsLoaded = false;
   bool _isRefreshingRecentRead = false;
+  int _loadGeneration = 0;
+  late final Worker _articleStateWorker;
 
   final articles = <ArticleModel>[].obs;
   final isAutoTranslateEnabled = false.obs;
@@ -92,8 +95,24 @@ class FeedDetailController extends GetxController {
     refreshAutoTranslateStatus();
     refreshAutoReadabilityStatus();
     refreshSilentStatus();
+    _articleStateWorker = ever(
+      ArticleStateNotifier.version,
+      (_) => _refreshFromLocal(),
+    );
     loadData();
-    ever(ArticleStateNotifier.version, (_) => _refreshFromLocal());
+  }
+
+  @override
+  void onClose() {
+    _loadGeneration++;
+    _articleStateWorker.dispose();
+    super.onClose();
+  }
+
+  bool _isLoadCurrent(int generation, int accountRevision) {
+    return !isClosed &&
+        generation == _loadGeneration &&
+        AccountSessionGuard.isCurrent(accountRevision);
   }
 
   void _applyFilter() {
@@ -179,7 +198,7 @@ class FeedDetailController extends GetxController {
     final article = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
     if (!_matchesScope(article)) return;
 
-    final merged = _mergeLocalReadState([article]).first;
+    final merged = LocalArticleDbService.mergeReadOverrides([article]).first;
     // 同步更新 allArticles
     final ai = allArticles.indexWhere((a) => a.entryId == eid);
     if (ai >= 0) {
@@ -221,6 +240,8 @@ class FeedDetailController extends GetxController {
   }
 
   Future<void> loadData() async {
+    final generation = ++_loadGeneration;
+    final accountRevision = AccountSessionGuard.revision;
     if (!AccountService.instance.isLoggedIn.value) {
       loadingState.value = const LoadError('请先在“设置”页配置 Folo Token');
       articles.clear();
@@ -234,7 +255,7 @@ class FeedDetailController extends GetxController {
         .where(_matchesScope)
         .toList();
     if (local.isNotEmpty) {
-      allArticles.value = _mergeLocalReadState(local);
+      allArticles.value = LocalArticleDbService.mergeReadOverrides(local);
       _applyFilter();
       loadingState.value = Success(articles.toList());
       hasInitialContent = true;
@@ -253,7 +274,9 @@ class FeedDetailController extends GetxController {
       _cacheScope,
     );
     if (!hasInitialContent && cachedArticles.isNotEmpty) {
-      allArticles.value = _mergeLocalReadState(cachedArticles);
+      allArticles.value = LocalArticleDbService.mergeReadOverrides(
+        cachedArticles,
+      );
       _applyFilter();
       loadingState.value = Success(articles.toList());
       hasInitialContent = true;
@@ -274,6 +297,7 @@ class FeedDetailController extends GetxController {
           _feedMap.isEmpty || !ContentCacheService.isSubscriptionsFresh();
       if (needRefresh) {
         final feedResult = await FeedHttp.getSubscriptions();
+        if (!_isLoadCurrent(generation, accountRevision)) return;
         if (feedResult is Success<List<FeedModel>>) {
           final merged = <FeedModel>[
             ...feedResult.response,
@@ -293,6 +317,7 @@ class FeedDetailController extends GetxController {
       FeedHttp.collectEntries(view: 1, withContent: true, feedMap: _feedMap),
       FeedHttp.collectAllInboxEntries(limit: 100),
     ]);
+    if (!_isLoadCurrent(generation, accountRevision)) return;
 
     final unreadResult = results[0];
     final socialResult = results[1];
@@ -332,7 +357,7 @@ class FeedDetailController extends GetxController {
     final all = LocalArticleDbService.readAllArticles()
         .where(_matchesScope)
         .toList();
-    allArticles.value = _mergeLocalReadState(all);
+    allArticles.value = LocalArticleDbService.mergeReadOverrides(all);
     _applyFilter();
     loadingState.value = Success(articles.toList());
 
@@ -342,7 +367,7 @@ class FeedDetailController extends GetxController {
     if (Get.isRegistered<SubscriptionsController>()) {
       Get.find<SubscriptionsController>().refreshUnreadCounts();
     }
-    unawaited(_refreshRecentReadWindow());
+    unawaited(_refreshRecentReadWindow(generation, accountRevision));
   }
 
   // Removed unused snapshot methods
@@ -394,11 +419,13 @@ class FeedDetailController extends GetxController {
         continue;
       }
 
-      final localOverride = LocalArticleDbService.readOverrideOf(local.entryId);
-      if (localOverride != null) {
-        // 服务端未读快照已不再包含该文，已读状态得到确认；
-        // 本地“恢复未读”覆盖也在此时失效。
-        GStorage.readStatus.delete(local.entryId);
+      final shouldInferRead =
+          LocalArticleDbService.reconcileUnreadSnapshotEntry(
+            local.entryId,
+            appearsUnread: false,
+          );
+      if (!shouldInferRead) {
+        continue;
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
       LocalArticleDbService.setReadState(
@@ -408,18 +435,27 @@ class FeedDetailController extends GetxController {
       );
     }
 
+    for (final article in unreadData) {
+      LocalArticleDbService.reconcileUnreadSnapshotEntry(
+        article.entryId,
+        appearsUnread: true,
+      );
+    }
+
     // 未读请求可能早于 mark-read 请求发出，返回的仍是旧快照。
     // 本地已读覆盖必须保留到某次成功快照明确不再包含该文章。
     LocalArticleDbService.upsertMany(unreadData, defaultReadState: false);
     AutoReadabilityWorker.enqueueMany(unreadData);
   }
 
-  Future<void> _refreshRecentReadWindow() async {
+  Future<void> _refreshRecentReadWindow(
+    int generation,
+    int accountRevision,
+  ) async {
     if (_isRefreshingRecentRead || !AccountService.instance.isLoggedIn.value) {
       return;
     }
     _isRefreshingRecentRead = true;
-
     try {
       final windowStart = DateTime.now().subtract(
         Duration(days: _readSyncWindowDays),
@@ -440,6 +476,7 @@ class FeedDetailController extends GetxController {
           feedMap: _feedMap,
         ),
       ]);
+      if (!_isLoadCurrent(generation, accountRevision)) return;
 
       final feedsReadResult = readResults[0];
       final socialReadResult = readResults[1];
@@ -468,7 +505,7 @@ class FeedDetailController extends GetxController {
       final all = LocalArticleDbService.readAllArticles()
           .where(_matchesScope)
           .toList();
-      allArticles.value = _mergeLocalReadState(all);
+      allArticles.value = LocalArticleDbService.mergeReadOverrides(all);
       _applyFilter();
       loadingState.value = Success(articles.toList());
 
@@ -491,35 +528,6 @@ class FeedDetailController extends GetxController {
     } finally {
       _isRefreshingRecentRead = false;
     }
-  }
-
-  List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {
-    return source.map((a) {
-      final localRead = LocalArticleDbService.readOverrideOf(a.entryId);
-      if (localRead != null && localRead != a.isRead) {
-        return ArticleModel(
-          entryId: a.entryId,
-          feedId: a.feedId,
-          feedTitle: a.feedTitle,
-          feedImage: a.feedImage,
-          title: a.title,
-          url: a.url,
-          content: a.content,
-          publishedAt: a.publishedAt,
-          isRead: localRead,
-          category: a.category,
-          subscriptionCategory: a.subscriptionCategory,
-          author: a.author,
-          imageUrl: a.imageUrl,
-          isRejectedByAi: a.isRejectedByAi,
-          filterReason: a.filterReason,
-          filterReviewed: a.filterReviewed,
-          filteredAt: a.filteredAt,
-          userAction: a.userAction,
-        );
-      }
-      return a;
-    }).toList();
   }
 }
 

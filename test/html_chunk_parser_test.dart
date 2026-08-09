@@ -100,6 +100,31 @@ void main() {
     expect(find.text('打开原文'), findsOneWidget);
   });
 
+  testWidgets('HtmlChunkCard invalidates cached content when chunk changes', (
+    tester,
+  ) async {
+    final first = HtmlChunkParser.parseSync('<p>First content</p>').single;
+    final second = HtmlChunkParser.parseSync('<p>Second content</p>').single;
+
+    Widget build(HtmlChunk chunk) => MaterialApp(
+      home: Scaffold(
+        body: HtmlChunkCard(
+          key: const ValueKey('stable-chunk-slot'),
+          chunk: chunk,
+          articleId: 'entry-id',
+          maxWidth: 420,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(build(first));
+    expect(find.text('First content'), findsOneWidget);
+
+    await tester.pumpWidget(build(second));
+    expect(find.text('First content'), findsNothing);
+    expect(find.text('Second content'), findsOneWidget);
+  });
+
   testWidgets('Bilibili iframe renders as a lazy video player', (tester) async {
     final chunk = HtmlChunkParser.parseSync(
       '<iframe src="https://player.bilibili.com/player.html?bvid=BV1ZiM86BEwu&amp;autoplay=false"></iframe>',

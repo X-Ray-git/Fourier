@@ -3,6 +3,69 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 
 void main() {
+  test('copyWith preserves fields that are not provided', () {
+    final original = ArticleModel(
+      entryId: 'entry-1',
+      feedId: 'feed-1',
+      feedTitle: 'Feed',
+      feedImage: 'https://example.com/feed.png',
+      title: 'Title',
+      url: 'https://example.com/article',
+      content: '<p>Body</p>',
+      author: 'Author',
+      imageUrl: 'https://example.com/image.png',
+      filterReason: 'Reason',
+      filteredAt: 123,
+      userAction: ArticleModel.userActionKeep,
+    );
+
+    final updated = original.copyWith(isRead: true);
+
+    expect(updated.isRead, isTrue);
+    expect(updated.feedImage, original.feedImage);
+    expect(updated.content, original.content);
+    expect(updated.author, original.author);
+    expect(updated.imageUrl, original.imageUrl);
+    expect(updated.filterReason, original.filterReason);
+    expect(updated.filteredAt, original.filteredAt);
+    expect(updated.userAction, original.userAction);
+  });
+
+  test('copyWith can explicitly clear nullable fields', () {
+    final original = ArticleModel(
+      entryId: 'entry-1',
+      feedId: 'feed-1',
+      feedTitle: 'Feed',
+      feedImage: 'https://example.com/feed.png',
+      title: 'Title',
+      url: 'https://example.com/article',
+      content: '<p>Body</p>',
+      author: 'Author',
+      imageUrl: 'https://example.com/image.png',
+      filterReason: 'Reason',
+      filteredAt: 123,
+      userAction: ArticleModel.userActionKeep,
+    );
+
+    final updated = original.copyWith(
+      feedImage: null,
+      content: null,
+      author: null,
+      imageUrl: null,
+      filterReason: null,
+      filteredAt: null,
+      userAction: null,
+    );
+
+    expect(updated.feedImage, isNull);
+    expect(updated.content, isNull);
+    expect(updated.author, isNull);
+    expect(updated.imageUrl, isNull);
+    expect(updated.filterReason, isNull);
+    expect(updated.filteredAt, isNull);
+    expect(updated.userAction, isNull);
+  });
+
   test('fromEntryJson should parse nested entry/feed fields', () {
     final article = ArticleModel.fromEntryJson({
       'read': true,

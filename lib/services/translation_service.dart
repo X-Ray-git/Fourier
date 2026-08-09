@@ -95,6 +95,9 @@ abstract final class TranslationService {
   static bool _hydrated = false;
   static String? _apiKey;
 
+  @visibleForTesting
+  static Future<void> Function(Duration duration)? debugRetryDelayOverride;
+
   static void setApiKey(String key) => _apiKey = key.trim();
 
   static String? getApiKey() =>
@@ -239,11 +242,16 @@ abstract final class TranslationService {
       accountRevision,
     );
     _inFlight[article.entryId] = future;
-    future.whenComplete(() {
+    void clearInFlight() {
       if (identical(_inFlight[article.entryId], future)) {
         _inFlight.remove(article.entryId);
       }
-    });
+    }
+
+    future.then<void>(
+      (_) => clearInFlight(),
+      onError: (Object _, StackTrace _) => clearInFlight(),
+    );
     return future;
   }
 
@@ -321,9 +329,6 @@ abstract final class TranslationService {
         attempt: attempt,
       );
       try {
-        _dio.options.headers['Authorization'] = 'Bearer $apiKey';
-        _dio.options.headers['Content-Type'] = 'application/json';
-
         final requestBody = <String, dynamic>{
           'messages': [
             {'role': 'system', 'content': systemPrompt},
@@ -337,6 +342,12 @@ abstract final class TranslationService {
         final response = await _dio.post(
           '/chat/completions',
           data: requestBody,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+          ),
         );
         await trace.recordResponse(
           response.data,
@@ -403,7 +414,7 @@ abstract final class TranslationService {
           debugPrint(
             '[Translation] Attempt $attempt failed for ${article.entryId}, retrying in 1s...',
           );
-          await Future.delayed(const Duration(seconds: 1));
+          await _waitBeforeRetry();
           continue;
         }
 
@@ -459,33 +470,30 @@ abstract final class TranslationService {
     debugPrint('[Translation] 🧩 ${article.entryId}: 切分为 ${chunks.length} 块');
 
     final llmConfig = LlmConfig.loadTranslate();
-    String? lastFailureSummary;
-    for (var attempt = 1; attempt <= totalAttempts; attempt++) {
-      final result = await _translateChunkBatch(
-        article: article,
-        targetLang: targetLang,
-        chunks: chunks,
-        apiKey: apiKey,
-        llmConfig: llmConfig,
-        attempt: attempt,
+    final result = await _translateChunkBatch(
+      article: article,
+      targetLang: targetLang,
+      chunks: chunks,
+      apiKey: apiKey,
+      llmConfig: llmConfig,
+      totalAttempts: totalAttempts,
+      accountRevision: accountRevision,
+    );
+    if (!AccountSessionGuard.isCurrent(accountRevision)) {
+      throw const _StaleAccountOperation();
+    }
+    if (result.record != null) {
+      await _writeRecord(
+        article.entryId,
+        result.record!,
+        accountRevision: accountRevision,
       );
-      if (!AccountSessionGuard.isCurrent(accountRevision)) {
-        throw const _StaleAccountOperation();
-      }
-      if (result.record != null) {
-        await _writeRecord(
-          article.entryId,
-          result.record!,
-          accountRevision: accountRevision,
-        );
-        return result.record!;
-      }
-      lastFailureSummary = result.failureSummary;
+      return result.record!;
     }
 
-    final errorMessage = lastFailureSummary == null
+    final errorMessage = result.failureSummary == null
         ? '分块翻译失败，已重试${totalAttempts - 1}次'
-        : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：$lastFailureSummary';
+        : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：${result.failureSummary}';
     await _restoreAfterFailure(
       article.entryId,
       previous,
@@ -505,33 +513,47 @@ abstract final class TranslationService {
     required List<String> chunks,
     required String apiKey,
     required LlmConfig llmConfig,
-    required int attempt,
+    required int totalAttempts,
+    required int accountRevision,
   }) async {
-    final futures = List<Future<_ChunkResult>>.generate(chunks.length, (i) {
-      return _translateOneChunk(
-        i: i,
-        total: chunks.length,
-        chunkHtml: chunks[i],
-        articleId: article.entryId,
-        articleTitle: article.title,
-        apiKey: apiKey,
-        targetLang: targetLang,
-        llmConfig: llmConfig,
-        attempt: attempt,
-      );
-    });
+    final results = <_ChunkResult>[];
+    for (var i = 0; i < chunks.length; i++) {
+      _ChunkResult? lastFailure;
+      for (var attempt = 1; attempt <= totalAttempts; attempt++) {
+        final result = await _translateOneChunk(
+          i: i,
+          total: chunks.length,
+          chunkHtml: chunks[i],
+          articleId: article.entryId,
+          articleTitle: article.title,
+          apiKey: apiKey,
+          targetLang: targetLang,
+          llmConfig: llmConfig,
+          attempt: attempt,
+        );
+        if (!AccountSessionGuard.isCurrent(accountRevision)) {
+          throw const _StaleAccountOperation();
+        }
+        if (result.error == null) {
+          results.add(result);
+          lastFailure = null;
+          break;
+        }
 
-    final results = await Future.wait(futures);
-    final failed = results.where((r) => r.error != null).toList();
-    if (failed.isNotEmpty) {
-      for (final r in failed) {
+        lastFailure = result;
         debugPrint(
-          '[Translation] 🧩 第 $attempt 次，第 ${r.index + 1}/${chunks.length} 块失败：${r.error}',
+          '[Translation] 🧩 第 ${i + 1}/${chunks.length} 块'
+          '第 $attempt 次失败：${result.error}',
+        );
+        if (attempt < totalAttempts) {
+          await _waitBeforeRetry();
+        }
+      }
+      if (lastFailure != null) {
+        return _ChunkBatchResult.failure(
+          _formatChunkFailures([lastFailure], chunks.length),
         );
       }
-      return _ChunkBatchResult.failure(
-        _formatChunkFailures(failed, chunks.length),
-      );
     }
 
     final parts = <String>[];
@@ -796,6 +818,12 @@ abstract final class TranslationService {
     final message = e.message.trim();
     if (message.isEmpty) return '格式不合法';
     return message.length <= 80 ? message : '${message.substring(0, 80)}...';
+  }
+
+  static Future<void> _waitBeforeRetry() {
+    final override = debugRetryDelayOverride;
+    if (override != null) return override(const Duration(seconds: 1));
+    return Future.delayed(const Duration(seconds: 1));
   }
 
   static String _formatChunkFailures(List<_ChunkResult> failed, int total) {

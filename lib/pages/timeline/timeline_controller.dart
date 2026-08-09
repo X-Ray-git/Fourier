@@ -50,9 +50,6 @@ class TimelineController extends GetxController {
   final isSyncing = false.obs;
   final isSilentSelected = false.obs;
 
-  String? _cursor;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
   bool _isRefreshingRecentRead = false;
   bool _isBatchingScopeChange = false;
   bool _reloadAfterAccountChange = false;
@@ -92,8 +89,6 @@ class TimelineController extends GetxController {
   }
 
   void _handleAccountChanged() {
-    _cursor = null;
-    _hasMore = false;
     _feedMap.clear();
     articles.clear();
     allArticles.clear();
@@ -158,9 +153,6 @@ class TimelineController extends GetxController {
 
   Future<void> loadData() async {
     final accountRevision = AccountSessionGuard.revision;
-    _cursor = null;
-    _hasMore = false;
-
     unawaited(ReadSyncService.syncPendingReads());
     _loadFromLocalDatabase(resetReason: 'loadData.localCache');
     if (allArticles.isEmpty) {
@@ -272,21 +264,32 @@ class TimelineController extends GetxController {
       }
 
       final localOverride = LocalArticleDbService.readOverrideOf(local.entryId);
-      if (localOverride != null) {
-        if (localOverride) {
-          _logReadStateProbe(local.entryId, 'snapshot.confirms-local-read');
-          _probeLocallyReadIds.remove(local.entryId);
-          _probeReportedReappearedIds.remove(local.entryId);
-        }
-        // 服务端未读快照已不再包含该文，已读状态得到确认；
-        // 本地“恢复未读”覆盖也在此时失效。
-        GStorage.readStatus.delete(local.entryId);
+      final shouldInferRead =
+          LocalArticleDbService.reconcileUnreadSnapshotEntry(
+            local.entryId,
+            appearsUnread: false,
+          );
+      if (!shouldInferRead) {
+        continue;
+      }
+      if (localOverride == true) {
+        _logReadStateProbe(local.entryId, 'snapshot.confirms-local-read');
+        _probeLocallyReadIds.remove(local.entryId);
+        _probeReportedReappearedIds.remove(local.entryId);
       }
       // 只更新本地缓存，不创建 readStatus 覆盖（系统推断，非用户操作）
       LocalArticleDbService.setReadState(
         local.entryId,
         true,
         source: ReadStateChangeSource.syncInference,
+      );
+    }
+
+    // 服务端重新返回文章时，才确认本地“恢复未读”操作。
+    for (final article in unreadData) {
+      LocalArticleDbService.reconcileUnreadSnapshotEntry(
+        article.entryId,
+        appearsUnread: true,
       );
     }
 
@@ -391,31 +394,6 @@ class TimelineController extends GetxController {
     return DateTime.tryParse(raw)?.millisecondsSinceEpoch;
   }
 
-  /// 加载更多（游标翻页）
-  Future<void> loadMore() async {
-    if (_isLoadingMore || !hasMore) return;
-    _isLoadingMore = true;
-
-    final result = await FeedHttp.getEntries(
-      view: 0,
-      withContent: true,
-      publishedAfter: _cursor,
-      feedMap: _feedMap,
-    );
-
-    if (result is Success<List<ArticleModel>>) {
-      final data = result.response;
-      if (data.isNotEmpty) {
-        _cursor = data.last.publishedAt;
-        LocalArticleDbService.upsertMany(_mergeLocalReadState(data));
-        _loadFromLocalDatabase(resetReason: 'pagination.loadMore');
-      }
-      _hasMore = data.length >= 50;
-    }
-
-    _isLoadingMore = false;
-  }
-
   void setViewMode(TimelineViewMode mode) {
     if (selectedMode.value == mode) return;
     resetTimelineListAnimation(reason: 'viewMode.change');
@@ -498,7 +476,7 @@ class TimelineController extends GetxController {
     _probeReportedReappearedIds.remove(entryId);
     _deferredReadVisualUpdates.remove(entryId);
     _cancelDeferredArticleStateNotification(entryId);
-    GStorage.readStatus.delete(entryId);
+    GStorage.readStatus.put(entryId, false);
     LocalArticleDbService.setReadState(entryId, false);
     _updateReadStateInMemory(entryId, false);
     ArticleStateNotifier.tick(entryId);
@@ -519,7 +497,7 @@ class TimelineController extends GetxController {
       if (isRead) {
         GStorage.readStatus.put(entryId, true);
       } else {
-        GStorage.readStatus.delete(entryId);
+        GStorage.readStatus.put(entryId, false);
       }
       LocalArticleDbService.setReadState(
         entryId,
@@ -599,8 +577,6 @@ class TimelineController extends GetxController {
     super.onClose();
   }
 
-  bool get hasMore => selectedMode.value != TimelineViewMode.read && _hasMore;
-  bool get isLoadingMore => _isLoadingMore;
   int get timelineListResetVersion => _timelineListResetVersion;
   String get timelineScopeKey => _timelineScopeKey;
 
@@ -726,7 +702,7 @@ class TimelineController extends GetxController {
 
   void _loadFromLocalDatabase({required String resetReason}) {
     final local = LocalArticleDbService.readAllArticles();
-    allArticles.value = _mergeLocalReadState(local);
+    allArticles.value = LocalArticleDbService.mergeReadOverrides(local);
     resetTimelineListAnimation(reason: resetReason);
     _applyFilter();
     _updateFilterCount();
@@ -839,26 +815,7 @@ class TimelineController extends GetxController {
     final localOverride = GStorage.readStatus.get(entryId);
     final mergedRead = localOverride == true ? true : updatedFromDb.isRead;
 
-    final finalUpdated = ArticleModel(
-      entryId: updatedFromDb.entryId,
-      feedId: updatedFromDb.feedId,
-      feedTitle: updatedFromDb.feedTitle,
-      feedImage: updatedFromDb.feedImage,
-      title: updatedFromDb.title,
-      url: updatedFromDb.url,
-      content: updatedFromDb.content,
-      publishedAt: updatedFromDb.publishedAt,
-      isRead: mergedRead,
-      category: updatedFromDb.category,
-      subscriptionCategory: updatedFromDb.subscriptionCategory,
-      author: updatedFromDb.author,
-      imageUrl: updatedFromDb.imageUrl,
-      isRejectedByAi: updatedFromDb.isRejectedByAi,
-      filterReason: updatedFromDb.filterReason,
-      filterReviewed: updatedFromDb.filterReviewed,
-      filteredAt: updatedFromDb.filteredAt,
-      userAction: updatedFromDb.userAction,
-    );
+    final finalUpdated = updatedFromDb.copyWith(isRead: mergedRead);
 
     allArticles[idx] = finalUpdated;
     _applyFilter();
@@ -911,54 +868,6 @@ class TimelineController extends GetxController {
   }
 
   ArticleModel _copyArticleWithReadState(ArticleModel article, bool isRead) {
-    return ArticleModel(
-      entryId: article.entryId,
-      feedId: article.feedId,
-      feedTitle: article.feedTitle,
-      feedImage: article.feedImage,
-      title: article.title,
-      url: article.url,
-      content: article.content,
-      publishedAt: article.publishedAt,
-      isRead: isRead,
-      category: article.category,
-      subscriptionCategory: article.subscriptionCategory,
-      author: article.author,
-      imageUrl: article.imageUrl,
-      isRejectedByAi: article.isRejectedByAi,
-      filterReason: article.filterReason,
-      filterReviewed: article.filterReviewed,
-      filteredAt: article.filteredAt,
-      userAction: article.userAction,
-    );
-  }
-
-  List<ArticleModel> _mergeLocalReadState(List<ArticleModel> source) {
-    return source.map((a) {
-      final readVal = LocalArticleDbService.readOverrideOf(a.entryId);
-      if (readVal != null && readVal != a.isRead) {
-        return ArticleModel(
-          entryId: a.entryId,
-          feedId: a.feedId,
-          feedTitle: a.feedTitle,
-          feedImage: a.feedImage,
-          title: a.title,
-          url: a.url,
-          content: a.content,
-          publishedAt: a.publishedAt,
-          isRead: readVal,
-          category: a.category,
-          subscriptionCategory: a.subscriptionCategory,
-          author: a.author,
-          imageUrl: a.imageUrl,
-          isRejectedByAi: a.isRejectedByAi,
-          filterReason: a.filterReason,
-          filterReviewed: a.filterReviewed,
-          filteredAt: a.filteredAt,
-          userAction: a.userAction,
-        );
-      }
-      return a;
-    }).toList();
+    return article.copyWith(isRead: isRead);
   }
 }

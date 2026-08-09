@@ -6,35 +6,13 @@ abstract final class ArticleImageService {
   /// Folo 图片代理域名规则（参考 Folo img-proxy 逻辑）
   /// 仅对需要特定 Referer 才能访问的 CDN 走代理
   static final List<_ProxyRule> _proxyRules = [
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://\w+\.sinaimg\.cn'),
-      referer: 'https://weibo.com',
-    ),
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://i\.pximg\.net'),
-      referer: 'https://www.pixiv.net',
-    ),
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://cdnfile\.sspai\.com'),
-      referer: 'https://sspai.com',
-    ),
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://(?:\w|-)+\.cdninstagram\.com'),
-      referer: 'https://www.instagram.com',
-    ),
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://[\w-]+\.xhscdn\.com'),
-      referer: 'https://www.xiaohongshu.com',
-    ),
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://sp1\.piokok\.com'),
-      referer: 'https://www.piokok.com',
-      force: true,
-    ),
-    _ProxyRule(
-      domainPattern: RegExp(r'^https://[\w-]+\.qbitai\.com'),
-      referer: 'https://www.qbitai.com',
-    ),
+    _ProxyRule(domainPattern: RegExp(r'^https://\w+\.sinaimg\.cn')),
+    _ProxyRule(domainPattern: RegExp(r'^https://i\.pximg\.net')),
+    _ProxyRule(domainPattern: RegExp(r'^https://cdnfile\.sspai\.com')),
+    _ProxyRule(domainPattern: RegExp(r'^https://(?:\w|-)+\.cdninstagram\.com')),
+    _ProxyRule(domainPattern: RegExp(r'^https://[\w-]+\.xhscdn\.com')),
+    _ProxyRule(domainPattern: RegExp(r'^https://sp1\.piokok\.com')),
+    _ProxyRule(domainPattern: RegExp(r'^https://[\w-]+\.qbitai\.com')),
   ];
 
   /// 默认请求头（不含 Referer，图片代理会按域名补正确的 Referer）
@@ -86,12 +64,6 @@ abstract final class ArticleImageService {
 
 class _ProxyRule {
   final RegExp domainPattern;
-  final String referer;
-  final bool force;
 
-  const _ProxyRule({
-    required this.domainPattern,
-    required this.referer,
-    this.force = false,
-  });
+  const _ProxyRule({required this.domainPattern});
 }

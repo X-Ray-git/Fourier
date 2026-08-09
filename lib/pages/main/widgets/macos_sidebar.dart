@@ -1119,147 +1119,118 @@ class _UnreadBadge extends StatelessWidget {
 
 // ─── Feed 侧边栏自动拉取/翻译开关图标 ──────────────────
 
-class _FeedAutoReadabilityIcon extends StatefulWidget {
+class _FeedAutoReadabilityIcon extends StatelessWidget {
   final String feedId;
   const _FeedAutoReadabilityIcon({required this.feedId});
 
-  @override
-  State<_FeedAutoReadabilityIcon> createState() =>
-      _FeedAutoReadabilityIconState();
-}
-
-class _FeedAutoReadabilityIconState extends State<_FeedAutoReadabilityIcon> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = FeedReadabilitySettingsService.isAutoReadabilityEnabled(
-      widget.feedId,
-    );
-  }
-
   void _toggle() {
-    final next = !_enabled;
-    FeedReadabilitySettingsService.setAutoReadability(widget.feedId, next);
-    setState(() => _enabled = next);
+    final next = !FeedReadabilitySettingsService.isAutoReadabilityEnabled(
+      feedId,
+    );
+    FeedReadabilitySettingsService.setAutoReadability(feedId, next);
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return AppGlassTooltip(
-      message: _enabled ? '已开启自动拉取全文' : '自动拉取全文',
-      child: InkWell(
-        onTap: _toggle,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: Icon(
-            _enabled ? Icons.article : Icons.article_outlined,
-            size: 14,
-            color: _enabled
-                ? cs.primary
-                : cs.onSurfaceVariant.withValues(alpha: 0.3),
+    return Obx(() {
+      final _ = FeedReadabilitySettingsService.version.value;
+      final enabled = FeedReadabilitySettingsService.isAutoReadabilityEnabled(
+        feedId,
+      );
+      return AppGlassTooltip(
+        message: enabled ? '已开启自动拉取全文' : '自动拉取全文',
+        child: InkWell(
+          onTap: _toggle,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(
+              enabled ? Icons.article : Icons.article_outlined,
+              size: 14,
+              color: enabled
+                  ? cs.primary
+                  : cs.onSurfaceVariant.withValues(alpha: 0.3),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
-class _FeedAutoTranslateIcon extends StatefulWidget {
+class _FeedAutoTranslateIcon extends StatelessWidget {
   final String feedId;
   const _FeedAutoTranslateIcon({required this.feedId});
 
-  @override
-  State<_FeedAutoTranslateIcon> createState() => _FeedAutoTranslateIconState();
-}
-
-class _FeedAutoTranslateIconState extends State<_FeedAutoTranslateIcon> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = FeedTranslationSettingsService.isAutoTranslateEnabled(
-      widget.feedId,
-    );
-  }
-
   void _toggle() {
-    final next = !_enabled;
-    FeedTranslationSettingsService.setAutoTranslate(widget.feedId, next);
-    setState(() => _enabled = next);
+    final next = !FeedTranslationSettingsService.isAutoTranslateEnabled(feedId);
+    FeedTranslationSettingsService.setAutoTranslate(feedId, next);
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return AppGlassTooltip(
-      message: _enabled ? '已开启自动翻译' : '自动翻译',
-      child: InkWell(
-        onTap: _toggle,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: Icon(
-            _enabled ? Icons.translate : Icons.translate_outlined,
-            size: 14,
-            color: _enabled
-                ? cs.primary
-                : cs.onSurfaceVariant.withValues(alpha: 0.3),
+    return Obx(() {
+      final _ = FeedTranslationSettingsService.version.value;
+      final enabled = FeedTranslationSettingsService.isAutoTranslateEnabled(
+        feedId,
+      );
+      return AppGlassTooltip(
+        message: enabled ? '已开启自动翻译' : '自动翻译',
+        child: InkWell(
+          onTap: _toggle,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(
+              enabled ? Icons.translate : Icons.translate_outlined,
+              size: 14,
+              color: enabled
+                  ? cs.primary
+                  : cs.onSurfaceVariant.withValues(alpha: 0.3),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
-class _FeedSilentIcon extends StatefulWidget {
+class _FeedSilentIcon extends StatelessWidget {
   final String feedId;
   const _FeedSilentIcon({required this.feedId});
 
-  @override
-  State<_FeedSilentIcon> createState() => _FeedSilentIconState();
-}
-
-class _FeedSilentIconState extends State<_FeedSilentIcon> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = FeedSilentSettingsService.isSilent(widget.feedId);
-  }
-
   void _toggle() {
-    final next = !_enabled;
-    FeedSilentSettingsService.setSilent(widget.feedId, next);
-    setState(() => _enabled = next);
+    final next = !FeedSilentSettingsService.isSilent(feedId);
+    FeedSilentSettingsService.setSilent(feedId, next);
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return AppGlassTooltip(
-      message: _enabled ? '已开启静默' : '设为静默',
-      child: InkWell(
-        onTap: _toggle,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: Icon(
-            _enabled
-                ? Icons.notifications_off
-                : Icons.notifications_off_outlined,
-            size: 14,
-            color: _enabled
-                ? cs.error
-                : cs.onSurfaceVariant.withValues(alpha: 0.3),
+    return Obx(() {
+      final _ = FeedSilentSettingsService.version.value;
+      final enabled = FeedSilentSettingsService.isSilent(feedId);
+      return AppGlassTooltip(
+        message: enabled ? '已开启静默' : '设为静默',
+        child: InkWell(
+          onTap: _toggle,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(
+              enabled
+                  ? Icons.notifications_off
+                  : Icons.notifications_off_outlined,
+              size: 14,
+              color: enabled
+                  ? cs.error
+                  : cs.onSurfaceVariant.withValues(alpha: 0.3),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }

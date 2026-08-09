@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/bilibili_embed_utils.dart';
@@ -14,6 +15,7 @@ abstract final class BilibiliPlaybackServer {
   static const _maxDanmakuResponseBytes = 8 * 1024 * 1024;
   static const _resolveTimeout = Duration(seconds: 20);
   static const _subtitleTimeout = Duration(seconds: 4);
+  static const _upstreamResponseTimeout = Duration(seconds: 20);
   static const _browserUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -69,7 +71,7 @@ abstract final class BilibiliPlaybackServer {
     server.listen(
       (request) => _handleRequest(state, request),
       onError: (Object error, StackTrace stackTrace) {
-        Zone.current.handleUncaughtError(error, stackTrace);
+        debugPrint('[BilibiliPlaybackServer] local server error: $error');
       },
       cancelOnError: false,
     );
@@ -425,7 +427,9 @@ abstract final class BilibiliPlaybackServer {
       ..set(HttpHeaders.refererHeader, referer)
       ..set('Origin', 'https://www.bilibili.com');
 
-    final upstreamResponse = await upstream.close();
+    final upstreamResponse = await upstream.close().timeout(
+      _upstreamResponseTimeout,
+    );
     final redirectLocation = upstreamResponse.headers.value(
       HttpHeaders.locationHeader,
     );

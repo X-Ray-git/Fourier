@@ -31,10 +31,19 @@ abstract final class StorageKeys {
   static const String readStatus = 'readStatus';
   static const String readSyncWindowDays = 'read_sync_window_days';
   static const String badgeStrategy = 'badge_strategy';
-  static const String articleLazyLoading = 'article_lazy_loading'; // deprecated
   static const String articleInitialChunkBuildCount =
       'article_initial_chunk_build_count';
   static const String articleContentMaxWidth = 'article_content_max_width';
   static const String macosMaxFlingVelocity = 'macos_max_fling_velocity';
   static const String appearanceMode = 'appearance_mode';
+  static const String readabilityFetchedPrefix = 'readability_fetched_';
+  static const String readabilityFetchStatePrefix = 'readability_fetch_state_';
+  static const String inboxDetailFetchedPrefix = 'inbox_detail_fetched_';
+
+  static String readabilityFetched(String entryId) =>
+      '$readabilityFetchedPrefix$entryId';
+  static String readabilityFetchState(String entryId) =>
+      '$readabilityFetchStatePrefix$entryId';
+  static String inboxDetailFetched(String entryId) =>
+      '$inboxDetailFetchedPrefix$entryId';
 }

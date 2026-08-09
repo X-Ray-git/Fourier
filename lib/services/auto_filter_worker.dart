@@ -32,9 +32,6 @@ abstract final class AutoFilterWorker {
   /// 正在处理中
   static final processingCount = 0.obs;
 
-  /// 已完成（含成功和失败）
-  static final doneCount = 0.obs;
-
   /// 增量回调：审核页在前台时直接推送被拒文章
   static void Function(String entryId, String title, String reason)? onRejected;
 
@@ -105,14 +102,12 @@ abstract final class AutoFilterWorker {
     final generation = _generation;
     _running.add(article.entryId);
     processingCount.value = _running.length;
-    doneCount.value = 0;
     unawaited(
       _runTask(article).whenComplete(() {
         if (generation != _generation) return;
         _running.remove(article.entryId);
         processingCount.value = _running.length;
         queuedCount.value = _queue.length;
-        doneCount.value++;
         _pump();
       }),
     );
@@ -136,25 +131,10 @@ abstract final class AutoFilterWorker {
       if (article.isRead) return; // 处理中可能被标已读
 
       if (result.shouldReject) {
-        final updated = ArticleModel(
-          entryId: article.entryId,
-          feedId: article.feedId,
-          feedTitle: article.feedTitle,
-          feedImage: article.feedImage,
-          title: article.title,
-          url: article.url,
-          content: article.content,
-          publishedAt: article.publishedAt,
-          isRead: article.isRead,
-          category: article.category,
-          subscriptionCategory: article.subscriptionCategory,
-          author: article.author,
-          imageUrl: article.imageUrl,
+        final updated = article.copyWith(
           isRejectedByAi: true,
           filterReason: result.reason,
-          filterReviewed: article.filterReviewed,
           filteredAt: DateTime.now().millisecondsSinceEpoch,
-          userAction: article.userAction,
         );
         LocalArticleDbService.upsertOne(updated);
         ArticleStateNotifier.tick(article.entryId);
@@ -173,7 +153,9 @@ abstract final class AutoFilterWorker {
         if (raw is Map) {
           raw['filterReviewed'] = true;
           raw['isRejectedByAi'] = false;
-          GStorage.articleDb.put(article.entryId, raw);
+          await GStorage.articleDb.put(article.entryId, raw);
+          LocalArticleDbService.invalidateCache();
+          ArticleStateNotifier.tick(article.entryId);
           AnalysisEventLedger.recordAiClassification(
             article: article,
             shouldReject: false,
@@ -208,7 +190,6 @@ abstract final class AutoFilterWorker {
     _running.clear();
     queuedCount.value = 0;
     processingCount.value = 0;
-    doneCount.value = 0;
   }
 
   /// 清除单篇文章的过滤状态（用户捞回）

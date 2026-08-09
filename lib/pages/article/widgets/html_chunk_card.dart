@@ -150,6 +150,20 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
   Brightness? _cachedBrightness;
   bool _codeCopied = false;
 
+  @override
+  void didUpdateWidget(covariant HtmlChunkCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chunk != widget.chunk ||
+        oldWidget.articleId != widget.articleId ||
+        oldWidget.articleUrl != widget.articleUrl ||
+        oldWidget.maxWidth != widget.maxWidth) {
+      _cachedWidget = null;
+      _cachedBrightness = null;
+      _codeCopied = false;
+    }
+    if (oldWidget.keepAlive != widget.keepAlive) updateKeepAlive();
+  }
+
   HtmlExtension? _getLinkExtension(BuildContext context) {
     if (widget.onLinkHover == null) return null;
     return _InteractiveLinkExtension(

@@ -32,6 +32,7 @@ import '../../services/local_article_db_service.dart';
 import '../../services/macos_app_menu_service.dart';
 import '../../services/analysis_event_ledger.dart';
 import '../../services/android_haptics_service.dart';
+import '../../services/account_session_guard.dart';
 import '../../services/auto_ai_queue_coordinator.dart';
 import '../../services/external_link_service.dart';
 import '../../services/read_sync_service.dart';
@@ -47,6 +48,8 @@ import 'widgets/html_chunk_card.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'widgets/image_gallery_page.dart';
 import '../../common/widgets/hero_dialog_route.dart';
+
+enum _ArticleSyncResult { success, failed, staleAccount }
 
 /// 文章详情控制器
 class ArticleController extends GetxController {
@@ -70,6 +73,8 @@ class ArticleController extends GetxController {
   final isParsingContent = false.obs;
   Worker? _translationRecordWorker;
   String _translationSourceContent = '';
+  int _lifecycleGeneration = 0;
+  int _contentGeneration = 0;
 
   ArticleController(this.article);
 
@@ -99,11 +104,22 @@ class ArticleController extends GetxController {
 
   @override
   void onClose() {
+    _lifecycleGeneration++;
+    _contentGeneration++;
     _translationRecordWorker?.dispose();
     super.onClose();
   }
 
+  bool _isUiCurrent(int lifecycleGeneration, int accountRevision) {
+    return !isClosed &&
+        lifecycleGeneration == _lifecycleGeneration &&
+        AccountSessionGuard.isCurrent(accountRevision);
+  }
+
   Future<void> _initContent({String? overrideContent}) async {
+    final lifecycleGeneration = _lifecycleGeneration;
+    final contentGeneration = ++_contentGeneration;
+    final accountRevision = AccountSessionGuard.revision;
     isParsingContent.value = true;
 
     final rawHtml = overrideContent ?? article.content ?? '';
@@ -141,6 +157,10 @@ class ArticleController extends GetxController {
           translatedChunks: tParsedChunks,
         );
       });
+      if (!_isUiCurrent(lifecycleGeneration, accountRevision) ||
+          contentGeneration != _contentGeneration) {
+        return;
+      }
 
       normalizedContent = result.normalizedContent;
       imageUrls = result.imageUrls;
@@ -163,11 +183,17 @@ class ArticleController extends GetxController {
         showSummary.value = true;
       }
     } finally {
-      isParsingContent.value = false;
+      if (_isUiCurrent(lifecycleGeneration, accountRevision) &&
+          contentGeneration == _contentGeneration) {
+        isParsingContent.value = false;
+      }
     }
   }
 
   Future<void> _refreshTranslationFromService() async {
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
+    if (!_isUiCurrent(lifecycleGeneration, accountRevision)) return;
     final record = TranslationService.recordOf(article.entryId);
     if (record == null) {
       _translationSourceContent = '';
@@ -198,7 +224,7 @@ class ArticleController extends GetxController {
         chunks: HtmlChunkParser.parseSync(normalized),
       );
     });
-    if (isClosed) return;
+    if (!_isUiCurrent(lifecycleGeneration, accountRevision)) return;
 
     final latestSourceContent =
         TranslationService.translatedContentFor(article.entryId)?.trim() ?? '';
@@ -211,59 +237,64 @@ class ArticleController extends GetxController {
   }
 
   Future<void> _fetchInboxContent() async {
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
     final result = await FeedHttp.getInboxEntryDetail(entryId: article.entryId);
+    if (!AccountSessionGuard.isCurrent(accountRevision)) return;
     if (result is Success<String> && result.response.isNotEmpty) {
-      await _initContent(overrideContent: result.response);
       _persistFetchedContent(result.response);
-      update(); // 通知 UI 重建
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        await _initContent(overrideContent: result.response);
+        if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+          update(); // 通知 UI 重建
+        }
+      }
     }
-    isFetchingContent.value = false;
+    if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+      isFetchingContent.value = false;
+    }
   }
 
   Future<void> fetchReadabilityContent() async {
     if (article.url.isEmpty) return;
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
 
     // We shouldn't block initialization, run async
     Future.microtask(() async {
-      isFetchingReadability.value = true;
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isFetchingReadability.value = true;
+      }
       try {
         final response = await PublicContentHttp.dio.get(article.url);
+        if (!AccountSessionGuard.isCurrent(accountRevision)) return;
         final htmlStr = response.data.toString();
         final document = html_parser.parse(htmlStr);
         final articleNode = ArticleContentUtils.getReadabilityContent(document);
         if (articleNode != null) {
-          await _initContent(overrideContent: articleNode.outerHtml);
           _persistFetchedContent(articleNode.outerHtml);
+          if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+            await _initContent(overrideContent: articleNode.outerHtml);
+          }
         }
       } catch (e) {
         // silently fail on auto-fetch
       } finally {
-        isFetchingReadability.value = false;
-        isFetchingContent.value = false;
+        if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+          isFetchingReadability.value = false;
+          isFetchingContent.value = false;
+        }
       }
     });
   }
 
   void _persistFetchedContent(String content) {
-    final fetchedArticle = ArticleModel(
-      entryId: article.entryId,
-      feedId: article.feedId,
-      feedTitle: article.feedTitle,
-      feedImage: article.feedImage,
-      title: article.title,
-      url: article.url,
+    final cached = GStorage.articleDb.get(article.entryId);
+    final cachedRead = cached is Map ? cached['isRead'] as bool? : null;
+    final localRead = LocalArticleDbService.readOverrideOf(article.entryId);
+    final fetchedArticle = article.copyWith(
       content: content,
-      publishedAt: article.publishedAt,
-      isRead: isRead.value,
-      category: article.category,
-      subscriptionCategory: article.subscriptionCategory,
-      author: article.author,
-      imageUrl: article.imageUrl,
-      isRejectedByAi: article.isRejectedByAi,
-      filterReason: article.filterReason,
-      filterReviewed: article.filterReviewed,
-      filteredAt: article.filteredAt,
-      userAction: article.userAction,
+      isRead: localRead ?? cachedRead ?? article.isRead,
     );
     LocalArticleDbService.upsertOne(fetchedArticle);
     ArticleContentUtils.clearCacheForEntry(article.entryId);
@@ -274,6 +305,8 @@ class ArticleController extends GetxController {
   Future<void> markAsRead({bool showSuccess = true}) async {
     if (isRead.value) return;
     if (isUpdatingReadState.value) return;
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
 
     isUpdatingReadState.value = true;
     if (Get.isRegistered<TimelineController>()) {
@@ -292,53 +325,76 @@ class ArticleController extends GetxController {
     UndoService.recordRead(article);
     ArticleStateNotifier.tick(article.entryId);
 
-    final ok = await _retrySync(
+    final syncResult = await _retrySync(
       action: () =>
           FeedHttp.markRead(entryIds: [article.entryId], isInbox: isInbox),
       successMsg: showSuccess ? '已标记已读' : null,
       maxRetries: 5,
+      lifecycleGeneration: lifecycleGeneration,
+      accountRevision: accountRevision,
     );
+
+    if (syncResult == _ArticleSyncResult.staleAccount) {
+      ReadSyncService.removeMany([article.entryId]);
+      return;
+    }
 
     // 同步结束后移出待同步队列；本地已读覆盖保留到未读快照确认。
     ReadSyncService.removeMany([article.entryId]);
 
-    if (!ok) {
+    if (syncResult == _ArticleSyncResult.failed) {
       // 5 次失败 → 恢复本地未读，与服务器保持一致
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsUnreadLocal(article.entryId);
       } else {
+        GStorage.readStatus.put(article.entryId, false);
         LocalArticleDbService.setReadState(article.entryId, false);
       }
-      isRead.value = false;
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isRead.value = false;
+      }
       UndoService.clearForEntry(article.entryId);
       ArticleStateNotifier.tick(article.entryId);
-      AppFeedback.error('标记已读失败', '已重试5次，已恢复为未读');
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        AppFeedback.error('标记已读失败', '已重试5次，已恢复为未读');
+      }
     }
-    isUpdatingReadState.value = false;
+    if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+      isUpdatingReadState.value = false;
+    }
   }
 
   Future<void> markAsUnread() async {
     if (!isRead.value || isUpdatingReadState.value) return;
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
 
     isUpdatingReadState.value = true;
+    // Prevent an older queued read sync from racing this explicit unread action.
+    ReadSyncService.removeMany([article.entryId]);
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().markAsUnreadLocal(article.entryId);
     } else {
+      GStorage.readStatus.put(article.entryId, false);
       LocalArticleDbService.setReadState(article.entryId, false);
     }
     isRead.value = false;
     ArticleStateNotifier.tick(article.entryId);
 
-    final ok = await _retrySync(
+    final syncResult = await _retrySync(
       action: () => FeedHttp.markUnread(
         entryId: article.entryId,
         isInbox: article.category == 'inbox',
       ),
       successMsg: '已恢复未读',
       maxRetries: 5,
+      lifecycleGeneration: lifecycleGeneration,
+      accountRevision: accountRevision,
     );
 
-    if (!ok) {
+    if (syncResult == _ArticleSyncResult.staleAccount) return;
+
+    if (syncResult == _ArticleSyncResult.failed) {
       // 5 次失败 → 恢复本地已读
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsReadLocal(
@@ -349,38 +405,58 @@ class ArticleController extends GetxController {
         GStorage.readStatus.put(article.entryId, true);
         LocalArticleDbService.setReadState(article.entryId, true);
       }
-      isRead.value = true;
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isRead.value = true;
+      }
       ArticleStateNotifier.tick(article.entryId);
-      AppFeedback.error('恢复未读失败', '已重试5次，已恢复为已读');
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        AppFeedback.error('恢复未读失败', '已重试5次，已恢复为已读');
+      }
     }
-    isUpdatingReadState.value = false;
+    if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+      isUpdatingReadState.value = false;
+    }
   }
 
-  /// 带重试的云端同步。成功返回 true，5 次均失败返回 false。
-  Future<bool> _retrySync({
+  /// 带重试的云端同步，并区分失败与账号切换取消。
+  Future<_ArticleSyncResult> _retrySync({
     required Future<LoadingState<void>> Function() action,
     required String? successMsg,
+    required int lifecycleGeneration,
+    required int accountRevision,
     int maxRetries = 5,
   }) async {
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      if (!AccountSessionGuard.isCurrent(accountRevision)) {
+        return _ArticleSyncResult.staleAccount;
+      }
       final result = await action();
+      if (!AccountSessionGuard.isCurrent(accountRevision)) {
+        return _ArticleSyncResult.staleAccount;
+      }
       if (result is Success<void>) {
-        if (successMsg != null) {
+        if (successMsg != null &&
+            _isUiCurrent(lifecycleGeneration, accountRevision)) {
           if (attempt == 1) {
             AppFeedback.success(successMsg, '已同步到云端');
           } else {
             AppFeedback.success(successMsg, '重试 $attempt 次后成功');
           }
         }
-        return true;
+        return _ArticleSyncResult.success;
       }
       if (attempt < maxRetries) {
         final delay = Duration(milliseconds: 800 * attempt);
         await Future.delayed(delay);
-        AppFeedback.info('同步失败，重试中', '第 $attempt/$maxRetries 次');
+        if (!AccountSessionGuard.isCurrent(accountRevision)) {
+          return _ArticleSyncResult.staleAccount;
+        }
+        if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+          AppFeedback.info('同步失败，重试中', '第 $attempt/$maxRetries 次');
+        }
       }
     }
-    return false;
+    return _ArticleSyncResult.failed;
   }
 
   Future<void> translateArticle() async {
@@ -389,6 +465,8 @@ class ArticleController extends GetxController {
       return;
     }
 
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
     isTranslating.value = true;
     try {
       final record = await TranslationService.translateArticle(
@@ -396,6 +474,7 @@ class ArticleController extends GetxController {
         targetLang: '简体中文',
         overrideContent: normalizedContent,
       );
+      if (!_isUiCurrent(lifecycleGeneration, accountRevision)) return;
 
       if (record.translatedContent != null &&
           record.translatedContent!.isNotEmpty) {
@@ -415,9 +494,13 @@ class ArticleController extends GetxController {
         AppFeedback.error('翻译失败', record.errorMessage ?? '请检查网络连接和 API 配置');
       }
     } catch (e) {
-      AppFeedback.error('翻译出错', e.toString());
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        AppFeedback.error('翻译出错', e.toString());
+      }
     } finally {
-      isTranslating.value = false;
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isTranslating.value = false;
+      }
     }
   }
 
@@ -427,6 +510,8 @@ class ArticleController extends GetxController {
       return;
     }
 
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
     isSummarizing.value = true;
     try {
       final record = await SummaryService.summarizeArticle(
@@ -434,6 +519,7 @@ class ArticleController extends GetxController {
         targetLang: '简体中文',
         overrideContent: normalizedContent,
       );
+      if (!_isUiCurrent(lifecycleGeneration, accountRevision)) return;
 
       if (record.summaryText != null && record.summaryText!.isNotEmpty) {
         summaryText.value = record.summaryText!;
@@ -444,9 +530,13 @@ class ArticleController extends GetxController {
         AppFeedback.error('摘要失败', record.errorMessage ?? '请检查网络连接和 API 配置');
       }
     } catch (e) {
-      AppFeedback.error('摘要出错', e.toString());
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        AppFeedback.error('摘要出错', e.toString());
+      }
     } finally {
-      isSummarizing.value = false;
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isSummarizing.value = false;
+      }
     }
   }
 
@@ -479,6 +569,7 @@ class ArticleController extends GetxController {
   }
 
   void openImagePreview(String imageUrl, BuildContext context) {
+    if (imageUrls.isEmpty) return;
     Navigator.of(context, rootNavigator: true).push(
       HeroDialogRoute(
         builder: (context) => ImageGalleryPage(
@@ -586,6 +677,9 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
     AnalysisEventLedger.recordArticleOpen(
       widget.request.sequence![_currentIndex],
     );
+    LocalArticleDbService.recordReadHistory(
+      widget.request.sequence![_currentIndex].entryId,
+    );
   }
 
   @override
@@ -604,6 +698,7 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
       onPageChanged: (index) {
         _currentIndex = index;
         AnalysisEventLedger.recordArticleOpen(articles[index]);
+        LocalArticleDbService.recordReadHistory(articles[index].entryId);
         // 翻页稳定完成后提供轻微反馈。
         AndroidHapticsService.selectionClick();
       },
@@ -611,6 +706,7 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
         key: ValueKey(articles[index].entryId),
         article: articles[index],
         pageLabel: '${index + 1} / ${articles.length}',
+        recordReadHistoryOnMount: false,
       ),
     );
   }
@@ -735,6 +831,7 @@ class ArticlePageView extends StatefulWidget {
   final bool? initialShowTranslation;
   final bool? initialShowSummary;
   final ValueChanged<ArticleModel>? onOpenRelatedArticle;
+  final bool recordReadHistoryOnMount;
 
   const ArticlePageView({
     super.key,
@@ -756,6 +853,7 @@ class ArticlePageView extends StatefulWidget {
     this.initialShowTranslation,
     this.initialShowSummary,
     this.onOpenRelatedArticle,
+    this.recordReadHistoryOnMount = true,
   });
 
   @override
@@ -821,7 +919,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _initialShowSummary = widget.initialShowSummary;
     _scrollController.addListener(_handleArticleScroll);
     _focusNode = FocusNode();
-    LocalArticleDbService.recordReadHistory(widget.article.entryId);
+    if (widget.recordReadHistoryOnMount) {
+      LocalArticleDbService.recordReadHistory(widget.article.entryId);
+    }
     ArticleImageCacheService.markArticleActive(widget.article.entryId);
     // 非分页器模式（单篇路由 / macOS 分栏）下，进入视图即记录打开事件；
     // 分页器模式由 _ArticlePagerPageState 在初始页与翻页时记录。

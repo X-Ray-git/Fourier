@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 
 import '../common/constants/constants.dart';
 import '../utils/storage.dart';
+import 'feed_readability_settings_service.dart';
 import 'feed_silent_settings_service.dart';
+import 'feed_translation_settings_service.dart';
 import 'summary_service.dart';
 import 'translation_service.dart';
 
@@ -213,9 +215,14 @@ abstract final class SettingsBackupService {
     }
     await GStorage.setting.putAll(settings);
 
-    if (keysToDelete.any((key) => key.startsWith('feed_silent_')) ||
-        settings.keys.any((key) => key.startsWith('feed_silent_'))) {
+    if (_changesPrefix(keysToDelete, settings, 'feed_silent_')) {
       FeedSilentSettingsService.version.value++;
+    }
+    if (_changesPrefix(keysToDelete, settings, 'feed_auto_readability_')) {
+      FeedReadabilitySettingsService.version.value++;
+    }
+    if (_changesPrefix(keysToDelete, settings, 'feed_auto_translate_')) {
+      FeedTranslationSettingsService.version.value++;
     }
   }
 
@@ -239,6 +246,15 @@ abstract final class SettingsBackupService {
 
   static bool _startsWithAny(String key, List<String> prefixes) {
     return prefixes.any(key.startsWith);
+  }
+
+  static bool _changesPrefix(
+    List<String> deletedKeys,
+    Map<String, dynamic> importedSettings,
+    String prefix,
+  ) {
+    return deletedKeys.any((key) => key.startsWith(prefix)) ||
+        importedSettings.keys.any((key) => key.startsWith(prefix));
   }
 
   static bool _isJsonPrimitive(Object? value) {

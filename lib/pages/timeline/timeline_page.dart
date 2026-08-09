@@ -332,7 +332,6 @@ class _TimelinePageState extends State<TimelinePage> {
         _scheduleSourceReturnValidation();
       },
     );
-    _scrollController.addListener(_onScroll);
     if (Platform.isMacOS) {
       HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
       MacArticleShortcutService.instance.register(
@@ -369,7 +368,6 @@ class _TimelinePageState extends State<TimelinePage> {
     _listCoordinator.dispose();
     _undoRestoreWorker?.dispose();
     _batchScopeWorker?.dispose();
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _emptyDetailFocusNode.dispose();
     super.dispose();
@@ -626,15 +624,6 @@ class _TimelinePageState extends State<TimelinePage> {
     if (location == null) return false;
     await File(location.path).writeAsString(markdown, flush: true);
     return true;
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      if (!controller.isLoadingMore && controller.hasMore) {
-        controller.loadMore();
-      }
-    }
   }
 
   void _onAppBarTap() {

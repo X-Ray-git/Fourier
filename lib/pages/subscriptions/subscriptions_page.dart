@@ -48,7 +48,6 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    controller.refreshUnreadCounts();
     final cs = Theme.of(context).colorScheme;
 
     return Obx(() {

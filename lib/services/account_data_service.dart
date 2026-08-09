@@ -1,3 +1,4 @@
+import '../common/constants/constants.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/article_length_estimator.dart';
 import '../utils/storage.dart';
@@ -20,16 +21,17 @@ import 'undo_service.dart';
 
 /// Clears data owned by the active Folo account while preserving preferences.
 abstract final class AccountDataService {
-  static Future<void> clearForAccountChange() async {
+  static void beginAccountChange() {
     AccountSessionGuard.beginAccountChange();
-
     AutoFilterWorker.cancelProcessing();
     AutoReadabilityWorker.cancelProcessing();
     ArticleRelationWorker.cancelProcessing();
     AutoSummaryWorker.cancelProcessing();
     AutoTranslationWorker.cancelProcessing();
     ReadSyncService.clear();
+  }
 
+  static Future<void> clearForAccountChange() async {
     await ArticleImageCacheService.resetForAccountChange();
     await AnalysisEventLedger.clear();
     await Future.wait([
@@ -47,9 +49,9 @@ abstract final class AccountDataService {
         .whereType<String>()
         .where(
           (key) =>
-              key.startsWith('readability_fetched_') ||
-              key.startsWith('readability_fetch_state_') ||
-              key.startsWith('inbox_detail_fetched_'),
+              key.startsWith(StorageKeys.readabilityFetchedPrefix) ||
+              key.startsWith(StorageKeys.readabilityFetchStatePrefix) ||
+              key.startsWith(StorageKeys.inboxDetailFetchedPrefix),
         )
         .toList(growable: false);
     await GStorage.setting.deleteAll(transientSettingKeys);

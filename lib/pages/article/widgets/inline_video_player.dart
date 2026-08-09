@@ -53,7 +53,9 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
     super.dispose();
   }
 
-  void _onControllerUpdate() => setState(() {});
+  void _onControllerUpdate() {
+    if (mounted) setState(() {});
+  }
 
   void _startHideTimer() {
     _hideTimer?.cancel();
@@ -117,14 +119,18 @@ class _InlineVideoPlayerState extends State<InlineVideoPlayer> {
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
       await controller.initialize();
+      if (!mounted || !identical(_controller, controller)) return;
       await controller.setLooping(false);
+      if (!mounted || !identical(_controller, controller)) return;
       controller.addListener(_onControllerUpdate);
       await controller.play();
+      if (!mounted || !identical(_controller, controller)) return;
       _activatePlaybackShortcut();
-      if (mounted) _focusNode.requestFocus();
+      _focusNode.requestFocus();
       setState(() {});
       _startHideTimer();
     } catch (e) {
+      if (!mounted) return;
       // 带时效签名的 CDN 地址失效通常表现为 401/403 鉴权错误；
       // 其余播放错误走通用文案。
       final errorText = _controller?.value.errorDescription ?? e.toString();

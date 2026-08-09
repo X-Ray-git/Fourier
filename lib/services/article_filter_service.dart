@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
@@ -28,6 +29,17 @@ abstract final class ArticleFilterService {
       sendTimeout: _timeout,
     ),
   );
+
+  @visibleForTesting
+  static Future<Response<dynamic>> Function(
+    String path, {
+    Object? data,
+    Options? options,
+  })?
+  debugPostOverride;
+
+  @visibleForTesting
+  static Future<void> Function(Duration duration)? debugRetryDelayOverride;
 
   static String getApiKey() {
     return GStorage.setting.get('deepseek_api_key', defaultValue: '') as String;
@@ -74,72 +86,101 @@ abstract final class ArticleFilterService {
         ? '来源频道ID: ${article.feedId}'
         : '';
 
-    _dio.options.headers['Authorization'] = 'Bearer $apiKey';
-    _dio.options.headers['Content-Type'] = 'application/json';
+    final maxRetries =
+        GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
+    final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
 
-    final config = LlmConfig.loadFilter();
-    final requestBody = <String, dynamic>{
-      'messages': [
-        {'role': 'system', 'content': prompt},
-        {
-          'role': 'user',
-          'content':
-              '频道: $source\n$channelHint\n标题: $title\n正文前500字: ${textContent.substring(0, textContent.length.clamp(0, 500))}',
-        },
-      ],
-      'response_format': {'type': 'json_object'},
-      'stream': false,
-      ...config.toRequestBody(),
-    };
-    final trace = LlmRequestTrace(
-      task: LlmTaskType.filter,
-      config: config,
-      prompt: prompt,
-      articleId: article.entryId,
-    );
-    try {
-      final response = await _dio.post('/chat/completions', data: requestBody);
-      await trace.recordResponse(
-        response.data,
-        httpStatus: response.statusCode,
+    for (var attempt = 1; attempt <= totalAttempts; attempt++) {
+      final config = LlmConfig.loadFilter();
+      final requestBody = <String, dynamic>{
+        'messages': [
+          {'role': 'system', 'content': prompt},
+          {
+            'role': 'user',
+            'content':
+                '频道: $source\n$channelHint\n标题: $title\n正文前500字: ${textContent.substring(0, textContent.length.clamp(0, 500))}',
+          },
+        ],
+        'response_format': {'type': 'json_object'},
+        'stream': false,
+        ...config.toRequestBody(),
+      };
+      final trace = LlmRequestTrace(
+        task: LlmTaskType.filter,
+        config: config,
+        prompt: prompt,
+        articleId: article.entryId,
+        attempt: attempt,
       );
+      try {
+        final options = Options(
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+        );
+        final postOverride = debugPostOverride;
+        final response = postOverride != null
+            ? await postOverride(
+                '/chat/completions',
+                data: requestBody,
+                options: options,
+              )
+            : await _dio.post(
+                '/chat/completions',
+                data: requestBody,
+                options: options,
+              );
+        await trace.recordResponse(
+          response.data,
+          httpStatus: response.statusCode,
+        );
 
-      final data = response.data as Map<String, dynamic>?;
-      final choices = data?['choices'] as List<dynamic>?;
-      if (choices == null || choices.isEmpty) {
-        throw StateError('DeepSeek returned empty response');
-      }
-      final message = (choices.first as Map<String, dynamic>)['message'];
-      if (message == null) {
-        throw StateError('DeepSeek response missing message');
-      }
-      final content = message['content'] as String?;
-      if (content == null || content.trim().isEmpty) {
-        throw StateError('DeepSeek returned empty filter result');
-      }
+        final data = response.data as Map<String, dynamic>?;
+        final choices = data?['choices'] as List<dynamic>?;
+        if (choices == null || choices.isEmpty) {
+          throw StateError('DeepSeek returned empty response');
+        }
+        final message = (choices.first as Map<String, dynamic>)['message'];
+        if (message == null) {
+          throw StateError('DeepSeek response missing message');
+        }
+        final content = message['content'] as String?;
+        if (content == null || content.trim().isEmpty) {
+          throw StateError('DeepSeek returned empty filter result');
+        }
 
-      var raw = content.trim();
-      if (raw.startsWith('```')) {
-        raw = raw.replaceFirst(RegExp(r'^```(?:json)?\s*'), '');
-        raw = raw.replaceFirst(RegExp(r'\s*```$'), '');
-      }
-      final first = raw.indexOf('{');
-      final last = raw.lastIndexOf('}');
-      if (first >= 0 && last > first) {
-        raw = raw.substring(first, last + 1);
-      }
+        var raw = content.trim();
+        if (raw.startsWith('```')) {
+          raw = raw.replaceFirst(RegExp(r'^```(?:json)?\s*'), '');
+          raw = raw.replaceFirst(RegExp(r'\s*```$'), '');
+        }
+        final first = raw.indexOf('{');
+        final last = raw.lastIndexOf('}');
+        if (first >= 0 && last > first) {
+          raw = raw.substring(first, last + 1);
+        }
 
-      final parsed = jsonDecode(raw) as Map<String, dynamic>;
-      final result = FilterResult(
-        shouldReject: parsed['should_reject'] == true,
-        reason: (parsed['reason'] ?? '未分类').toString(),
-      );
-      await trace.complete();
-      return result;
-    } catch (error) {
-      await trace.fail(error);
-      rethrow;
+        final parsed = jsonDecode(raw) as Map<String, dynamic>;
+        final result = FilterResult(
+          shouldReject: parsed['should_reject'] == true,
+          reason: (parsed['reason'] ?? '未分类').toString(),
+        );
+        await trace.complete();
+        return result;
+      } catch (error) {
+        await trace.fail(error);
+        if (attempt >= totalAttempts) rethrow;
+        final delayOverride = debugRetryDelayOverride;
+        if (delayOverride != null) {
+          await delayOverride(const Duration(seconds: 1));
+        } else {
+          await Future<void>.delayed(const Duration(seconds: 1));
+        }
+      }
     }
+
+    throw StateError('Filter retries exhausted');
   }
 
   // ─── 默认 Prompt ─────────────────────────────────────────────

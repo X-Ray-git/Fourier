@@ -29,25 +29,28 @@ class ColorParser {
 
     if (colorStr.startsWith('#')) {
       final hex = colorStr.substring(1);
+      if (!RegExp(r'^[0-9a-f]+$').hasMatch(hex)) return null;
       if (hex.length == 3) {
         // #RGB -> #RRGGBB
         final r = hex[0] + hex[0];
         final g = hex[1] + hex[1];
         final b = hex[2] + hex[2];
-        return Color(int.parse('0xFF$r$g$b'));
+        return Color(int.parse('FF$r$g$b', radix: 16));
       } else if (hex.length == 6) {
-        return Color(int.parse('0xFF$hex'));
+        return Color(int.parse('FF$hex', radix: 16));
       } else if (hex.length == 8) {
         // CSS is #RRGGBBAA, Flutter is 0xAARRGGBB
         final rrggbb = hex.substring(0, 6);
         final aa = hex.substring(6, 8);
-        return Color(int.parse('0x$aa$rrggbb'));
+        return Color(int.parse('$aa$rrggbb', radix: 16));
       }
       return null;
     }
 
     if (colorStr.startsWith('rgba')) {
-      final match = RegExp(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)').firstMatch(colorStr);
+      final match = RegExp(
+        r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)',
+      ).firstMatch(colorStr);
       if (match != null) {
         final r = int.tryParse(match.group(1) ?? '0') ?? 0;
         final g = int.tryParse(match.group(2) ?? '0') ?? 0;
@@ -57,7 +60,9 @@ class ColorParser {
         return Color.fromRGBO(r, g, b, a);
       }
     } else if (colorStr.startsWith('rgb')) {
-      final match = RegExp(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)').firstMatch(colorStr);
+      final match = RegExp(
+        r'rgb\((\d+),\s*(\d+),\s*(\d+)\)',
+      ).firstMatch(colorStr);
       if (match != null) {
         final r = int.tryParse(match.group(1) ?? '0') ?? 0;
         final g = int.tryParse(match.group(2) ?? '0') ?? 0;

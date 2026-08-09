@@ -83,6 +83,21 @@ void main() {
     },
   );
 
+  test('single export keeps embedded media URLs', () {
+    final markdown = ArticleMarkdownExportService.buildArticle(
+      article: article(),
+      chunks: const [
+        HtmlChunk(
+          type: HtmlChunkType.iframeVideo,
+          content: '',
+          imageSrc: 'https://example.com/video.mp4',
+        ),
+      ],
+    );
+
+    expect(markdown, contains('https://example.com/video.mp4'));
+  });
+
   test('batch export keeps article order without a batch heading', () async {
     final markdown = await ArticleMarkdownExportService.buildBatch([
       article(id: '1', title: 'First', content: '<p>First body</p>'),

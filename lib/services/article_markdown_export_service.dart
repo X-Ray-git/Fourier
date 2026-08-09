@@ -170,7 +170,8 @@ class _ArticleMarkdownExporter {
   }
 
   String _iframeToMarkdown(HtmlChunk chunk) {
-    final src = (chunk.attributes['src'] ?? chunk.content).trim();
+    final src = (chunk.imageSrc ?? chunk.attributes['src'] ?? chunk.content)
+        .trim();
     return src;
   }
 

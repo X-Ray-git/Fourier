@@ -617,6 +617,21 @@ class _SettingsPageState extends State<SettingsPage> {
     return result == true;
   }
 
+  Future<bool> _confirmUnverifiedAccountImport(String reason) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _SettingsConfirmDialog(
+        title: '无法在线验证 Folo 账号',
+        content:
+            '$reason。继续导入会切换到配置中的账号，并清理当前账号保存在本机的文章、摘要、翻译、阅读记录和图片缓存；联网后 Fourier 会再次读取账号资料。',
+        confirmLabel: '仍然导入',
+        onCancel: () => Get.back(result: false),
+        onConfirm: () => Get.back(result: true),
+      ),
+    );
+    return result == true;
+  }
+
   Future<void> _exportSettingsToClipboard() async {
     if (!await _confirmSettingsExport()) return;
     try {
@@ -632,9 +647,30 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final payload = await SettingsBackupService.readFromClipboard();
       final nextToken = payload.sessionToken?.trim() ?? '';
-      final candidate = nextToken.isEmpty
-          ? null
-          : await FoloAuthService.validateSessionToken(nextToken);
+      final currentToken = _accountService.sessionToken?.trim() ?? '';
+      FoloAccountCandidate? candidate;
+      if (nextToken.isNotEmpty && nextToken != currentToken) {
+        try {
+          candidate = await FoloAuthService.validateSessionToken(nextToken);
+        } on FoloAuthException catch (error) {
+          if (error.kind != FoloAuthFailureKind.network) rethrow;
+          if (!mounted ||
+              !await _confirmUnverifiedAccountImport(error.message)) {
+            return;
+          }
+        }
+      } else if (nextToken.isNotEmpty) {
+        final profile = _accountService.profile.value;
+        if (profile != null) {
+          candidate = FoloAccountCandidate(
+            sessionToken: nextToken,
+            userId: profile.userId,
+            name: profile.name,
+            email: profile.email,
+            imageUrl: profile.imageUrl,
+          );
+        }
+      }
       final summary = await _accountService.applyAccountChange(
         nextSessionToken: nextToken.isEmpty ? null : nextToken,
         nextProfile: candidate?.profile,
@@ -643,6 +679,7 @@ class _SettingsPageState extends State<SettingsPage> {
           return payload.summary;
         },
       );
+      unawaited(_accountService.refreshProfileIfMissing());
       setState(_loadPersistedSettings);
       AppFeedback.success(
         '配置已导入',

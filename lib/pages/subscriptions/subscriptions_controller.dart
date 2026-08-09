@@ -44,6 +44,8 @@ class SubscriptionsController extends GetxController {
   final expandedState = <String, bool>{}.obs;
   Worker? _catalogWorker;
   Worker? _accountWorker;
+  Worker? _articleStateWorker;
+  Worker? _silentSettingsWorker;
 
   @override
   void onInit() {
@@ -58,8 +60,11 @@ class SubscriptionsController extends GetxController {
     );
     refreshUnreadCounts();
     loadData();
-    ever(ArticleStateNotifier.version, (_) => refreshUnreadCounts());
-    ever(FeedSilentSettingsService.version, (_) {
+    _articleStateWorker = ever(
+      ArticleStateNotifier.version,
+      (_) => refreshUnreadCounts(ArticleStateNotifier.lastEntryId),
+    );
+    _silentSettingsWorker = ever(FeedSilentSettingsService.version, (_) {
       refreshUnreadCounts();
       viewNodes.refresh();
     });
@@ -69,6 +74,8 @@ class SubscriptionsController extends GetxController {
   void onClose() {
     _catalogWorker?.dispose();
     _accountWorker?.dispose();
+    _articleStateWorker?.dispose();
+    _silentSettingsWorker?.dispose();
     super.onClose();
   }
 
@@ -116,11 +123,8 @@ class SubscriptionsController extends GetxController {
   /// 每源未读计数
   final _unreadCounts = <String, int>{}.obs;
 
-  void refreshUnreadCounts() {
-    final eid = ArticleStateNotifier.lastEntryId;
+  void refreshUnreadCounts([String? eid]) {
     if (eid != null) {
-      // 消费后立刻清除，防止后续调用永远走增量路径
-      ArticleStateNotifier.clearLastEntryId();
       final raw = GStorage.articleDb.get(eid);
       if (raw is Map) {
         final feedId = raw['feedId'] as String?;

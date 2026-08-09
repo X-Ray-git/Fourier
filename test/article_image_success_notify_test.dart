@@ -4,8 +4,14 @@ import 'package:fourier/services/article_image_cache_service.dart';
 import 'support/hive_test_helper.dart';
 
 void main() {
-  setUp(HiveTestHelper.setUp);
-  tearDown(HiveTestHelper.tearDown);
+  setUp(() async {
+    await HiveTestHelper.setUp();
+    ArticleImageCacheService.setEnabledForTesting(true);
+  });
+  tearDown(() async {
+    ArticleImageCacheService.setEnabledForTesting(null);
+    await HiveTestHelper.tearDown();
+  });
 
   group('ArticleImageCacheService 统一成功通知', () {
     test('正文失败状态记录后，外部/全屏成功写入缓存会清除失败并推进 revision', () async {

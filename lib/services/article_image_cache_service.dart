@@ -81,10 +81,17 @@ abstract final class ArticleImageCacheService {
   static int _runningDownloads = 0;
   static int _prefetchGeneration = 0;
   static bool _cleanupRunning = false;
+  static bool? _enabledOverrideForTesting;
 
   static BaseCacheManager get _cacheManager => DefaultCacheManager();
 
-  static bool get _enabled => Platform.isMacOS || Platform.isAndroid;
+  static bool get _enabled =>
+      _enabledOverrideForTesting ?? (Platform.isMacOS || Platform.isAndroid);
+
+  @visibleForTesting
+  static void setEnabledForTesting(bool? enabled) {
+    _enabledOverrideForTesting = enabled;
+  }
 
   static ValueListenable<ArticleImageRetryState> acquireRetryState(
     String articleId,

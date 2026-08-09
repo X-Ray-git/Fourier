@@ -64,6 +64,7 @@ flutter build macos --debug
 - Flutter 命令可能需要权限更新 Flutter SDK cache。
 - 完整 `dart analyze` 会很吵，因为 `reference/` 包含外部复制来的参考工程。
 - Flutter `3.44.6` 的分析器会对现有 renderer 和少量 helper 报 `prefer_initializing_formals` info；工具链迁移时共观察到 59 条，没有 warning/error。CI 使用 `flutter analyze --no-fatal-infos lib test`。不要为了消除本次升级带来的 info 顺带机械重写液态玻璃 renderer；后续可作为独立无行为重构处理。
+- GitHub 的 Android job 在 Ubuntu runner 上执行 Dart/Flutter 测试，`Platform.isAndroid` 在测试进程中仍为 `false`。测试受平台门控的 service 时必须使用该 service 明确提供的 test override，并在 `tearDown` 恢复；不能依赖开发机恰好是 macOS，也不能为迁就 CI 删除生产环境的平台边界。
 
 当前测试：
 

@@ -26,7 +26,7 @@ abstract final class AndroidHapticsService {
     await HapticFeedback.selectionClick();
   }
 
-  /// 已读状态变更成功等轻反馈。
+  /// 已读按钮按下等明确操作的轻反馈。
   static Future<void> lightImpact() async {
     if (!isEnabled) return;
     await HapticFeedback.lightImpact();

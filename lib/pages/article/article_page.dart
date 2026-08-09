@@ -299,10 +299,7 @@ class ArticleController extends GetxController {
     // 同步结束后移出待同步队列；本地已读覆盖保留到未读快照确认。
     ReadSyncService.removeMany([article.entryId]);
 
-    if (ok) {
-      // 标为已读成功：轻反馈。
-      await AndroidHapticsService.lightImpact();
-    } else {
+    if (!ok) {
       // 5 次失败 → 恢复本地未读，与服务器保持一致
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsUnreadLocal(article.entryId);
@@ -335,10 +332,7 @@ class ArticleController extends GetxController {
       maxRetries: 5,
     );
 
-    if (ok) {
-      // 恢复未读成功：轻反馈。
-      await AndroidHapticsService.lightImpact();
-    } else {
+    if (!ok) {
       // 5 次失败 → 恢复本地已读
       if (Get.isRegistered<TimelineController>()) {
         Get.find<TimelineController>().markAsReadLocal(
@@ -2031,6 +2025,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                     onPressed: isUpdating
                         ? null
                         : () {
+                            unawaited(AndroidHapticsService.lightImpact());
                             if (isRead) {
                               controller.markAsUnread();
                             } else if (widget.onMKeyPressed != null) {

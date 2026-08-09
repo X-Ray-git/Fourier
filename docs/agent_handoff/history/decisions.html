@@ -1056,7 +1056,7 @@
 
 背景：振动散落且语义不清。
 
-决策：新建轻量 `AndroidHapticsService`（不影响 macOS），设置页增加默认开启的开关；翻页稳定 `selectionClick`、垃圾拦截侧滑确认 `mediumImpact`、已读切换成功 `lightImpact`、筛选选择 `selectionClick`；普通点击/滚动/加载/AI 完成/动画不振动；手势层与业务层不重复振动。
+决策：新建轻量 `AndroidHapticsService`（不影响 macOS），设置页增加默认开启的开关；翻页稳定 `selectionClick`、垃圾拦截侧滑确认 `mediumImpact`、Android 文章页已读按钮按下立即 `lightImpact`、筛选选择 `selectionClick`；已读触觉绑定用户按下按钮的时刻，不等待远端同步和提示弹出，自动已读、撤销、后台同步及业务完成回调不额外振动；普通点击/滚动、加载、AI 完成/动画不振动；手势层与业务层不重复振动。
 
 后果：触觉反馈语义集中、可配置、可测试。
 

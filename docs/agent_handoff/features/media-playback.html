@@ -165,7 +165,7 @@
 
 ## macOS 触控板滚动桥
 
-- macOS 的 WKWebView 会吞掉指针滚轮事件，因此 SABR 本地页面会把菜单外的纵向 wheel delta 按动画帧合并，经 `AutoFoloVideoPlayer` 通道交回文章 `_scrollController.position.pointerScroll()`。该路径不做滤波或补间，确保触控板仍然跟手；分辨率/字幕菜单内部滚动不外传。官方跨域 iframe 回退无法可靠桥接其内部滚轮，这是兼容兜底的已知边界。
+- macOS 的 WKWebView 会吞掉指针滚轮事件，因此 SABR 本地页面会把菜单外的纵向 wheel delta 按动画帧合并，经 `FourierVideoPlayer` 通道交回文章 `_scrollController.position.pointerScroll()`。该路径不做滤波或补间，确保触控板仍然跟手；分辨率/字幕菜单内部滚动不外传。官方跨域 iframe 回退无法可靠桥接其内部滚轮，这是兼容兜底的已知边界。
 
 ## 网络与安全边界
 

@@ -46,14 +46,19 @@ abstract final class AppContextMenu {
           )
         : cs.surfaceContainerHighest;
 
+    final overlayBox = Navigator.of(
+      context,
+    ).overlay?.context.findRenderObject();
+    final overlaySize = overlayBox is RenderBox
+        ? overlayBox.size
+        : MediaQuery.sizeOf(context);
+    final localPosition = overlayBox is RenderBox
+        ? overlayBox.globalToLocal(position)
+        : position;
+
     return showMenu<T>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
+      position: relativePositionFor(localPosition, overlaySize),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       color: background,
       elevation: isMacOS ? 10 : 6,
@@ -69,6 +74,18 @@ abstract final class AppContextMenu {
           AppContextMenuDivider<T>() => const PopupMenuDivider(height: 8),
         };
       }).toList(),
+    );
+  }
+
+  @visibleForTesting
+  static RelativeRect relativePositionFor(Offset position, Size overlaySize) {
+    final dx = position.dx.clamp(0.0, overlaySize.width);
+    final dy = position.dy.clamp(0.0, overlaySize.height);
+    return RelativeRect.fromLTRB(
+      dx,
+      dy,
+      overlaySize.width - dx,
+      overlaySize.height - dy,
     );
   }
 

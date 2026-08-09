@@ -139,6 +139,7 @@ macOS 分栏选择与移除协调：
 - macOS 时间线 header 的横向间距已经按文章卡片右边界校准：文章范围→排序 `8px`、排序→同步 `8px`、同步→中间栏右边界 `10px`。文章卡片右边缘到时间线右边界也保持 `10px`；文章详情右上角三个按钮的既有间距不随这里联动。
 - 同步按钮样式和旋转逻辑集中在 `AppGlassSyncButton`。普通时间线通过 `_MacSyncButton` 订阅 `TimelineController.isSyncing`，垃圾拦截页也复用同一个按钮。
 - 文章卡片的长按/右键 AI 操作集中在 `ArticleActionsMenu`。不要再把翻译/摘要菜单逻辑塞回 `article_card.dart`。
+- 正文图片、全屏图片、文章卡片和侧边栏的 macOS 右键菜单共用 `AppContextMenu`。传入的 `TapDownDetails.globalPosition` 必须先转换到当前 Navigator Overlay 的局部坐标，再以 Overlay 尺寸计算 `RelativeRect` 的右、下剩余距离；不能把 `dx/dy` 同时写入 `left/top/right/bottom`，否则菜单会随窗口尺寸和点击位置偏离鼠标。
 - 文章列表卡片的基础“外壳”样式集中在 `ArticleCardChrome`：macOS 普通态使用极高透明度中性色填充，不使用普通边框；选中态仍使用主色背景和边框。外边距、内部 padding 和圆角也从这里取值，不要在普通时间线、最近阅读、垃圾拦截审核行之间复制常量。
 - 垃圾拦截审核行有保留/移除按钮、拒绝理由和摘要块，所以不强行复用完整 `ArticleCard`；但卡片外壳必须复用 `ArticleCardChrome`，避免之后调整卡片密度时漏改。
 - 最近阅读页里的文章本来都属于“已读语境”，标题不要再因 `isRead` 降低字重；只保留已读颜色淡化即可，否则和其他页面的标题观感不统一。

@@ -84,6 +84,12 @@
 ./scripts/release.sh 1.2.1 -m $'- feat: add cross-platform Folo browser login and account switching\n- feat: add misclassification actions with atomic undo and review markers\n- feat: retry failed article images with deterministic backoff\n- fix: preserve undo animations and Android settings labels' --push
 ```
 
+
+## v2.0.0
+
+```bash
+./scripts/release.sh 2.0.0 -m $'- breaking: rebrand Auto Folo as Fourier with new app identifiers and icons; existing version 1 settings exports remain importable\n- feat: add summary-based article relationship discovery, related-article review, queue monitoring, and local LLM usage/analysis ledgers\n- docs: replace the legacy handoff with a self-contained offline Fourier Wiki and complete repository identity cleanup\n- perf: use rolling-slot AI workers and harden translation, readability, image-cache, and account-bound task persistence\n- fix: improve YouTube/Bilibili fallbacks, image recovery, external links, recent-reading stability, and Android haptics\n- style: unify Android reading pages with transparent headers, shared edge fades, safe insets, and native-backdrop toolbar controls' --push
+```
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

@@ -97,6 +97,7 @@ macOS UI：
 - 下拉 overlay 的可读性修复是局部处理，不应通过全局提高 `AppGlassSurface` 不透明度解决，否则会影响其他已经验证过的玻璃控件。
 - 三选一的外观 segmented 高度和普通下拉/文本输入结构不同，应在“阅读与后台偏好”中独占完整一行；不要为了机械配对压缩其已验证的动画和玻璃规格。其余普通设置再进入响应式两列网格，窄窗口回落为单列。
 - macOS 的 Folo 与 DeepSeek 凭据位于同一个“服务认证”容器，底部右侧共用紧凑的“测试连接 + 保存认证”按钮行；Prompt 保存/重置仍位于各自容器底部右侧。不要把保存按钮挤在输入框右侧或横向撑满卡片。
+- 开源许可证入口不得再调用 Flutter 默认 `showLicensePage()`，否则会在三栏应用上方推入一张脱离 Fourier 设计语言的完整 Material 页面。macOS 使用窗口内居中玻璃面板，并在宽屏内以软件包列表 + 许可证正文双栏呈现。
 
 Android UI：
 
@@ -108,6 +109,7 @@ Android UI：
 - `OutlineInputBorder` 的浮动 label 会向上越出输入框布局框约 `8.6px`。字段自身已经不裁剪它，但放进 `ExpansionTile`（内部对 body 用 `ClipRect`）或 `MobileSettingsPanel`（`Clip.antiAlias`）时，若控件上方紧贴容器顶部且缓冲 `< ~9px`，上溢部分仍会被上层容器切掉。`_LlmConfigCard` 的 `ExpansionTile` children padding 顶部因此从 `0` 改为 `10`；以后在裁切容器顶部紧跟带 `labelText` 的 outline 输入控件时，必须同样预留 `≥ 9px` 顶部缓冲。`AppGlassTextField` 用独立 `Text` 标题 + `InputBorder.none`，无浮动 label，不受此约束。
 - 移动端服务认证、LLM 自动提交数字输入和 Prompt 行为仍与 macOS 共享语义。正文最大宽度、macOS fling 上限等桌面专属项不得出现在 Android 设置页。
 - 后台任务中心是独立二级页面，入口位于设置页。该页面有实时队列和失败记录导航，保持独立路由比把全部状态展开在设置列表中更清晰。
+- Android 开源许可证保持二级页面语义，但使用 `MobileBlurAppBar`、`MobileSettingsPanel` 和共享许可证目录组件；窄屏从软件包列表进入正文，并可返回列表。两端共用 `AppLicenseService.loadCatalog()` 的搜索、排序与去重结果，不能分别维护第三方声明。
 
 保存语义：
 

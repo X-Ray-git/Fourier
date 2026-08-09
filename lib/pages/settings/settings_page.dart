@@ -29,6 +29,7 @@ import '../../router/app_pages.dart';
 import '../../utils/security_utils.dart';
 import '../../utils/storage.dart';
 import '../main/main_controller.dart';
+import 'app_licenses_page.dart';
 import 'task_center_page.dart';
 import 'widgets/mobile_settings_chrome.dart';
 
@@ -71,12 +72,17 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _androidHapticsEnabled;
 
   void _showOpenSourceLicenses() {
-    showLicensePage(
-      context: context,
-      applicationName: AppConstants.appName,
-      applicationVersion: AppVersionService.version,
-      applicationLegalese: 'Licensed under AGPL-3.0-only.',
-    );
+    if (Platform.isMacOS) {
+      showDialog<void>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.32),
+        builder: (_) => const AppLicensesDialog(),
+      );
+      return;
+    }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AppLicensesPage()));
   }
 
   @override

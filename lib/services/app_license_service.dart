@@ -1,5 +1,14 @@
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+class AppLicenseRecord {
+  const AppLicenseRecord({required this.packageName, required this.text});
+
+  final String packageName;
+  final String text;
+}
 
 class AppLicenseService {
   AppLicenseService._();
@@ -30,5 +39,41 @@ class AppLicenseService {
         yield LicenseEntryWithLineBreaks(packages, text);
       }
     });
+  }
+
+  /// Builds a package-oriented catalog from Flutter's shared license registry.
+  /// Multiple entries for one package are retained without duplicating text.
+  static Future<List<AppLicenseRecord>> loadCatalog() async {
+    final textsByPackage = <String, LinkedHashSet<String>>{};
+    await for (final entry in LicenseRegistry.licenses) {
+      final text = entry.paragraphs
+          .map((paragraph) {
+            final indent = '  ' * paragraph.indent;
+            return '$indent${paragraph.text}';
+          })
+          .join('\n\n')
+          .trim();
+      if (text.isEmpty) continue;
+      for (final package in entry.packages) {
+        final name = package.trim();
+        if (name.isEmpty) continue;
+        textsByPackage.putIfAbsent(name, LinkedHashSet.new).add(text);
+      }
+    }
+
+    final records = textsByPackage.entries
+        .map(
+          (entry) => AppLicenseRecord(
+            packageName: entry.key,
+            text: entry.value.join('\n\n---\n\n'),
+          ),
+        )
+        .toList(growable: false);
+    records.sort((a, b) {
+      if (a.packageName == 'Fourier') return -1;
+      if (b.packageName == 'Fourier') return 1;
+      return a.packageName.toLowerCase().compareTo(b.packageName.toLowerCase());
+    });
+    return records;
   }
 }

@@ -25,4 +25,13 @@ void main() {
       }),
     );
   });
+
+  test('builds a sorted package catalog without duplicate text', () async {
+    final records = await AppLicenseService.loadCatalog();
+
+    expect(records, isNotEmpty);
+    expect(records.first.packageName, 'Fourier');
+    expect(records.map((record) => record.packageName), contains('PiliPlus'));
+    expect(records.every((record) => record.text.trim().isNotEmpty), isTrue);
+  });
 }

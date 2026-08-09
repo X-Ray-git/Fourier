@@ -145,12 +145,20 @@
 
 Release notes 规则：
 
+- GitHub Release 正文默认必须保持统一结构：`本版重点`、至少一个内容章节（如
+  `新功能`、`修复与改进` 或 `升级说明`），以及 `完整变更` 对比链接。
+- 较长说明优先写入临时 Markdown 文件并通过 `--notes-file <path>` 传入，避免
+  shell 多行引号破坏格式；`-m` 仍可直接传入完整 Markdown。
+- 如果某次发布确实需要不同结构，必须显式使用
+  `--allow-unstructured-notes`；不要把普通的简略 bullet list 当作正式正文。
 - `scripts/release.sh` 默认拒绝 `-m` 中的字面量 `\n`。
 - 真实换行使用 ANSI-C quoting：
 
 ```bash
 ./scripts/release.sh 1.2.3 -m $'- fix: first item\n- feat: second item' --push
 ```
+
+上例仅说明真实换行的 shell 写法；正式 Release 仍需满足上述章节结构。
 
 - 如果确实需要字面量 backslash-n，使用 `--allow-literal-backslash-n`。
 

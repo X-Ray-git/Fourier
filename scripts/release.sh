@@ -4,10 +4,18 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/release.sh <version> -m "<message>" [--push] [--allow-literal-backslash-n]
+  scripts/release.sh <version> (-m "<message>" | --notes-file <path>) [--push]
+    [--allow-literal-backslash-n] [--allow-unstructured-notes]
 
 Example:
-  scripts/release.sh 1.1.7 -m $'- fix: list scrolling\n- feat: media controls' --push
+  scripts/release.sh 1.2.3 --notes-file /tmp/v1.2.3-notes.md --push
+
+Release notes normally need these sections:
+  ## 本版重点
+  At least one content section, such as ## 新功能 or ## 修复与改进
+  **完整变更**
+
+For an intentionally different format, pass --allow-unstructured-notes.
 
 If the release notes intentionally need to contain the literal characters \n,
 pass --allow-literal-backslash-n. Otherwise literal \n is treated as a likely
@@ -29,8 +37,10 @@ version="$1"
 shift
 
 message=""
+notes_file=""
 push_remote=false
 allow_literal_backslash_n=false
+allow_unstructured_notes=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,8 +48,16 @@ while [[ $# -gt 0 ]]; do
       message="$2"
       shift 2
       ;;
+    --notes-file)
+      notes_file="$2"
+      shift 2
+      ;;
     --allow-literal-backslash-n)
       allow_literal_backslash_n=true
+      shift
+      ;;
+    --allow-unstructured-notes)
+      allow_unstructured_notes=true
       shift
       ;;
     --push)
@@ -54,8 +72,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$message" && -n "$notes_file" ]]; then
+  echo "Error: use either -m or --notes-file, not both." >&2
+  exit 1
+fi
+
+if [[ -n "$notes_file" ]]; then
+  if [[ ! -f "$notes_file" ]]; then
+    echo "Release notes file does not exist: $notes_file" >&2
+    exit 1
+  fi
+  message="$(<"$notes_file")"
+fi
+
 if [[ -z "$message" ]]; then
-  echo "Error: -m <message> is required. Please provide a brief bullet list of changes." >&2
+  echo "Error: provide release notes with -m or --notes-file." >&2
   exit 1
 fi
 
@@ -71,6 +102,39 @@ If you intentionally want the release notes to display the literal characters \n
 rerun with --allow-literal-backslash-n.
 EOF
   exit 1
+fi
+
+if [[ "$allow_unstructured_notes" != true ]]; then
+  has_content_section=false
+  for heading in \
+    "## 重要变更" \
+    "## 新功能" \
+    "## 修复与改进" \
+    "## 性能改进" \
+    "## 升级说明"; do
+    if [[ "$message" == *"$heading"* ]]; then
+      has_content_section=true
+      break
+    fi
+  done
+
+  if [[ "$message" != *"## 本版重点"* || \
+        "$has_content_section" != true || \
+        "$message" != *"**完整变更**"* ]]; then
+    cat >&2 <<'EOF'
+Error: release notes do not use the standard structure.
+
+Expected:
+  ## 本版重点
+  At least one of: ## 重要变更 / ## 新功能 / ## 修复与改进 /
+                   ## 性能改进 / ## 升级说明
+  **完整变更**
+
+Use --allow-unstructured-notes only when a release intentionally needs a
+different public format.
+EOF
+    exit 1
+  fi
 fi
 
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -116,6 +180,9 @@ printf -v message_arg '%q' "$message"
 release_flags=""
 if [[ "$allow_literal_backslash_n" == true ]]; then
   release_flags+=" --allow-literal-backslash-n"
+fi
+if [[ "$allow_unstructured_notes" == true ]]; then
+  release_flags+=" --allow-unstructured-notes"
 fi
 if [[ "$push_remote" == true ]]; then
   release_flags+=" --push"

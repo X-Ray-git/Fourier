@@ -90,6 +90,11 @@
 ```bash
 ./scripts/release.sh 2.0.0 -m $'- breaking: rebrand Auto Folo as Fourier with new app identifiers and icons; existing version 1 settings exports remain importable\n- feat: add summary-based article relationship discovery, related-article review, queue monitoring, and local LLM usage/analysis ledgers\n- docs: replace the legacy handoff with a self-contained offline Fourier Wiki and complete repository identity cleanup\n- perf: use rolling-slot AI workers and harden translation, readability, image-cache, and account-bound task persistence\n- fix: improve YouTube/Bilibili fallbacks, image recovery, external links, recent-reading stability, and Android haptics\n- style: unify Android reading pages with transparent headers, shared edge fades, safe insets, and native-backdrop toolbar controls' --push
 ```
+
+首次生成的 GitHub Release 正文原样采用了上述英文 tag annotation，因而缺少
+此前版本使用的中文章节与完整变更链接。2026-08-09 已仅编辑公开 Release 正文，
+未移动 tag、未替换附件、未重新触发构建。随后为 `scripts/release.sh` 增加标准
+章节校验与 `--notes-file` 支持，避免普通发布再次依赖事后人工整理。
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

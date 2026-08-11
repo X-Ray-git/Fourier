@@ -48,8 +48,8 @@ class ArticleRelationDisplayItem {
 /// 因此请求失败或进程退出不会丢任务；只有一个合法批次完整落盘后才推进窗口。
 abstract final class ArticleRelationService {
   static const int schemaVersion = 1;
-  static const int batchSize = 32;
-  static const int historyLimit = 256;
+  static const int batchSize = 128;
+  static const int historyLimit = 1024;
 
   static const String _activationKey = '__activation_at__';
   static const String _sequenceKey = '__sequence__';

@@ -43,4 +43,9 @@ void main() {
       LlmConfig.filterDefault.concurrency,
     );
   });
+
+  test('relation defaults use the expanded output budget', () {
+    expect(LlmConfig.relationDefault.maxTokens, 32768);
+    expect(LlmConfig.relationDefault.concurrency, 1);
+  });
 }

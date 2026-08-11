@@ -33,9 +33,10 @@ class ArticleRelationApiResult {
 
 /// 摘要关系批处理 worker。
 ///
-/// 固定单飞：32 是每批新摘要数量，而不是并发请求数。失败时 pending
+/// 固定单飞：128 是每批新摘要上限，而不是并发请求数。失败时 pending
 /// 原样保留，历史窗口也不推进；用户可在任务中心重试。
 abstract final class ArticleRelationWorker {
+  static const int _truncatedRetryMaxTokens = 65536;
   static const Duration _timeout = Duration(seconds: 300);
   static const int _maxAttempts = 3;
   static String get promptVersion =>
@@ -172,8 +173,9 @@ abstract final class ArticleRelationWorker {
         final result = override == null
             ? await _request(
                 input,
-                expandOutputBudget && config.maxTokens < 32768
-                    ? config.copyWith(maxTokens: 32768)
+                expandOutputBudget &&
+                        config.maxTokens < _truncatedRetryMaxTokens
+                    ? config.copyWith(maxTokens: _truncatedRetryMaxTokens)
                     : config,
                 attempt,
               )

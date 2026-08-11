@@ -262,8 +262,8 @@ HTML entity 解码：
 
 ## macOS 行内代码
 
-- 行内代码仅 macOS 把 vertical padding 从 2 收窄为 1；Android 保持 2。
-- 字号、baseline、横向 padding 与块级代码不受影响；覆盖中文、英文与混排行内代码。
+- macOS 与 Android 行内代码的自身行高都固定为 `1.2`，避免继承正文 `1.5–1.7` 行高后让背景色块几乎占满整行。macOS vertical padding 为 1，Android 保留稍宽松的 2。
+- 紧凑行高覆盖段落、列表、引用与兜底 HTML；字号 `14px`、alphabetic baseline、横向 padding 与块级代码不受影响。
 
 ## 文章链接 hover 生命周期
 

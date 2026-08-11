@@ -77,7 +77,7 @@ class LlmConfig {
     thinking: true,
     reasoningEffort: 'max',
     temperature: 0,
-    maxTokens: 8192,
+    maxTokens: 32768,
     concurrency: 1,
   );
 

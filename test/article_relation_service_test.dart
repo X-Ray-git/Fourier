@@ -87,12 +87,16 @@ void main() {
     expect(ArticleRelationService.pendingCount, 1);
   });
 
-  test('历史窗口随成功批次增长并限制为 256 篇', () async {
+  test('历史窗口随成功批次增长并限制为 1024 篇', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
 
     for (var batch = 0; batch < 9; batch++) {
-      for (var offset = 0; offset < 32; offset++) {
-        final index = batch * 32 + offset;
+      for (
+        var offset = 0;
+        offset < ArticleRelationService.batchSize;
+        offset++
+      ) {
+        final index = batch * ArticleRelationService.batchSize + offset;
         await ArticleRelationService.onSummaryCompleted(
           _article(index),
           SummaryRecord(
@@ -107,35 +111,66 @@ void main() {
         flushPartial: false,
       );
       expect(input, isNotNull);
-      expect(input!.newNodes.length, 32);
+      expect(input!.newNodes.length, ArticleRelationService.batchSize);
       expect(
         input.historyNodes.length,
-        batch == 0 ? 0 : (batch * 32).clamp(0, 256),
+        batch == 0
+            ? 0
+            : (batch * ArticleRelationService.batchSize).clamp(
+                0,
+                ArticleRelationService.historyLimit,
+              ),
       );
 
       // 在批次提交前，pending 和 history 都不能被提前推进。
-      expect(ArticleRelationService.pendingCount, 32);
-      expect(ArticleRelationService.historyCount, (batch * 32).clamp(0, 256));
+      expect(
+        ArticleRelationService.pendingCount,
+        ArticleRelationService.batchSize,
+      );
+      expect(
+        ArticleRelationService.historyCount,
+        (batch * ArticleRelationService.batchSize).clamp(
+          0,
+          ArticleRelationService.historyLimit,
+        ),
+      );
       await ArticleRelationService.completeBatch(input, const []);
       expect(ArticleRelationService.pendingCount, 0);
     }
 
-    expect(ArticleRelationService.historyCount, 256);
+    expect(
+      ArticleRelationService.historyCount,
+      ArticleRelationService.historyLimit,
+    );
   });
 
-  test('历史窗口超限时固定淘汰 32 篇以稳定后续请求前缀', () async {
+  test('历史窗口超限时固定淘汰 128 篇以稳定后续请求前缀', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
 
     for (var batch = 0; batch < 8; batch++) {
-      await _enqueueAndComplete(batch * 32, 32);
+      await _enqueueAndComplete(
+        batch * ArticleRelationService.batchSize,
+        ArticleRelationService.batchSize,
+      );
     }
-    expect(ArticleRelationService.historyCount, 256);
+    expect(
+      ArticleRelationService.historyCount,
+      ArticleRelationService.historyLimit,
+    );
 
-    await _enqueueAndComplete(256, 1, flushPartial: true);
-    expect(ArticleRelationService.historyCount, 225);
+    await _enqueueAndComplete(
+      ArticleRelationService.historyLimit,
+      1,
+      flushPartial: true,
+    );
+    expect(ArticleRelationService.historyCount, 897);
 
-    await _enqueueAndComplete(257, 20, flushPartial: true);
-    expect(ArticleRelationService.historyCount, 245);
+    await _enqueueAndComplete(
+      ArticleRelationService.historyLimit + 1,
+      20,
+      flushPartial: true,
+    );
+    expect(ArticleRelationService.historyCount, 917);
   });
 
   test('尾批只有显式 flushPartial 时才发车', () async {

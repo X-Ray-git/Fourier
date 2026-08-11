@@ -357,7 +357,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
       final error = ArticleRelationWorker.lastError.value;
       final runningLabel = running > 0
           ? '当前批次 $currentNew + $currentHistory'
-          : '历史 ${ArticleRelationService.historyCount}/256';
+          : '历史 ${ArticleRelationService.historyCount}/'
+                '${ArticleRelationService.historyLimit}';
       return _TaskStatusCard(
         icon: Icons.hub_outlined,
         title: '关系建立',

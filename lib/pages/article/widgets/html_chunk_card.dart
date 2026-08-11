@@ -419,16 +419,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         'a': Style(color: cs.primary),
         'strong': Style(fontWeight: FontWeight.w700),
         'em': Style(fontStyle: FontStyle.italic),
-        'code': Style(
-          fontFamily: 'monospace',
-          fontFamilyFallback: const [
-            'Menlo',
-            'Monaco',
-            'Courier New',
-            'Courier',
-          ],
-          fontSize: FontSize(14),
-        ),
+        'code': _inlineCodeStyle(),
       },
       extensions: _buildCommonExtensions(context, cs),
     );
@@ -446,6 +437,17 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     final linkExt = _getLinkExtension(context);
     if (linkExt != null) exts.add(linkExt);
     return exts;
+  }
+
+  Style _inlineCodeStyle() {
+    return Style(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier New', 'Courier'],
+      fontSize: FontSize(14),
+      // 正文行高通常为 1.5–1.7；行内代码继承该值会让
+      // 背景色块几乎占满整行。两端统一使用紧凑文本行高。
+      lineHeight: const LineHeight(1.2),
+    );
   }
 
   // ── 图片 ──
@@ -570,6 +572,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
             padding: HtmlPaddings.zero,
           ),
           'a': Style(color: cs.primary),
+          'code': _inlineCodeStyle(),
         },
         extensions: _buildCommonExtensions(context, cs),
       ),
@@ -704,16 +707,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         'a': Style(color: cs.primary, textDecoration: TextDecoration.none),
         'strong': Style(fontWeight: FontWeight.w700),
         'em': Style(fontStyle: FontStyle.italic),
-        'code': Style(
-          fontFamily: 'monospace',
-          fontFamilyFallback: const [
-            'Menlo',
-            'Monaco',
-            'Courier New',
-            'Courier',
-          ],
-          fontSize: FontSize(14),
-        ),
+        'code': _inlineCodeStyle(),
         'ul': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
         'ol': Style(padding: HtmlPaddings.only(left: 20), margin: Margins.zero),
       },
@@ -998,6 +992,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           padding: HtmlPaddings.zero,
         ),
         'a': Style(color: cs.primary),
+        'code': _inlineCodeStyle(),
       },
       extensions: _buildCommonExtensions(context, cs),
     );

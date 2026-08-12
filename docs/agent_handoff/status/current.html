@@ -67,7 +67,7 @@
 当前产品形态：
 
 - Flutter 应用，使用 GetX、Hive、Dio 和本地缓存。
-- 文章关系建立是默认关闭的可选实验功能。两端设置页可立即启停；关闭不积压、不追溯，已有关系保留。关系区分无向的“近似重复”和“同一事件”，当前仅记录、展示与统计，不自动拦截。
+- 文章关系建立是默认关闭的可选实验功能。两端设置页可立即启停；关闭不积压、不追溯，已有关系保留。关系区分无向的“近似重复”和“同一事件”，当前仅记录、展示与统计，不自动拦截。默认请求已使用稳定 `Axxxxxx` ID、`articles` 和 `new_ids` 保护 DeepSeek 前缀缓存。
 - 产品名：`Fourier`。
 - Dart package 名仍是 `fourier`。
 - Android application id、macOS bundle id、MethodChannel 命名空间使用 `io.github.xraygit.fourier`。

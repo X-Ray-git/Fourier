@@ -55,7 +55,7 @@ class ArticleRelationDisplayItem {
 /// 关系功能只消费启用时间之后完成的摘要。pending 与 history 都持久化，
 /// 因此请求失败或进程退出不会丢任务；只有一个合法批次完整落盘后才推进窗口。
 abstract final class ArticleRelationService {
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
   static const int batchSize = 128;
   static const int historyLimit = 1024;
 

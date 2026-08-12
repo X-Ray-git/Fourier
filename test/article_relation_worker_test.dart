@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fourier/models/article.dart';
 import 'package:fourier/models/article_relation.dart';
+import 'package:fourier/services/article_relation_prompt_service.dart';
 import 'package:fourier/services/article_relation_service.dart';
 import 'package:fourier/services/article_relation_worker.dart';
 import 'package:fourier/services/summary_service.dart';
@@ -95,6 +96,80 @@ void main() {
       ),
       throwsFormatException,
     );
+  });
+
+  test('文章从新批次进入历史后保持稳定 ID 与完整载荷', () {
+    final first = _node('first', sequence: 41);
+    final second = _node('second', sequence: 42);
+    final firstPayload = ArticleRelationWorker.buildUserPayload(
+      ArticleRelationBatchInput(
+        id: 'batch-1',
+        newNodes: [first],
+        historyNodes: const [],
+      ),
+    );
+    final secondPayload = ArticleRelationWorker.buildUserPayload(
+      ArticleRelationBatchInput(
+        id: 'batch-2',
+        newNodes: [second],
+        historyNodes: [first],
+      ),
+    );
+
+    expect(firstPayload['new_ids'], ['A000041']);
+    expect(secondPayload['new_ids'], ['A000042']);
+    expect(
+      (secondPayload['articles'] as List<dynamic>).first,
+      (firstPayload['articles'] as List<dynamic>).first,
+    );
+  });
+
+  test('稳定标签响应只接受包含本批 new_ids 的关系', () {
+    final labels = {
+      'A000041': _node('history', sequence: 41),
+      'A000042': _node('new', sequence: 42),
+    };
+    final result = ArticleRelationWorker.parseResponse(
+      {
+        'choices': [
+          {
+            'finish_reason': 'stop',
+            'message': {
+              'content':
+                  '{"groups":['
+                  '{"type":"equivalent","members":["A000041","A000042"],"reason":"有效","confidence":0.9},'
+                  '{"type":"equivalent","members":["A000041","A000099"],"reason":"无新文章","confidence":0.9}'
+                  ']}',
+            },
+          },
+        ],
+      },
+      labels,
+      newLabels: {'A000042'},
+    );
+
+    expect(result.groups, hasLength(1));
+    expect(result.groups.single.memberIds, ['history', 'new']);
+  });
+
+  test('启动时迁移已知旧默认 Prompt，但保留自定义 Prompt', () async {
+    await GStorage.setting.put(
+      ArticleRelationPromptService.storageKey,
+      _legacyRelationDefaultPrompt,
+    );
+    await ArticleRelationWorker.initialize();
+    expect(
+      GStorage.setting.get(ArticleRelationPromptService.storageKey),
+      ArticleRelationPromptService.defaultPrompt,
+    );
+
+    ArticleRelationWorker.resetForTest();
+    await GStorage.setting.put(
+      ArticleRelationPromptService.storageKey,
+      '我的自定义关系规则',
+    );
+    await ArticleRelationWorker.initialize();
+    expect(ArticleRelationPromptService.getPrompt(), '我的自定义关系规则');
   });
 
   test('关闭会丢弃待处理队列，重新开启不追溯关闭期间摘要', () async {
@@ -232,10 +307,10 @@ Future<void> _waitUntil(bool Function() condition) async {
   }
 }
 
-ArticleRelationNode _node(String id) {
+ArticleRelationNode _node(String id, {int sequence = 1}) {
   return ArticleRelationNode(
     articleId: id,
-    sequence: 1,
+    sequence: sequence,
     title: id,
     feedId: 'feed',
     feedTitle: '来源',
@@ -245,3 +320,20 @@ ArticleRelationNode _node(String id) {
     summaryUpdatedAt: 1,
   );
 }
+
+const _legacyRelationDefaultPrompt = '''
+你是文章信息关系分析器。输入包含本批新文章 new 与历史文章 history，每篇只有元信息和摘要。
+
+请建立两种稀疏、无向的文章关系：
+1. equivalent（近似重复）：信息内容高度重合，阅读其中任意一篇后其余文章基本不再提供明显新增信息。
+2. same_event（同一事件）：报道同一次明确发布、公告、事故或核心事实，但各文章仍包含不可互相替代的新增信息。
+
+判断只基于内容关系，与文章是否已读、用户兴趣或质量无关。即使组内文章当前都未读，也可以建立关系。若一个同一事件组内存在近似重复子集，应同时输出一个覆盖该事件的 same_event 组和对应的 equivalent 子组。
+
+不要为仅主题相近、同一人物、同一产品或同一领域的文章建立关系。后续独立评测、量化版本、生态适配或观点文章，若不是同一次核心发布事实，不属于 same_event。不要处理日报、周报、链接合集、综合摘要、纯图片或有效摘要不足的文章；不确定时不建立关系。每个输出组必须至少包含一个 N 开头的新文章 ID。
+
+只返回 JSON 对象，不要 Markdown、解释或代码块。结构必须是：
+{"groups":[{"type":"same_event","members":["N001","H003"],"reason":"简短说明共同的核心事件","confidence":0.0},{"type":"equivalent","members":["N001","H004"],"reason":"简短说明可替代的具体信息","confidence":0.0}]}
+
+没有可靠关系时返回：{"groups":[]}
+''';

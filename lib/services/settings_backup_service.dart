@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../common/constants/constants.dart';
 import '../utils/storage.dart';
+import 'article_relation_prompt_service.dart';
 import 'article_relation_service.dart';
 import 'article_relation_worker.dart';
 import 'feed_readability_settings_service.dart';
@@ -185,6 +186,7 @@ abstract final class SettingsBackupService {
   static Future<void> applyPayload(SettingsBackupPayload payload) async {
     final relationWasEnabled = ArticleRelationService.isEnabled;
     await _replaceManagedSettings(payload.settings);
+    await ArticleRelationPromptService.migrateLegacyDefaultPrompt();
     _refreshRuntimeCaches();
     await ArticleRelationWorker.applyStoredEnabledSetting(relationWasEnabled);
   }

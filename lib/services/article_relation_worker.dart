@@ -41,7 +41,7 @@ abstract final class ArticleRelationWorker {
   static const Duration _timeout = Duration(seconds: 300);
   static const int _maxAttempts = 3;
   static String get promptVersion =>
-      'relation-v2@${ArticleRelationPromptService.promptFingerprint}';
+      'relation-v3@${ArticleRelationPromptService.promptFingerprint}';
 
   static final Dio _dio = Dio(
     BaseOptions(
@@ -75,6 +75,7 @@ abstract final class ArticleRelationWorker {
   static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+    await ArticleRelationPromptService.migrateLegacyDefaultPrompt();
     ArticleRelationService.registerScheduler(schedule);
     if (!ArticleRelationService.isEnabled) {
       await ArticleRelationService.discardPending();
@@ -309,13 +310,13 @@ abstract final class ArticleRelationWorker {
     if (apiKey.trim().isEmpty) {
       throw StateError('DeepSeek API key not configured');
     }
-    final labels = <String, ArticleRelationNode>{};
-    for (var i = 0; i < input.newNodes.length; i++) {
-      labels['N${(i + 1).toString().padLeft(3, '0')}'] = input.newNodes[i];
-    }
-    for (var i = 0; i < input.historyNodes.length; i++) {
-      labels['H${(i + 1).toString().padLeft(3, '0')}'] = input.historyNodes[i];
-    }
+    final usesStableInput = ArticleRelationPromptService.usesStableInputSchema;
+    final labels = usesStableInput
+        ? _labelsFor(input)
+        : _legacyLabelsFor(input);
+    final newLabels = usesStableInput
+        ? input.newNodes.map(_stableLabel).toSet()
+        : null;
 
     final prompt = ArticleRelationPromptService.getPrompt();
     final trace = LlmRequestTrace(
@@ -339,22 +340,11 @@ abstract final class ArticleRelationWorker {
             {'role': 'system', 'content': prompt},
             {
               'role': 'user',
-              'content': jsonEncode({
-                // 稳定历史放在前缀位置，便于 DeepSeek 自动前缀缓存命中；
-                // 本批变化的 new 放在最后。
-                'history': [
-                  for (final entry in labels.entries.where(
-                    (entry) => entry.key.startsWith('H'),
-                  ))
-                    _nodePayload(entry.key, entry.value),
-                ],
-                'new': [
-                  for (final entry in labels.entries.where(
-                    (entry) => entry.key.startsWith('N'),
-                  ))
-                    _nodePayload(entry.key, entry.value),
-                ],
-              }),
+              'content': jsonEncode(
+                usesStableInput
+                    ? buildUserPayload(input)
+                    : _buildLegacyUserPayload(labels),
+              ),
             },
           ],
           'response_format': {'type': 'json_object'},
@@ -366,7 +356,7 @@ abstract final class ArticleRelationWorker {
         response.data,
         httpStatus: response.statusCode,
       );
-      final result = parseResponse(response.data, labels);
+      final result = parseResponse(response.data, labels, newLabels: newLabels);
       await trace.complete();
       return result;
     } catch (error) {
@@ -378,8 +368,9 @@ abstract final class ArticleRelationWorker {
   @visibleForTesting
   static ArticleRelationApiResult parseResponse(
     dynamic responseData,
-    Map<String, ArticleRelationNode> labels,
-  ) {
+    Map<String, ArticleRelationNode> labels, {
+    Set<String>? newLabels,
+  }) {
     if (responseData is! Map) {
       throw const FormatException('关系响应不是 JSON 对象');
     }
@@ -423,7 +414,9 @@ abstract final class ArticleRelationWorker {
           .toSet()
           .toList(growable: false);
       if (memberLabels.length < 2 ||
-          !memberLabels.any((label) => label.startsWith('N'))) {
+          !memberLabels.any(
+            (label) => newLabels?.contains(label) ?? label.startsWith('N'),
+          )) {
         continue;
       }
       final reason = raw['reason']?.toString().trim() ?? '';
@@ -453,6 +446,75 @@ abstract final class ArticleRelationWorker {
       cacheMissTokens: token('prompt_cache_miss_tokens'),
       totalTokens: token('total_tokens'),
     );
+  }
+
+  @visibleForTesting
+  static Map<String, dynamic> buildUserPayload(
+    ArticleRelationBatchInput input,
+  ) {
+    final labels = _labelsFor(input);
+    return {
+      // history 始终在前、new 只追加到末尾。文章晋升为历史后，整条记录
+      // 与稳定 ID 均不改变；变化的 new_ids 放在最后保护文章数据前缀。
+      'articles': [
+        for (final entry in labels.entries)
+          _nodePayload(entry.key, entry.value),
+      ],
+      'new_ids': [for (final node in input.newNodes) _stableLabel(node)],
+    };
+  }
+
+  static Map<String, ArticleRelationNode> _labelsFor(
+    ArticleRelationBatchInput input,
+  ) {
+    final labels = <String, ArticleRelationNode>{};
+    for (final node in [...input.historyNodes, ...input.newNodes]) {
+      final label = _stableLabel(node);
+      if (labels.containsKey(label)) {
+        throw StateError('Duplicate article relation sequence: $label');
+      }
+      labels[label] = node;
+    }
+    return labels;
+  }
+
+  static Map<String, ArticleRelationNode> _legacyLabelsFor(
+    ArticleRelationBatchInput input,
+  ) {
+    final labels = <String, ArticleRelationNode>{};
+    for (var i = 0; i < input.newNodes.length; i++) {
+      labels['N${(i + 1).toString().padLeft(3, '0')}'] = input.newNodes[i];
+    }
+    for (var i = 0; i < input.historyNodes.length; i++) {
+      labels['H${(i + 1).toString().padLeft(3, '0')}'] = input.historyNodes[i];
+    }
+    return labels;
+  }
+
+  static Map<String, dynamic> _buildLegacyUserPayload(
+    Map<String, ArticleRelationNode> labels,
+  ) {
+    return {
+      'history': [
+        for (final entry in labels.entries.where(
+          (entry) => entry.key.startsWith('H'),
+        ))
+          _nodePayload(entry.key, entry.value),
+      ],
+      'new': [
+        for (final entry in labels.entries.where(
+          (entry) => entry.key.startsWith('N'),
+        ))
+          _nodePayload(entry.key, entry.value),
+      ],
+    };
+  }
+
+  static String _stableLabel(ArticleRelationNode node) {
+    if (node.sequence <= 0) {
+      throw StateError('Invalid article relation sequence: ${node.sequence}');
+    }
+    return 'A${node.sequence.toString().padLeft(6, '0')}';
   }
 
   static Map<String, dynamic> _nodePayload(

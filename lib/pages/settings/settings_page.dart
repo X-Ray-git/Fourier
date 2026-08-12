@@ -3949,7 +3949,8 @@ class _RelationPromptCard extends StatelessWidget {
       hintText: '输入关系判断规则...',
       emptyWarning: '请保留默认的 JSON 结构和关系组约束',
       savedMessage: '新关系批次将从下次请求生效',
-      helpText: '程序会自动提供新摘要、历史摘要和文章元信息；Prompt 不应依赖正文或当前已读状态。',
+      helpText:
+          '默认 Prompt 接收 articles 与 new_ids。为兼容已有规则，真正自定义的旧 Prompt 暂时仍接收 new/history；Prompt 不应依赖正文或当前已读状态。',
       loadPrompt: ArticleRelationPromptService.getPrompt,
       savePrompt: ArticleRelationPromptService.setPrompt,
       resetPrompt: ArticleRelationPromptService.resetPrompt,

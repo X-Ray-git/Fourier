@@ -101,6 +101,26 @@ class ArticleRelationNode {
   }
 }
 
+enum ArticleRelationKind { equivalent, sameEvent }
+
+extension ArticleRelationKindX on ArticleRelationKind {
+  String get storageValue => switch (this) {
+    ArticleRelationKind.equivalent => 'equivalent',
+    ArticleRelationKind.sameEvent => 'same_event',
+  };
+
+  String get label => switch (this) {
+    ArticleRelationKind.equivalent => '近似重复',
+    ArticleRelationKind.sameEvent => '同一事件',
+  };
+
+  static ArticleRelationKind? tryParse(Object? raw) => switch (raw) {
+    'equivalent' => ArticleRelationKind.equivalent,
+    'same_event' => ArticleRelationKind.sameEvent,
+    _ => null,
+  };
+}
+
 class ArticleRelationGroup {
   const ArticleRelationGroup({
     required this.id,
@@ -109,6 +129,7 @@ class ArticleRelationGroup {
     required this.reason,
     required this.confidence,
     required this.createdAt,
+    this.kind = ArticleRelationKind.equivalent,
     this.enabled = true,
   });
 
@@ -118,6 +139,7 @@ class ArticleRelationGroup {
   final String reason;
   final double confidence;
   final int createdAt;
+  final ArticleRelationKind kind;
   final bool enabled;
 
   Map<String, dynamic> toJson() => {
@@ -127,6 +149,7 @@ class ArticleRelationGroup {
     'reason': reason,
     'confidence': confidence,
     'createdAt': createdAt,
+    'kind': kind.storageValue,
     'enabled': enabled,
   };
 
@@ -140,6 +163,10 @@ class ArticleRelationGroup {
       reason: json['reason'] as String? ?? '',
       confidence: (json['confidence'] as num?)?.toDouble() ?? 0,
       createdAt: json['createdAt'] as int? ?? 0,
+      // v1 关系只有“内容可替代”一种语义，兼容为近似重复。
+      kind:
+          ArticleRelationKindX.tryParse(json['kind']) ??
+          ArticleRelationKind.equivalent,
       enabled: json['enabled'] as bool? ?? true,
     );
   }

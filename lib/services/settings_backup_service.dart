@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 
 import '../common/constants/constants.dart';
 import '../utils/storage.dart';
+import 'article_relation_service.dart';
+import 'article_relation_worker.dart';
 import 'feed_readability_settings_service.dart';
 import 'feed_silent_settings_service.dart';
 import 'feed_translation_settings_service.dart';
@@ -71,6 +73,7 @@ abstract final class SettingsBackupService {
     StorageKeys.badgeStrategy,
     StorageKeys.articleContentMaxWidth,
     StorageKeys.macosMaxFlingVelocity,
+    StorageKeys.articleRelationEnabled,
     _deepseekApiKey,
     _autoRetryMaxCount,
     _translationPrompt,
@@ -96,6 +99,8 @@ abstract final class SettingsBackupService {
     StorageKeys.macosMaxFlingVelocity,
     _autoRetryMaxCount,
   };
+
+  static const _boolKeys = {StorageKeys.articleRelationEnabled};
 
   static Future<SettingsBackupSummary> exportToClipboard() async {
     final settings = exportSettings();
@@ -178,8 +183,10 @@ abstract final class SettingsBackupService {
   }
 
   static Future<void> applyPayload(SettingsBackupPayload payload) async {
+    final relationWasEnabled = ArticleRelationService.isEnabled;
     await _replaceManagedSettings(payload.settings);
     _refreshRuntimeCaches();
+    await ArticleRelationWorker.applyStoredEnabledSetting(relationWasEnabled);
   }
 
   static SettingsBackupSummary summarize(Map<String, dynamic> settings) {
@@ -291,7 +298,8 @@ abstract final class SettingsBackupService {
       throw FormatException('$key 必须是数字');
     }
 
-    if (key.endsWith('thinking') ||
+    if (_boolKeys.contains(key) ||
+        key.endsWith('thinking') ||
         _startsWithAny(key, _feedPreferencePrefixes)) {
       if (value is bool) return value;
       throw FormatException('$key 必须是布尔值');

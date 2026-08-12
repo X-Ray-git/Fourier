@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fourier/common/constants/constants.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/models/article_relation.dart';
 import 'package:fourier/services/article_relation_service.dart';
@@ -13,6 +14,22 @@ import 'support/hive_test_helper.dart';
 void main() {
   setUp(HiveTestHelper.setUp);
   tearDown(HiveTestHelper.tearDown);
+
+  test('默认关闭且关闭期间完成的摘要不进入待处理队列', () async {
+    expect(ArticleRelationService.isEnabled, isFalse);
+
+    await ArticleRelationService.onSummaryCompleted(
+      _article(0),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '关闭期间的摘要',
+        updatedAt: 1000,
+      ),
+    );
+
+    expect(ArticleRelationService.pendingCount, 0);
+    expect(ArticleRelationService.nodeOf('article-0'), isNull);
+  });
 
   test('只接收功能启用后完成的新摘要', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1000);
@@ -195,6 +212,115 @@ void main() {
     );
     expect(tail?.newNodes.length, 7);
     expect(ArticleRelationService.pendingCount, 7);
+  });
+
+  test('批次准备后关闭开关会拒绝迟到结果', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    await ArticleRelationService.onSummaryCompleted(
+      _article(0),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '摘要 0',
+        updatedAt: 1000,
+      ),
+    );
+    final input = await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    );
+    await GStorage.setting.put(StorageKeys.articleRelationEnabled, false);
+
+    final committed = await ArticleRelationService.completeBatch(input!, const [
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.equivalent,
+        memberIds: ['article-0', 'article-1'],
+        reason: '迟到结果',
+        confidence: 0.9,
+      ),
+    ]);
+
+    expect(committed, isFalse);
+    expect(ArticleRelationService.groupCount, 0);
+    expect(ArticleRelationService.historyCount, 0);
+  });
+
+  test('同一事件组跨批次显式合并，近似重复保持独立子组', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    for (var index = 0; index < 3; index++) {
+      await ArticleRelationService.onSummaryCompleted(
+        _article(index),
+        SummaryRecord(
+          status: SummaryStatus.done,
+          summaryText: '摘要 $index',
+          updatedAt: 1000 + index,
+        ),
+      );
+    }
+    final first = await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    );
+    await ArticleRelationService.completeBatch(first!, const [
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        memberIds: ['article-0', 'article-1'],
+        reason: '同一发布',
+        confidence: 0.9,
+      ),
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.equivalent,
+        memberIds: ['article-0', 'article-1'],
+        reason: '内容可替代',
+        confidence: 0.95,
+      ),
+    ]);
+
+    await ArticleRelationService.onSummaryCompleted(
+      _article(3),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '摘要 3',
+        updatedAt: 2000,
+      ),
+    );
+    final second = await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    );
+    await ArticleRelationService.completeBatch(second!, const [
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        memberIds: ['article-1', 'article-3'],
+        reason: '同一发布的新增报道',
+        confidence: 0.88,
+      ),
+    ]);
+
+    final eventGroups = ArticleRelationService.groupsFor(
+      'article-0',
+    ).where((group) => group.kind == ArticleRelationKind.sameEvent).toList();
+    expect(eventGroups, hasLength(1));
+    expect(eventGroups.single.memberIds.toSet(), {
+      'article-0',
+      'article-1',
+      'article-3',
+    });
+    expect(
+      ArticleRelationService.groupsFor(
+        'article-0',
+      ).where((group) => group.kind == ArticleRelationKind.equivalent),
+      hasLength(1),
+    );
+  });
+
+  test('旧关系记录默认迁移为近似重复', () {
+    final group = ArticleRelationGroup.fromJson({
+      'id': 'legacy',
+      'batchId': 'relation-000001',
+      'memberIds': ['a', 'b'],
+      'reason': '旧关系',
+      'confidence': 0.9,
+      'createdAt': 1,
+    });
+
+    expect(group.kind, ArticleRelationKind.equivalent);
   });
 }
 

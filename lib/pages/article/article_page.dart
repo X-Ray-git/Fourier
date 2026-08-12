@@ -15,6 +15,7 @@ import '../../http/feed_http.dart';
 import '../../http/init.dart';
 import '../../http/public_content_http.dart';
 import '../../models/article.dart';
+import '../../models/article_relation.dart';
 import '../../router/app_pages.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
@@ -3136,6 +3137,9 @@ class _ArticleRelationsSection extends StatelessWidget {
       final direct = ArticleRelationService.directRelationsFor(article.entryId);
       if (direct.isEmpty) return const SizedBox.shrink();
       final component = ArticleRelationService.componentFor(article.entryId);
+      final hasSameEvent = ArticleRelationService.hasSameEventGroup(
+        article.entryId,
+      );
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Column(
@@ -3152,6 +3156,7 @@ class _ArticleRelationsSection extends StatelessWidget {
               const SizedBox(height: 6),
               _RelationGroupButton(
                 count: component.length + 1,
+                hasSameEvent: hasSameEvent,
                 onTap: () => _showGroup(context, component),
               ),
             ],
@@ -3186,7 +3191,11 @@ class _ArticleRelationsSection extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: cs.surface.withValues(alpha: 0.96),
-        title: const Text('关系组'),
+        title: Text(
+          ArticleRelationService.hasSameEventGroup(article.entryId)
+              ? '同一事件组'
+              : '近似重复组',
+        ),
         content: SizedBox(
           width: 520,
           child: ConstrainedBox(
@@ -3237,6 +3246,11 @@ class _ArticleRelationRow extends StatelessWidget {
         ? ('已读', true)
         : ('未读', false);
     final imageUrl = item.node.feedImage;
+    final relationColor = item.kind == ArticleRelationKind.equivalent
+        ? cs.primary
+        : Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF9BAFC3)
+        : const Color(0xFF52687D);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -3307,6 +3321,17 @@ class _ArticleRelationRow extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       PillTag(
+                        label: item.kind.label,
+                        backgroundColor: relationColor.withValues(alpha: 0.12),
+                        foregroundColor: relationColor,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        fontSize: 10,
+                      ),
+                      const SizedBox(width: 4),
+                      PillTag(
                         label: status,
                         backgroundColor: handled
                             ? cs.onSurface.withValues(alpha: 0.07)
@@ -3339,9 +3364,14 @@ class _ArticleRelationRow extends StatelessWidget {
 }
 
 class _RelationGroupButton extends StatelessWidget {
-  const _RelationGroupButton({required this.count, required this.onTap});
+  const _RelationGroupButton({
+    required this.count,
+    required this.hasSameEvent,
+    required this.onTap,
+  });
 
   final int count;
+  final bool hasSameEvent;
   final VoidCallback onTap;
 
   @override
@@ -3358,7 +3388,7 @@ class _RelationGroupButton extends StatelessWidget {
             Icon(Icons.account_tree_outlined, size: 15, color: cs.primary),
             const SizedBox(width: 7),
             Text(
-              '查看关系组（$count 篇）',
+              hasSameEvent ? '查看同一事件组（$count 篇）' : '查看近似重复组（$count 篇）',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],

@@ -36,6 +36,7 @@ abstract final class StorageKeys {
   static const String articleContentMaxWidth = 'article_content_max_width';
   static const String macosMaxFlingVelocity = 'macos_max_fling_velocity';
   static const String appearanceMode = 'appearance_mode';
+  static const String articleRelationEnabled = 'article_relation_enabled';
   static const String readabilityFetchedPrefix = 'readability_fetched_';
   static const String readabilityFetchStatePrefix = 'readability_fetch_state_';
   static const String inboxDetailFetchedPrefix = 'inbox_detail_fetched_';

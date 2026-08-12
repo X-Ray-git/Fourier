@@ -348,6 +348,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     return Obx(() {
       // recordsVersion 让落盘后的 pending/history/group 变化触发刷新。
       ArticleRelationService.recordsVersion.value;
+      final enabled = ArticleRelationService.isEnabled;
       final queued = ArticleRelationService.pendingCount;
       final running = ArticleRelationWorker.processingCount.value;
       final currentNew = ArticleRelationWorker.currentNewCount.value;
@@ -362,14 +363,19 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
       return _TaskStatusCard(
         icon: Icons.hub_outlined,
         title: '关系建立',
-        subtitle:
-            '$runningLabel · 本次完成 $completed 批 · ${ArticleRelationService.groupCount} 组关系',
-        queued: queued,
-        processing: running,
-        failed: failed,
-        failureHint: error == null ? null : '最近失败：$error。待处理摘要仍保留，可安全重试。',
-        actionLabel: error == null ? null : '重试',
-        onAction: error == null ? null : ArticleRelationWorker.retryPending,
+        subtitle: enabled
+            ? '$runningLabel · 本次完成 $completed 批 · ${ArticleRelationService.groupCount} 组关系'
+            : '已关闭 · 已有 ${ArticleRelationService.groupCount} 组关系保留',
+        queued: enabled ? queued : 0,
+        processing: enabled ? running : 0,
+        failed: enabled ? failed : 0,
+        failureHint: enabled && error != null
+            ? '最近失败：$error。待处理摘要仍保留，可安全重试。'
+            : null,
+        actionLabel: enabled && error != null ? '重试' : null,
+        onAction: enabled && error != null
+            ? ArticleRelationWorker.retryPending
+            : null,
       );
     });
   }
@@ -809,8 +815,10 @@ class _OverviewCard extends StatelessWidget {
         AutoTranslationWorker.processingCount.value +
         AutoSummaryWorker.queueSize +
         AutoSummaryWorker.processingCount.value +
-        ArticleRelationService.pendingCount +
-        ArticleRelationWorker.processingCount.value;
+        (ArticleRelationService.isEnabled
+            ? ArticleRelationService.pendingCount +
+                  ArticleRelationWorker.processingCount.value
+            : 0);
     final cs = Theme.of(context).colorScheme;
 
     return _TaskPanel(

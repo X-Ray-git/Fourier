@@ -27,6 +27,7 @@ class FilterReviewPipelineStatus extends StatelessWidget {
           AutoFilterWorker.processingCount.value;
       final relationPending = ArticleRelationService.pendingCount;
       final relationRunning = ArticleRelationWorker.processingCount.value > 0;
+      final relationEnabled = ArticleRelationService.isEnabled;
 
       final items = <Widget>[
         _PipelineStatusItem(
@@ -37,12 +38,14 @@ class FilterReviewPipelineStatus extends StatelessWidget {
         ),
         _PipelineStatusItem(
           label: '关系建立',
-          detail: relationRunning
+          detail: !relationEnabled
+              ? '关闭'
+              : relationRunning
               ? '处理中'
               : relationPending > 0
               ? '$relationPending/${ArticleRelationService.batchSize}'
               : '完成',
-          active: relationRunning,
+          active: relationEnabled && relationRunning,
           fontSize: fontSize,
         ),
       ];

@@ -57,6 +57,18 @@ void main() {
       expect(payload.settings['relation_prompt'], 'relation rules');
     });
 
+    test('keeps the relation feature toggle as a boolean', () {
+      final payload = SettingsBackupService.parseJson('''
+{
+  "type": "fourier_settings",
+  "version": 1,
+  "settings": {"article_relation_enabled": true}
+}
+''');
+
+      expect(payload.settings[StorageKeys.articleRelationEnabled], isTrue);
+    });
+
     test('keeps an Auto Folo version 1 session token for migration', () {
       final payload = SettingsBackupService.parseJson('''
 {

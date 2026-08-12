@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
+import '../common/constants/constants.dart';
 import '../models/article.dart';
 import '../models/article_relation.dart';
 import '../utils/storage.dart';
@@ -25,20 +26,27 @@ class ArticleRelationBatchInput {
 
 class ArticleRelationCandidateGroup {
   const ArticleRelationCandidateGroup({
+    required this.kind,
     required this.memberIds,
     required this.reason,
     required this.confidence,
   });
 
+  final ArticleRelationKind kind;
   final List<String> memberIds;
   final String reason;
   final double confidence;
 }
 
 class ArticleRelationDisplayItem {
-  const ArticleRelationDisplayItem({required this.node, this.article});
+  const ArticleRelationDisplayItem({
+    required this.node,
+    required this.kind,
+    this.article,
+  });
 
   final ArticleRelationNode node;
+  final ArticleRelationKind kind;
   final ArticleModel? article;
 }
 
@@ -47,7 +55,7 @@ class ArticleRelationDisplayItem {
 /// 关系功能只消费启用时间之后完成的摘要。pending 与 history 都持久化，
 /// 因此请求失败或进程退出不会丢任务；只有一个合法批次完整落盘后才推进窗口。
 abstract final class ArticleRelationService {
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
   static const int batchSize = 128;
   static const int historyLimit = 1024;
 
@@ -64,6 +72,13 @@ abstract final class ArticleRelationService {
   static void Function({required bool flushPartial})? _scheduler;
 
   static final RxInt recordsVersion = 0.obs;
+
+  static bool get isEnabled =>
+      GStorage.setting.get(
+        StorageKeys.articleRelationEnabled,
+        defaultValue: false,
+      ) ==
+      true;
 
   static int? get activatedAt =>
       GStorage.articleRelations.get(_activationKey) as int?;
@@ -84,6 +99,7 @@ abstract final class ArticleRelationService {
   }
 
   static Future<void> initialize() async {
+    if (!isEnabled) return;
     if (_initialized) return;
     _initialized = true;
     final box = GStorage.articleRelations;
@@ -102,6 +118,7 @@ abstract final class ArticleRelationService {
     ArticleModel article,
     SummaryRecord record,
   ) async {
+    if (!isEnabled) return;
     final activationWasMissing = activatedAt == null;
     await initialize();
     final summary = (record.summaryText ?? '').trim();
@@ -118,6 +135,7 @@ abstract final class ArticleRelationService {
   /// 恢复“摘要已持久化、关系 pending 尚未来得及写入”的崩溃窗口。
   /// 只扫描启用时间之后的结构化 done 记录，旧 String 摘要不会误入队。
   static Future<void> recoverCompletedSummaries() async {
+    if (!isEnabled) return;
     final activation = activatedAt;
     if (activation == null) return;
     final articles = {
@@ -144,6 +162,7 @@ abstract final class ArticleRelationService {
     bool schedule = true,
   }) {
     return _serialWrite(() async {
+      if (!isEnabled) return;
       final summary = record.summaryText!.trim();
       final digest = sha256.convert(utf8.encode(summary)).toString();
       final existing = nodeOf(article.entryId);
@@ -203,6 +222,7 @@ abstract final class ArticleRelationService {
     required bool flushPartial,
   }) {
     return _serialWrite(() async {
+      if (!isEnabled) return null;
       final pending = _readIds(_pendingKey);
       if (pending.isEmpty || (!flushPartial && pending.length < batchSize)) {
         return null;
@@ -232,11 +252,13 @@ abstract final class ArticleRelationService {
     });
   }
 
-  static Future<void> completeBatch(
+  static Future<bool> completeBatch(
     ArticleRelationBatchInput input,
     List<ArticleRelationCandidateGroup> groups,
   ) {
     return _serialWrite(() async {
+      // 开关可能在网络响应返回与串行写入之间关闭，最终提交必须再次核对。
+      if (!isEnabled) return false;
       final now = DateTime.now().millisecondsSinceEpoch;
       final newIds = input.newNodes.map((node) => node.articleId).toSet();
       final pending = _readIds(_pendingKey)..removeWhere(newIds.contains);
@@ -248,16 +270,15 @@ abstract final class ArticleRelationService {
         history.removeRange(0, evictionCount);
       }
 
-      final staleGroupKeys = <String>[];
+      final existingGroups = <String, ArticleRelationGroup>{};
+      final staleGroupKeys = <String>{};
       for (final key in GStorage.articleRelations.keys.whereType<String>()) {
         if (!key.startsWith(_groupPrefix)) continue;
         final raw = GStorage.articleRelations.get(key);
         if (raw is! Map) continue;
         final old = ArticleRelationGroup.fromJson(raw.cast<dynamic, dynamic>());
+        existingGroups[key] = old;
         if (old.memberIds.any(newIds.contains)) staleGroupKeys.add(key);
-      }
-      if (staleGroupKeys.isNotEmpty) {
-        await GStorage.articleRelations.deleteAll(staleGroupKeys);
       }
 
       final updates = <dynamic, dynamic>{
@@ -269,20 +290,56 @@ abstract final class ArticleRelationService {
             .copyWith(processedAt: now, lastBatchId: input.id)
             .toJson();
       }
+      final newRecords = <ArticleRelationGroup>[];
       for (var i = 0; i < groups.length; i++) {
         final group = groups[i];
+        final memberIds = group.memberIds.toSet();
+        if (group.kind == ArticleRelationKind.sameEvent) {
+          var merged = true;
+          while (merged) {
+            merged = false;
+            for (final entry in existingGroups.entries) {
+              if (staleGroupKeys.contains(entry.key) ||
+                  entry.value.kind != ArticleRelationKind.sameEvent ||
+                  !entry.value.memberIds.any(memberIds.contains)) {
+                continue;
+              }
+              memberIds.addAll(entry.value.memberIds);
+              staleGroupKeys.add(entry.key);
+              merged = true;
+            }
+            for (var index = newRecords.length - 1; index >= 0; index--) {
+              final existing = newRecords[index];
+              if (existing.kind != ArticleRelationKind.sameEvent ||
+                  !existing.memberIds.any(memberIds.contains)) {
+                continue;
+              }
+              memberIds.addAll(existing.memberIds);
+              newRecords.removeAt(index);
+              merged = true;
+            }
+          }
+        }
         final record = ArticleRelationGroup(
           id: '${input.id}-g${i + 1}',
           batchId: input.id,
-          memberIds: group.memberIds,
+          memberIds: memberIds.toList(growable: false),
           reason: group.reason,
           confidence: group.confidence,
           createdAt: now,
+          kind: group.kind,
         );
+        newRecords.add(record);
+      }
+      if (staleGroupKeys.isNotEmpty) {
+        await GStorage.articleRelations.deleteAll(staleGroupKeys.toList());
+      }
+      for (final record in newRecords) {
         updates['$_groupPrefix${record.id}'] = record.toJson();
       }
       await GStorage.articleRelations.putAll(updates);
       recordsVersion.value++;
+      return true;
     });
   }
 
@@ -301,39 +358,69 @@ abstract final class ArticleRelationService {
   }
 
   static List<ArticleRelationDisplayItem> directRelationsFor(String articleId) {
-    final ids = <String>{};
+    final kindsById = <String, ArticleRelationKind>{};
     for (final group in groupsFor(articleId)) {
-      ids.addAll(group.memberIds.where((id) => id != articleId));
-    }
-    return _displayItems(ids);
-  }
-
-  static List<ArticleRelationDisplayItem> componentFor(String articleId) {
-    final visited = <String>{articleId};
-    final queue = <String>[articleId];
-    while (queue.isNotEmpty) {
-      final current = queue.removeAt(0);
-      for (final group in groupsFor(current)) {
-        for (final id in group.memberIds) {
-          if (visited.add(id)) queue.add(id);
+      for (final id in group.memberIds.where((id) => id != articleId)) {
+        final current = kindsById[id];
+        if (current == null || group.kind == ArticleRelationKind.equivalent) {
+          kindsById[id] = group.kind;
         }
       }
     }
-    visited.remove(articleId);
-    return _displayItems(visited);
+    return _displayItems(kindsById);
   }
 
-  static List<ArticleRelationDisplayItem> _displayItems(Iterable<String> ids) {
+  static List<ArticleRelationDisplayItem> componentFor(String articleId) {
+    final kindsById = <String, ArticleRelationKind>{
+      articleId: ArticleRelationKind.equivalent,
+    };
+    final queue = <String>[articleId];
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      final currentKind = kindsById[current]!;
+      for (final group in groupsFor(current)) {
+        for (final id in group.memberIds) {
+          final nextKind =
+              currentKind == ArticleRelationKind.equivalent &&
+                  group.kind == ArticleRelationKind.equivalent
+              ? ArticleRelationKind.equivalent
+              : ArticleRelationKind.sameEvent;
+          final previous = kindsById[id];
+          if (previous == null ||
+              (previous == ArticleRelationKind.sameEvent &&
+                  nextKind == ArticleRelationKind.equivalent)) {
+            kindsById[id] = nextKind;
+            if (id != current) queue.add(id);
+          }
+        }
+      }
+    }
+    kindsById.remove(articleId);
+    return _displayItems(kindsById);
+  }
+
+  static bool hasSameEventGroup(String articleId) => groupsFor(
+    articleId,
+  ).any((group) => group.kind == ArticleRelationKind.sameEvent);
+
+  static List<ArticleRelationDisplayItem> _displayItems(
+    Map<String, ArticleRelationKind> kindsById,
+  ) {
     final articles = {
       for (final article in LocalArticleDbService.readAllArticles())
         article.entryId: article,
     };
-    final items = ids
-        .map((id) {
+    final items = kindsById.entries
+        .map((entry) {
+          final id = entry.key;
           final node = nodeOf(id);
           return node == null
               ? null
-              : ArticleRelationDisplayItem(node: node, article: articles[id]);
+              : ArticleRelationDisplayItem(
+                  node: node,
+                  kind: entry.value,
+                  article: articles[id],
+                );
         })
         .whereType<ArticleRelationDisplayItem>()
         .toList();
@@ -342,7 +429,38 @@ abstract final class ArticleRelationService {
   }
 
   static void notifySummaryQueueIdle() {
-    if (pendingCount > 0) _scheduler?.call(flushPartial: true);
+    if (isEnabled && pendingCount > 0) {
+      _scheduler?.call(flushPartial: true);
+    }
+  }
+
+  /// 开启时以当前时刻作为新边界，不追溯关闭期间完成的摘要。
+  static Future<void> activateFromNow() {
+    return _serialWrite(() async {
+      final box = GStorage.articleRelations;
+      await box.put(_activationKey, DateTime.now().millisecondsSinceEpoch);
+      if (box.get(_pendingKey) is! List) {
+        await box.put(_pendingKey, <String>[]);
+      }
+      if (box.get(_historyKey) is! List) {
+        await box.put(_historyKey, <String>[]);
+      }
+      _initialized = true;
+      recordsVersion.value++;
+    });
+  }
+
+  /// 关闭时丢弃未完成的派生节点，不形成待补算积压。
+  static Future<void> discardPending() {
+    return _serialWrite(() async {
+      final pending = _readIds(_pendingKey);
+      if (pending.isEmpty) return;
+      await GStorage.articleRelations.deleteAll([
+        for (final articleId in pending) '$_nodePrefix$articleId',
+      ]);
+      await GStorage.articleRelations.put(_pendingKey, <String>[]);
+      recordsVersion.value++;
+    });
   }
 
   static void resetForAccountChange() {
@@ -358,6 +476,7 @@ abstract final class ArticleRelationService {
     _initialized = false;
     _writeQueue = Future<void>.value();
     _scheduler = null;
+    await GStorage.setting.put(StorageKeys.articleRelationEnabled, true);
     if (activatedAt != null) {
       await GStorage.articleRelations.put(_activationKey, activatedAt);
     }

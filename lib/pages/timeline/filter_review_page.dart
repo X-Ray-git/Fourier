@@ -746,8 +746,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       final p = AutoFilterWorker.processingCount.value;
       ArticleRelationService.recordsVersion.value;
       final relationActive =
-          ArticleRelationService.pendingCount > 0 ||
-          ArticleRelationWorker.processingCount.value > 0;
+          ArticleRelationService.isEnabled &&
+          (ArticleRelationService.pendingCount > 0 ||
+              ArticleRelationWorker.processingCount.value > 0);
       final llmActive = q > 0 || p > 0 || relationActive;
 
       return Column(
@@ -867,8 +868,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 final p = AutoFilterWorker.processingCount.value;
                 ArticleRelationService.recordsVersion.value;
                 final relationActive =
-                    ArticleRelationService.pendingCount > 0 ||
-                    ArticleRelationWorker.processingCount.value > 0;
+                    ArticleRelationService.isEnabled &&
+                    (ArticleRelationService.pendingCount > 0 ||
+                        ArticleRelationWorker.processingCount.value > 0);
                 final llmActive = q > 0 || p > 0 || relationActive;
 
                 return ScrollbarTheme(

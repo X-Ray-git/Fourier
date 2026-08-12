@@ -20,6 +20,7 @@ import '../../services/app_version_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/article_relation_prompt_service.dart';
 import '../../services/article_relation_service.dart';
+import '../../services/article_relation_worker.dart';
 import '../../services/llm_config.dart';
 import '../../services/settings_backup_service.dart';
 import '../../services/folo_auth_service.dart';
@@ -70,6 +71,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
   late bool _androidHapticsEnabled;
+  late bool _articleRelationEnabled;
 
   void _showOpenSourceLicenses() {
     if (Platform.isMacOS) {
@@ -134,6 +136,7 @@ class _SettingsPageState extends State<SettingsPage> {
       defaultValue: 3,
     );
     _androidHapticsEnabled = AndroidHapticsService.isEnabled;
+    _articleRelationEnabled = ArticleRelationService.isEnabled;
   }
 
   @override
@@ -535,6 +538,20 @@ class _SettingsPageState extends State<SettingsPage> {
   void _setAutoRetryMaxCount(int value) {
     setState(() => _autoRetryMaxCount = value);
     GStorage.setting.put('auto_retry_max_count', value);
+  }
+
+  Future<void> _setArticleRelationEnabled(bool enabled) async {
+    final previous = _articleRelationEnabled;
+    setState(() => _articleRelationEnabled = enabled);
+    try {
+      await ArticleRelationWorker.setEnabled(enabled);
+    } catch (_) {
+      try {
+        await ArticleRelationWorker.setEnabled(previous);
+      } catch (_) {}
+      if (mounted) setState(() => _articleRelationEnabled = previous);
+      AppFeedback.error('设置保存失败', '关系建立开关已恢复原值');
+    }
   }
 
   void _setAppearanceMode(String value) {
@@ -1093,6 +1110,11 @@ class _SettingsPageState extends State<SettingsPage> {
                               resetConfig: LlmConfig.resetFilter,
                             ),
                             const SizedBox(height: 10),
+                            _ArticleRelationFeatureToggle(
+                              value: _articleRelationEnabled,
+                              onChanged: _setArticleRelationEnabled,
+                            ),
+                            const SizedBox(height: 10),
                             _LlmConfigCard(
                               title: '关系判断 LLM 参数',
                               defaultConfig: LlmConfig.relationDefault,
@@ -1631,6 +1653,11 @@ class _SettingsPageState extends State<SettingsPage> {
               loadConfig: LlmConfig.loadFilter,
               saveConfig: LlmConfig.saveFilter,
               resetConfig: LlmConfig.resetFilter,
+            ),
+            const SizedBox(height: 10),
+            _ArticleRelationFeatureToggle(
+              value: _articleRelationEnabled,
+              onChanged: _setArticleRelationEnabled,
             ),
             const SizedBox(height: 10),
             _LlmConfigCard(
@@ -4077,6 +4104,50 @@ class _AutoSavedSettingsTextField extends StatelessWidget {
       inputFormatters: inputFormatters,
       enabled: enabled,
       onSubmitted: (_) => onCommit(),
+    );
+  }
+}
+
+class _ArticleRelationFeatureToggle extends StatelessWidget {
+  const _ArticleRelationFeatureToggle({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final content = SwitchListTile.adaptive(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      title: const Text(
+        '启用文章关系建立',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+      subtitle: const Text(
+        '默认关闭。关闭时不消耗关系判断 token，也不会积压或追溯处理期间完成的摘要；已有关系保留。',
+        style: TextStyle(fontSize: 12),
+      ),
+      value: value,
+      onChanged: onChanged,
+    );
+
+    if (!Platform.isMacOS) {
+      return Platform.isAndroid
+          ? MobileSettingsPanel(child: content)
+          : Card(child: content);
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: cs.onSurfaceVariant.withValues(alpha: 0.28),
+          width: 0.8,
+        ),
+      ),
+      child: content,
     );
   }
 }

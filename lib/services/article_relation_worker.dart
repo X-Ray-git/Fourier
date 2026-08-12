@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
+import '../common/constants/constants.dart';
 import '../models/article_relation.dart';
 import '../utils/storage.dart';
 import 'account_session_guard.dart';
@@ -40,7 +41,7 @@ abstract final class ArticleRelationWorker {
   static const Duration _timeout = Duration(seconds: 300);
   static const int _maxAttempts = 3;
   static String get promptVersion =>
-      'relation-v1@${ArticleRelationPromptService.promptFingerprint}';
+      'relation-v2@${ArticleRelationPromptService.promptFingerprint}';
 
   static final Dio _dio = Dio(
     BaseOptions(
@@ -74,8 +75,16 @@ abstract final class ArticleRelationWorker {
   static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    await ArticleRelationService.initialize();
     ArticleRelationService.registerScheduler(schedule);
+    if (!ArticleRelationService.isEnabled) {
+      await ArticleRelationService.discardPending();
+      return;
+    }
+    await ArticleRelationService.initialize();
+    _restoreRuntimeStateAndSchedule();
+  }
+
+  static void _restoreRuntimeStateAndSchedule() {
     final failedBatch = _latestFailedPendingBatch();
     if (failedBatch != null) {
       _retryRequired = true;
@@ -88,8 +97,39 @@ abstract final class ArticleRelationWorker {
     }
   }
 
+  static Future<void> setEnabled(bool enabled) async {
+    if (enabled == ArticleRelationService.isEnabled) return;
+    if (!enabled) {
+      await GStorage.setting.put(StorageKeys.articleRelationEnabled, false);
+      ArticleRelationService.recordsVersion.value++;
+      cancelProcessing();
+      await ArticleRelationService.discardPending();
+      return;
+    }
+
+    _retryRequired = false;
+    lastError.value = null;
+    await ArticleRelationService.activateFromNow();
+    await GStorage.setting.put(StorageKeys.articleRelationEnabled, true);
+    ArticleRelationService.recordsVersion.value++;
+  }
+
+  /// 配置导入后同步运行时开关；关闭仍执行“不积压”的清理语义。
+  static Future<void> applyStoredEnabledSetting(bool wasEnabled) async {
+    final enabled = ArticleRelationService.isEnabled;
+    if (enabled == wasEnabled) return;
+    if (!enabled) {
+      cancelProcessing();
+      await ArticleRelationService.discardPending();
+      return;
+    }
+    _retryRequired = false;
+    lastError.value = null;
+    await ArticleRelationService.activateFromNow();
+  }
+
   static void schedule({required bool flushPartial}) {
-    if (_retryRequired) return;
+    if (!ArticleRelationService.isEnabled || _retryRequired) return;
     _flushPartialRequested = _flushPartialRequested || flushPartial;
     if (_running || _scheduled) return;
     _scheduled = true;
@@ -100,6 +140,7 @@ abstract final class ArticleRelationWorker {
   }
 
   static void retryPending() {
+    if (!ArticleRelationService.isEnabled) return;
     _retryRequired = false;
     lastError.value = null;
     schedule(flushPartial: true);
@@ -110,7 +151,7 @@ abstract final class ArticleRelationWorker {
     _running = true;
     final generation = _generation;
     try {
-      while (generation == _generation) {
+      while (generation == _generation && ArticleRelationService.isEnabled) {
         final flushPartial = _flushPartialRequested;
         _flushPartialRequested = false;
         final input = await ArticleRelationService.prepareNextBatch(
@@ -181,10 +222,15 @@ abstract final class ArticleRelationWorker {
               )
             : await override(input);
         if (generation != _generation ||
+            !ArticleRelationService.isEnabled ||
             !AccountSessionGuard.isCurrent(accountRevision)) {
           return false;
         }
-        await ArticleRelationService.completeBatch(input, result.groups);
+        final committed = await ArticleRelationService.completeBatch(
+          input,
+          result.groups,
+        );
+        if (!committed) return false;
         final completedAt = DateTime.now().millisecondsSinceEpoch;
         await _saveBatch(
           ArticleRelationBatchRecord(
@@ -365,6 +411,12 @@ abstract final class ArticleRelationWorker {
     final groups = <ArticleRelationCandidateGroup>[];
     for (final raw in rawGroups) {
       if (raw is! Map) continue;
+      // 兼容关系 v1 及旧自定义 prompt：当时只有“近似重复”一种语义，
+      // 输出没有 type。明确给出未知 type 时仍跳过，避免误解新语义。
+      final kind = raw['type'] == null
+          ? ArticleRelationKind.equivalent
+          : ArticleRelationKindX.tryParse(raw['type']);
+      if (kind == null) continue;
       final memberLabels = (raw['members'] as List<dynamic>? ?? const [])
           .whereType<String>()
           .where(labels.containsKey)
@@ -381,6 +433,7 @@ abstract final class ArticleRelationWorker {
       );
       groups.add(
         ArticleRelationCandidateGroup(
+          kind: kind,
           memberIds: memberLabels
               .map((label) => labels[label]!.articleId)
               .toList(growable: false),

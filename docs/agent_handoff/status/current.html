@@ -50,7 +50,7 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-截至 2026-08-10：
+截至 2026-08-12：
 
 - `main` 是当前集成分支。
 - Fourier 品牌迁移与离线工程 Wiki 已通过独立 merge commit 合入 `main`。应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和图标均已迁移；旧 Auto Folo 名称只允许存在于历史证据、旧设置导入与明确的迁移兼容说明中。
@@ -63,6 +63,7 @@
 - 除非用户明确要求，否则不要创建 release/tag。
 - `AGENT_HANDOFF.md` 现在只作为短入口。维护型交接知识库位于 `docs/agent_handoff/`。
 - 旧单文件时间线已拆入 `docs/agent_handoff/history/archive/`；`history/chronology.html` 提供全部旧章节索引，`history/timeline.html` 仅保留兼容入口。当前事实不得写入历史归档。
+- macOS 已接入本地能耗诊断日志，用于定位无法稳定复现的“高耗电量”提示；当前空闲实测无持续 CPU 占用或电源断言，启动/刷新图片预取是首要待量化对象。日志边界与路径见 `features/performance.html`，不得在没有证据时直接削弱用户明确选择的图片预取策略。
 
 当前产品形态：
 

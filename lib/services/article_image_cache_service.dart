@@ -88,6 +88,13 @@ abstract final class ArticleImageCacheService {
   static bool get _enabled =>
       _enabledOverrideForTesting ?? (Platform.isMacOS || Platform.isAndroid);
 
+  static Map<String, int> get diagnosticSnapshot => {
+    'foregroundQueued': _foregroundQueue.length,
+    'backgroundQueued': _backgroundQueue.length,
+    'running': _runningDownloads,
+    'failedArticles': _failedImageUrls.length,
+  };
+
   @visibleForTesting
   static void setEnabledForTesting(bool? enabled) {
     _enabledOverrideForTesting = enabled;

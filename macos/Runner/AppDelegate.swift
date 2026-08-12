@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import Darwin
 import WebKit
 import webview_flutter_wkwebview
 
@@ -39,6 +40,18 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
     mainFlutterWindow?.delegate = self
 
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
+
+    let energyDiagnosticsChannel = FlutterMethodChannel(
+      name: "io.github.xraygit.fourier/energy_diagnostics",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    energyDiagnosticsChannel.setMethodCallHandler { [weak self] (call, result) in
+      guard call.method == "getProcessMetrics" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(self?.processMetrics() ?? [:])
+    }
 
     let badgeChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/badge", binaryMessenger: controller.engine.binaryMessenger)
     badgeChannel.setMethodCallHandler { (call, result) in
@@ -174,6 +187,43 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       webView.configuration.preferences.isElementFullscreenEnabled = true
       result(nil)
     }
+  }
+
+  private func processMetrics() -> [String: Any] {
+    var usage = rusage()
+    getrusage(RUSAGE_SELF, &usage)
+    let userSeconds = Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1_000_000
+    let systemSeconds = Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1_000_000
+
+    var taskInfo = mach_task_basic_info()
+    var taskInfoCount = mach_msg_type_number_t(
+      MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size
+    )
+    let taskInfoResult = withUnsafeMutablePointer(to: &taskInfo) { pointer in
+      pointer.withMemoryRebound(to: integer_t.self, capacity: Int(taskInfoCount)) {
+        task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &taskInfoCount)
+      }
+    }
+
+    let window = mainFlutterWindow
+    let lowPowerMode: Bool
+    if #available(macOS 12.0, *) {
+      lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+    } else {
+      lowPowerMode = false
+    }
+    var metrics: [String: Any] = [
+      "cpuSeconds": userSeconds + systemSeconds,
+      "lowPowerMode": lowPowerMode,
+      "thermalState": ProcessInfo.processInfo.thermalState.rawValue,
+      "appActive": NSApp.isActive,
+      "windowVisible": window?.isVisible ?? false,
+      "windowMiniaturized": window?.isMiniaturized ?? false,
+    ]
+    if taskInfoResult == KERN_SUCCESS {
+      metrics["residentBytes"] = Int64(taskInfo.resident_size)
+    }
+    return metrics
   }
 
   private static func menuItem(at path: [String]) -> NSMenuItem? {

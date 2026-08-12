@@ -91,12 +91,20 @@ class _MainPageState extends State<MainPage> {
                   Expanded(
                     child: ColoredBox(
                       color: colorScheme.surface,
-                      child: Obx(
-                        () => IndexedStack(
-                          index: controller.currentIndex.value,
-                          children: _macPages,
-                        ),
-                      ),
+                      child: Obx(() {
+                        final index = controller.currentIndex.value;
+                        final pages = _macPages;
+                        return IndexedStack(
+                          index: index,
+                          children: List.generate(
+                            pages.length,
+                            (pageIndex) => TickerMode(
+                              enabled: pageIndex == index,
+                              child: pages[pageIndex],
+                            ),
+                          ),
+                        );
+                      }),
                     ),
                   ),
                 ],

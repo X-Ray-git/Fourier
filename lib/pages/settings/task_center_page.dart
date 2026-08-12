@@ -37,14 +37,21 @@ enum _AiTaskType { translation, summary }
 class _TaskCenterPageState extends State<TaskCenterPage> {
   Timer? _refreshTimer;
   bool _syncingReads = false;
+  bool _tickerEnabled = true;
   final _macScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted && _tickerEnabled) setState(() {});
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _tickerEnabled = TickerMode.valuesOf(context).enabled;
   }
 
   @override

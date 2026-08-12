@@ -50,6 +50,12 @@
 <script type="text/markdown" id="wiki-content">
 # 验证记录
 
+## 2026-08-12 macOS 能耗诊断
+
+- 当前正式版在省电模式、无 LLM 请求且已运行约一天时，短时空闲采样约为 `0.0%–0.1% CPU`；`pmset` 未发现 Fourier 持有防休眠或网络活跃断言。暂未证明存在空闲永久高负载。
+- 新增本地轮转诊断，记录 CPU、内存、低电量/温度状态、帧耗时和各后台队列计数；不记录内容或凭据。后续需使用包含本改动的 macOS 构建正常使用，待系统再次提示高耗电后检查 `energy.jsonl`，判断高峰是否与刷新图片预取、同步、AI 队列或 UI 慢帧重合。
+- 隐藏 macOS 主页面已关闭 ticker，隐藏任务中心停止每秒刷新。定向测试、`dart analyze lib test`（无新增 warning/error）及 macOS Debug 构建通过；构建中只保留 `video_player_avfoundation` 的既有弃用 warning。
+
 ## 2026-08-04 误分类（N）标记与撤销
 
 已完成端到端验证：

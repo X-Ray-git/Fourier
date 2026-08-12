@@ -27,6 +27,7 @@ import 'services/app_version_service.dart';
 import 'services/folo_request_metadata.dart';
 import 'services/article_relation_worker.dart';
 import 'services/mac_article_shortcut_service.dart';
+import 'services/macos_energy_diagnostic_service.dart';
 import 'utils/storage.dart';
 import 'services/undo_service.dart';
 import 'utils/macos_window_controls.dart';
@@ -135,6 +136,7 @@ void main() async {
   }
 
   runApp(const FourierApp());
+  unawaited(MacosEnergyDiagnosticService.initialize());
 
   if (shouldShowMacWindow) {
     try {

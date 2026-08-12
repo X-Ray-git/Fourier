@@ -293,8 +293,10 @@ abstract final class AutoReadabilityWorker {
     unawaited(GStorage.setting.delete(_stateKey(entryId)));
   }
 
-  @visibleForTesting
   static int get runningCount => _running.length;
+
+  static int get queueSize => _queue.length;
+  static int get retryCount => _fetchRetryTimers.length;
 
   static void cancelProcessing() {
     _generation++;

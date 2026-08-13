@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../common/constants/constants.dart';
 import '../models/article.dart';
 import '../models/feed.dart';
+import '../services/analysis_event_ledger.dart';
 import 'init.dart';
 import 'folo_api_contract.dart';
 
@@ -426,7 +427,35 @@ class FeedHttp {
   static Future<LoadingState<void>> markRead({
     required List<String> entryIds,
     bool isInbox = false,
+    required RemoteReadRequestSource auditSource,
+    Map<String, int>? queuedAtByEntryId,
   }) async {
+    final stopwatch = Stopwatch()..start();
+    final attemptSequence = AnalysisEventLedger.recordRemoteMarkReadAttempt(
+      entryIds: entryIds,
+      isInbox: isInbox,
+      source: auditSource,
+      queuedAtByEntryId: queuedAtByEntryId,
+    );
+
+    LoadingState<void> finish(
+      LoadingState<void> result, {
+      int? statusCode,
+      String? failureKind,
+    }) {
+      stopwatch.stop();
+      AnalysisEventLedger.recordRemoteMarkReadResult(
+        attemptSequence: attemptSequence,
+        entryIds: entryIds,
+        source: auditSource,
+        success: result is Success<void>,
+        durationMs: stopwatch.elapsedMilliseconds,
+        statusCode: statusCode,
+        failureKind: failureKind,
+      );
+      return result;
+    }
+
     try {
       final response = await Request().post(
         ApiConstants.reads,
@@ -438,13 +467,36 @@ class FeedHttp {
       final body = _responseMap(response);
       if (response.statusCode == 200 && body != null) {
         if (_isSuccess(body)) {
-          return const Success(null);
+          return finish(const Success(null), statusCode: response.statusCode);
         }
-        return LoadError(_messageOf(body, fallback: '标已读失败'));
+        return finish(
+          LoadError(_messageOf(body, fallback: '标已读失败')),
+          statusCode: response.statusCode,
+          failureKind: 'api_rejected',
+        );
       }
-      return LoadError('请求失败: ${response.statusCode}');
+      return finish(
+        LoadError('请求失败: ${response.statusCode}'),
+        statusCode: response.statusCode,
+        failureKind: 'http_status',
+      );
     } on DioException catch (e) {
-      return LoadError('网络错误: ${e.message}');
+      return finish(
+        LoadError('网络错误: ${e.message}'),
+        statusCode: e.response?.statusCode,
+        failureKind: e.type.name,
+      );
+    } catch (_) {
+      stopwatch.stop();
+      AnalysisEventLedger.recordRemoteMarkReadResult(
+        attemptSequence: attemptSequence,
+        entryIds: entryIds,
+        source: auditSource,
+        success: false,
+        durationMs: stopwatch.elapsedMilliseconds,
+        failureKind: 'unexpected_exception',
+      );
+      rethrow;
     }
   }
 

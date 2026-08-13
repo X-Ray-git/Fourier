@@ -43,6 +43,7 @@ class _WebEmbedVideoPlayerState extends State<WebEmbedVideoPlayer> {
   WebViewController? _controller;
   bool _isLoading = false;
   bool _hasError = false;
+  bool _tickerEnabled = true;
 
   @override
   void initState() {
@@ -51,6 +52,22 @@ class _WebEmbedVideoPlayerState extends State<WebEmbedVideoPlayer> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _startPlayback();
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_pauseWebViewPlayback());
+    super.dispose();
+  }
+
+  Future<void> _pauseWebViewPlayback() async {
+    try {
+      await _controller?.runJavaScript(
+        'document.querySelectorAll("video").forEach(function(v){v.pause();});',
+      );
+    } catch (_) {
+      // WebView 可能已随页面一起销毁。
     }
   }
 
@@ -142,6 +159,13 @@ class _WebEmbedVideoPlayerState extends State<WebEmbedVideoPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    // 路由被覆盖时暂停 WebView 播放，避免声音从下层路由传出。
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    if (_tickerEnabled && !tickerEnabled) {
+      unawaited(_pauseWebViewPlayback());
+    }
+    _tickerEnabled = tickerEnabled;
+
     final colorScheme = Theme.of(context).colorScheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),

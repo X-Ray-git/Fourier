@@ -327,8 +327,11 @@ class ArticleController extends GetxController {
     ArticleStateNotifier.tick(article.entryId);
 
     final syncResult = await _retrySync(
-      action: () =>
-          FeedHttp.markRead(entryIds: [article.entryId], isInbox: isInbox),
+      action: () => FeedHttp.markRead(
+        entryIds: [article.entryId],
+        isInbox: isInbox,
+        auditSource: RemoteReadRequestSource.articleController,
+      ),
       successMsg: showSuccess ? '已标记已读' : null,
       maxRetries: 5,
       lifecycleGeneration: lifecycleGeneration,
@@ -760,6 +763,7 @@ class _MacArticleDetailStackState extends State<MacArticleDetailStack> {
           isSplitView: true,
           isActive: widget.isActive,
           onClose: _popRelatedArticle,
+          onMarkedReadByShortcut: _popRelatedArticle,
           onOpenRelatedArticle: _openRelatedArticle,
         ),
         transitionsBuilder: (_, animation, _, child) {
@@ -821,6 +825,7 @@ class ArticlePageView extends StatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onMKeyPressed;
+  final VoidCallback? onMarkedReadByShortcut;
   final VoidCallback? onMisclassifyKeyPressed;
   final VoidCallback? onOpenOriginalAndMarkRead;
   final bool Function()? isActive;
@@ -843,6 +848,7 @@ class ArticlePageView extends StatefulWidget {
     this.onPrevious,
     this.onNext,
     this.onMKeyPressed,
+    this.onMarkedReadByShortcut,
     this.onMisclassifyKeyPressed,
     this.onOpenOriginalAndMarkRead,
     this.isActive,
@@ -1200,6 +1206,9 @@ class _ArticlePageViewState extends State<ArticlePageView> {
       if (controller.isUpdatingReadState.value) return true;
       final wasUnread = !controller.isRead.value;
       _toggleReadState();
+      if (wasUnread) {
+        widget.onMarkedReadByShortcut?.call();
+      }
       if (wasUnread && widget.onNext != null) {
         widget.onNext!();
       }

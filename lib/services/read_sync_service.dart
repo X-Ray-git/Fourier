@@ -2,6 +2,7 @@ import '../http/feed_http.dart';
 import '../http/init.dart';
 import '../utils/storage.dart';
 import 'account_session_guard.dart';
+import 'analysis_event_ledger.dart';
 
 class PendingReadSyncItem {
   final String entryId;
@@ -145,6 +146,11 @@ abstract final class ReadSyncService {
           final result = await FeedHttp.markRead(
             entryIds: chunk,
             isInbox: entry.key,
+            auditSource: RemoteReadRequestSource.pendingQueue,
+            queuedAtByEntryId: {
+              for (final item in entry.value)
+                if (chunk.contains(item.entryId)) item.entryId: item.updatedAt,
+            },
           );
           if (!AccountSessionGuard.isCurrent(accountRevision)) return;
           if (result is Success<void>) {

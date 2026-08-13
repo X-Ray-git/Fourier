@@ -108,6 +108,79 @@ void main() {
     expect(event['articleId'], 'entry-1');
   });
 
+  test('记录远端标已读请求并关联成功结果', () {
+    final attemptSequence = AnalysisEventLedger.recordRemoteMarkReadAttempt(
+      entryIds: const ['entry-1'],
+      isInbox: true,
+      source: RemoteReadRequestSource.pendingQueue,
+      queuedAtByEntryId: const {'entry-1': 123456789},
+    );
+    AnalysisEventLedger.recordRemoteMarkReadResult(
+      attemptSequence: attemptSequence,
+      entryIds: const ['entry-1'],
+      source: RemoteReadRequestSource.pendingQueue,
+      success: true,
+      durationMs: 42,
+      statusCode: 200,
+    );
+
+    final attempt = Map<String, dynamic>.from(
+      GStorage.analysisEvents.get('000000000001') as Map,
+    );
+    final attemptData = Map<String, dynamic>.from(attempt['data'] as Map);
+    expect(attempt['type'], 'remote_mark_read_attempt');
+    expect(attempt['articleId'], 'entry-1');
+    expect(attemptData['source'], 'pendingQueue');
+    expect(attemptData['entryIds'], ['entry-1']);
+    expect(attemptData['isInbox'], isTrue);
+    expect(Map<String, dynamic>.from(attemptData['queuedAtByEntryId'] as Map), {
+      'entry-1': 123456789,
+    });
+
+    final result = Map<String, dynamic>.from(
+      GStorage.analysisEvents.get('000000000002') as Map,
+    );
+    final resultData = Map<String, dynamic>.from(result['data'] as Map);
+    expect(result['type'], 'remote_mark_read_result');
+    expect(result['articleId'], 'entry-1');
+    expect(resultData['attemptSequence'], attemptSequence);
+    expect(resultData['success'], isTrue);
+    expect(resultData['durationMs'], 42);
+    expect(resultData['statusCode'], 200);
+  });
+
+  test('批量远端标已读失败保留来源和失败类型', () {
+    final attemptSequence = AnalysisEventLedger.recordRemoteMarkReadAttempt(
+      entryIds: const ['entry-1', 'entry-2'],
+      isInbox: false,
+      source: RemoteReadRequestSource.batchAction,
+    );
+    AnalysisEventLedger.recordRemoteMarkReadResult(
+      attemptSequence: attemptSequence,
+      entryIds: const ['entry-1', 'entry-2'],
+      source: RemoteReadRequestSource.batchAction,
+      success: false,
+      durationMs: 300,
+      statusCode: 503,
+      failureKind: 'http_status',
+    );
+
+    final attempt = Map<String, dynamic>.from(
+      GStorage.analysisEvents.get('000000000001') as Map,
+    );
+    expect(attempt.containsKey('articleId'), isFalse);
+
+    final result = Map<String, dynamic>.from(
+      GStorage.analysisEvents.get('000000000002') as Map,
+    );
+    final data = Map<String, dynamic>.from(result['data'] as Map);
+    expect(data['source'], 'batchAction');
+    expect(data['entryIds'], ['entry-1', 'entry-2']);
+    expect(data['success'], isFalse);
+    expect(data['statusCode'], 503);
+    expect(data['failureKind'], 'http_status');
+  });
+
   test('只记录真实读状态变化并保留来源', () {
     final article = _article();
     LocalArticleDbService.upsertOne(article);

@@ -1177,6 +1177,68 @@
 
 后果：后续看到历史审查报告时，不能把“报告曾指出”当作当前 bug 的证据。God 文件拆分、统一 DI、LLM 基类、全局并发池等架构议题应单独立项，不能夹带进正确性修复提交。
 
+## YouTube 播放器 attestation 必须运行在真实 YouTube 页面环境（2026-08-13）
+
+背景：BotGuard GenerateIT 只对真实 YouTube 页面环境签发 integrity token。探针矩阵（同 IP 同日）证明 127.0.0.1 裸页只能拿到 websafe fallback token：硬用 fallback 铸 pot 会在 GVS 试用配额耗尽后播放中 403 卡死，拒绝 fallback 则整链失败回退官方 iframe。challenge 来源、本地 visitorData、UA、cookie 与 IP 软限均被排除。
+
+决策：播放器 WebView 加载真实 `https://www.youtube-nocookie.com/embed/<id>` 页面，onPageFinished 时把 IIFE 版运行时经 `runJavaScript` 注入；attestation 用经代理重抓的 embed 页 HTML 里的 `ytcfg`/`ytAtN(R/T)`（`/att/get`+eacrToken 仅回退），并注入 `yt.config_`；运行时接管 DOM、隐藏官方播放器。完整证据见 `features/media-playback-attestation.html`。
+
+后果：播放器不再依赖本地裸页；Google 收紧 attestation 政策时，修复方向是继续对齐真实页面配方（参照 FreeTube/bgutils 官方示例），而不是回到本地页或放宽 token 使用。不得把 GenerateIT 的 fallback token 当作正式 token 使用。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要把播放器页面退回 127.0.0.1 裸页，也不要试图用 UA/头合成在裸页上重获 integrity token。
+- 不要把 fallback token 当正式 token 使用（GVS 试用配额耗尽后播放中 403）。
+- 不要删除官方 iframe 回退链路：YouTube 内部接口和 BotGuard 会变化，回退必须长期保留。
+</details>
+
+## loopback 代理对真实 embed 页面提供 HTTPS 自签实例与证书白名单放行（2026-08-13）
+
+背景：真实 embed 页面是 https，浏览器把指向 `http://127.0.0.1` 的子资源按混合内容拦截，运行时请求根本到不了代理。
+
+决策：macOS 上 `YouTubePlaybackServer` 运行时用 `/usr/bin/openssl` 生成 RSA-2048 自签名证书（SAN=127.0.0.1/localhost，每进程一份），读入内存后立即删除临时证书和私钥文件，并另起 HTTPS loopback 实例；WebView 的 `onSslAuthError` 回调只对「证书 DER 与当前进程生成一致、host=127.0.0.1、端口匹配」的挑战 `proceed()`，其余一律取消。Android 不调用不存在的 OpenSSL，而是继续使用 HTTP loopback，并只对 YouTube 真实 HTTPS embed 注入会话启用 localhost mixed content；外部明文请求继续由 network security config 拒绝。代理对所有响应补 CORS（`Access-Control-Allow-Headers: *`，无凭据请求下合法）并处理 OPTIONS 预检。
+
+后果：真实页面的跨源请求可安全到达代理；对其他主机的 TLS 校验不削弱。证书无需进 keychain、无需用户授权。openssl 不可用时降级为纯 HTTP（当前会回到混合内容拦截，属可观测的失败而非静默风险）。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要把 `badCertificateCallback` 或无条件 `proceed()` 应用到任何非本站证书。
+- 不要把自签证书或私钥写入仓库、配置备份或持久化目录。
+- 不要为证书安装引入 keychain 写权限或用户授权流程。
+</details>
+
+## 真实 embed 页面的 Trusted Types 由运行时 shim 直通策略处理（2026-08-13）
+
+背景：embed 页 CSP 强制 `require-trusted-types-for 'script'`，Shaka UI 的 `insertAdjacentHTML`/`innerHTML` 与 BotGuard interpreter、SABR `Platform.shim.eval` 都被原生 sink 拒绝。
+
+决策：运行时安装 `installTrustedTypesShim`：优先用直通策略 `fourier#runtime`（实测 WebKit 允许在无 `trusted-types` 白名单时 `createPolicy`）把字符串包装为 TrustedHTML/TrustedScript 走原生 sink；策略不可用时退回「blob URL + 同步 XHR responseType=document 解析 + 节点搬移」（实测唯一未被强制且同步可用的解析路径）。宿主页面自身的 TrustedHTML/TrustedScript 值始终走原生路径。
+
+后果：注入的运行时与宿主页面的 TT 环境共存；Shaka UI、BotGuard 与 SABR 都能在真实页面执行。若 YouTube 未来在 CSP 里显式禁止创建策略，需评估 blob 解析回退或其他注入形态。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要绕过宿主页面的 Trusted Types 对字符串做原生 HTML/脚本注入（包括 `createHTMLDocument`、`DOMParser`、`createContextualFragment`，实测均被强制）。
+- 不要把策略名改为与宿主页面冲突的名称，也不要复用宿主页面的策略名。
+</details>
+
+## WebView 播放器随路由生命周期暂停（2026-08-13）
+
+背景：真实页面播放后，关页（Esc/路由弹出）或从文章进入相关文章（下层路由保留在栈中）时声音继续。
+
+决策：`ShakaEmbedPlayer` 与 `WebEmbedVideoPlayer` 在 dispose 时对页面内全部 `video` 执行 `pause()`；并用 `TickerMode.valuesOf(context).enabled` 监听路由覆盖（ModalRoute 会关闭非当前路由的 Ticker）主动暂停。相关文章返回后不自动续播。
+
+后果：两种 WebView 播放器都不再向已不可见的路由漏声音；若平台 view 销毁延迟，dispose 里的 runJavaScript 仍能命中存活的 WebView。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要依赖平台 view 销毁来停止播放（销毁可能延迟）。
+- 不要在下层路由重新可见时自动续播。
+</details>
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

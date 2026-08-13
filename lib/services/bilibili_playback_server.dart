@@ -119,12 +119,6 @@ abstract final class BilibiliPlaybackServer {
               '$_assetRoot/embed_video_player.js',
               ContentType('application', 'javascript', charset: 'utf-8'),
             );
-          case 'embed_video_player.css':
-            await _serveAsset(
-              request,
-              '$_assetRoot/embed_video_player.css',
-              ContentType('text', 'css', charset: 'utf-8'),
-            );
           default:
             await _sendStatus(request.response, HttpStatus.notFound);
         }

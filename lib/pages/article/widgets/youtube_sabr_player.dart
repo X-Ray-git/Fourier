@@ -20,7 +20,13 @@ class YouTubeSabrPlayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShakaEmbedPlayer(
       debugLabel: 'YouTube',
-      playerUriBuilder: () => YouTubePlaybackServer.playerUri(info.videoId),
+      sessionBuilder: () async {
+        final session = await YouTubePlaybackServer.embedSession(info.videoId);
+        return ShakaEmbedSession(
+          pageUri: session.pageUri,
+          injectionScript: session.injectionScript,
+        );
+      },
       thumbnailUri: info.thumbnailUri,
       onArticleScroll: onArticleScroll,
       onFallback: onFallback,

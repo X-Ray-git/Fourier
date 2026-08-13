@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node ./copy-index.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

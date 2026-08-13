@@ -30,6 +30,7 @@ Wiki 维护：
 - [macOS 平台说明](docs/agent_handoff/platforms/macos.html)
 - [文章渲染](docs/agent_handoff/features/article-rendering.html)
 - [媒体播放](docs/agent_handoff/features/media-playback.html)
+- [YouTube attestation 排障案例](docs/agent_handoff/features/media-playback-attestation.html)
 - [时间线](docs/agent_handoff/features/timeline.html)
 - [翻译与摘要](docs/agent_handoff/features/translation-summary.html)
 - [Liquid Glass 设计](docs/agent_handoff/design/liquid-glass.html)

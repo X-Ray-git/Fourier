@@ -10,10 +10,9 @@ abstract final class YouTubePlaybackServer {
   static const _assetRoot = 'assets/embed_video_player';
   static const _maxProxyRequestBytes = 2 * 1024 * 1024;
   static const _upstreamResponseTimeout = Duration(seconds: 20);
-  static const _browserUserAgent =
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-      'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36';
+  static const _youtubeEmbedderUrl = 'https://github.com/X-Ray-git/Fourier/';
+  static const _youtubeNoCookieOrigin = 'https://www.youtube-nocookie.com';
+  static const _youtubeOrigin = 'https://www.youtube.com';
   static const _allowedMethods = {'GET', 'HEAD', 'POST'};
   static const _requestHeadersToDrop = {
     'accept-encoding',
@@ -36,20 +35,74 @@ abstract final class YouTubePlaybackServer {
     ..autoUncompress = false
     ..connectionTimeout = const Duration(seconds: 12);
   static Future<_ServerState>? _starting;
+  static Future<String>? _embedBundle;
+  static _ServerState? _state;
+  static _TlsMaterial? _tlsMaterial;
 
-  static Future<Uri> playerUri(String videoId) async {
+  /// 播放器 WebView 加载真实 YouTube embed 页面（真实 origin 与页面环境是
+  /// BotGuard 签发真实 integrity token 的前提），并把运行时 bundle 与代理
+  /// 地址注入该页面。所有 API/媒体请求仍走 loopback 代理。
+  ///
+  /// macOS 使用自签名 HTTPS loopback 代理：embed 页面是 https，浏览器会把
+  /// 指向 http://127.0.0.1 的子资源当作混合内容拦截。证书在运行时生成，
+  /// WebView 通过 SSL 认证回调仅对本站证书放行（见 `ShakaEmbedPlayer`）。
+  static Future<YouTubeEmbedSession> embedSession(String videoId) async {
     final normalizedVideoId = videoId.trim();
     if (!RegExp(r'^[A-Za-z0-9_-]{6,20}$').hasMatch(normalizedVideoId)) {
       throw ArgumentError.value(videoId, 'videoId', 'Invalid YouTube ID');
     }
 
     final state = await (_starting ??= _start());
-    return Uri(
-      scheme: 'http',
+    final useTls = state.httpsServer != null;
+    final proxyBase = Uri(
+      scheme: useTls ? 'https' : 'http',
       host: InternetAddress.loopbackIPv4.address,
-      port: state.server.port,
-      pathSegments: [state.capability, 'index.html'],
-      queryParameters: {'videoId': normalizedVideoId},
+      port: useTls ? state.httpsServer!.port : state.server.port,
+      pathSegments: [state.capability],
+    ).toString();
+    final bundle = await (_embedBundle ??= _loadEmbedBundle());
+    final config =
+        'globalThis.__FOURIER_EMBED__ = '
+        '{proxyBase:${jsonEncode(proxyBase)},'
+        'videoId:${jsonEncode(normalizedVideoId)}};\n';
+    return YouTubeEmbedSession(
+      pageUri: Uri.parse(
+        '$_youtubeNoCookieOrigin/embed/$normalizedVideoId'
+        '?html5=1&playsinline=1',
+      ),
+      injectionScript: '$config$bundle',
+    );
+  }
+
+  /// WebView SSL 认证回调的判定：只对当前进程生成、运行在本机 loopback
+  /// 端口上的自签名证书放行，其余一律拒绝。
+  static bool isTrustedLoopbackCertificate({
+    Uint8List? certificateDer,
+    String? host,
+    int? port,
+  }) {
+    final state = _state;
+    final httpsPort = state?.httpsServer?.port;
+    if (httpsPort == null) return false;
+    if (port != null && port != httpsPort) return false;
+    if (host != null && host != InternetAddress.loopbackIPv4.address) {
+      return false;
+    }
+    final expected = _tlsMaterial?.certDer;
+    final actual = certificateDer;
+    if (expected == null || actual == null) return false;
+    if (expected.length != actual.length) return false;
+    var diff = 0;
+    for (var index = 0; index < expected.length; index++) {
+      diff |= expected[index] ^ actual[index];
+    }
+    return diff == 0;
+  }
+
+  static Future<String> _loadEmbedBundle() async {
+    final data = await rootBundle.load('$_assetRoot/embed_video_player.js');
+    return utf8.decode(
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
     );
   }
 
@@ -59,7 +112,27 @@ abstract final class YouTubePlaybackServer {
       0,
       shared: false,
     );
-    final state = _ServerState(server, _newCapability());
+    HttpServer? httpsServer;
+    if (Platform.isMacOS) {
+      try {
+        final tls = await _ensureTlsMaterial();
+        final context = SecurityContext();
+        context.useCertificateChainBytes(utf8.encode(tls.certPem));
+        context.usePrivateKeyBytes(utf8.encode(tls.keyPem));
+        httpsServer = await HttpServer.bindSecure(
+          InternetAddress.loopbackIPv4,
+          0,
+          context,
+          shared: false,
+        );
+      } catch (error) {
+        debugPrint(
+          '[YouTubePlaybackServer] HTTPS loopback unavailable: $error',
+        );
+      }
+    }
+    final state = _ServerState(server, httpsServer, _newCapability());
+    _state = state;
     server.listen(
       (request) => _handleRequest(state, request),
       onError: (Object error, StackTrace stackTrace) {
@@ -67,7 +140,65 @@ abstract final class YouTubePlaybackServer {
       },
       cancelOnError: false,
     );
+    httpsServer?.listen(
+      (request) => _handleRequest(state, request),
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('[YouTubePlaybackServer] local TLS server error: $error');
+      },
+      cancelOnError: false,
+    );
     return state;
+  }
+
+  /// 运行时生成只用于 127.0.0.1 loopback 的自签名证书（每进程一份，存于
+  /// 系统临时目录）。openssl 不可用时降级为纯 HTTP 代理。
+  static Future<_TlsMaterial> _ensureTlsMaterial() async {
+    final existing = _tlsMaterial;
+    if (existing != null) return existing;
+    final dir = await Directory.systemTemp.createTemp('fourier_yt_tls_');
+    final certPath = '${dir.path}/cert.pem';
+    final keyPath = '${dir.path}/key.pem';
+    try {
+      final result = await Process.run('/usr/bin/openssl', [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-keyout',
+        keyPath,
+        '-out',
+        certPath,
+        '-days',
+        '397',
+        '-nodes',
+        '-subj',
+        '/CN=127.0.0.1',
+        '-addext',
+        'subjectAltName=IP:127.0.0.1,DNS:localhost',
+      ]);
+      if (result.exitCode != 0) {
+        throw StateError('openssl cert generation failed: ${result.stderr}');
+      }
+      final certPem = await File(certPath).readAsString();
+      final keyPem = await File(keyPath).readAsString();
+      final material = _TlsMaterial(certPem, keyPem, _pemToDer(certPem));
+      _tlsMaterial = material;
+      return material;
+    } finally {
+      // SecurityContext 使用内存中的 PEM；证书与私钥不应残留在磁盘。
+      try {
+        await dir.delete(recursive: true);
+      } catch (_) {
+        // 系统临时目录清理失败不应阻断播放器启动。
+      }
+    }
+  }
+
+  static List<int> _pemToDer(String pem) {
+    final base64 = pem
+        .replaceAll(RegExp(r'-----(BEGIN|END) CERTIFICATE-----'), '')
+        .replaceAll(RegExp(r'\s'), '');
+    return base64Decode(base64);
   }
 
   static String _newCapability() {
@@ -81,6 +212,16 @@ abstract final class YouTubePlaybackServer {
     HttpRequest request,
   ) async {
     try {
+      _applyCorsHeaders(request.response);
+      if (request.method == 'OPTIONS') {
+        if (kDebugMode) {
+          final target = request.uri.queryParameters['target'];
+          final host = target == null ? null : Uri.tryParse(target)?.host;
+          debugPrint('[YouTubeProxy] preflight for ${host ?? 'unknown'}');
+        }
+        await _sendStatus(request.response, HttpStatus.noContent);
+        return;
+      }
       final segments = request.uri.pathSegments;
       if (segments.length != 2 || segments.first != state.capability) {
         await _sendStatus(request.response, HttpStatus.notFound);
@@ -88,24 +229,6 @@ abstract final class YouTubePlaybackServer {
       }
 
       switch (segments.last) {
-        case 'index.html':
-          await _serveAsset(
-            request,
-            '$_assetRoot/index.html',
-            ContentType.html,
-          );
-        case 'embed_video_player.js':
-          await _serveAsset(
-            request,
-            '$_assetRoot/embed_video_player.js',
-            ContentType('application', 'javascript', charset: 'utf-8'),
-          );
-        case 'embed_video_player.css':
-          await _serveAsset(
-            request,
-            '$_assetRoot/embed_video_player.css',
-            ContentType('text', 'css', charset: 'utf-8'),
-          );
         case 'proxy':
           await _proxy(request);
         default:
@@ -118,45 +241,6 @@ abstract final class YouTubePlaybackServer {
         // The client may already have disconnected from a streaming response.
       }
     }
-  }
-
-  static Future<void> _serveAsset(
-    HttpRequest request,
-    String assetPath,
-    ContentType contentType,
-  ) async {
-    if (request.method != 'GET' && request.method != 'HEAD') {
-      await _sendStatus(
-        request.response,
-        HttpStatus.methodNotAllowed,
-        allow: 'GET, HEAD',
-      );
-      return;
-    }
-
-    final data = await rootBundle.load(assetPath);
-    final bytes = data.buffer.asUint8List(
-      data.offsetInBytes,
-      data.lengthInBytes,
-    );
-    final response = request.response;
-    response.headers
-      ..contentType = contentType
-      ..set(HttpHeaders.cacheControlHeader, 'no-store')
-      ..set('X-Content-Type-Options', 'nosniff')
-      ..set(
-        'Content-Security-Policy',
-        "default-src 'none'; "
-            "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob:; "
-            "font-src 'none'; "
-            "media-src 'self' data: blob:; "
-            "connect-src 'self';",
-      );
-    response.contentLength = bytes.length;
-    if (request.method == 'GET') response.add(bytes);
-    await response.close();
   }
 
   static Future<void> _proxy(HttpRequest request) async {
@@ -212,7 +296,10 @@ abstract final class YouTubePlaybackServer {
           upstream.headers.add(name, value);
         }
       });
-      upstream.headers.set(HttpHeaders.userAgentHeader, _browserUserAgent);
+      // Keep the WebView's real user agent. BotGuard fingerprints the actual
+      // browser environment, so replacing it with a synthetic Chrome user
+      // agent can make GenerateIT return only a fallback token.
+      _applyYouTubeEmbedHeaders(upstream, target, body);
       if (body.isNotEmpty) upstream.add(body);
 
       final upstreamResponse = await upstream.close().timeout(
@@ -258,6 +345,8 @@ abstract final class YouTubePlaybackServer {
           'method': method,
           'host': host,
           'statusCode': upstreamResponse.statusCode,
+          if (_isHostOrSubdomain(host, 'googlevideo.com'))
+            'hasPot': target.queryParameters.containsKey('pot'),
           'redirectsRemaining': redirectsRemaining,
         },
       );
@@ -314,10 +403,75 @@ abstract final class YouTubePlaybackServer {
     }
     final host = target.host.toLowerCase();
     return _isHostOrSubdomain(host, 'youtube.com') ||
+        (host == 'www.youtube-nocookie.com' &&
+            target.path.startsWith('/embed/')) ||
         host == 'youtubei.googleapis.com' ||
+        host == 'jnn-pa.googleapis.com' ||
+        (host == 'www.google.com' && target.path.startsWith('/js/th/')) ||
         host == 'uytfe.sandbox.google.com' ||
         host.endsWith('.sandbox.googleapis.com') ||
         _isHostOrSubdomain(host, 'googlevideo.com');
+  }
+
+  static void _applyYouTubeEmbedHeaders(
+    HttpClientRequest upstream,
+    Uri target,
+    List<int> body,
+  ) {
+    final host = target.host.toLowerCase();
+    if (_isHostOrSubdomain(host, 'youtube.com') &&
+        target.path == '/api/jnn/v1/GenerateIT') {
+      upstream.headers
+        ..set('Origin', _youtubeOrigin)
+        ..set(HttpHeaders.refererHeader, '$_youtubeOrigin/');
+      return;
+    }
+    if (host == 'www.youtube-nocookie.com' &&
+        target.path.startsWith('/embed/')) {
+      upstream.headers.set(HttpHeaders.refererHeader, _youtubeEmbedderUrl);
+      return;
+    }
+    if (!_isHostOrSubdomain(host, 'youtube.com') ||
+        target.path != '/youtubei/v1/player' ||
+        body.isEmpty) {
+      return;
+    }
+
+    try {
+      final payload = jsonDecode(utf8.decode(body));
+      if (payload is! Map) return;
+      final context = payload['context'];
+      final client = context is Map ? context['client'] : null;
+      if (client is! Map || client['clientName'] != 'WEB_EMBEDDED_PLAYER') {
+        return;
+      }
+      final videoId = payload['videoId'];
+      if (videoId is! String ||
+          !RegExp(r'^[A-Za-z0-9_-]{6,20}$').hasMatch(videoId)) {
+        return;
+      }
+      upstream.headers
+        ..set('Origin', _youtubeNoCookieOrigin)
+        ..set(
+          HttpHeaders.refererHeader,
+          '$_youtubeNoCookieOrigin/embed/$videoId',
+        );
+    } catch (_) {
+      // Non-JSON requests follow the normal proxy path without synthesized
+      // embedded-player identity headers.
+    }
+  }
+
+  /// 真实 embed 页面与 loopback 代理不同源，代理响应必须放行 CORS。
+  /// 运行时请求会带非安全头（user-agent、X-Origin、X-Goog-Visitor-Id、
+  /// x-goog-api-key 等），预检按通配放行全部请求头；无凭据请求模式下
+  /// `Access-Control-Allow-Headers: *` 是合法的。
+  static void _applyCorsHeaders(HttpResponse response) {
+    response.headers
+      ..set('Access-Control-Allow-Origin', '*')
+      ..set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS')
+      ..set('Access-Control-Allow-Headers', '*')
+      ..set('Access-Control-Max-Age', '7200');
   }
 
   static bool _isHostOrSubdomain(String host, String domain) =>
@@ -342,8 +496,29 @@ abstract final class YouTubePlaybackServer {
 }
 
 final class _ServerState {
-  const _ServerState(this.server, this.capability);
+  const _ServerState(this.server, this.httpsServer, this.capability);
 
   final HttpServer server;
+  final HttpServer? httpsServer;
   final String capability;
+}
+
+final class _TlsMaterial {
+  const _TlsMaterial(this.certPem, this.keyPem, this.certDer);
+
+  final String certPem;
+  final String keyPem;
+  final List<int> certDer;
+}
+
+/// 真实 YouTube embed 页面的播放会话：WebView 加载 [pageUri]，随后把
+/// [injectionScript]（运行时配置 + 播放器 bundle）注入该页面。
+final class YouTubeEmbedSession {
+  const YouTubeEmbedSession({
+    required this.pageUri,
+    required this.injectionScript,
+  });
+
+  final Uri pageUri;
+  final String injectionScript;
 }

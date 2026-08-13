@@ -395,8 +395,11 @@ class UndoService {
 
     final isInbox = article.category == 'inbox';
     final ok = await _retrySync(
-      action: () =>
-          FeedHttp.markRead(entryIds: [article.entryId], isInbox: isInbox),
+      action: () => FeedHttp.markRead(
+        entryIds: [article.entryId],
+        isInbox: isInbox,
+        auditSource: RemoteReadRequestSource.singleAction,
+      ),
     );
 
     ReadSyncService.removeMany([article.entryId]);
@@ -488,6 +491,7 @@ class UndoService {
           action: () => FeedHttp.markRead(
             entryIds: chunk.map((article) => article.entryId).toList(),
             isInbox: isInbox,
+            auditSource: RemoteReadRequestSource.batchAction,
           ),
         );
       },

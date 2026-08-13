@@ -1,6 +1,62 @@
 import shaka from 'shaka-player/dist/shaka-player.ui';
 
+interface FourierEmbedConfig {
+  proxyBase: string;
+  videoId: string;
+}
+
+export function getEmbedConfig(): FourierEmbedConfig | undefined {
+  return (globalThis as typeof globalThis & { __FOURIER_EMBED__?: FourierEmbedConfig })
+    .__FOURIER_EMBED__;
+}
+
+interface TrustedTypesPolicyLike {
+  createHTML(source: string): unknown;
+  createScript(source: string): unknown;
+}
+
+let trustedTypesPolicy: TrustedTypesPolicyLike | null | undefined;
+
+/**
+ * 真实 embed 页面通过 CSP `require-trusted-types-for 'script'` 强制
+ * Trusted Types。WebKit 允许在未声明 `trusted-types` 白名单时创建策略，
+ * 这里懒创建一个直通策略，供 HTML/脚本 sink 包装字符串输入。
+ */
+export function getTrustedTypesPolicy(): TrustedTypesPolicyLike | null {
+  if (trustedTypesPolicy !== undefined) return trustedTypesPolicy;
+  trustedTypesPolicy = null;
+  try {
+    const trustedTypes = (
+      globalThis as typeof globalThis & {
+        trustedTypes?: { createPolicy(name: string, options: object): unknown };
+      }
+    ).trustedTypes;
+    if (trustedTypes?.createPolicy) {
+      trustedTypesPolicy = trustedTypes.createPolicy('fourier#runtime', {
+        createHTML: (source: string) => source,
+        createScript: (source: string) => source,
+      }) as TrustedTypesPolicyLike;
+    }
+  } catch {
+    // 页面 CSP 显式禁止创建任何策略时保持 null，由调用方走降级路径。
+  }
+  return trustedTypesPolicy;
+}
+
+export function trustedScriptSource(code: string): unknown {
+  return getTrustedTypesPolicy()?.createScript(code) ?? code;
+}
+
 export function buildProxyURL(target: string | URL): string {
+  const embedConfig = getEmbedConfig();
+  if (embedConfig?.proxyBase) {
+    const base = embedConfig.proxyBase.endsWith('/')
+      ? embedConfig.proxyBase
+      : `${embedConfig.proxyBase}/`;
+    const proxyURL = new URL('proxy', base);
+    proxyURL.searchParams.set('target', target.toString());
+    return proxyURL.toString();
+  }
   const proxyURL = new URL('proxy', globalThis.location.href);
   proxyURL.searchParams.set('target', target.toString());
   return proxyURL.toString();

@@ -73,8 +73,24 @@
 .shaka-video-container .shaka-seek-bar-container {
   height: 4px;
   margin: 0 0 6px;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
   border-radius: 2px;
   cursor: pointer;
+}
+
+/* Shaka 会给 seek-bar/input 内联 12px 高度并相对容器上移 4px；容器去掉
+   透明边框后必须把它们收回 4px 轨道内，否则 hover 时播过/缓冲段会溢出到
+   进度条下方形成一条细线。 */
+.shaka-video-container .shaka-seek-bar-container .shaka-seek-bar {
+  top: 0 !important;
+  height: 4px !important;
+}
+
+.shaka-video-container .shaka-seek-bar-container input {
+  top: 0 !important;
+  height: 4px !important;
+  border: 0 !important;
 }
 
 .shaka-video-container .shaka-seek-bar-container .shaka-range-element {

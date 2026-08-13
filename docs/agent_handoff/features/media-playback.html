@@ -118,6 +118,7 @@
 
 - inline player 和全屏 player 都支持空格播放/暂停，但同一时刻只能由当前可见播放器处理全局按键。
 - 普通 inline video 与 YouTube 自定义播放器共用 `ArticleVideoPlaybackShortcut`：开始播放或点击播放器会把它设为当前播放器，裸 `Space`/媒体播放键在文章其他区域仍控制当前播放器；切到另一播放器时转移归属，widget dispose 时释放。YouTube 的 WKWebView 焦点内外会走同一通道并做短时间去重，不得再分别维护两套全局快捷键。
+- 播放器页面被关闭（Esc/路由弹出）或路由被覆盖（从文章进入相关文章，下层路由保留在栈中）时必须停止 WebView 内的播放：`ShakaEmbedPlayer` 与 `WebEmbedVideoPlayer` 在 dispose 时对页面内全部 `video` 执行 `pause()`，并通过 `TickerMode.valuesOf(context).enabled` 监听路由覆盖（ModalRoute 会关闭非当前路由的 Ticker）主动暂停。若平台 view 销毁延迟导致 dispose 后 WebView 仍存活，dispose 里的 runJavaScript 仍能命中它；相关文章返回后不自动续播。
 - 进入全屏前，inline player 如果是 `activePlayer`，应暂时释放该身份；全屏页在首帧后请求焦点并接管空格。退出全屏后，inline player 再恢复 `activePlayer` 和焦点。
 - 普通视频全屏页与图片画廊必须通过 root navigator 打开，避免 macOS 分栏详情区的嵌套路由把全屏内容限制在右栏。YouTube/Bilibili 的 WebView 元素全屏继续由系统原生全屏能力接管，不走 Flutter 嵌套路由。
 - 不要让 inline 与全屏页面同时响应同一次空格事件，否则可能发生连续切换两次、视觉上像“空格无效”。也不要在全屏 widget 尚未挂载完成前同步请求焦点。
@@ -138,9 +139,13 @@
 
 ## YouTube
 
+> 本节是当前架构事实。2026-08 那次「卡死 / 回退官方 iframe」问题的完整排查证据、探针矩阵与思路见 [YouTube 播放 attestation 排障案例](media-playback-attestation.html)。
+
 - Folo/Newtype 等源会返回 `youtube.com` 或 `youtube-nocookie.com/embed/...` iframe。它不是媒体文件，不能直接交给 `video_player`；严格 URL 解析得到 video ID 后，macOS/Android 首选 `YouTubeSabrPlayer`，失败时回退到官方 iframe。
 - `YouTubeEmbedInfo` 只识别明确的 YouTube embed/watch/shorts/live/youtu.be URL，并统一生成隐私增强 `youtube-nocookie.com` 地址。
-- `YouTubeSabrPlayer` 只在用户点击后启动进程内 loopback 服务并创建 WebView。本地页面打包 YouTube.js 17.2.0、googlevideo 4.0.4、bgutils-js 3.2.0 和 Shaka Player 4.16.2；依赖锁定、构建说明和完整许可见 `tool/embed_video_player_runtime/` 与 `THIRD_PARTY_NOTICES.md`。不要在 Dart 中 Base64 搬运媒体数据；GoogleVideo 响应必须从 loopback 代理流式送入 WebView。
+- `YouTubeSabrPlayer` 只在用户点击后启动进程内 loopback 服务并创建 WebView。**播放器 WebView 加载真实 `https://www.youtube-nocookie.com/embed/<videoId>` 页面**（真实 origin 与页面环境是 BotGuard 签发真实 integrity token 的前提；2026-08 探针矩阵证明 127.0.0.1 裸页只会拿到 websafe fallback token，导致 GVS 试用配额耗尽后播放中 403 卡死或整链失败回退官方 iframe）。页面加载完成后（onPageFinished）把运行时 bundle 与 `__FOURIER_EMBED__` 配置（loopback 代理地址、videoId）经 `runJavaScript` 注入：注入脚本接管 DOM（隐藏官方播放器、自建播放表面）、经代理重新抓取 embed 页面 HTML 提取 `ytcfg` 与 `ytAtN(R/T)`、注入 `yt.config_`（BotGuard 读 EVENT_ID）、用页面 challenge 完成 GenerateIT；`/att/get`（带 eacrToken）仅作回退。运行时打包 YouTube.js 17.2.0、googlevideo 4.0.4、bgutils-js 3.2.0 和 Shaka Player 4.16.2，构建为经典脚本（IIFE）以便注入；依赖锁定、构建说明和完整许可见 `tool/embed_video_player_runtime/` 与 `THIRD_PARTY_NOTICES.md`。不要在 Dart 中 Base64 搬运媒体数据；GoogleVideo 响应必须从 loopback 代理流式送入 WebView。
+- 真实 embed 页面与 loopback 代理不同源，代理对所有响应补充 CORS 头（请求头通配放行）并处理 OPTIONS 预检。macOS 上代理另起一个**自签名 HTTPS loopback 实例**（证书由 `/usr/bin/openssl` 运行时生成、RSA-2048、SAN=127.0.0.1/localhost，只在内存中保留，生成文件随即删除）：embed 页面是 https，浏览器会拦截指向 `http://127.0.0.1` 的混合内容子资源。WebView 的 `onSslAuthError` 回调只对「证书 DER 与当前进程生成一致、host=127.0.0.1、端口匹配」的挑战调用 `proceed()`，其余一律取消。Android 没有 macOS OpenSSL 路径，继续使用 HTTP loopback，并只对这一类“真实 HTTPS embed + 注入运行时”WebView 会话设置 `MixedContentMode.alwaysAllow`；Android network security config 仍只允许 localhost 明文。白名单、能力路径与流式转发规则不变。不得把 GenerateIT 的 fallback token 当作正式 token 使用：GVS 只给试用配额，随后 403。
+- embed 页面 CSP 强制 Trusted Types（`require-trusted-types-for 'script'`）。运行时安装 `installTrustedTypesShim`：优先创建直通策略 `fourier#runtime` 包装 HTML/脚本字符串（WebKit 允许在无 `trusted-types` 白名单时创建策略），不可用时退回「blob URL + 同步 XHR responseType=document 解析 + 节点搬移」；eval 类 sink（Shaka UI 的 `insertAdjacentHTML`/`innerHTML`、BotGuard interpreter、SABR 的 `Platform.shim.eval`）都经 `trustedScriptSource` 包装。宿主页面自身的 TrustedHTML/TrustedScript 值始终走原生路径。
 - SABR 播放器的控制语义要尽量对齐 `InlineVideoPlayer`：单击画面只显隐控制栏，不直接切换播放；控制栏播放时 3 秒后淡出、暂停时保持可见；进度条使用应用橙色，左侧为播放和时间，右侧只保留音量、设置和全屏。设置菜单保留字幕、清晰度、语言和倍速，不重新引入网页播放器的章节、循环、画中画或保存帧等入口。WebView 内双击全屏已关闭，避免和应用现有点击语义分叉。
 - VOD 的 SABR UMP 可能正常结束却没有返回媒体段、重定向或上下文更新。此时先卸载失败请求、关闭 SABR 请求改写但保留同源 GoogleVideo 代理，再由同一个 Shaka 控件加载 YouTube.js 普通自适应 DASH。SABR 与普通 DASH 都失败、直播失败、35 秒内未进入 playing，或收到主 frame 错误时，才重建为 `WebEmbedVideoPlayer(startOnMount: true)`。官方回退不是临时调试代码：YouTube 内部接口和 BotGuard 会变化，必须长期保留。
 - YouTube 官方 iframe 错误 `153` 表示 embed 请求缺少 HTTP Referer/客户端身份。回退链路通过受控本地 HTML iframe、`YouTubeEmbedInfo.clientBaseUrl`（公开仓库地址）、`strict-origin-when-cross-origin` 和 `allowfullscreen` 提供合法身份与全屏权限。导航代理需精确放行该 client document URL，否则会误把初始化 base URL 打开到默认浏览器并留下白屏转圈。
@@ -169,7 +174,7 @@
 
 ## 网络与安全边界
 
-- 运行时页面由进程内 `127.0.0.1` 随机端口提供。路径包含每次进程随机生成的 256-bit 能力令牌；代理只接受 YouTube/GoogleVideo 明确白名单内的 HTTPS 目标，拒绝用户信息、非 443 端口和相似域名，POST 请求体限制为 2 MiB，媒体响应保持流式转发。不要把它改成局域网监听或通用开放代理。
+- 运行时页面由进程内 `127.0.0.1` 随机端口提供（Bilibili 本地页面），YouTube 播放器改走真实 embed 页面 + 注入。路径包含每次进程随机生成的 256-bit 能力令牌；代理只接受 YouTube/GoogleVideo 明确白名单内的 HTTPS 目标，拒绝用户信息、非 443 端口和相似域名，POST 请求体限制为 2 MiB，媒体响应保持流式转发，并补充 CORS 响应头与 OPTIONS 预检以服务真实 embed 页面的跨源请求。不要把它改成局域网监听或通用开放代理。
 - Bilibili 使用独立的 `127.0.0.1` 随机能力路径服务。媒体代理只接受当前播放 session 中由官方 API 实际返回的完整 HTTPS URL；重定向还必须落在 `bilivideo.com` 或明确的 Akamai 镜像。请求补充 Bilibili Referer/Origin，Range 响应保持流式转发。不要放宽为通用 URL 代理。
 - loopback 服务只在用户点击播放后启动。macOS Release 需要 `com.apple.security.network.server` 与 `NSAllowsLocalNetworking`；Android 的 network security config 只对 `localhost/127.0.0.1` 允许明文 HTTP，外部目标继续强制 HTTPS。服务不得监听 `0.0.0.0` 或局域网地址。
 - 两条首选链路都必须懒加载。文章初始渲染只显示缩略图，不得静默创建 WebView 或请求 API。
@@ -181,17 +186,18 @@
 - MarkTechPost 的 `Mira Murati’s Thinking Machines Lab Makes The Technical Case For Human-Centered AI Built On Customizable Model Weights`：对应内容不是视频，而是 `500x500` 的交互式 explainer。原网页用 `iframe srcdoc` 承载完整 HTML/CSS/JavaScript，但 Folo 返回内容已丢失 `srcdoc` 属性名和开头，剩余代码被实体转义后塞入无 `src` iframe，无法可靠还原。当前继续省略/降级比执行残缺任意脚本更安全；若未来支持完整 srcdoc，应从原网页重新抓取，并使用受限、懒加载 WebView 单独设计，不能放宽现有“受支持官方视频 iframe”白名单。
 - 无有效 `src/source` 的 audio、video、iframe 不得静默删除，也不得继续伪装成可播放的空播放器。当前保留媒体 chunk，并明确显示“源内容未提供可用的媒体地址”；文章有原始链接时提供“打开原文”。这既暴露源内容/解析问题，又避免误导用户。
 
-## YouTube 客户端回退链（MWEB / IOS）
+## YouTube 客户端回退链
 
-已确认失败样本 `vO6SWG-jxvE`：WEB 客户端返回 34 个格式但全部只有 SABR 信息（无直接 URL），SABR 报 Shaka 1002 空响应；MWEB 返回 35 个可直接使用的格式，IOS 返回 24 个。
+已确认失败样本 `vO6SWG-jxvE`：WEB 客户端返回 34 个格式但全部只有 SABR 信息（无直接 URL），SABR 报 Shaka 1002 空响应；MWEB 返回 35 个可直接使用的格式。
 
-当前实现（`tool/embed_video_player_runtime/src/main.ts`）：
+当前实现（`tool/embed_video_player_runtime/src/main.ts`，VOD 链）：
 
-- SABR 仍是 VOD 首选路径。
-- SABR 设置或加载失败后，通过 `innertube.getInfo(videoId, { client: 'MWEB' })` 重新获取信息，再生成 `is_sabr=false` 的普通 DASH 并加载。
-- MWEB 失败后可继续尝试 `client: 'IOS'`；两者均失败才回退官方 YouTube 嵌入（Dart 侧收到 error 后切换 `WebEmbedVideoPlayer`）。
+- **WEB_EMBEDDED 直连优先**：重新抓取 embed 页面 HTML 提取真实 `ytcfg`/context（含加密的 embeddedPlayerContext），用该 context 请求 `/player` 并生成 `is_sabr=false` 的普通 DASH。它只覆盖允许嵌入的视频，但正是文章内嵌视频的主要场景；失败（如 "This video is unavailable"）后进入 SABR。
+- **SABR 次之**：UMP 可能正常结束却没有返回媒体段、重定向或上下文更新（Shaka 1002 空响应），失败后卸载请求并关闭 SABR 请求改写，保留 GoogleVideo 代理。
+- **MWEB 兜底**：铸 PLAYER/GVS 两个 WebPO token（生成真 token 的前提见排障案例），`innertube.getInfo(videoId, { client: 'MWEB' })` 重新获取信息并生成普通 DASH。GVS token 不可用则直接失败，不再回退 IOS。
 - 不允许继续用原 WEB/SABR-only response 构建 direct DASH。
 - 直播 / PostLiveDVR 仍走官方 manifest 直连，不进入回退链。
+- 三条自定义链都失败、直播失败、35 秒内未进入 playing，或收到主 frame 错误时，Dart 侧才重建为 `WebEmbedVideoPlayer(startOnMount: true)`。官方回退不是临时调试代码：YouTube 内部接口和 BotGuard 会变化，必须长期保留。
 - 修改 TypeScript 源码后必须运行 `npm run typecheck && npm run build` 并提交生成的 `assets/embed_video_player/` 产物，不直接手改压缩文件。
 
 本地代理 debug 诊断（仅 debug 构建）：记录目标 host、方法、状态码、重定向次数与错误类型；**不记录**完整签名 URL、Token 或请求体。
@@ -211,6 +217,7 @@
 ## 相关页面
 
 - [文章渲染](../features/article-rendering.html)：正文媒体 chunk 的渲染与图片处理。
+- [YouTube 播放 attestation 排障案例](media-playback-attestation.html)：2026-08 卡死/回退问题的完整排查证据、探针矩阵与修复历程。
 - [网络](../architecture/networking.html)：loopback 服务、代理白名单与证书校验的网络层细节。
 - [验证记录](../status/verification.html)：YouTube SABR 与 Bilibili 的实机验证清单。
 

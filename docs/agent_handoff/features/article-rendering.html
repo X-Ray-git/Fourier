@@ -277,7 +277,7 @@ HTML entity 解码：
 - 主 Scaffold 使用 `extendBodyBehindAppBar=true`；真实列表带顶部 inset，骨架屏曾缺失导致卡片埋入 AppBar。
 - 新增共享 `MobileViewportInsets`（顶部/底部 inset），时间线、垃圾拦截、订阅源的真实列表与骨架屏共用，禁止复制魔法数字。
 - Android 嵌入主壳的列表顶部只使用 Scaffold 已重写后的 `MediaQuery.padding.top`；不得再次叠加 toolbar 高度，否则真实卡片和骨架都会在 AppBar 下方留下重复空白。
-- macOS 从相关文章进入嵌套详情时，顶部使用项目统一的玻璃返回按钮并支持 `Esc` 返回上一层；图片预览使用 root navigator，避免“全屏”只占右侧文章栏。
+- macOS 从相关文章进入嵌套详情时，顶部使用项目统一的玻璃返回按钮并支持 `Esc` 返回上一层；在嵌套层阅读一篇未读文章并按 `M` 标为已读后，也自动返回上一层。该自动返回只属于相关文章嵌套详情的键盘操作，不改变根文章、恢复未读、工具栏点击或 Android 完整路由的行为。图片预览使用 root navigator，避免“全屏”只占右侧文章栏。
 
 </script>
 <script src="../assets/wiki-common.js"></script>

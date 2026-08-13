@@ -9,17 +9,27 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import '../../../services/article_image_service.dart';
+import '../../../services/youtube_playback_server.dart';
 import '../../../utils/macos_webview_controls.dart';
 import 'article_video_playback_shortcut.dart';
 import 'media_play_button.dart';
 
 typedef ShakaPlayerUriBuilder = Future<Uri> Function();
 
+class ShakaEmbedSession {
+  const ShakaEmbedSession({required this.pageUri, this.injectionScript});
+
+  final Uri pageUri;
+  final String? injectionScript;
+}
+
+typedef ShakaSessionBuilder = Future<ShakaEmbedSession> Function();
+
 class ShakaEmbedPlayer extends StatefulWidget {
   const ShakaEmbedPlayer({
     super.key,
     required this.debugLabel,
-    required this.playerUriBuilder,
+    required this.sessionBuilder,
     required this.onFallback,
     this.thumbnailUri,
     this.idleBackground,
@@ -27,7 +37,7 @@ class ShakaEmbedPlayer extends StatefulWidget {
   });
 
   final String debugLabel;
-  final ShakaPlayerUriBuilder playerUriBuilder;
+  final ShakaSessionBuilder sessionBuilder;
   final VoidCallback onFallback;
   final Uri? thumbnailUri;
   final Widget? idleBackground;
@@ -45,12 +55,26 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
   bool _isLoading = false;
   bool _isPlaying = false;
   bool _didFallback = false;
+  bool _didInject = false;
+  bool _tickerEnabled = true;
+  String? _pendingInjection;
 
   @override
   void dispose() {
     ArticleVideoPlaybackShortcut.deactivate(this);
     _timeout?.cancel();
+    unawaited(_pauseWebViewPlayback());
     super.dispose();
+  }
+
+  Future<void> _pauseWebViewPlayback() async {
+    try {
+      await _controller?.runJavaScript(
+        'document.querySelectorAll("video").forEach(function(v){v.pause();});',
+      );
+    } catch (_) {
+      // WebView 可能已随页面一起销毁。
+    }
   }
 
   void _activatePlaybackShortcut() {
@@ -68,7 +92,7 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
     setState(() => _isLoading = true);
 
     try {
-      final playerUri = await widget.playerUriBuilder();
+      final session = await widget.sessionBuilder();
       if (!mounted || _didFallback) return;
 
       late final PlatformWebViewControllerCreationParams params;
@@ -83,8 +107,19 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
 
       final controller = WebViewController.fromPlatformCreationParams(params);
       if (controller.platform is AndroidWebViewController) {
-        await (controller.platform as AndroidWebViewController)
-            .setMediaPlaybackRequiresUserGesture(false);
+        final androidController =
+            controller.platform as AndroidWebViewController;
+        await androidController.setMediaPlaybackRequiresUserGesture(false);
+        if (session.pageUri.scheme == 'https' &&
+            session.injectionScript != null) {
+          // YouTube 的真实 HTTPS embed 页需要访问只监听 127.0.0.1 的
+          // HTTP 媒体代理。Android 没有 macOS 的运行时 OpenSSL，因而仅对
+          // 这类注入会话放行 mixed content；network security config 仍将
+          // 外部明文请求限制在 localhost 之外。
+          await androidController.setMixedContentMode(
+            MixedContentMode.alwaysAllow,
+          );
+        }
       } else if (controller.platform is WebKitWebViewController) {
         await MacOSWebViewControls.enableElementFullscreen(
           (controller.platform as WebKitWebViewController).webViewIdentifier,
@@ -104,6 +139,7 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
         'FourierVideoPlayer',
         onMessageReceived: _handlePlayerMessage,
       );
+      _pendingInjection = session.injectionScript;
       await controller.setNavigationDelegate(
         NavigationDelegate(
           onWebResourceError: (error) {
@@ -113,17 +149,18 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
               );
             }
           },
+          onPageFinished: (_) => _injectRuntimeScript(controller),
+          onSslAuthError: _handleSslAuthError,
           onNavigationRequest: (request) {
             final uri = Uri.tryParse(request.url);
             if (uri == null) return NavigationDecision.prevent;
             if (uri.scheme == 'about') {
               return NavigationDecision.navigate;
             }
-            if (uri.scheme == playerUri.scheme &&
-                uri.host == playerUri.host &&
-                uri.port == playerUri.port &&
-                uri.pathSegments.isNotEmpty &&
-                uri.pathSegments.first == playerUri.pathSegments.first) {
+            final pageUri = session.pageUri;
+            if (uri.scheme == pageUri.scheme &&
+                uri.host == pageUri.host &&
+                uri.port == pageUri.port) {
               return NavigationDecision.navigate;
             }
             return NavigationDecision.prevent;
@@ -138,9 +175,39 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
         _loadTimeout,
         () => _fallback('playback timeout after ${_loadTimeout.inSeconds}s'),
       );
-      await controller.loadRequest(playerUri);
+      await controller.loadRequest(session.pageUri);
     } catch (error, stackTrace) {
       _fallback('Dart setup error: $error', stackTrace);
+    }
+  }
+
+  Future<void> _injectRuntimeScript(WebViewController controller) async {
+    final injection = _pendingInjection;
+    if (_didInject || injection == null || _didFallback) return;
+    _pendingInjection = null;
+    _didInject = true;
+    try {
+      await controller.runJavaScript(injection);
+    } catch (error, stackTrace) {
+      _fallback('runtime injection error: $error', stackTrace);
+    }
+  }
+
+  /// 只对 YouTube 播放器自己生成的 loopback 自签名证书放行：证书 DER 必须
+  /// 与当前进程生成的一致，且 host/port 属于本机 loopback 服务。其余 TLS
+  /// 错误一律取消，不削弱 WebView 对其他主机的校验。
+  void _handleSslAuthError(SslAuthError error) {
+    final platform = error.platform;
+    final webKitError = platform is WebKitSslAuthError ? platform : null;
+    final accepted = YouTubePlaybackServer.isTrustedLoopbackCertificate(
+      certificateDer: error.certificate?.data,
+      host: webKitError?.host,
+      port: webKitError?.port,
+    );
+    if (accepted) {
+      unawaited(error.proceed());
+    } else {
+      unawaited(error.cancel());
     }
   }
 
@@ -189,6 +256,14 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    // 路由被覆盖（例如从文章进入相关文章）时 ModalRoute 会关闭非当前路由
+    // 的 Ticker；此时必须暂停 WebView 里的播放，否则声音会从下层路由传出。
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    if (_tickerEnabled && !tickerEnabled) {
+      unawaited(_pauseWebViewPlayback());
+    }
+    _tickerEnabled = tickerEnabled;
+
     final colorScheme = Theme.of(context).colorScheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),

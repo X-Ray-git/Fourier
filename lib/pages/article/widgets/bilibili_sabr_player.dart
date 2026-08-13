@@ -20,7 +20,9 @@ class BilibiliSabrPlayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShakaEmbedPlayer(
       debugLabel: 'Bilibili',
-      playerUriBuilder: () => BilibiliPlaybackServer.playerUri(info),
+      sessionBuilder: () async => ShakaEmbedSession(
+        pageUri: await BilibiliPlaybackServer.playerUri(info),
+      ),
       idleBackground: const BilibiliIdleBackground(),
       onArticleScroll: onArticleScroll,
       onFallback: onFallback,

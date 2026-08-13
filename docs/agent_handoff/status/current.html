@@ -50,7 +50,9 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-截至 2026-08-12：
+截至 2026-08-13：
+
+- YouTube 播放器 attestation 问题已定位并完成修复（macOS 真机验证通过）：根因是 BotGuard GenerateIT 只对真实 YouTube 页面环境签发 integrity token，127.0.0.1 裸页只能拿到 websafe fallback token（GVS 试用配额耗尽后播放中 403 卡死，或整链失败回退官方 iframe）。播放器 WebView 现加载真实 `youtube-nocookie.com/embed/<id>` 页面并在 onPageFinished 注入 IIFE 版运行时：接管 DOM、经代理重抓 embed 页 HTML 提取 `ytcfg`/`ytAtN(R/T)`、注入 `yt.config_`、用页面 challenge 走 GenerateIT（`/att/get`+eacrToken 仅回退）；loopback 代理补 CORS（请求头通配）与 OPTIONS 预检，macOS 另起自签名 HTTPS loopback 实例并经 `onSslAuthError` 仅对本站证书放行（绕开混合内容拦截）；运行时带 Trusted Types 直通策略 shim。完整排障证据、探针矩阵与逐层修复过程见 `features/media-playback-attestation.html`（探针脚本在已忽略的 `scratch/youtube-attestation-probe/`）。用户已验证：真实播放、hover 细线修复、关页/切文章后声音停止。遗留：SABR UMP 空响应由 MWEB 直连兜底（独立问题）、WEB_EMBEDDED 直连仍 "This video is unavailable"、Android 未真机验证。
 
 - `main` 是当前集成分支。
 - Fourier 品牌迁移与离线工程 Wiki 已通过独立 merge commit 合入 `main`。应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和图标均已迁移；旧 Auto Folo 名称只允许存在于历史证据、旧设置导入与明确的迁移兼容说明中。

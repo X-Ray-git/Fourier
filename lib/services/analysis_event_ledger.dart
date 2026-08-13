@@ -8,6 +8,13 @@ import '../utils/storage.dart';
 
 enum ReadStateChangeSource { user, syncInference }
 
+enum RemoteReadRequestSource {
+  articleController,
+  singleAction,
+  batchAction,
+  pendingQueue,
+}
+
 /// 本地分析事件账本 — 版本化、追加式、账号级。
 ///
 /// 作为未来统计中心和 JSON 导出的唯一数据来源。从本版本开始记录，
@@ -18,6 +25,7 @@ enum ReadStateChangeSource { user, syncInference }
 /// - 用户 M/K/N 等人工操作及操作前后状态（[recordUserAction]）
 /// - 标为已读 / 恢复未读（[recordReadStateChange]）
 /// - 文章打开事件（[recordArticleOpen]）
+/// - 实际发往 Folo 的已读请求及结果（[recordRemoteMarkReadAttempt]）
 ///
 /// 语义约定：
 /// - K 表示「保留或稍后确认」，不能自动解释为 AI 分类错误。
@@ -117,6 +125,71 @@ abstract final class AnalysisEventLedger {
   /// 文章打开事件（进入阅读视图，不含相邻预构建页）。
   static void recordArticleOpen(ArticleModel article) {
     record(type: 'article_open', article: article);
+  }
+
+  /// 记录一次真正发往 Folo 的标已读请求。
+  ///
+  /// 返回事件序号用于和结果事件关联。审计是尽力写入：账本不可用时
+  /// 返回 null，绝不能阻断用户的已读同步。
+  static int? recordRemoteMarkReadAttempt({
+    required List<String> entryIds,
+    required bool isInbox,
+    required RemoteReadRequestSource source,
+    Map<String, int>? queuedAtByEntryId,
+  }) {
+    try {
+      final ids = entryIds
+          .map((id) => id.trim())
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
+      return record(
+        type: 'remote_mark_read_attempt',
+        entryId: ids.length == 1 ? ids.single : null,
+        data: {
+          'source': source.name,
+          'entryIds': ids,
+          'isInbox': isInbox,
+          if (queuedAtByEntryId != null && queuedAtByEntryId.isNotEmpty)
+            'queuedAtByEntryId': queuedAtByEntryId,
+        },
+      );
+    } catch (error) {
+      debugPrint('[AnalysisLedger] remote mark-read attempt skipped: $error');
+      return null;
+    }
+  }
+
+  /// 记录对应远端标已读请求的最终结果。
+  static void recordRemoteMarkReadResult({
+    required int? attemptSequence,
+    required List<String> entryIds,
+    required RemoteReadRequestSource source,
+    required bool success,
+    required int durationMs,
+    int? statusCode,
+    String? failureKind,
+  }) {
+    try {
+      final ids = entryIds
+          .map((id) => id.trim())
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
+      record(
+        type: 'remote_mark_read_result',
+        entryId: ids.length == 1 ? ids.single : null,
+        data: {
+          'source': source.name,
+          'entryIds': ids,
+          'attemptSequence': ?attemptSequence,
+          'success': success,
+          'durationMs': durationMs,
+          'statusCode': ?statusCode,
+          'failureKind': ?failureKind,
+        },
+      );
+    } catch (error) {
+      debugPrint('[AnalysisLedger] remote mark-read result skipped: $error');
+    }
   }
 
   /// 文章分类状态快照（不包含正文/摘要/翻译等敏感内容）。

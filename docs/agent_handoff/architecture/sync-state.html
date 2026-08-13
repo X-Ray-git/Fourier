@@ -135,6 +135,8 @@ Fourier 以 Folo 服务端为数据权威，本地 Hive 提供缓存与已读覆
 - 读取文章已读状态时优先使用 `LocalArticleDbService.readOverrideOf(entryId)`；如果没有本地覆盖，再回退到 `ArticleModel.isRead`。不要直接把 `GStorage.readStatus.get(entryId, defaultValue: false)` 当作最终状态，否则最近阅读等已读文章会被错误显示为未读。
 - 本地标为已读后的 `readStatus == true` 是跨请求竞态保护，不能在 mark-read HTTP 成功时立即删除。未读请求可能比 mark-read 更早发出并返回旧快照；只在后续成功未读快照明确不再包含该文章时，才清除覆盖并以本地数据库中的已读状态继续。主时间线和订阅源详情必须遵循同一规则。
 - 自动翻译/摘要只在正文持久化后、准备入队时读取最新本地已读状态：当时已读则不入队，当时未读则正常入队且后续不因标记已读而取消。
+- 所有实际 `POST /reads` 出口统一写入 `AnalysisEventLedger` 的 attempt/result 审计事件，来源包括 `articleController`、`singleAction`、`batchAction` 和 `pendingQueue`。待同步队列请求同时携带最初入队时间；请求结果记录耗时、HTTP 状态或失败类型。账本写入是尽力而为，存储异常不得阻断已读同步。
+- 本地 `mark_read` / `mark_unread` 事件描述状态变化意图，远端 attempt/result 描述实际网络请求，`syncInference` 描述后续服务端快照。诊断时必须联合三类证据，不能把服务端已读快照直接等同于本机用户操作。
 
 ## 账号切换隔离
 

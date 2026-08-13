@@ -56,6 +56,24 @@
 - 新增本地轮转诊断，记录 CPU、内存、低电量/温度状态、帧耗时和各后台队列计数；不记录内容或凭据。后续需使用包含本改动的 macOS 构建正常使用，待系统再次提示高耗电后检查 `energy.jsonl`，判断高峰是否与刷新图片预取、同步、AI 队列或 UI 慢帧重合。
 - 隐藏 macOS 主页面已关闭 ticker，隐藏任务中心停止每秒刷新。定向测试、`dart analyze lib test`（无新增 warning/error）及 macOS Debug 构建通过；构建中只保留 `video_player_avfoundation` 的既有弃用 warning。
 
+## 2026-08-13 YouTube 播放器 attestation 修复与生命周期
+
+用户真机（macOS Debug）确认：
+
+- 真实播放：自定义播放器成功开始播放（当前 VOD 由 WEB_EMBEDDED → SABR → MWEB 链完成，样本最终走 MWEB 直连 DASH），不再回退官方 iframe。
+- 播放中段请求持续 `206`，不再出现试用配额耗尽后的 403 卡死。
+- hover 进度条下方细线已消失，拖拽/点击跳转正常。
+- 关页（Esc）、进入相关文章、切走文章后声音立即停止（dispose + TickerMode 双路径）。
+
+自动化验证：`flutter test --no-pub` 237 项通过；`dart analyze lib test` 无 error/warning（仅保留既有 Liquid Glass info）；运行时 `npm run typecheck && npm run build` 通过；macOS 与 Android Debug 构建成功。
+
+仍需观察：
+
+- **长视频中途稳定性**：请完整观看较长视频，确认 pot 在有效期内没有中段 403（当前真 token 的 TTL 为 43200s，理论覆盖任意 VOD，但应保留一次真实长视频观察）。
+- SABR UMP 空响应（Shaka 1002）由 MWEB 直连兜底，属已知独立问题；WEB_EMBEDDED 直连仍返回 "This video is unavailable"。两者都不阻塞播放，是否继续排查见排障案例的边界说明。
+- **Android 未验证**：真实 embed 页 + 注入 + 代理的整条链路只验证了 macOS。代码已仅对该 YouTube WebView 会话启用 localhost mixed content，并继续依赖 Android network security config 将外部明文请求拒绝；仍需真机确认注入时序、媒体分段、文章滚动和官方播放器回退的视觉表现。
+- 官方 iframe 回退（`WebEmbedVideoPlayer`）在新架构下仍应偶尔抽查一次，确认错误路径没有被破坏。
+
 ## 2026-08-04 误分类（N）标记与撤销
 
 已完成端到端验证：
@@ -79,19 +97,10 @@
 
 - 2026-07-31 图片加载失败重试机制已收敛到 `ArticleImageCacheService`（自动指数退避 `1s/2s/4s` 共 3 次、失败状态落盘、全局刷新 `retryFailedPrefetches` 串行重扫、成功后以图片级 `successRevision` 精确重建）。需在 macOS/Android 真机验证：打开含失败图片的文章，确认失败占位先显示“重新加载中…”、后台自动重试成功后占位自动变成图片（无需手动点）；自动重试耗尽后占位文案变为“图片加载失败，点击重试”，手动点击仅发起一条 service 下载链并可恢复；普通位图与独立块级 SVG 都需覆盖。切到时间线做一次全局刷新，确认之前失败的图片会在缓存清理完成后重新排查，进程重启后刷新仍能重扫落盘记录。HTML 行内图片扩展和图片画廊本次未纳入重试，属预期范围边界。决策与边界见 `history/decisions.md`“图片加载失败的重试统一收敛到 ArticleImageCacheService”。
 - 2026-07-31 Android 设置页 `_LlmConfigCard`（翻译/摘要/过滤 LLM 参数卡片）展开后第一个下拉框“模型”的浮动 label 上半部分被裁切。根因是 `ExpansionTile` children padding 顶部为 `0`，浮动 label 向上越出 `OutlineInputBorder` 约 `8.6px` 的部分被 `ExpansionTile` 内部 `ClipRect` 和外层 `MobileSettingsPanel` 的 `Clip.antiAlias` 切掉；已把该 padding 顶部改为 `10`。需在真机分别展开翻译、摘要、过滤三个 LLM 参数卡片，确认“模型”及其他首项浮动标签完整显示，且展开动画和卡片整体布局无异常。静态分析与排查结论见 `history/decisions.md`“带浮动标签的设置输入控件上方必须为裁切容器预留缓冲”。
-- 2026-07-29 YouTube SABR 首选播放器尚待用户实机验证。macOS 与 Android
-  分别打开真实 YouTube 文章，检查首次点击有即时 loading、能够开始播放、
-  播放/暂停、拖动橙色进度条、清晰度/字幕/语言/倍速切换和系统全屏可用；
-  单击画面应只显隐控件，播放时 3 秒淡出、暂停时保持显示。macOS 触控板在
-  视频画面和控制栏上纵向滑动应继续滚动文章，打开分辨率/字幕菜单后菜单
-  自身仍可滚动；开始播放后点击文章其他位置，`Space`/媒体播放键仍应控制
-  当前视频，同篇切换另一视频后快捷键归属应随之转移。Android 触摸纵向
-  滑动不得被 WebView 锁死。切换文章不能残留上一篇控制器；SABR UMP 没有
-  媒体段时应先尝试同控件的普通自适应 DASH，只有两者都失败才在 35 秒内
-  切到官方 iframe，不得打开无关浏览器页面；官方 iframe 的内部滚轮不承诺
-  桥接。
-  macOS Release 还需确认 sandbox 下 loopback server 可以绑定；Android
-  需确认只放行 localhost 明文而外部 HTTPS 行为不变。
+- 2026-07-29 的 YouTube 首选播放器实机验证清单已随 2026-08-13 的 attestation
+  架构改造重新执行（见下方 08-13 小节）：macOS 端经用户确认通过；Android
+  端仍待验证。macOS Release 的 sandbox 下 loopback 绑定与 Android 的
+  localhost 明文放行边界继续按原清单执行。
 - macOS 静默订阅源批量导出的入口、勾选、四类动作、morph 展开和 `Esc` 退出已完成用户运行确认。仍需在真实网络偶发部分成功时观察：本地列表、菜单篇数、刷新后的远端状态与 Undo/Redo 历史必须只反映最终确认改变的子集；保存取消或失败不能标为已读。
 - GitHub 发布 Actions 已迁移到 Node 24 对应的 `checkout@v7`、`setup-java@v5`、`upload-artifact@v7` 和 `download-artifact@v8`，Flutter pin 也从 `3.41.6` 对齐为 `3.44.6`。`v1.2.0` 首次触发确认版本校验和 macOS arm64 全部成功，但 Android 因不存在的 `setup-java@v6` 在 job 初始化阶段失败，GitHub Release 因依赖关系被跳过；旧 tag 未产生 Release 后已删除，workflow 修正为实际使用 Node 24 的 `@v5`，等待重建同名 tag。重新触发后应确认 Android、macOS arm64 和 GitHub Release 三段均成功。
 - macOS 圆形工具按钮和文章范围 morph 已完成用户视觉检查后进入提交：深色按钮应比旧版更通透；浅色按钮应通过冷白材质、左上高光和仅位于外部的双层阴影保持可见，内部不能因阴影发灰。文章范围在主时间线与订阅源详情都应只显示“未读/全部”，深色触发图标为白色、浅色为 `onSurface`，展开/收回和筛选结果应与排序共用的 morph 行为一致。后续如调整共享组件，要同时检查排序与两处范围入口。

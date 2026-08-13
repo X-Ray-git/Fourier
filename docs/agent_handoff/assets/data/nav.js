@@ -41,6 +41,7 @@ window.WIKI_NAV = [
       { title: '时间线', path: 'features/timeline.html' },
       { title: '文章渲染', path: 'features/article-rendering.html' },
       { title: '媒体播放', path: 'features/media-playback.html' },
+      { title: 'YouTube attestation 排障案例', path: 'features/media-playback-attestation.html' },
       { title: '翻译与摘要', path: 'features/translation-summary.html' },
       { title: '垃圾拦截与审核', path: 'features/filter-review.html' },
       { title: '订阅源', path: 'features/subscriptions.html' },

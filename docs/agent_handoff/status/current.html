@@ -50,7 +50,7 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-截至 2026-08-13：
+截至 2026-08-16：
 
 - YouTube 播放器 attestation 问题已定位并完成修复（macOS 真机验证通过）：根因是 BotGuard GenerateIT 只对真实 YouTube 页面环境签发 integrity token，127.0.0.1 裸页只能拿到 websafe fallback token（GVS 试用配额耗尽后播放中 403 卡死，或整链失败回退官方 iframe）。播放器 WebView 现加载真实 `youtube-nocookie.com/embed/<id>` 页面并在 onPageFinished 注入 IIFE 版运行时：接管 DOM、经代理重抓 embed 页 HTML 提取 `ytcfg`/`ytAtN(R/T)`、注入 `yt.config_`、用页面 challenge 走 GenerateIT（`/att/get`+eacrToken 仅回退）；loopback 代理补 CORS（请求头通配）与 OPTIONS 预检，macOS 另起自签名 HTTPS loopback 实例并经 `onSslAuthError` 仅对本站证书放行（绕开混合内容拦截）；运行时带 Trusted Types 直通策略 shim。完整排障证据、探针矩阵与逐层修复过程见 `features/media-playback-attestation.html`（探针脚本在已忽略的 `scratch/youtube-attestation-probe/`）。用户已验证：真实播放、hover 细线修复、关页/切文章后声音停止。遗留：SABR UMP 空响应由 MWEB 直连兜底（独立问题）、WEB_EMBEDDED 直连仍 "This video is unavailable"、Android 未真机验证。
 
@@ -82,7 +82,7 @@
 - 大批 worktree 合入后的 macOS 视觉检查可接受。
 - macOS 文章工具栏 hover 闪烁已修复。
 - 从卡片右键菜单删除摘要后，文章详情能立即更新。
-- 工具链已对齐到本地与 GitHub Actions 均使用 Flutter `3.44.6`，项目最低约束为 Flutter `>=3.44.0`、Dart `^3.12.2`。macOS 插件完成纯 SwiftPM 迁移，`screen_retriever 0.2.2` 修复最后一个不兼容项；CocoaPods 工程引用、Podfile/lock 和旧并行签名补丁已删除。Android Debug、macOS Debug/Release 均已本地构建通过，Release 主程序确认为 arm64。
+- 工具链已对齐到本地与 GitHub Actions 均使用 Flutter `3.47.0`，项目最低约束为 Flutter `>=3.47.0`、Dart `^3.13.0`，macOS 最低部署版本为 `12.0`。锁文件只随 SDK 更新 `intl`、`matcher`、`meta`、`test_api`、`vector_math`，未顺带升级其余依赖。macOS 插件继续使用纯 SwiftPM；Android Debug、macOS Debug/Release 与 237 项测试均通过，Release 主程序确认为 arm64。Android 的 Gradle/AGP/Kotlin 后续支持提醒已记录，等待独立联动迁移。
 - macOS 中间时间线在具体订阅源筛选状态下，header 不再显示重复的订阅源级按钮，也不再显示清除筛选按钮；用户验证该视觉调整符合预期。
 - 垃圾拦截页开始复用普通时间线的同步按钮和文章 AI 右键菜单：刷新按钮位置已按时间线 header 对齐，文章审核行右键也有翻译/摘要相关动作。
 - `flutter run -d macos --no-pub` 的“构建成功但等不到 debug connection”问题已定位为 Xcode Debug Dylib 被 macOS 系统策略拒载，并通过 Debug 配置 `ENABLE_DEBUG_DYLIB = NO` 修复。

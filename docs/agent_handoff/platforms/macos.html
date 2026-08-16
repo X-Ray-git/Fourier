@@ -175,6 +175,7 @@ macOS 是近期 UI 工作的主要验证目标。
 
 - 不要重新采用“直接移动 `standardWindowButton`”方案。系统按钮的可见 frame 可以移动，但 AppKit 私有的整组 hover tracking 仍停留在默认位置，造成方向相关的提前 hover/消失；手工复制 tracking area 会丢失首次 hover 状态，移动 `NSTitlebarView` 又会破坏 hit test。当前自绘 AppKit 控件已经补齐整组 hover、非激活灰态和系统 action 转发。
 - 项目从 Flutter `3.44.6` 起使用纯 Swift Package Manager 管理 macOS 插件。`screen_retriever` 已升级到 `0.2.2`，全部插件进入生成的 `FlutterGeneratedPluginSwiftPackage`；CocoaPods 已 deintegrate，仓库不再保留 Podfile/lock、Pods xcconfig include 或 workspace Pods 引用。
+- Flutter `3.47.0` 起项目最低 macOS deployment target 为 `12.0`；Xcode Debug/Profile/Release 三个配置必须保持一致。当前旧系统玻璃回退只覆盖 macOS 12～15。
 - 迁移时本地 Android Debug、macOS Debug 和 macOS Release 均已构建成功，Release 主程序确认为 arm64；UI 调试仍优先使用 debug build。
 - 如果 `flutter run -d macos` 看似卡住，先检查 debug 日志量或 foregrounding 问题，不要直接归因于应用启动失败。
 - AppKit 窗口几何变化可能被仍在运行的应用缓存。验证红黄绿按钮位置前应完全退出应用。

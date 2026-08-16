@@ -1239,6 +1239,14 @@
 - 不要在下层路由重新可见时自动续播。
 </details>
 
+## Flutter 3.47.0 工具链与 macOS 12 最低版本（2026-08-16）
+
+背景：本机 stable Flutter 从 `3.44.6` 升级到 `3.47.0` / Dart `3.13.0` 后，旧锁文件在 `--enforce-lockfile` 下无法解析；新分析器还发现认证服务在 `try` 内直接返回 Future 的两处 warning。Flutter 构建工具同时要求把 macOS deployment target 从 `10.15` 提升到 `12.0`。
+
+决策：正式将本地、`pubspec.yaml` 和 GitHub Actions 两个 job 对齐到 Flutter `3.47.0`，Dart 最低约束改为 `^3.13.0`；只接受 SDK 解析要求的五个锁文件包更新，不顺带升级其他依赖。认证服务两处返回改为显式 `await`，确保异步异常继续落入现有 catch。保留 Flutter 自动加入的 analyzer 平台/build 排除项和 Xcode 三个配置中的 macOS `12.0`。
+
+后果：应用不再支持 macOS 10.15～11，旧玻璃回退边界收窄为 macOS 12～15。237 项测试、Android Debug、macOS Debug/Release 均通过，Release 主程序仍为 arm64。Flutter 3.47 已提示 Gradle `8.14`、AGP `8.11.1`、Kotlin `2.2.20` 将在后续版本停止支持，但当前构建仍成功；这三项必须在独立任务中联动升级，不能为消除 warning 零散修改。
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

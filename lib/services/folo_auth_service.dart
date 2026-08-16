@@ -245,7 +245,7 @@ abstract final class FoloAuthService {
           (response.statusCode ?? 500) < 300) {
         final sessionToken = _extractSessionToken(response);
         if (sessionToken != null && sessionToken.isNotEmpty) {
-          return validateSessionToken(sessionToken);
+          return await validateSessionToken(sessionToken);
         }
       }
 
@@ -449,7 +449,7 @@ abstract final class FoloAuthService {
       if (sessionToken == null || sessionToken.isEmpty) {
         throw const FoloAuthException('Folo 未返回 Session Token');
       }
-      return validateSessionToken(sessionToken);
+      return await validateSessionToken(sessionToken);
     } on DioException catch (error) {
       throw FoloAuthException(_networkMessage(error));
     } finally {

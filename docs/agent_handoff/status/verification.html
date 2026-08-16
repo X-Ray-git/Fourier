@@ -56,6 +56,17 @@
 - 新增本地轮转诊断，记录 CPU、内存、低电量/温度状态、帧耗时和各后台队列计数；不记录内容或凭据。后续需使用包含本改动的 macOS 构建正常使用，待系统再次提示高耗电后检查 `energy.jsonl`，判断高峰是否与刷新图片预取、同步、AI 队列或 UI 慢帧重合。
 - 隐藏 macOS 主页面已关闭 ticker，隐藏任务中心停止每秒刷新。定向测试、`dart analyze lib test`（无新增 warning/error）及 macOS Debug 构建通过；构建中只保留 `video_player_avfoundation` 的既有弃用 warning。
 
+## 2026-08-16 Flutter 3.47.0 工具链迁移
+
+- 本地与 GitHub Actions 两个构建 job 已统一为 Flutter `3.47.0` / Dart `3.13.0`；`pubspec.yaml` 最低约束和 `pubspec.lock` 同步更新。
+- 锁文件仅更新 SDK 解析要求的 `intl 0.20.3`、`matcher 0.12.20`、`meta 1.19.0`、`test_api 0.7.12`、`vector_math 2.4.2`，没有扩展为全依赖升级。
+- `dart analyze lib test` 为 0 error / 0 warning，仅保留 59 条既有 `prefer_initializing_formals` info；Flutter 3.47 新增发现的两处认证异步 warning 已用 `await` 修正。
+- `flutter test --no-pub` 237 项通过；Android Debug APK、macOS Debug 和 macOS Release 均构建成功，Release 主程序经 `file` 确认为 arm64。macOS 构建只保留 `video_player_avfoundation 2.9.6` 的既有弃用 warning。
+- Flutter 自动把 macOS deployment target 从 `10.15` 提升到 `12.0`，Xcode 工程三个配置保持一致。
+- Android 仍可构建，但 Flutter 提示 Gradle `8.14`、AGP `8.11.1`、Kotlin `2.2.20` 将在后续版本停止支持；下一次 Flutter 升级前应将三者作为独立任务联动迁移。
+- 本机 `flutter doctor -v` 仅报告无法列出 iOS Simulator runtime；本工程不构建 iOS。另检测到 Android SDK 与 Homebrew 各有一份 `adb`，若未来真机识别异常，应先统一 PATH 中的 adb，而不是修改项目代码。
+- 本轮提交前未补做升级后的 macOS/Android 真机视觉与交互回归；自动测试和构建已通过，后续有设备条件时再重点复查登录、视频、滚动、macOS 窗口/玻璃效果及 Android 顶部布局，不阻塞本次工具链迁移提交。
+
 ## 2026-08-13 YouTube 播放器 attestation 修复与生命周期
 
 用户真机（macOS Debug）确认：

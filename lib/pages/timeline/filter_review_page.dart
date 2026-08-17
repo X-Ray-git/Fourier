@@ -20,6 +20,7 @@ import '../../services/external_link_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/summary_service.dart';
+import '../../services/translation_service.dart';
 import '../../services/undo_service.dart';
 import '../../utils/storage.dart';
 import '../article/article_page.dart';
@@ -462,6 +463,21 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   void _selectRelativeArticle(int delta) {
     _listCoordinator.selectRelative(delta);
+  }
+
+  void _openArticleSource(ArticleSourceOpenRequest request) {
+    final feedId = request.article.feedId.trim();
+    if (feedId.isEmpty || !Get.isRegistered<MainController>()) return;
+
+    final mainController = Get.find<MainController>();
+    final timelineController = Get.find<TimelineController>();
+    mainController.beginTimelineSourceNavigation(
+      destinationFeedId: feedId,
+      returnIndex: 1,
+    );
+    timelineController.setTimelineScope(feedId: feedId);
+    timelineController.selectedArticle.value = null;
+    mainController.selectIndex(0);
   }
 
   void _scrollToArticle(String entryId) {
@@ -928,6 +944,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
               return MacArticleDetailStack(
                 key: ValueKey(selected.entryId),
                 isActive: isDetailActive,
+                onOpenSource: _openArticleSource,
                 onRelatedNavigationChanged: (isViewingRelated) {
                   _isViewingRelatedArticle = isViewingRelated;
                 },
@@ -951,6 +968,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                     }
                   },
                   onClose: _clearSelectionAndFocusEmptyDetail,
+                  onOpenSource: _openArticleSource,
                   onPrevious: () => _selectRelativeArticle(-1),
                   onNext: () => _selectRelativeArticle(1),
                   onMKeyPressed: () {
@@ -1698,15 +1716,17 @@ class _MacReviewRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        article.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ArticleCardChrome.titleFontSize,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: selected ? cs.primary : cs.onSurface,
+                      Obx(
+                        () => Text(
+                          TranslationService.displayTitleFor(article),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ArticleCardChrome.titleFontSize,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? cs.primary : cs.onSurface,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 5),

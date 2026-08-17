@@ -734,11 +734,13 @@ class MacArticleDetailStack extends StatefulWidget {
     required this.rootBuilder,
     this.isActive,
     this.onRelatedNavigationChanged,
+    this.onOpenSource,
   });
 
   final MacArticleDetailRootBuilder rootBuilder;
   final bool Function()? isActive;
   final ValueChanged<bool>? onRelatedNavigationChanged;
+  final ValueChanged<ArticleSourceOpenRequest>? onOpenSource;
 
   @override
   State<MacArticleDetailStack> createState() => _MacArticleDetailStackState();
@@ -764,6 +766,7 @@ class _MacArticleDetailStackState extends State<MacArticleDetailStack> {
           isActive: widget.isActive,
           onClose: _popRelatedArticle,
           onMarkedReadByShortcut: _popRelatedArticle,
+          onOpenSource: widget.onOpenSource,
           onOpenRelatedArticle: _openRelatedArticle,
         ),
         transitionsBuilder: (_, animation, _, child) {
@@ -3185,7 +3188,11 @@ class _ArticleRelationsSection extends StatelessWidget {
         onOpenArticle!(localArticle);
         return;
       }
-      await Get.toNamed(Routes.article, arguments: localArticle);
+      await Get.toNamed(
+        Routes.article,
+        arguments: localArticle,
+        preventDuplicates: false,
+      );
       return;
     }
     await ExternalLinkService.openUrlWithFeedback(item.node.url);

@@ -394,7 +394,14 @@ class _TimelinePageState extends State<TimelinePage> {
     }
     // The article view owns the first Esc while a destination article is open.
     if (controller.selectedArticle.value != null) return false;
-    if (_sourceReturnContext == null) return false;
+    if (_sourceReturnContext == null) {
+      if (!Get.isRegistered<MainController>()) return false;
+      return Get.find<MainController>().tryReturnFromTimelineSource(
+        silent: controller.isSilentSelected.value,
+        feedId: controller.selectedFeedId.value,
+        category: controller.selectedCategory.value,
+      );
+    }
 
     _restoreSourceContext();
     return true;
@@ -405,10 +412,18 @@ class _TimelinePageState extends State<TimelinePage> {
     Future<void>.microtask(() {
       if (!mounted || generation != _sourceScopeValidationGeneration) return;
       final returnContext = _sourceReturnContext;
-      if (returnContext == null || _isRestoringSourceContext) return;
-      if (!returnContext.matchesDestination(controller)) {
+      if (returnContext != null &&
+          !_isRestoringSourceContext &&
+          !returnContext.matchesDestination(controller)) {
         _sourceReturnContext = null;
         _pendingArticleRestore = null;
+      }
+      if (Get.isRegistered<MainController>()) {
+        Get.find<MainController>().validateTimelineSourceNavigation(
+          silent: controller.isSilentSelected.value,
+          feedId: controller.selectedFeedId.value,
+          category: controller.selectedCategory.value,
+        );
       }
     });
   }
@@ -1273,6 +1288,7 @@ class _TimelinePageState extends State<TimelinePage> {
                   return MacArticleDetailStack(
                     key: ValueKey(selected.entryId),
                     isActive: isDetailActive,
+                    onOpenSource: _openArticleSource,
                     rootBuilder: (_, openRelatedArticle) => ArticlePageView(
                       article: selected,
                       isSplitView: true,

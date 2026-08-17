@@ -43,6 +43,7 @@ class MobileBlurAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: centerTitle,
       toolbarHeight: toolbarHeight,
       clipBehavior: clipBehavior,
+      forceMaterialTransparency: !blurBackground,
       backgroundColor: blurBackground
           ? cs.surface.withValues(alpha: 0.74)
           : Colors.transparent,

@@ -28,9 +28,9 @@ LinearGradient mobileTopEdgeGradient({
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [
-      background.withValues(alpha: 0.8),
-      background.withValues(alpha: 0.8),
-      background.withValues(alpha: 0.35),
+      background.withValues(alpha: 0.85),
+      background.withValues(alpha: 0.85),
+      background.withValues(alpha: 0.45),
       background.withValues(alpha: 0),
     ],
     stops: [0, transitionStartStop, transitionMidpointStop, transitionEndStop],

@@ -2076,9 +2076,11 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         ),
         centerTitle: !usesCollapsibleMacHeader,
         titleSpacing: usesCollapsibleMacHeader ? 11 : null,
+        forceMaterialTransparency: !Platform.isMacOS,
         backgroundColor: Platform.isMacOS
             ? colorScheme.surface
             : Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         clipBehavior: Platform.isMacOS ? Clip.hardEdge : Clip.none,
         elevation: 0,
         scrolledUnderElevation: 0,

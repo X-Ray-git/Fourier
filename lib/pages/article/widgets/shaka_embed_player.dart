@@ -265,6 +265,11 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
     _tickerEnabled = tickerEnabled;
 
     final colorScheme = Theme.of(context).colorScheme;
+    // YouTube must first load its real embed page before the injected runtime
+    // can take over the DOM. Keep that intermediate page fully covered until
+    // playback starts so its error/loading chrome cannot leak through our
+    // single loading indicator.
+    final coverWebView = _controller == null || (_isLoading && !_isPlaying);
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: AspectRatio(
@@ -274,11 +279,9 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (_controller != null)
-                WebViewWidget(controller: _controller!)
-              else
-                _buildIdleBackground(colorScheme),
-              if (_controller == null)
+              if (_controller != null) WebViewWidget(controller: _controller!),
+              if (coverWebView) _buildIdleBackground(colorScheme),
+              if (coverWebView)
                 ColoredBox(color: Colors.black.withValues(alpha: 0.2)),
               if (_controller == null && !_isLoading)
                 Center(

@@ -29,6 +29,7 @@ import 'bilibili_embed_player.dart';
 import 'article_svg_image.dart';
 import 'inline_video_player.dart';
 import 'youtube_embed_player.dart';
+import 'macos_managed_animated_image.dart';
 
 double _fallbackImageHeight(double width) =>
     (width * 0.6).clamp(180.0, 420.0).toDouble();
@@ -1055,6 +1056,86 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           maxWidth: diskCacheWidth,
         );
 
+        final placeholder = SizedBox(
+          width: renderWidth,
+          height: renderHeight,
+          child: const Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        );
+        final errorWidget = Container(
+          width: renderWidth,
+          height: renderHeight,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.2),
+          child: const Center(
+            child: Icon(Icons.broken_image_outlined, size: 20),
+          ),
+        );
+
+        Widget rasterImage;
+        if (Platform.isMacOS &&
+            ArticleImageCacheService.isLikelyAnimatedImage(imageUrl)) {
+          rasterImage = MacosManagedAnimatedImage(
+            imageProvider: CachedNetworkImageProvider(
+              imageUrl,
+              cacheKey: ArticleImageCacheService.displayCacheKey(
+                widget.articleId,
+                imageUrl,
+              ),
+              headers: ArticleImageService.httpHeaders,
+              maxWidth: diskCacheWidth,
+            ),
+            width: renderWidth,
+            placeholder: placeholder,
+            errorWidget: errorWidget,
+            onLoaded: () =>
+                ArticleImageCacheService.notifyImageLoadedSuccessfully(
+                  widget.articleId,
+                  imageUrl,
+                ),
+          );
+        } else {
+          rasterImage = CachedNetworkImage(
+            imageUrl: imageUrl,
+            cacheKey: ArticleImageCacheService.displayCacheKey(
+              widget.articleId,
+              imageUrl,
+            ),
+            httpHeaders: ArticleImageService.httpHeaders,
+            fit: BoxFit.contain,
+            width: renderWidth,
+            memCacheWidth: cacheWidth,
+            maxWidthDiskCache: diskCacheWidth,
+            fadeInDuration: const Duration(milliseconds: 80),
+            fadeOutDuration: const Duration(milliseconds: 80),
+            placeholder: (context, url) => placeholder,
+            errorWidget: (context, url, error) => errorWidget,
+            imageBuilder: (ctx, imageProvider) => Image(
+              image: imageProvider,
+              fit: BoxFit.contain,
+              width: renderWidth,
+            ),
+          );
+        }
+        rasterImage = GestureDetector(
+          onTap: widget.onImageTap != null
+              ? () => widget.onImageTap!(imageUrl)
+              : null,
+          onSecondaryTapDown: Platform.isMacOS
+              ? (details) => showInlineImageContextMenu(
+                  context,
+                  details.globalPosition,
+                  imageUrl,
+                )
+              : null,
+          child: rasterImage,
+        );
+
         final imageWidget = ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: ArticleImageService.isSvg(imageUrl)
@@ -1074,83 +1155,11 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
                     imageUrl: imageUrl,
                     width: renderWidth,
                     fit: BoxFit.contain,
-                    placeholder: SizedBox(
-                      width: renderWidth,
-                      height: renderHeight,
-                      child: const Center(
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    ),
-                    errorWidget: Container(
-                      width: renderWidth,
-                      height: renderHeight,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.2),
-                      child: const Center(
-                        child: Icon(Icons.broken_image_outlined, size: 20),
-                      ),
-                    ),
+                    placeholder: placeholder,
+                    errorWidget: errorWidget,
                   ),
                 )
-              : CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  cacheKey: ArticleImageCacheService.displayCacheKey(
-                    widget.articleId,
-                    imageUrl,
-                  ),
-                  httpHeaders: ArticleImageService.httpHeaders,
-                  fit: BoxFit.contain,
-                  width: renderWidth,
-                  memCacheWidth: cacheWidth,
-                  maxWidthDiskCache: diskCacheWidth,
-                  fadeInDuration: const Duration(milliseconds: 80),
-                  fadeOutDuration: const Duration(milliseconds: 80),
-                  placeholder: (context, url) => SizedBox(
-                    width: renderWidth,
-                    height: renderHeight,
-                    child: const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: renderWidth,
-                    height: renderHeight,
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.2),
-                    child: const Center(
-                      child: Icon(Icons.broken_image_outlined, size: 20),
-                    ),
-                  ),
-                  imageBuilder: (ctx, imageProvider) {
-                    final gesture = GestureDetector(
-                      onTap: widget.onImageTap != null
-                          ? () => widget.onImageTap!(imageUrl)
-                          : null,
-                      onSecondaryTapDown: Platform.isMacOS
-                          ? (details) => showInlineImageContextMenu(
-                              ctx,
-                              details.globalPosition,
-                              imageUrl,
-                            )
-                          : null,
-                      child: SizedBox(
-                        width: renderWidth,
-                        child: Image(image: imageProvider, fit: BoxFit.contain),
-                      ),
-                    );
-                    return gesture;
-                  },
-                ),
+              : rasterImage,
         );
 
         if (isInlineEmoji) return imageWidget;
@@ -1320,6 +1329,41 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     ),
                   ),
                   errorWidget: errorWidget,
+                )
+              : Platform.isMacOS &&
+                    ArticleImageCacheService.isLikelyAnimatedImage(
+                      widget.imageUrl,
+                    )
+              ? MacosManagedAnimatedImage(
+                  key: retryKey,
+                  imageProvider: CachedNetworkImageProvider(
+                    widget.imageUrl,
+                    cacheKey: ArticleImageCacheService.displayCacheKey(
+                      widget.articleId,
+                      widget.imageUrl,
+                    ),
+                    headers: ArticleImageService.httpHeaders,
+                    maxWidth: diskCacheWidth,
+                  ),
+                  width: displayWidth,
+                  placeholder: SizedBox(
+                    width: displayWidth,
+                    height: displayHeight,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                  errorWidget: errorWidget,
+                  onLoaded: () =>
+                      ArticleImageCacheService.notifyImageLoadedSuccessfully(
+                        widget.articleId,
+                        widget.imageUrl,
+                      ),
+                  onError: _reportFailure,
                 )
               : CachedNetworkImage(
                   key: retryKey,

@@ -32,6 +32,7 @@ void main() {
             <img src="https://example.com/animated.gif">
             <img src="https://example.com/animated.apng">
             <img src="https://example.com/image?id=1&format=gif">
+            <img src="https://example.com/image?id=2&wx_fmt=gif">
             <img src="https://example.com/static.webp">
           ''',
         },
@@ -40,6 +41,12 @@ void main() {
       expect(plan, [
         {'articleId': 'entry', 'imageUrl': 'https://example.com/static.webp'},
       ]);
+      expect(
+        ArticleImageCacheService.isLikelyAnimatedImage(
+          'https://example.com/image?id=2&wx_fmt=gif',
+        ),
+        isTrue,
+      );
     });
 
     test('resolves relative images before building the prefetch plan', () {

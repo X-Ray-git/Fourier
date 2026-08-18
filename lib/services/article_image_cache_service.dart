@@ -181,7 +181,15 @@ abstract final class ArticleImageCacheService {
     return !lowerPath.endsWith('.gif') &&
         !lowerPath.endsWith('.apng') &&
         !lowerQuery.contains('format=gif') &&
-        !lowerQuery.contains('format=apng');
+        !lowerQuery.contains('format=apng') &&
+        !lowerQuery.contains('wx_fmt=gif') &&
+        !lowerQuery.contains('wx_fmt=apng');
+  }
+
+  /// URL-level best effort used to avoid mounting known multi-frame codecs in
+  /// offscreen macOS article content. Unknown formats retain the normal path.
+  static bool isLikelyAnimatedImage(String imageUrl) {
+    return !isBackgroundPrefetchable(imageUrl);
   }
 
   static Future<File> getImageFile(String articleId, String imageUrl) {

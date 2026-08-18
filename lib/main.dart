@@ -28,6 +28,7 @@ import 'services/folo_request_metadata.dart';
 import 'services/article_relation_worker.dart';
 import 'services/mac_article_shortcut_service.dart';
 import 'services/macos_energy_diagnostic_service.dart';
+import 'services/macos_window_activity_service.dart';
 import 'utils/storage.dart';
 import 'services/undo_service.dart';
 import 'utils/macos_window_controls.dart';
@@ -122,6 +123,7 @@ void main() async {
   if (Platform.isMacOS) {
     await LiquidGlassWidgets.initialize();
     await windowManager.ensureInitialized();
+    await MacosWindowActivityService.initialize();
     const windowOptions = WindowOptions(
       size: Size(1000, 750),
       minimumSize: Size(600, 500),

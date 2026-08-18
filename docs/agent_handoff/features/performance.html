@@ -123,11 +123,13 @@
 ## macOS 能耗诊断
 
 - 2026-08-12 对已连续运行约一天的正式版做空闲采样：在 macOS 省电模式、无 LLM 请求时，Fourier 当前 CPU 约为 `0.0%–0.1%`，没有持有防休眠或网络活跃电源断言。现有证据不支持“空闲状态存在永久高 CPU 循环”；系统显示的高耗电更可能来自启动/刷新阶段的集中工作或近期累计能耗。
+- 2026-08-18 捕获到另一类确定性高耗电：窗口仍显示但已经失焦、后台队列为空时，进程仍约占用 `52%–55% CPU` 并持续产生接近显示刷新率的 Flutter 帧；原生采样栈集中在 `flutter::MultiFrameCodec.getNextFrame`。对应正文包含多幅 GIF，且正文 `Column` 会让屏外图片继续挂载。这证明至少一次系统高耗电提示来自屏外/失焦动图持续解码，而不是 AI worker 或图片预取。
 - 当前最值得验证的启动负载是文章图片预取：macOS 刷新会为全部本地未读文章在 isolate 中规划图片，随后最多并发 16 个缓存检查/下载，每篇最多 8 张；这是此前明确选择的激进策略，未取得量化证据前不得擅自降低参数。全文抓取和各 AI worker 同时补位也可能叠加负载。
-- macOS 构建会在本机写入隐私安全的轮转日志：`~/Library/Application Support/io.github.xraygit.fourier/diagnostics/energy.jsonl`，上一轮为 `energy.jsonl.previous`。每 15 秒只读采样一次；有 CPU/帧/后台任务活动时落盘，空闲时每 5 分钟才写心跳，单文件上限 2 MiB。
-- 日志只包含进程 CPU 增量、常驻内存、低电量/温度状态、应用与窗口状态、当前主页面索引、Flutter 帧耗时，以及图片/全文/翻译/摘要/过滤/关系队列的计数。不记录文章标题、正文、URL、订阅源、Prompt、账号信息、Token 或 API Key，也不上传。
+- macOS 正文中 URL 可明确识别的 GIF/APNG 使用独立播放门控：只在窗口聚焦且图片距离正文 viewport 不超过约 `200px` 时保留多帧监听；滚出范围或窗口失焦时移除监听并冻结最后一帧，恢复后继续使用相同缓存。静态图片、Android、全屏图片查看器、正文 `Column` 与缓存策略均不改变。未知格式继续走原路径，避免把全部图片都接入滚动监听。
+- macOS 构建会在本机写入隐私安全的轮转日志：`~/Library/Containers/io.github.xraygit.fourier/Data/Library/Application Support/io.github.xraygit.fourier/diagnostics/energy.jsonl`，上一轮为 `energy.jsonl.previous`。每 15 秒只读采样一次；有 CPU/帧/后台任务活动时落盘，空闲时每 5 分钟才写心跳，单文件上限 2 MiB。
+- 日志 schema 2 除原有进程 CPU、内存、低电量/温度、应用/窗口状态、页面索引、Flutter 帧耗时和各后台队列计数外，还记录动图实例总数、近 viewport 数、正在播放数、因屏外/失焦冻结数，以及采样区间内帧回调/流重连/状态变化计数。不记录文章标题、正文、URL、订阅源、Prompt、账号信息、Token 或 API Key，也不上传；动图监控只维护内存整数，仍随现有 15 秒采样统一落盘。
 - macOS `IndexedStack` 中的隐藏主页现在使用 `TickerMode` 停止 ticker；隐藏的任务中心不再每秒 `setState`。这不改变页面状态和可见交互，只移除确定无意义的后台重建。
-- 后续若再次收到系统高耗电提示，应保留应用继续运行并直接检查上述 JSONL；先对齐高 CPU 区间与图片队列、同步状态、AI worker 或慢帧，再决定是否调整预取策略或渲染实现。
+- 后续若再次收到系统高耗电提示，应保留应用继续运行并直接检查上述 JSONL；先看 `animatedImages.playing/frameCallbacks` 是否与高 CPU、持续帧重合，再对齐图片预取、同步与 AI 队列。若失焦时 `playing` 仍非零，优先检查窗口焦点事件；若 `playing=0` 仍高 CPU，再调查其他渲染路径。待长期验证充分后，可以连同现有诊断服务和日志一起评估是否移除，不能只删日志读取说明而遗留定时器。
 
 ## 已知好坏版本对比
 

@@ -50,6 +50,12 @@
 <script type="text/markdown" id="wiki-content">
 # 验证记录
 
+## 2026-08-18 macOS 正文动图能耗门控
+
+- 真机运行中的高耗电样本在窗口失焦、任务队列为空时仍约占用 `52%–55% CPU` 并接近持续出帧；`sample` 栈集中在 `flutter::MultiFrameCodec.getNextFrame`，隐藏窗口后 CPU 与帧数归零，根因与正文中保持挂载的 GIF 一致。
+- URL 可明确识别的 GIF/APNG 现在只在窗口聚焦且距正文 viewport 约 `200px` 内挂载图像流；屏外或失焦后保留最后一帧但停止多帧解码。诊断 schema 2 增加匿名动图状态和区间计数，不记录 URL、文章信息或凭据。
+- `dart analyze lib test` 无新增 error/warning（仅保留 59 条既有 `prefer_initializing_formals` info）；`flutter test --no-pub` 245 项全部通过；`git diff --check` 通过。仍需 Release 真机确认：可见 GIF 正常播放、滚出/滚回后恢复、切到其他应用时 CPU 回落、全屏图片行为不变。
+
 ## 2026-08-18 CoderBill 邮件兼容与 Android 返回入口
 
 - CoderBill Circle 邮件兼容使用 `feedId/category + 模板结构签名` 双重门禁；定向测试覆盖页脚、应用推广、邮件样式清理，以及正文、主操作链接、图片尺寸和真实数据表保留。另以本机 13 份真实缓存快照做过只读结构核对，结果符合预期；快照正文和私人内容没有写入测试、文档或 Git。

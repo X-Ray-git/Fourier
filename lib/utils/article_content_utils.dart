@@ -23,10 +23,15 @@ abstract final class ArticleContentUtils {
     String entryId,
     String rawHtml, {
     String? sourceUrl,
+    String? feedId,
+    String? category,
   }) {
     final cached = _cache[entryId];
     final sourceDigest = sha256.convert(
-      utf8.encode('${sourceUrl ?? ''}\u0000$rawHtml'),
+      utf8.encode(
+        '${sourceUrl ?? ''}\u0000${feedId ?? ''}\u0000${category ?? ''}'
+        '\u0000$rawHtml',
+      ),
     );
     if (cached != null && cached.sourceDigest == sourceDigest) {
       return cached.normalizedHtml;
@@ -35,7 +40,12 @@ abstract final class ArticleContentUtils {
     if (cached == null && _cache.length >= _cacheMax) {
       _cache.remove(_cache.keys.first);
     }
-    final normalized = normalizeHtml(rawHtml, sourceUrl: sourceUrl);
+    final normalized = normalizeHtml(
+      rawHtml,
+      sourceUrl: sourceUrl,
+      feedId: feedId,
+      category: category,
+    );
     _cache[entryId] = _NormalizedHtmlCacheEntry(sourceDigest, normalized);
     return normalized;
   }
@@ -78,7 +88,12 @@ abstract final class ArticleContentUtils {
     caseSensitive: false,
   );
 
-  static String normalizeHtml(String rawHtml, {String? sourceUrl}) {
+  static String normalizeHtml(
+    String rawHtml, {
+    String? sourceUrl,
+    String? feedId,
+    String? category,
+  }) {
     final normalized = rawHtml.trim();
     if (normalized.isEmpty) return '';
 
@@ -86,7 +101,12 @@ abstract final class ArticleContentUtils {
     _removeUnsafeTags(fragment);
     _removeTrackingPixels(fragment);
     _removeHiddenElements(fragment);
-    ArticleContentCompatibility.apply(fragment, sourceUrl: sourceUrl);
+    ArticleContentCompatibility.apply(
+      fragment,
+      sourceUrl: sourceUrl,
+      feedId: feedId,
+      category: category,
+    );
     _normalizeImages(fragment, sourceUrl: sourceUrl);
     _trimSpacingStyles(fragment);
     _removeEmptyBlocks(fragment);

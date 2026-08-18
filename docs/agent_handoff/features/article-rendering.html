@@ -81,8 +81,8 @@
 
   <rect x="600" y="40" width="170" height="76" rx="12" class="dg-node"/>
   <text x="685" y="66" class="dg-label">规范化缓存</text>
-  <text x="685" y="86" class="dg-sub">entryId + 正文</text>
-  <text x="685" y="102" class="dg-sub">SHA-256 指纹</text>
+  <text x="685" y="86" class="dg-sub">entryId + 内容上下文</text>
+  <text x="685" y="102" class="dg-sub">正文 / URL / feed / category</text>
 
   <rect x="800" y="40" width="120" height="76" rx="12" class="dg-node dg-note"/>
   <text x="860" y="66" class="dg-label">渲染</text>
@@ -135,6 +135,7 @@
 - `lib/services/article_markdown_export_service.dart`
 - `lib/utils/article_content_utils.dart`
 - `lib/utils/article_content_compatibility.dart`
+- `lib/utils/coderbill_email_compatibility.dart`
 - `lib/utils/html_chunk_parser.dart`
 
 当前设计：
@@ -159,8 +160,11 @@ HTML 空段规范化：
 - 官方作者区有稳定的 `data-target="BlogAuthorsByline"`。兼容层将其转换为内部 `fourier-author-list/fourier-author` 语义结构，解析器继续兼容旧缓存中的 `auto-folo-*` 标签；`HtmlChunkParser` 生成单个 `authorList` chunk，`HtmlChunkCard` 以 `36px` 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。
 - 作者区之外的 Hugging Face 头像堆叠属于站点装饰信息，仍按明确的 `cdn-avatars.huggingface.co` 或 `/avatars/` 头像语义移除；普通正文图片和其他来源即使带有 `avatar`/圆形类名也不能被误删。
 - 已保存译文此前直接进入 `HtmlChunkParser`，会绕过正文规范化。当前原文、历史译文和新生成译文在展示前都统一经过 `normalizeHtml()`；历史数据不需要批量迁移，重新构建文章 Controller 即可生效。
-- `normalizeHtml()` 接受文章原文 URL 作为来源上下文；来源规则按 URL host 分派，不依赖可变的订阅源标题或 feed ID。MarkTechPost 会移除上游依赖网页脚本的 `dm-copy-raw-code` 控件；若 `Interactive Explainer` 后出现被 Folo 展开到正文中的完整内嵌文档（以残留 `<title>` 为确定边界），则把该尾部替换为“交互内容仅在原文网页中可用”及原文链接。不要据此放宽到任意 iframe、任意 `Interactive` 文本或其他来源。
-- 来源规则必须依赖稳定的来源标记、域名或明确语义，并配正向/反向最小 HTML 测试。不要按文章标题、订阅源 ID、图片是否圆形或图片固有尺寸做宽泛判断。
+- `normalizeHtml()` 接受文章原文 URL、feed ID 和分类作为来源上下文。普通网页来源优先按稳定 URL host 分派，不依赖可变标题；邮件模板可在“稳定来源身份 + 模板结构签名”同时成立时使用窄规则。MarkTechPost 会移除上游依赖网页脚本的 `dm-copy-raw-code` 控件；若 `Interactive Explainer` 后出现被 Folo 展开到正文中的完整内嵌文档（以残留 `<title>` 为确定边界），则把该尾部替换为“交互内容仅在原文网页中可用”及原文链接。不要据此放宽到任意 iframe、任意 `Interactive` 文本或其他来源。
+- CoderBill Inbox 正文是 Circle/SendGrid 邮件模板，不应作为普通网页或全局 newsletter 启发式处理。规则仅在 `feedId == coderbill`、`category == inbox`，且正文同时含 Circle body 容器或其稳定跳转链接时生效；只满足来源身份或只长得像邮件都不能触发。
+- CoderBill 专用兼容层删除邮件页脚、应用推广徽章和依赖邮件客户端的布局样式，把 `View post` 保留为 Fourier 控制的普通主操作链接；正文、普通链接、真实数据表和有效图片均保留。图片 style 中的明确像素尺寸会迁移到 `width/height` 属性，避免移除邮件 CSS 后把小图错误放大。
+- 正文展示、历史/新译文、摘要、过滤、图片预取、长度估算和 Markdown 导出必须传递同一套来源上下文。规范化缓存的 SHA-256 输入包含正文、URL、feed ID 和 category，不能让同一 entry 在上下文变化后复用错误结果。
+- 来源规则必须依赖稳定来源标记、域名或明确结构语义，并配正向/反向最小 HTML 测试。不得按文章标题、单独的订阅源 ID、图片是否圆形或图片固有尺寸做宽泛判断；测试和文档只使用脱敏最小片段，不提交真实邮件正文。
 
 超链接：
 
@@ -201,7 +205,7 @@ HTML 空段规范化：
 - `ArticleContentUtils` 不能再用“没有 `<th>`”直接判定布局表格。真实数据表常用第一行 `<td>` 充当表头；当前按结构保留至少两行两列、列数稳定、无嵌套且以文本为主的网格，单行/单列、嵌套、媒体主导或结构混乱的表格仍可扁平化。
 - 更彻底但暂缓的架构方向：拆分“忠实阅读渲染规范化”和“翻译/摘要等 LLM 输入清洗”两条管线。前者尽量保留源 HTML 语义，后者可以更积极地扁平化 Newsletter 布局、压缩噪声。实施前需要盘点 `normalizeHtmlForEntry` 缓存、翻译、摘要、readability 和复制正文的调用边界，并为两套输出建立独立缓存键；不要在没有完成调用链审计时直接复制两套规则。
 - HTML 规范化只应删除数值确实为 `0` 的 inline `opacity`；`0.8`、`0.46` 等半透明内容仍是可见正文。顶层文本和布局表格拆平后移到顶层的文本必须重新 HTML 转义，不能让 `&lt;b&gt;` 一类字面内容变成真实标签。
-- 翻译/摘要共用的规范化缓存不能只凭 `entryId` 命中，还必须确认传入的原始正文一致；同一文章补全文或更新正文后必须重新规范化。
+- 翻译/摘要共用的规范化缓存不能只凭 `entryId` 命中，还必须确认正文、原文 URL、feed ID 和 category 一致；同一文章补全文、更新正文或来源上下文变化后必须重新规范化。
 - 坏源 HTML 可能出现空代码块。可以隐藏真正空的代码块，但不要重写有意义代码。
 
 底部间距：
@@ -218,6 +222,7 @@ HTML 空段规范化：
 
 Android 文章操作：
 
+- 普通 Android 页面和文章详情不显示应用自绘返回按钮；`MobileBlurAppBar` 禁止 Flutter 根据嵌套路由自动插入 leading，返回统一交给系统返回键或系统预测返回手势。确有独立业务语义的专用流程仍可显式提供控件，不能因此恢复全局隐式返回箭头。
 - 右下角已读/恢复未读入口是 `48px` 圆形 Flutter 玻璃按钮，不再使用旧 FAB；Android 不提供复制全文按钮。
 - 文章存在目录时，目录按钮位于已读按钮上方，间隔 `8px`；目录内容通过 `AppMobileGlassSheet` 展开，继续复用正文 heading key 和跳转逻辑。
 - 翻译与摘要 pill 和 macOS 共用状态语义与文案，但保留移动端触摸目标，不要为了视觉一致缩成桌面点击尺寸。

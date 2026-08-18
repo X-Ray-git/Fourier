@@ -50,6 +50,12 @@
 <script type="text/markdown" id="wiki-content">
 # 验证记录
 
+## 2026-08-18 CoderBill 邮件兼容与 Android 返回入口
+
+- CoderBill Circle 邮件兼容使用 `feedId/category + 模板结构签名` 双重门禁；定向测试覆盖页脚、应用推广、邮件样式清理，以及正文、主操作链接、图片尺寸和真实数据表保留。另以本机 13 份真实缓存快照做过只读结构核对，结果符合预期；快照正文和私人内容没有写入测试、文档或 Git。
+- 正文规范化上下文现贯穿渲染、历史/新译文、摘要、过滤、图片预取、长度估算与 Markdown 导出，缓存摘要也包含 URL/feed/category。`flutter test --no-pub` 共 242 项通过；`dart analyze lib test` 为 0 error / 0 warning，仅保留 59 条既有 `prefer_initializing_formals` info；`git diff --check` 通过。
+- 仍需用户运行后视觉检查一篇普通 CoderBill 通知和一篇较长邮件：确认没有竖向长按钮、页脚/推广已消失，正文、链接、图片尺寸和真正的数据表仍正确。Android 需确认普通页面及文章详情使用系统返回键/边缘手势可正常返回，顶部不再出现隐式箭头；这些视觉与真机交互未由自动测试替代。
+
 ## 2026-08-12 macOS 能耗诊断
 
 - 当前正式版在省电模式、无 LLM 请求且已运行约一天时，短时空闲采样约为 `0.0%–0.1% CPU`；`pmset` 未发现 Fourier 持有防休眠或网络活跃断言。暂未证明存在空闲永久高负载。

@@ -1,5 +1,7 @@
 import 'package:html/dom.dart' as dom;
 
+import 'coderbill_email_compatibility.dart';
+
 /// Narrow compatibility fixes for source HTML that depends on site CSS which
 /// is not available in the article reader.
 abstract final class ArticleContentCompatibility {
@@ -7,7 +9,19 @@ abstract final class ArticleContentCompatibility {
   static const String authorTag = 'fourier-author';
   static const Set<String> _emptyWrapperTags = {'a', 'span', 'li', 'ul', 'ol'};
 
-  static void apply(dom.DocumentFragment fragment, {String? sourceUrl}) {
+  static void apply(
+    dom.DocumentFragment fragment, {
+    String? sourceUrl,
+    String? feedId,
+    String? category,
+  }) {
+    if (CoderBillEmailCompatibility.appliesTo(
+      fragment,
+      feedId: feedId,
+      category: category,
+    )) {
+      CoderBillEmailCompatibility.apply(fragment);
+    }
     _normalizeHuggingFaceAuthorBylines(fragment);
     _removeHuggingFaceAvatars(fragment);
 

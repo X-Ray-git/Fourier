@@ -35,6 +35,7 @@ class MobileBlurAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return AppBar(
+      automaticallyImplyLeading: false,
       title: title,
       leading: leading,
       leadingWidth: leadingWidth,

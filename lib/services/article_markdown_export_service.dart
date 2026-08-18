@@ -39,6 +39,8 @@ abstract final class ArticleMarkdownExportService {
                     ArticleContentUtils.normalizeHtml(
                       rawHtml,
                       sourceUrl: article.url,
+                      feedId: article.feedId,
+                      category: article.category,
                     ),
                   );
             return _ArticleMarkdownExporter(
@@ -305,9 +307,9 @@ class _ArticleMarkdownExporter {
   }
 
   String _markdownTableCell(String text) {
-    return _normalizeInlineSpacing(
-      text,
-    ).replaceAll('\n', '<br>').replaceAll('|', r'\|');
+    return _normalizeInlineSpacing(text)
+        .replaceAll('\n', '<br>')
+        .replaceAll('|', r'\|');
   }
 
   String _normalizeInlineSpacing(String text) {

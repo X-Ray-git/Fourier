@@ -233,9 +233,8 @@ abstract final class ArticleImageCacheService {
     _activeArticleIds.remove(articleId);
     final rawTimestamp = GStorage.readHistory.get(articleId);
     if (rawTimestamp is int) {
-      final dueAt = DateTime.fromMillisecondsSinceEpoch(
-        rawTimestamp,
-      ).add(readCacheRetention);
+      final dueAt = DateTime.fromMillisecondsSinceEpoch(rawTimestamp)
+          .add(readCacheRetention);
       _cleanupDueAt[articleId] = dueAt;
     }
     final dueAt = _cleanupDueAt[articleId];
@@ -299,6 +298,8 @@ abstract final class ArticleImageCacheService {
           'articleId': article.entryId,
           'content': content,
           'sourceUrl': article.url,
+          'feedId': article.feedId,
+          'category': article.category,
         },
       ], maxImages: _profile.imagesPerArticle),
     );
@@ -332,6 +333,8 @@ abstract final class ArticleImageCacheService {
             'articleId': article.entryId,
             'content': article.content!,
             'sourceUrl': article.url,
+            'feedId': article.feedId,
+            'category': article.category,
           },
         );
     final articleLimit = _profile.backgroundArticleLimit;
@@ -376,10 +379,12 @@ abstract final class ArticleImageCacheService {
       final normalized = ArticleContentUtils.normalizeHtml(
         content,
         sourceUrl: sourceUrl,
+        feedId: article['feedId'],
+        category: article['category'],
       );
-      final urls = ArticleContentUtils.extractImageUrls(
-        normalized,
-      ).where(isBackgroundPrefetchable).take(maxImages);
+      final urls = ArticleContentUtils.extractImageUrls(normalized)
+          .where(isBackgroundPrefetchable)
+          .take(maxImages);
       for (final imageUrl in urls) {
         plan.add({'articleId': articleId, 'imageUrl': imageUrl});
       }
@@ -761,9 +766,8 @@ abstract final class ArticleImageCacheService {
           continue;
         }
 
-        final dueAt = DateTime.fromMillisecondsSinceEpoch(
-          readTimestamp,
-        ).add(readCacheRetention);
+        final dueAt = DateTime.fromMillisecondsSinceEpoch(readTimestamp)
+            .add(readCacheRetention);
         if (dueAt.isAfter(now)) {
           _cleanupDueAt[articleId] = dueAt;
           continue;

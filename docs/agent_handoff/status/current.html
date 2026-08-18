@@ -143,7 +143,7 @@
   播放和视觉验证。
 - 原文 Markdown 转换已从 `article_page.dart` 提取到 `ArticleMarkdownExportService`；单篇复制和批量构建共享标题去重、元数据、正文结构和转义规则。页面层只处理当前内容、剪贴板与反馈，后续静默订阅源批量功能不得再维护页面内 exporter。
 - 单篇 Markdown 转换现与批量导出一样运行在 isolate，并有连续触发保护；畸形嵌套列表不再递归回同一 HTML。真实阿里技术 568KB 级缓存样本已验证能完成导出，不再阻塞 UI 或栈溢出。
-- 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。原文与已保存译文都在解析前走同一规范化路径，历史文章不需要数据库迁移。
+- 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。CoderBill Inbox 使用独立的 Circle 邮件兼容层，只有 feed/category 与模板结构签名同时成立才移除邮件页脚、推广外壳和邮件布局样式，正文、链接、数据表、图片及其明确尺寸保持不变。原文、已保存译文、AI 输入、图片预取、长度估算和 Markdown 导出都传递相同来源上下文，规范化缓存也包含 URL/feed/category；历史文章不需要数据库迁移。
 - 规范化现携带文章原文 URL：相对图片可按页面地址解析，正文、预取、图片查看器和 Markdown 使用一致的绝对地址；SVG 复用文章级磁盘缓存并由 `flutter_svg` 渲染。MarkTechPost 来源规则会移除失效的网页复制控件和确定泄漏的交互文档，代码块由阅读器提供统一轻量复制按钮。OpenAI News 缺少真实音频地址的问题仍不在本轮恢复。
 - Debug 与 Release 网络请求现在统一使用系统 HTTPS 证书信任链，不再通过 `badCertificateCallback` 无条件接受无效证书；自定义 `HttpClient` 的 `15s` idle timeout 保持不变。需要抓包时应安装并信任代理证书，而不是在应用内关闭校验。
 - Folo 接口边界已按上游 `@follow-app/client-sdk 0.3.95` 重新审计：认证 Dio 只允许访问 `https://api.folo.is`，公共文章抓取改用无认证客户端；订阅联合响应、创建响应、Inbox 分页、顶层 `read`、恢复未读 `isInbox` 与批量分类接口均按官方类型修正。用户凭据仍只有 Session Token；Client/Session ID 由应用内部生成，不进入配置备份。
@@ -166,6 +166,7 @@
 - Android 主导航选中态已收敛为橙色实心图标，不再绘制橙色胶囊底板；时间线与垃圾拦截数字角标使用集中语义色 `#DB4A3E`、白字且无边框。用户已完成视觉检查并确认该组合合理。
 - Android 与 macOS 的普通文章卡片现共用预计内容高度标签，固定以 `340 logical px` 阅读宽度计算并计入图片等渲染块，显示在订阅源行右侧；macOS 垃圾拦截独立审核行也接入同一组件。用户已完成两端视觉检查，角标和长度均符合预期。
 - Android 文章页右下角目录、标为已读和恢复未读图标使用 `24px` Rounded Material Symbols、字重 `700`。该字重只通过 `AppGlassIconButton.iconWeight` 局部应用，其他玻璃工具按钮维持原样。
+- Android 普通页面与文章详情不再显示应用级顶部返回按钮；共享 `MobileBlurAppBar` 禁止 Flutter 自动插入 leading，返回统一依赖系统返回键和预测返回手势。独立业务流程仍可显式提供专用返回控件。
 - Android Inbox 展开出现灰色块的根因不是页面动画，而是静默订阅源路径未在 `Obx` 中读取 Rx；`unreadFor()` 已调整读取顺序。用户在 Debug 中确认红色 GetX 错误和 Release 灰色块均消失，原有页面淡入淡出和分类展开动画已保留。
 - 用户已视觉验证 Android 主时间线、订阅源详情、文章目录/已读按钮、底部导航、设置页、任务中心、下拉选择面板和次级页面。底栏最终采用目标设备视觉确认的 `12px` 边距、`56px` 高、`28px` 连续半径；普通移动端 AppBar 收敛为共享 `48px` 工具栏。当前可以把本轮描述为 Android 设计迁移完成，但仍需在不同系统导航模式和屏幕圆角设备上复查底栏兼容性。
 - 合并时又把 Android 文章范围改为圆形按钮 + 玻璃选择面板，并把普通/垃圾拦截卡片字级统一为 `14/12px`。横滑圆角已经在本轮真机 Debug 中完成最终视觉确认；前两项继续按验证记录维护，不再把圆角列为开放项。

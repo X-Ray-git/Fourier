@@ -708,6 +708,22 @@
 
 后果：macOS 插件现在全部由 SwiftPM 生成包管理，构建不再运行 CocoaPods；本地 Android Debug、macOS Debug 和 macOS Release 均通过，Release 主程序为 arm64。以后升级 Flutter 时必须同时维护 pubspec 最低约束、lockfile 和 CI pin；若日志重新出现 `Running pod install`，应视为 CocoaPods 集成被误恢复。下一次 tag 仍需在 GitHub `macos-26` runner 上验证 SwiftPM、arm64 和 Release 上传全链路。
 
+## CoderBill 邮件采用来源与模板双重门禁的专用兼容层（2026-08-18）
+
+背景：CoderBill Inbox 保存的是 Circle/SendGrid 完整邮件模板，而不是已经脱离邮件客户端样式的普通正文。直接渲染会保留页脚、应用推广、布局表和依赖邮件 CSS 的竖向长按钮；若把“像邮件”的特征扩展成全局清洗规则，又会误伤其他订阅源的正文、真实数据表和图片。
+
+决策：兼容逻辑收敛到独立的 `CoderBillEmailCompatibility`，且必须同时满足 `feedId == coderbill`、`category == inbox` 和 Circle body 容器或稳定跳转链接签名。规则只移除 Circle 页脚、推广徽章和邮件展示样式，把 `View post` 保留为 Fourier 控制的普通链接；正文、普通链接、真实数据表和有效图片保留，style 中的明确像素图片尺寸迁移到 `width/height` 属性。渲染、历史/新译文、摘要、过滤、图片预取、长度估算和 Markdown 导出都传递 URL/feed/category，规范化缓存摘要同步纳入这些上下文。
+
+后果：不引入 WebView、动态规则语言或全局 newsletter 启发式，普通文章不受影响；同一 entry 的来源上下文变化时也不会误用旧规范化缓存。正反例测试只使用脱敏最小模板；真实邮件快照仅可在本机只读核对，不得进入 Git、文档或测试 fixture。
+
+## Android 普通页面依赖系统返回而不自动插入顶部按钮（2026-08-18）
+
+背景：Android 已有系统返回键和预测返回手势，普通页面及文章详情继续显示应用级左上返回按钮会重复表达同一导航能力；嵌套路由还可能让 Flutter 在未显式设置 leading 时自动生成箭头，导致不同页面行为不一致。
+
+决策：共享 `MobileBlurAppBar` 固定 `automaticallyImplyLeading: false`，普通列表和文章详情不绘制顶部返回按钮，统一交给系统返回。确有独立业务语义、无法由普通路由返回表达的专用流程，仍可显式传入 leading 或其他操作控件。
+
+后果：Android 顶部工具区更简洁，返回语义由系统统一；新增页面不能依赖 Navigator 层级自动获得可见箭头，必须先判断它属于普通系统返回还是需要专用业务入口。macOS 和相关文章分栏返回行为不随本决策改变。
+
 ## Android 垃圾拦截进入主导航并保留重叠计数
 
 背景：Android 垃圾拦截长期通过主时间线顶部“AI 智能过滤”卡片或后台任务二级入口打开，和 macOS 的一级导航地位不一致。用户认为手机端把审核作为底部导航入口更符合直觉，并希望时间线和垃圾拦截图标分别显示数字角标。

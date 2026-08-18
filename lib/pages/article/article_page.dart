@@ -46,7 +46,9 @@ import '../../utils/storage.dart';
 import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
 import 'widgets/html_chunk_card.dart';
+
 import 'package:flutter_html/flutter_html.dart';
+
 import 'widgets/image_gallery_page.dart';
 import '../../common/widgets/hero_dialog_route.dart';
 
@@ -130,12 +132,16 @@ class ArticleController extends GetxController {
         ? (TranslationService.translatedContentFor(entryId) ?? '')
         : '';
     final sourceUrl = article.url;
+    final feedId = article.feedId;
+    final category = article.category;
 
     try {
       final result = await Isolate.run(() {
         final normalized = ArticleContentUtils.normalizeHtml(
           rawHtml,
           sourceUrl: sourceUrl,
+          feedId: feedId,
+          category: category,
         );
         final urls = ArticleContentUtils.extractImageUrls(normalized);
         final parsedChunks = HtmlChunkParser.parseSync(normalized);
@@ -146,6 +152,8 @@ class ArticleController extends GetxController {
           normalizedTranslation = ArticleContentUtils.normalizeHtml(
             tContent,
             sourceUrl: sourceUrl,
+            feedId: feedId,
+            category: category,
           );
           tParsedChunks = HtmlChunkParser.parseSync(normalizedTranslation);
         }
@@ -215,10 +223,14 @@ class ArticleController extends GetxController {
 
     final shouldReveal = !isTranslated.value;
     final sourceUrl = article.url;
+    final feedId = article.feedId;
+    final category = article.category;
     final result = await Isolate.run(() {
       final normalized = ArticleContentUtils.normalizeHtml(
         sourceContent,
         sourceUrl: sourceUrl,
+        feedId: feedId,
+        category: category,
       );
       return (
         normalized: normalized,
@@ -486,6 +498,8 @@ class ArticleController extends GetxController {
         final normalizedTranslation = ArticleContentUtils.normalizeHtml(
           record.translatedContent!,
           sourceUrl: article.url,
+          feedId: article.feedId,
+          category: article.category,
         );
         translationContent.value = normalizedTranslation;
         isTranslated.value = true;
@@ -718,11 +732,10 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
 
 // ─── 文章视图（核心） ───────────────────────────
 
-typedef MacArticleDetailRootBuilder =
-    Widget Function(
-      BuildContext context,
-      ValueChanged<ArticleModel> openRelatedArticle,
-    );
+typedef MacArticleDetailRootBuilder = Widget Function(
+  BuildContext context,
+  ValueChanged<ArticleModel> openRelatedArticle,
+);
 
 /// Keeps relation-driven navigation inside the macOS detail pane.
 ///
@@ -2001,11 +2014,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
         toolbarHeight: Platform.isMacOS
             ? kToolbarHeight
             : mobileAppBarToolbarHeight,
-        leadingWidth: showsRelatedArticleBackButton
-            ? 45
-            : Platform.isMacOS
-            ? null
-            : 48,
+        leadingWidth: showsRelatedArticleBackButton ? 45 : null,
         leading: showsRelatedArticleBackButton
             ? Padding(
                 padding: const EdgeInsets.only(left: 11),
@@ -2014,21 +2023,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                   child: AppGlassIconButton(
                     icon: Icons.arrow_back_ios_new_rounded,
                     tooltip: '返回上一篇文章 (Esc)',
-                    onPressed: _closeArticle,
-                  ),
-                ),
-              )
-            : !Platform.isMacOS
-            ? Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: AppGlassIconButton(
-                    icon: Icons.arrow_back_rounded,
-                    tooltip: '返回',
-                    size: 36,
-                    iconSize: 19,
-                    nativeBackdrop: true,
                     onPressed: _closeArticle,
                   ),
                 ),
@@ -3646,12 +3640,10 @@ class _SummaryCard extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.light
-                ? Theme.of(
-                    context,
-                  ).colorScheme.secondaryContainer.withValues(alpha: 0.10)
-                : Theme.of(
-                    context,
-                  ).colorScheme.secondaryContainer.withValues(alpha: 0.15),
+                ? Theme.of(context).colorScheme.secondaryContainer
+                      .withValues(alpha: 0.10)
+                : Theme.of(context).colorScheme.secondaryContainer
+                      .withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(

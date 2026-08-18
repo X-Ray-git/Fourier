@@ -362,6 +362,85 @@ void main() {
     expect(fragment.text, contains('Newsletter 正文'));
   });
 
+  test('CoderBill compatibility removes Circle email chrome and styles', () {
+    const raw = '''
+<table id="user-content-bodyTable" role="presentation">
+  <tr><td>
+    <h2 style="font-size: 30px">邮件标题</h2>
+    <p style="margin: 24px">邮件正文</p>
+    <p><a href="https://email.notification.circle.so/c/post"
+      style="height: 38px; line-height: 39px; padding: 0 20px; background: blue">View post</a></p>
+    <img src="https://example.com/content.png"
+      style="width: 320px; height: 180px; border-radius: 8px">
+    <h3>Get the Circle app</h3>
+    <a href="https://email.notification.circle.so/c/app">
+      <img width="140" height="47"
+        src="https://cdn.mcauto-images-production.sendgrid.net/assets/498x167.png">
+    </a>
+    <table>
+      <tr><th>名称</th><th>数值</th></tr>
+      <tr><td>命中率</td><td>90%</td></tr>
+    </table>
+    <table role="presentation"><tr><td>
+      <a href="https://email.notification.circle.so/c/settings">Change notification settings</a>
+      <a href="https://email.notification.circle.so/c/unsubscribe">Unsubscribe from all emails</a>
+    </td></tr></table>
+  </td></tr>
+</table>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      feedId: 'coderbill',
+      category: 'inbox',
+    );
+    final fragment = html_parser.parseFragment(normalized);
+
+    expect(fragment.text, contains('邮件正文'));
+    expect(fragment.text, contains('View post'));
+    expect(fragment.text, isNot(contains('Get the Circle app')));
+    expect(fragment.text, isNot(contains('Change notification settings')));
+    expect(fragment.text, isNot(contains('Unsubscribe from all emails')));
+    final contentImage = fragment.querySelector('img');
+    expect(contentImage?.attributes['src'], 'https://example.com/content.png');
+    expect(contentImage?.attributes['width'], '320');
+    expect(contentImage?.attributes['height'], '180');
+    expect(contentImage?.attributes.containsKey('style'), isFalse);
+    expect(fragment.querySelectorAll('table'), hasLength(1));
+    expect(fragment.querySelector('table th')?.text, '名称');
+    expect(normalized, isNot(contains('height: 38px')));
+    expect(
+      fragment
+          .querySelector('a[data-fourier-email-action="primary"]')
+          ?.attributes['href'],
+      'https://email.notification.circle.so/c/post',
+    );
+  });
+
+  test('CoderBill rules require both source identity and Circle structure', () {
+    const circleTemplate = '''
+<table id="user-content-emailBody" role="presentation">
+  <tr><td><a href="https://email.notification.circle.so/c/post"
+    style="height: 38px">正文</a></td></tr>
+</table>
+''';
+    const unrelated = '<a style="height: 38px">普通正文</a>';
+
+    final otherInbox = ArticleContentUtils.normalizeHtml(
+      circleTemplate,
+      feedId: 'another-inbox',
+      category: 'inbox',
+    );
+    final ordinaryCoderBill = ArticleContentUtils.normalizeHtml(
+      unrelated,
+      feedId: 'coderbill',
+      category: 'inbox',
+    );
+
+    expect(otherInbox, contains('height: 38px'));
+    expect(ordinaryCoderBill, contains('height: 38px'));
+  });
+
   test('normalizeHtml flattens irregular non-semantic table layouts', () {
     const raw = '''
 <table>

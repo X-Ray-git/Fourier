@@ -26,7 +26,12 @@ abstract final class ArticleLengthEstimator {
       return height;
     }
 
-    final normalized = ArticleContentUtils.normalizeHtml(rawContent);
+    final normalized = ArticleContentUtils.normalizeHtml(
+      rawContent,
+      sourceUrl: article.url,
+      feedId: article.feedId,
+      category: article.category,
+    );
     final chunks = HtmlChunkParser.parseSync(normalized);
     final bodyHeight = chunks.fold<double>(
       0,

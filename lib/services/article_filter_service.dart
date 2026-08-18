@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -73,6 +74,8 @@ abstract final class ArticleFilterService {
     final htmlContent = ArticleContentUtils.normalizeHtml(
       article.content ?? '',
       sourceUrl: article.url,
+      feedId: article.feedId,
+      category: article.category,
     );
     final textContent = htmlContent
         .replaceAll(RegExp(r'<[^>]*>'), ' ')

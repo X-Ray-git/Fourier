@@ -104,9 +104,10 @@ abstract final class TranslationService {
       _apiKey ?? (GStorage.setting.get('deepseek_api_key') as String?);
 
   static String getPrompt(String targetLang) {
-    final template =
-        GStorage.setting.get('translation_prompt', defaultValue: _defaultPrompt)
-            as String;
+    final template = GStorage.setting.get(
+      'translation_prompt',
+      defaultValue: _defaultPrompt,
+    ) as String;
     return template.replaceAll('{targetLang}', targetLang);
   }
 
@@ -284,6 +285,8 @@ abstract final class TranslationService {
       article.entryId,
       overrideContent ?? article.content ?? '',
       sourceUrl: article.url,
+      feedId: article.feedId,
+      category: article.category,
     );
     // 正文过大时分块翻译，避免 LLM 输出畸形 JSON
     const chunkThreshold = 35 * 1024;
@@ -364,9 +367,9 @@ abstract final class TranslationService {
 
         Map<String, dynamic> parsed;
         try {
-          parsed =
-              jsonDecode(_normalizeJsonPayload(content))
-                  as Map<String, dynamic>;
+          parsed = jsonDecode(
+            _normalizeJsonPayload(content),
+          ) as Map<String, dynamic>;
         } on FormatException {
           final recovered = _extractJsonObject(content);
           if (recovered != null) {

@@ -24,6 +24,15 @@ copyright and license terms remain applicable to the corresponding portions.
 - Copyright: The Flutter Authors
 - License text: [`third_party/licenses/BSD-3-Clause-Flutter.txt`](third_party/licenses/BSD-3-Clause-Flutter.txt)
 
+## Sparkle
+
+- Version: 2.9.6
+- Source: https://github.com/sparkle-project/Sparkle
+- License: MIT License
+- Copyright: Sparkle Project contributors and bundled component authors
+- Usage: macOS 应用内更新检查、签名验证、安装和重启。
+- License text: [`third_party/licenses/MIT-Sparkle.txt`](third_party/licenses/MIT-Sparkle.txt)
+
 ## interactiveviewer_gallery
 
 - Source: https://github.com/qq326646683/interactiveviewer_gallery

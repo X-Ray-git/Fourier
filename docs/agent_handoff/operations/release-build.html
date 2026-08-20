@@ -167,6 +167,10 @@ Release notes 规则：
 - Android 包名相同但签名 key 不同时会安装冲突。
 - 项目已通过 GitHub Secrets 让 GitHub 内部构建签名与用户本地 debug keystore 对齐。
 - GitHub Secrets 不存放在仓库中。
+- macOS 应用内更新使用 Sparkle `2.9.6`。仓库只保存 `SUPublicEDKey`，私钥只允许存在于本机登录钥匙串的 Sparkle 项和 GitHub Actions `SPARKLE_PRIVATE_KEY` Secret，禁止写入代码、文档、日志、Release 或普通文件备份。
+- macOS tag 构建完成后，workflow 从 SwiftPM artifact 中调用 Sparkle `generate_appcast`，通过标准输入读取私钥，为 arm64 ZIP 生成 Ed25519 签名并把 annotated tag 正文嵌入 `appcast.xml`。Release 必须同时上传 ZIP 与 `appcast.xml`；稳定 feed URL 为 `https://github.com/X-Ray-git/Fourier/releases/latest/download/appcast.xml`。
+- `generate_appcast` 的 CI 参数使用 `--ed-key-file -`，不要把 Secret 落盘；appcast 只保留当前完整包，不生成 delta。若 Sparkle 升级，必须同步维护 Xcode 精确版本、`Package.resolved`、第三方许可和 workflow 工具路径，并先做本地签名烟雾测试。
+- Android 应用内更新依赖 GitHub Release asset 自动提供的 `sha256:` digest。不要删除、重命名 `Fourier-android-vX.Y.Z.apk` 规则，除非同步修改客户端选择逻辑和测试。
 
 本地构建命令：
 

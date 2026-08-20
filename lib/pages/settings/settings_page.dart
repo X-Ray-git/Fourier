@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ import '../../models/folo_account_profile.dart';
 import '../../services/account_service.dart';
 import '../../services/android_haptics_service.dart';
 import '../../services/app_version_service.dart';
+import '../../services/app_update_service.dart';
 import '../../services/article_filter_service.dart';
 import '../../services/article_relation_prompt_service.dart';
 import '../../services/article_relation_service.dart';
@@ -67,6 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _testingCredentials = false;
   bool _changingAccount = false;
   bool _loggingIn = false;
+  bool _checkingForUpdates = false;
   late String _appearanceMode;
   late String _badgeStrategy;
   late int _autoRetryMaxCount;
@@ -82,9 +85,45 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       return;
     }
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const AppLicensesPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const AppLicensesPage()));
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingForUpdates) return;
+    setState(() => _checkingForUpdates = true);
+    try {
+      if (Platform.isMacOS) {
+        await AppUpdateService.checkForMacOSUpdate();
+        return;
+      }
+      final release = await AppUpdateService.checkLatestAndroidRelease();
+      if (!mounted) return;
+      if (!release.isNewerThanInstalled) {
+        AppFeedback.success('已是最新版本', '当前版本为 v${AppVersionService.version}');
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _AndroidUpdateDialog(release: release),
+      );
+    } on DioException catch (error) {
+      if (!mounted) return;
+      final status = error.response?.statusCode;
+      AppFeedback.error(
+        '检查更新失败',
+        status == null ? '无法连接 GitHub，请稍后重试' : 'GitHub 返回错误（$status）',
+      );
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      AppFeedback.error('检查更新失败', error.message ?? '系统更新服务不可用');
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      AppFeedback.error('检查更新失败', error.message);
+    } finally {
+      if (mounted) setState(() => _checkingForUpdates = false);
+    }
   }
 
   @override
@@ -444,12 +483,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveReadSyncWindowDays() async {
-    final previous =
-        GStorage.setting.get(
-              StorageKeys.readSyncWindowDays,
-              defaultValue: AppConstants.defaultReadSyncWindowDays,
-            )
-            as int;
+    final previous = GStorage.setting.get(
+      StorageKeys.readSyncWindowDays,
+      defaultValue: AppConstants.defaultReadSyncWindowDays,
+    ) as int;
     final readWindowDays = int.tryParse(
       _readSyncWindowDaysController.text.trim(),
     );
@@ -471,12 +508,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveArticleContentMaxWidth() async {
-    final previous =
-        GStorage.setting.get(
-              StorageKeys.articleContentMaxWidth,
-              defaultValue: AppConstants.defaultArticleContentMaxWidth,
-            )
-            as int;
+    final previous = GStorage.setting.get(
+      StorageKeys.articleContentMaxWidth,
+      defaultValue: AppConstants.defaultArticleContentMaxWidth,
+    ) as int;
     final articleContentMaxWidth = int.tryParse(
       _articleContentMaxWidthController.text.trim(),
     );
@@ -500,12 +535,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveMacosMaxFlingVelocity() async {
-    final previous =
-        GStorage.setting.get(
-              StorageKeys.macosMaxFlingVelocity,
-              defaultValue: AppConstants.defaultMacosMaxFlingVelocity,
-            )
-            as int;
+    final previous = GStorage.setting.get(
+      StorageKeys.macosMaxFlingVelocity,
+      defaultValue: AppConstants.defaultMacosMaxFlingVelocity,
+    ) as int;
     final macosMaxFlingVelocity = int.tryParse(
       _macosMaxFlingVelocityController.text.trim(),
     );
@@ -581,8 +614,7 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) => _SettingsConfirmDialog(
         title: '退出 Folo 账号',
-        content:
-            '将从 Fourier 移除当前登录并清理本地文章、摘要、翻译、阅读记录、图片缓存和撤销历史。Prompt、AI 参数、DeepSeek Key 和界面偏好会保留；浏览器中的 Folo 登录不会退出。',
+        content: '将从 Fourier 移除当前登录并清理本地文章、摘要、翻译、阅读记录、图片缓存和撤销历史。Prompt、AI 参数、DeepSeek Key 和界面偏好会保留；浏览器中的 Folo 登录不会退出。',
         confirmLabel: '退出并清理',
         onCancel: () => Get.back(result: false),
         onConfirm: () => Get.back(result: true),
@@ -902,9 +934,8 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(width: 24),
               Expanded(
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
+                  behavior: ScrollConfiguration.of(context)
+                      .copyWith(scrollbars: false),
                   child: ListView(
                     controller: _macSettingsScrollController,
                     padding: EdgeInsets.zero,
@@ -1141,8 +1172,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               hintText: '输入摘要规则...',
                               emptyWarning: '请保留默认的 JSON 结构指令',
                               savedMessage: '新摘要将从下次请求生效',
-                              helpText:
-                                  '这里配置 System Prompt。程序会自动拼接文章标题和 HTML 正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
+                              helpText: '这里配置 System Prompt。程序会自动拼接文章标题和 HTML 正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
                               loadPrompt: () =>
                                   SummaryService.getPrompt('{targetLang}'),
                               savePrompt: SummaryService.setPrompt,
@@ -1155,8 +1185,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               hintText: '输入翻译规则...',
                               emptyWarning: '请保留默认的 JSON 结构指令',
                               savedMessage: '新翻译将从下次请求生效',
-                              helpText:
-                                  '这里配置 System Prompt。程序会自动拼接文章或分块正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
+                              helpText: '这里配置 System Prompt。程序会自动拼接文章或分块正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
                               loadPrompt: () =>
                                   TranslationService.getPrompt('{targetLang}'),
                               savePrompt: TranslationService.setPrompt,
@@ -1356,11 +1385,22 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 12),
         _MacSettingsMetadataRow(label: 'Folo API', value: 'api.folo.is'),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: _showOpenSourceLicenses,
-          icon: const Icon(Icons.description_outlined, size: 17),
-          label: const Text('开源许可证'),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            AppGlassButton(
+              onPressed: _checkingForUpdates ? null : _checkForUpdates,
+              icon: Icons.system_update_alt_rounded,
+              label: _checkingForUpdates ? '正在检查' : '检查更新',
+            ),
+            AppGlassButton(
+              onPressed: _showOpenSourceLicenses,
+              icon: Icons.description_outlined,
+              label: '开源许可证',
+            ),
+          ],
         ),
       ],
     );
@@ -1747,11 +1787,27 @@ class _SettingsPageState extends State<SettingsPage> {
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _showOpenSourceLicenses,
-                    icon: const Icon(Icons.description_outlined, size: 17),
-                    label: const Text('开源许可证'),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: _checkingForUpdates
+                            ? null
+                            : _checkForUpdates,
+                        icon: const Icon(
+                          Icons.system_update_alt_rounded,
+                          size: 17,
+                        ),
+                        label: Text(_checkingForUpdates ? '正在检查' : '检查更新'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _showOpenSourceLicenses,
+                        icon: const Icon(Icons.description_outlined, size: 17),
+                        label: const Text('开源许可证'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -2204,8 +2260,7 @@ class _SettingsPageState extends State<SettingsPage> {
             hintText: '输入摘要规则...',
             emptyWarning: '请保留默认的 JSON 结构指令',
             savedMessage: '新摘要将从下次请求生效',
-            helpText:
-                '这里配置 System Prompt。程序会自动拼接文章标题和 HTML 正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
+            helpText: '这里配置 System Prompt。程序会自动拼接文章标题和 HTML 正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
             loadPrompt: () => SummaryService.getPrompt('{targetLang}'),
             savePrompt: SummaryService.setPrompt,
             resetPrompt: SummaryService.resetPrompt,
@@ -2217,8 +2272,7 @@ class _SettingsPageState extends State<SettingsPage> {
             hintText: '输入翻译规则...',
             emptyWarning: '请保留默认的 JSON 结构指令',
             savedMessage: '新翻译将从下次请求生效',
-            helpText:
-                '这里配置 System Prompt。程序会自动拼接文章或分块正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
+            helpText: '这里配置 System Prompt。程序会自动拼接文章或分块正文作为 User Prompt；如需动态目标语言，可保留 {targetLang}。',
             loadPrompt: () => TranslationService.getPrompt('{targetLang}'),
             savePrompt: TranslationService.setPrompt,
             resetPrompt: TranslationService.resetPrompt,
@@ -2311,11 +2365,27 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _showOpenSourceLicenses,
-                    icon: const Icon(Icons.description_outlined, size: 17),
-                    label: const Text('开源许可证'),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: _checkingForUpdates
+                            ? null
+                            : _checkForUpdates,
+                        icon: const Icon(
+                          Icons.system_update_alt_rounded,
+                          size: 17,
+                        ),
+                        label: Text(_checkingForUpdates ? '正在检查' : '检查更新'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _showOpenSourceLicenses,
+                        icon: const Icon(Icons.description_outlined, size: 17),
+                        label: const Text('开源许可证'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -2818,6 +2888,138 @@ class _FoloAccountIdentity extends StatelessWidget {
   }
 }
 
+class _AndroidUpdateDialog extends StatefulWidget {
+  const _AndroidUpdateDialog({required this.release});
+
+  final AppUpdateRelease release;
+
+  @override
+  State<_AndroidUpdateDialog> createState() => _AndroidUpdateDialogState();
+}
+
+class _AndroidUpdateDialogState extends State<_AndroidUpdateDialog> {
+  CancelToken? _cancelToken;
+  bool _downloading = false;
+  int _received = 0;
+  int _total = 0;
+
+  double? get _progress => _total > 0 ? _received / _total : null;
+
+  Future<void> _install() async {
+    if (_downloading) return;
+    final cancelToken = CancelToken();
+    setState(() {
+      _cancelToken = cancelToken;
+      _downloading = true;
+      _received = 0;
+      _total = widget.release.asset.size;
+    });
+    try {
+      final installerOpened = await AppUpdateService.downloadAndInstallAndroid(
+        widget.release,
+        cancelToken: cancelToken,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          setState(() {
+            _received = received;
+            _total = total > 0 ? total : widget.release.asset.size;
+          });
+        },
+      );
+      if (!mounted) return;
+      if (!installerOpened) {
+        AppFeedback.info('需要安装权限', '授权后返回 Fourier，再次点击“下载并安装”');
+        setState(() => _downloading = false);
+      }
+    } on DioException catch (error) {
+      if (!mounted) return;
+      if (!CancelToken.isCancel(error)) {
+        AppFeedback.error('下载失败', '无法下载安装包，请稍后重试');
+      }
+      setState(() => _downloading = false);
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      AppFeedback.error('安装包不可用', error.message);
+      setState(() => _downloading = false);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      AppFeedback.error('无法开始安装', error.message ?? '系统安装器不可用');
+      setState(() => _downloading = false);
+    }
+  }
+
+  void _cancelOrClose() {
+    _cancelToken?.cancel('user_cancelled');
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final release = widget.release;
+    final notes = release.notes.trim().isEmpty
+        ? '本次发布没有附加说明。'
+        : release.notes.trim();
+    final megabytes = release.asset.size / (1024 * 1024);
+
+    return PopScope(
+      canPop: !_downloading,
+      child: AlertDialog(
+        title: Text('发现新版本 v${release.version}'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460, maxHeight: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '当前版本 v${AppVersionService.version} · 安装包 ${megabytes.toStringAsFixed(1)} MB',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    notes,
+                    style: const TextStyle(height: 1.5),
+                  ),
+                ),
+              ),
+              if (_downloading) ...[
+                const SizedBox(height: 18),
+                LinearProgressIndicator(value: _progress),
+                const SizedBox(height: 6),
+                Text(
+                  _progress == null
+                      ? '正在下载…'
+                      : '正在下载 ${(_progress! * 100).round()}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _cancelOrClose,
+            child: Text(_downloading ? '取消下载' : '稍后'),
+          ),
+          FilledButton.icon(
+            onPressed: _downloading ? null : _install,
+            icon: const Icon(Icons.download_rounded),
+            label: const Text('下载并安装'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SettingsConfirmDialog extends StatelessWidget {
   final String title;
   final String content;
@@ -3238,8 +3440,7 @@ class _BrowserLoginDialogState extends State<_BrowserLoginDialog>
               ),
               const SizedBox(height: 10),
               Text(
-                _error ??
-                    '已打开 Folo 官方登录页面。完成登录后，Fourier 会在后台自动接收授权；无需点击网页中的“打开 Folo”按钮。',
+                _error ?? '已打开 Folo 官方登录页面。完成登录后，Fourier 会在后台自动接收授权；无需点击网页中的“打开 Folo”按钮。',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
@@ -3949,8 +4150,7 @@ class _RelationPromptCard extends StatelessWidget {
       hintText: '输入关系判断规则...',
       emptyWarning: '请保留默认的 JSON 结构和关系组约束',
       savedMessage: '新关系批次将从下次请求生效',
-      helpText:
-          '默认 Prompt 接收 articles 与 new_ids。为兼容已有规则，真正自定义的旧 Prompt 暂时仍接收 new/history；Prompt 不应依赖正文或当前已读状态。',
+      helpText: '默认 Prompt 接收 articles 与 new_ids。为兼容已有规则，真正自定义的旧 Prompt 暂时仍接收 new/history；Prompt 不应依赖正文或当前已读状态。',
       loadPrompt: ArticleRelationPromptService.getPrompt,
       savePrompt: ArticleRelationPromptService.setPrompt,
       resetPrompt: ArticleRelationPromptService.resetPrompt,

@@ -6,8 +6,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.FileProvider
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import io.flutter.embedding.android.FlutterActivity
@@ -18,6 +20,7 @@ class MainActivity : FlutterActivity() {
     private val MOVE_CHANNEL = "io.github.xraygit.fourier/move_to_background"
     private val BADGE_CHANNEL = "io.github.xraygit.fourier/badge"
     private val AUTH_CALLBACK_CHANNEL = "io.github.xraygit.fourier/auth_callback"
+    private val APP_UPDATE_CHANNEL = "io.github.xraygit.fourier/app_update"
     private val BADGE_NOTIFICATION_ID = 1001
     private val BADGE_CHANNEL_ID = "badge_channel"
     private var authCallbackChannel: MethodChannel? = null
@@ -75,6 +78,23 @@ class MainActivity : FlutterActivity() {
             }
         }
         captureAuthCallback(intent)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            APP_UPDATE_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "installAndroidApk" -> {
+                    val path = call.arguments as? String
+                    if (path == null) {
+                        result.error("INVALID_ARGUMENT", "Expected APK path", null)
+                    } else {
+                        installAndroidApk(path, result)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -109,6 +129,49 @@ class MainActivity : FlutterActivity() {
     private fun setBadge(count: Int) {
         if (tryVivoBadge(count)) return
         fallbackNotificationBadge(count)
+    }
+
+    private fun installAndroidApk(path: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            try {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+                result.success(false)
+            } catch (error: Exception) {
+                result.error("INSTALL_PERMISSION_UNAVAILABLE", error.message, null)
+            }
+            return
+        }
+
+        val apk = java.io.File(path)
+        if (!apk.isFile) {
+            result.error("APK_NOT_FOUND", "Downloaded APK does not exist", null)
+            return
+        }
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.update-files",
+            apk
+        )
+        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = uri
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            putExtra(Intent.EXTRA_RETURN_RESULT, false)
+        }
+        try {
+            startActivity(intent)
+            result.success(true)
+        } catch (error: Exception) {
+            result.error("INSTALLER_UNAVAILABLE", error.message, null)
+        }
     }
 
     /** Vivo / Origin OS ContentProvider 直写角标，不需要通知 */

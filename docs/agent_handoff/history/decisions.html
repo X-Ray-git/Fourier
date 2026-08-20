@@ -1263,6 +1263,23 @@
 
 后果：应用不再支持 macOS 10.15～11，旧玻璃回退边界收窄为 macOS 12～15。237 项测试、Android Debug、macOS Debug/Release 均通过，Release 主程序仍为 arm64。Flutter 3.47 已提示 Gradle `8.14`、AGP `8.11.1`、Kotlin `2.2.20` 将在后续版本停止支持，但当前构建仍成功；这三项必须在独立任务中联动升级，不能为消除 warning 零散修改。
 
+## GitHub Release 手动更新与平台安装器（2026-08-18）
+
+背景：Fourier 通过公开 GitHub Release 分发 Android APK 和 macOS arm64 ZIP，不进入应用商店。用户需要应用内检查和下载更新，但明确不需要启动或后台自动检查。
+
+决策：更新检查只有设置页“关于”中的手动入口。Android 匿名调用 GitHub latest release API，按 tag 精确选择 APK，下载后强制验证 GitHub asset SHA-256，再交给 Android 系统安装器并保留用户确认；不自建静默安装器。macOS 不手写应用覆盖逻辑，使用固定 Sparkle `2.9.6`、标准用户界面、Installer XPC 和 Ed25519 更新签名；自动检查与自动更新同时关闭。发布流水线从 annotated tag 正文生成签名 `appcast.xml` 并作为 Release asset 上传，稳定 feed 使用 GitHub `releases/latest/download` 重定向。
+
+后果：当前安装版本不会产生任何新增后台网络或定时任务；第一版带更新器的版本仍需手动安装。之后 Android 可在下载后进入系统升级页，macOS 可由 Sparkle 安全替换并重启。更新私钥属于发布根信任，只允许存 GitHub Secret 和本机钥匙串，仓库保存公钥；丢失私钥且没有 Developer ID 连续签名时会破坏后续更新能力，因此必须保留本机安全备份。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要在没有新产品决策时增加启动检查、恢复前台检查、定时检查或后台下载。
+- 不要因为当前只有个人使用就跳过 APK digest 或 Sparkle Ed25519 校验。
+- 不要在 macOS 上自行解压并覆盖正在运行的 app，也不要把 Sparkle 私钥提交进仓库。
+- 不要让 Android 绕过系统安装确认或假定“未知应用安装”权限永远存在。
+</details>
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

@@ -63,6 +63,7 @@
 - 本地 `main` 仍可能领先远端；提交/推送前必须先看 `git status --short --branch`。
 - 最近一批 worktree 功能已经用 merge commit 合入 `main`，保留了分支历史。
 - 除非用户明确要求，否则不要创建 release/tag。
+- 两端设置页已加入纯手动检查更新：Android 从最新正式 GitHub Release 下载并校验 APK 后交给系统安装器；macOS 使用 Sparkle 2 的签名更新、替换和重启。启动和后台不检查更新。下一次 tag 必须同时发布 `appcast.xml`，且 GitHub Actions 需要已配置 `SPARKLE_PRIVATE_KEY` Secret；第一版更新器仍需手动安装。
 - `AGENT_HANDOFF.md` 现在只作为短入口。维护型交接知识库位于 `docs/agent_handoff/`。
 - 旧单文件时间线已拆入 `docs/agent_handoff/history/archive/`；`history/chronology.html` 提供全部旧章节索引，`history/timeline.html` 仅保留兼容入口。当前事实不得写入历史归档。
 - macOS 能耗诊断已定位到一条确定原因：失焦/屏外 GIF 仍由 `MultiFrameCodec` 持续解码，可造成约半个 CPU 核心和接近刷新率的无效帧。疑似动图现仅在窗口聚焦且靠近正文 viewport 时播放，失焦/屏外冻结最后一帧；日志 schema 2 同步记录匿名动图计数。仍需用户用包含本改动的 Release 长期观察，静态图、Android、全屏查看器、正文 `Column` 和图片预取策略未变。详情见 `features/performance.html`。

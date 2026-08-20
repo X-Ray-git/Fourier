@@ -31,5 +31,15 @@
 	</dict>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<false/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/X-Ray-git/Fourier/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Ors01YvEPo9DnLXZqOocQ3vfzp0IQnoK24xLkn9UAWk=</string>
 </dict>
 </plist>

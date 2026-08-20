@@ -150,11 +150,40 @@ jobs:
             "dist/Fourier-macOS-arm64-${GITHUB_REF_NAME}.zip"
           rm -rf "dist/Fourier.app"
 
+      - name: Generate signed Sparkle appcast
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "Missing SPARKLE_PRIVATE_KEY secret."
+            exit 1
+          fi
+          SPARKLE_TOOLS_DIR="$(find build/macos -type d -path '*/artifacts/sparkle/Sparkle/bin' -print -quit)"
+          if [ -z "$SPARKLE_TOOLS_DIR" ] || [ ! -x "$SPARKLE_TOOLS_DIR/generate_appcast" ]; then
+            echo "Could not locate Sparkle generate_appcast tool."
+            exit 1
+          fi
+          ARCHIVE="dist/Fourier-macOS-arm64-${GITHUB_REF_NAME}.zip"
+          NOTES="${ARCHIVE%.zip}.md"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$NOTES"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
+            "$SPARKLE_TOOLS_DIR/generate_appcast" \
+              --ed-key-file - \
+              --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+              --embed-release-notes \
+              --maximum-deltas 0 \
+              -o dist/appcast.xml \
+              dist
+          rm "$NOTES"
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v7
         with:
           name: fourier-macos
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/appcast.xml
           if-no-files-found: error
 
   release:

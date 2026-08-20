@@ -3,10 +3,12 @@ import FlutterMacOS
 import Darwin
 import WebKit
 import webview_flutter_wkwebview
+import Sparkle
 
 @main
 class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   private var isQuitting = false
+  private var updaterController: SPUStandardUpdaterController?
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return false
@@ -39,7 +41,35 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   override func applicationDidFinishLaunching(_ notification: Notification) {
     mainFlutterWindow?.delegate = self
 
+    updaterController = SPUStandardUpdaterController(
+      startingUpdater: true,
+      updaterDelegate: nil,
+      userDriverDelegate: nil
+    )
+    updaterController?.updater.automaticallyChecksForUpdates = false
+
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
+
+    let appUpdateChannel = FlutterMethodChannel(
+      name: "io.github.xraygit.fourier/app_update",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    appUpdateChannel.setMethodCallHandler { [weak self] (call, result) in
+      guard call.method == "checkForMacOSUpdate" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let updaterController = self?.updaterController else {
+        result(FlutterError(
+          code: "UPDATER_UNAVAILABLE",
+          message: "Sparkle updater is not initialized",
+          details: nil
+        ))
+        return
+      }
+      updaterController.checkForUpdates(nil)
+      result(nil)
+    }
 
     let energyDiagnosticsChannel = FlutterMethodChannel(
       name: "io.github.xraygit.fourier/energy_diagnostics",

@@ -128,6 +128,14 @@ Android UI：
 - macOS 与移动端的无按钮数字输入复用 `_AutoSavedSettingsTextField`；两端服务认证共用 `_CredentialActions`，避免按钮语义、加载态和提交时机分叉。
 - 自动保存写入必须串行，并以最后一次用户选择为准；正常选择不弹成功提示，失败时恢复上一次持久值并提示。单行文本按 Enter 与点击保存等价。
 
+## 手动检查更新
+
+- macOS 与 Android 的“关于”区域都提供“检查更新”，这是唯一更新检查入口。当前明确不在启动、刷新、恢复前台或后台任务中自动访问 GitHub；以后若改变必须作为独立产品决策，不能顺手加入定时器。
+- Android 手动读取 `X-Ray-git/Fourier` 最新正式 GitHub Release，严格选择与 tag 对应的 `Fourier-android-vX.Y.Z.apk`。发现新版本后展示 Release notes、文件大小和下载进度；下载完成必须按 GitHub asset 的 `sha256` digest 校验，再调用系统安装器。首次使用由 Android 引导用户授权 Fourier 安装未知应用，返回后再次点击即可复用已校验的临时 APK，不应重复下载。
+- Android 不自动安装、不绕过系统确认、不嵌入 GitHub Token，也不读取 prerelease。网络、格式、摘要或安装器错误都应明确反馈；取消下载时删除不完整文件。
+- macOS 的按钮直接调用 Sparkle 2 标准手动更新界面。Sparkle 负责检查、Ed25519 校验、下载、沙盒外替换与重启；不要另写解压 ZIP、覆盖 `/Applications` 或自行重启的安装器。`SUEnableAutomaticChecks` 与 `SUAllowsAutomaticUpdates` 均保持关闭，Runner 还会显式把 `automaticallyChecksForUpdates` 设为 false。
+- 第一版带更新器的安装包仍需用户手动安装。只有从该版本开始，后续版本才能在应用内完成升级。
+
 ## Android 触觉反馈
 
 - 新增集中但轻量的 `AndroidHapticsService`（macOS 完全不受影响，非 Android 平台直接禁用）。

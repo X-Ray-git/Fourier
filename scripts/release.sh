@@ -176,7 +176,14 @@ fi
 perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml
 
 release_history="docs/agent_handoff/history/releases.html"
-printf -v message_arg '%q' "$message"
+# macOS ships an older Bash whose printf %q can split UTF-8 code points under
+# some locales. Python's shell quoting keeps release history valid and remains
+# readable when notes contain Chinese or real newlines.
+message_arg="$(printf '%s' "$message" | python3 -c '
+import shlex
+import sys
+sys.stdout.write(shlex.quote(sys.stdin.read()))
+')"
 release_flags=""
 if [[ "$allow_literal_backslash_n" == true ]]; then
   release_flags+=" --allow-literal-backslash-n"
@@ -192,6 +199,7 @@ fi
   printf './scripts/release.sh %s -m %s%s\n' "$version" "$message_arg" "$release_flags"
   printf '```\n'
 } | python3 -c '
+import os
 import sys
 frag = sys.stdin.read().replace("</script>", "<\\\\/script>")
 path = sys.argv[1]
@@ -199,7 +207,11 @@ src = open(path, encoding="utf-8").read()
 marker = "</script>"
 idx = src.find(marker)
 assert idx != -1 and "id=\"wiki-content\"" in src[:idx], "releases.html wiki-content block not found"
-open(path, "w", encoding="utf-8").write(src[:idx] + frag + src[idx:])
+payload = (src[:idx] + frag + src[idx:]).encode("utf-8")
+tmp = path + ".tmp"
+with open(tmp, "wb") as handle:
+    handle.write(payload)
+os.replace(tmp, path)
 ' "$release_history"
 
 git add pubspec.yaml "$release_history"

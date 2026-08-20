@@ -1280,6 +1280,22 @@
 - 不要让 Android 绕过系统安装确认或假定“未知应用安装”权限永远存在。
 </details>
 
+## YouTube 播放启动超时改为分阶段无进展计时（2026-08-20）
+
+背景：真实样本先经历 WEB_EMBEDDED `Load failed` 和 SABR `Shaka 1002`，随后 MWEB 已成功取得 manifest、画质列表和正常 `200/206` 媒体响应，却因旧 35 秒计时器从 WebView 创建时就开始计算，在 MWEB 刚进入可播放阶段时被错误回退到官方网页。一次完整 Debug 采样确认 MWEB 可持续越过此前约 1 分钟卡死点，画质在 480p/720p/1080p 间正常自适应，偶发 `stalled` 在有充足缓冲时自行恢复。
+
+决策：`ShakaEmbedPlayer` 在主页面、运行时 ready、manifest 加载、`loadedmetadata` 和 `canplay` 等真实进展点重新开始 35 秒“无进展”超时，`playing` 后取消计时；任何阶段真正停滞仍会进入原有官方 iframe 回退。运行时保留 Debug 专用播放快照，loopback 代理只记录净化后的 host/resource/status/range 元信息，禁止记录签名媒体 URL、能力令牌和请求体；周期采样由 `diagnosticsEnabled` 注入开关限制在 Debug，Release 不启动采样定时器。
+
+后果：WEB_EMBEDDED/SABR 的正常失败不再挤占 MWEB 的启动预算，同时没有取消有界失败回退。macOS 样本已验证；Android 共用运行时、代理和阶段协议，预期同步受益，但 Android System WebView 的媒体行为仍需真机验证后才能视为完整跨平台验收。
+
+<details class="dg-callout" open>
+<summary>不要回退</summary>
+
+- 不要恢复覆盖整条多客户端回退链的单一总超时。
+- 不要把周期播放快照打开到 Release，也不要在日志中打印完整代理或签名媒体 URL。
+- 不要因单个 `stalled` 或码率切换时被取消的旧分片请求立即回退；应以持续无进展和最终播放错误为准。
+</details>
+
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

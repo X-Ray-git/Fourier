@@ -31,8 +31,161 @@ let playbackGvsPoTokenCreationPromise: Promise<void> | undefined;
 let playbackGvsPoToken: string | undefined;
 let coldStartToken: string | undefined;
 let bilibiliDanmaku: BilibiliDanmaku | undefined;
+let activePlaybackSource = 'none';
+let playbackProbeTimer: number | undefined;
 
 const youtubeEmbedderUrl = 'https://github.com/X-Ray-git/Fourier/';
+const playbackProbeStartedAt = performance.now();
+const playbackDiagnosticsEnabled =
+  getEmbedConfig()?.diagnosticsEnabled === true;
+
+function probeNumber(value: unknown, digits = 1): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Number(value.toFixed(digits))
+    : undefined;
+}
+
+function playbackProbe(event: string, fields: Record<string, unknown> = {}) {
+  if (!playbackDiagnosticsEnabled) return;
+  console.info(
+    '[PlaybackProbe]',
+    JSON.stringify({
+      elapsedMs: Math.round(performance.now() - playbackProbeStartedAt),
+      event,
+      ...fields,
+    })
+  );
+}
+
+function bufferedAheadSeconds(): number {
+  const position = videoElement.currentTime;
+  for (let index = 0; index < videoElement.buffered.length; index++) {
+    const start = videoElement.buffered.start(index);
+    const end = videoElement.buffered.end(index);
+    if (position >= start && position <= end) return Math.max(0, end - position);
+  }
+  return 0;
+}
+
+function activeVariantSummary() {
+  const variants = player.getVariantTracks();
+  const active = variants.find((track) => track.active);
+  const heights = Array.from(
+    new Set(
+      variants
+        .map((track) => track.height)
+        .filter((height): height is number => typeof height === 'number')
+    )
+  ).sort((left, right) => left - right);
+  return {
+    activeHeight: active?.height,
+    activeBandwidthKbps: active?.bandwidth
+      ? Math.round(active.bandwidth / 1000)
+      : undefined,
+    availableHeights: heights,
+  };
+}
+
+function playbackSnapshot(reason: string) {
+  const stats = player.getStats();
+  const quality = videoElement.getVideoPlaybackQuality?.();
+  playbackProbe('snapshot', {
+    reason,
+    source: activePlaybackSource,
+    positionSec: probeNumber(videoElement.currentTime),
+    durationSec: probeNumber(videoElement.duration),
+    bufferedAheadSec: probeNumber(bufferedAheadSeconds()),
+    paused: videoElement.paused,
+    ended: videoElement.ended,
+    readyState: videoElement.readyState,
+    networkState: videoElement.networkState,
+    videoSize: `${videoElement.videoWidth}x${videoElement.videoHeight}`,
+    shakaBuffering: player.isBuffering(),
+    estimatedBandwidthKbps: stats.estimatedBandwidth
+      ? Math.round(stats.estimatedBandwidth / 1000)
+      : undefined,
+    droppedFrames: quality?.droppedVideoFrames ?? stats.droppedFrames,
+    decodedFrames: quality?.totalVideoFrames ?? stats.decodedFrames,
+    ...activeVariantSummary(),
+  });
+}
+
+function installPlaybackProgressNotifications() {
+  for (const eventName of ['loadedmetadata', 'canplay']) {
+    videoElement.addEventListener(eventName, () => {
+      notify('progress', eventName);
+    });
+  }
+}
+
+function installPlaybackProbe() {
+  if (!playbackDiagnosticsEnabled) return;
+  const mediaEvents = [
+    'loadstart',
+    'loadedmetadata',
+    'canplay',
+    'playing',
+    'pause',
+    'waiting',
+    'stalled',
+    'suspend',
+    'ended',
+    'emptied',
+    'error',
+  ];
+  for (const eventName of mediaEvents) {
+    videoElement.addEventListener(eventName, () => {
+      const mediaError = videoElement.error;
+      playbackProbe('media_event', {
+        name: eventName,
+        positionSec: probeNumber(videoElement.currentTime),
+        bufferedAheadSec: probeNumber(bufferedAheadSeconds()),
+        readyState: videoElement.readyState,
+        networkState: videoElement.networkState,
+        errorCode: mediaError?.code,
+      });
+      if (eventName === 'waiting' || eventName === 'stalled' || eventName === 'error') {
+        playbackSnapshot(eventName);
+      }
+    });
+  }
+
+  player.addEventListener('buffering', (event) => {
+    const buffering = (event as Event & { buffering?: boolean }).buffering;
+    playbackProbe('shaka_buffering', { buffering });
+    playbackSnapshot(buffering ? 'buffering_start' : 'buffering_end');
+  });
+  for (const eventName of ['adaptation', 'variantchanged']) {
+    player.addEventListener(eventName, () => {
+      playbackProbe('quality_change', {
+        name: eventName,
+        ...activeVariantSummary(),
+      });
+    });
+  }
+  player.addEventListener('error', (event) => {
+    const detail = (event as Event & {
+      detail?: { severity?: number; category?: number; code?: number };
+    }).detail;
+    playbackProbe('shaka_error', {
+      severity: detail?.severity,
+      category: detail?.category,
+      code: detail?.code,
+    });
+    playbackSnapshot('shaka_error');
+  });
+
+  playbackProbeTimer = globalThis.setInterval(() => {
+    if (videoElement.readyState > HTMLMediaElement.HAVE_NOTHING) {
+      playbackSnapshot('periodic');
+    }
+  }, 10000);
+  globalThis.addEventListener('pagehide', () => {
+    if (playbackProbeTimer !== undefined) clearInterval(playbackProbeTimer);
+    playbackSnapshot('pagehide');
+  }, { once: true });
+  playbackProbe('installed');
+}
 
 /**
  * 本地页面（Bilibili）由 index.html 提供 #video / #video-container。
@@ -101,7 +254,7 @@ function takeoverEmbedPageDom() {
 }
 
 function notify(
-  type: 'ready' | 'playing' | 'error' | 'scroll' | 'activated' | 'togglePlayback',
+  type: 'ready' | 'playing' | 'error' | 'progress' | 'scroll' | 'activated' | 'togglePlayback',
   detail?: string | number
 ) {
   const channel = (globalThis as typeof globalThis & {
@@ -383,6 +536,8 @@ async function main(provider: string) {
   console.log('[Main]', 'Attaching media element');
   await player.attach(videoElement, false);
   console.log('[Main]', 'Media element attached');
+  installPlaybackProgressNotifications();
+  installPlaybackProbe();
 
   console.log('[Main]', 'Creating UI overlay');
   const ui = new shaka.ui.Overlay(player, videoContainer, videoElement);
@@ -513,8 +668,10 @@ async function loadVideo(videoId: string) {
   playbackPlayerPoToken = undefined;
   playbackPlayerPoTokenContentBinding = videoId;
   coldStartToken = undefined;
+  activePlaybackSource = 'loading';
 
   console.log('[Player]', `Loading video: ${videoId}`);
+  playbackProbe('load_start', { videoId });
 
   try {
     if (sabrAdapter) {
@@ -551,16 +708,21 @@ async function loadVideo(videoId: string) {
         throw new Error('Could not find a valid manifest URI.');
       playbackSource = 'official-manifest';
       await player.load(manifestUri);
+      notify('progress', 'manifest-official');
     } else {
       throw new Error('Could not find a valid manifest URI.');
     }
 
     await videoElement.play();
+    activePlaybackSource = playbackSource;
     notify('playing', videoInfo.basic_info.title);
     console.log('[Player]', `Now playing: ${videoInfo.basic_info.title} (${playbackSource})`);
+    playbackSnapshot('play_started');
   } catch (e: any) {
     const detail = describePlayerError(e);
+    activePlaybackSource = 'failed';
     console.error('[Player]', 'Error:', detail, e?.stack || '');
+    playbackProbe('load_error', { detail });
     notify('error', detail);
   }
 }
@@ -577,6 +739,7 @@ async function playVodWithSabrFallback(videoId: string, videoInfo: Awaited<Retur
     console.log('[Player] Loading WEB_EMBEDDED direct adaptive DASH manifest');
     await player.load(embeddedManifest);
     console.log('[Player] WEB_EMBEDDED direct adaptive DASH manifest loaded');
+    notify('progress', 'manifest-WEB_EMBEDDED');
     return 'WEB_EMBEDDED';
   } catch (embeddedError) {
     console.warn(
@@ -591,6 +754,7 @@ async function playVodWithSabrFallback(videoId: string, videoInfo: Awaited<Retur
     console.log('[Player]', 'Loading SABR DASH manifest');
     await player.load(sabrManifest);
     console.log('[Player]', 'SABR DASH manifest loaded');
+    notify('progress', 'manifest-SABR');
     return 'sabr';
   } catch (sabrError) {
     console.warn(
@@ -605,6 +769,7 @@ async function playVodWithSabrFallback(videoId: string, videoInfo: Awaited<Retur
   console.log('[Player] Loading MWEB direct adaptive DASH manifest');
   await player.load(directManifest);
   console.log('[Player] MWEB direct adaptive DASH manifest loaded');
+  notify('progress', 'manifest-MWEB');
   return 'MWEB';
 }
 

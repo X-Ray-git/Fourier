@@ -89,6 +89,7 @@ void main() {
         expect(script, contains('globalThis.__FOURIER_EMBED__'));
         expect(script, contains('proxyBase:"https://127.0.0.1:'));
         expect(script, contains('videoId:"dQw4w9WgXcQ"'));
+        expect(script, contains('diagnosticsEnabled:true'));
         expect(script, contains('FourierVideoPlayer'));
       },
     );

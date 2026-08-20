@@ -3,6 +3,7 @@ import shaka from 'shaka-player/dist/shaka-player.ui';
 interface FourierEmbedConfig {
   proxyBase: string;
   videoId: string;
+  diagnosticsEnabled?: boolean;
 }
 
 export function getEmbedConfig(): FourierEmbedConfig | undefined {

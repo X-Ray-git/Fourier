@@ -90,10 +90,16 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
   Future<void> _startPlayback() async {
     if (_isLoading || _controller != null || _didFallback) return;
     setState(() => _isLoading = true);
+    _debugProbe('start');
 
     try {
       final session = await widget.sessionBuilder();
       if (!mounted || _didFallback) return;
+      _debugProbe(
+        'session_ready',
+        'scheme=${session.pageUri.scheme} host=${session.pageUri.host} '
+            'hasInjection=${session.injectionScript != null}',
+      );
 
       late final PlatformWebViewControllerCreationParams params;
       if (WebViewPlatform.instance is WebKitWebViewPlatform) {
@@ -149,7 +155,10 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
               );
             }
           },
-          onPageFinished: (_) => _injectRuntimeScript(controller),
+          onPageFinished: (_) {
+            _debugProbe('page_finished');
+            _injectRuntimeScript(controller);
+          },
           onSslAuthError: _handleSslAuthError,
           onNavigationRequest: (request) {
             final uri = Uri.tryParse(request.url);
@@ -171,11 +180,9 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
       if (!mounted || _didFallback) return;
       setState(() => _controller = controller);
       _activatePlaybackShortcut();
-      _timeout = Timer(
-        _loadTimeout,
-        () => _fallback('playback timeout after ${_loadTimeout.inSeconds}s'),
-      );
+      _armLoadTimeout('main-frame');
       await controller.loadRequest(session.pageUri);
+      _debugProbe('load_request_sent');
     } catch (error, stackTrace) {
       _fallback('Dart setup error: $error', stackTrace);
     }
@@ -186,8 +193,10 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
     if (_didInject || injection == null || _didFallback) return;
     _pendingInjection = null;
     _didInject = true;
+    _debugProbe('runtime_injection_start');
     try {
       await controller.runJavaScript(injection);
+      _debugProbe('runtime_injection_complete');
     } catch (error, stackTrace) {
       _fallback('runtime injection error: $error', stackTrace);
     }
@@ -215,7 +224,15 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
     if (_didFallback) return;
     try {
       final payload = jsonDecode(message.message) as Map<String, dynamic>;
-      switch (payload['type']) {
+      final type = payload['type'];
+      if (type == 'ready' || type == 'playing' || type == 'error') {
+        _debugProbe('message', 'type=$type');
+      }
+      switch (type) {
+        case 'ready':
+          _armLoadTimeout('runtime-ready');
+        case 'progress':
+          _armLoadTimeout('player-${payload['detail']}');
         case 'playing':
           _timeout?.cancel();
           _activatePlaybackShortcut();
@@ -252,6 +269,28 @@ class _ShakaEmbedPlayerState extends State<ShakaEmbedPlayer> {
     _didFallback = true;
     _timeout?.cancel();
     widget.onFallback();
+  }
+
+  void _armLoadTimeout(String stage) {
+    if (_didFallback || _isPlaying) return;
+    _timeout?.cancel();
+    _debugProbe(
+      'timeout_armed',
+      'stage=$stage seconds=${_loadTimeout.inSeconds}',
+    );
+    _timeout = Timer(
+      _loadTimeout,
+      () => _fallback(
+        'playback timeout at $stage after '
+        '${_loadTimeout.inSeconds}s without progress',
+      ),
+    );
+  }
+
+  void _debugProbe(String event, [String details = '']) {
+    if (!kDebugMode) return;
+    final suffix = details.isEmpty ? '' : ' $details';
+    debugPrint('[${widget.debugLabel}PlayerProbe] event=$event$suffix');
   }
 
   @override

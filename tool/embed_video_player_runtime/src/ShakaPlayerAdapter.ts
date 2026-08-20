@@ -105,7 +105,13 @@ export class ShakaPlayerAdapter implements SabrPlayerAdapter {
       const timer = new shaka.util.Timer(() => {
         abortStatus.timedOut = true;
         controller.abort();
-        console.warn('[ShakaPlayerAdapter]', 'Request aborted due to timeout:', uri, requestType);
+        // Signed media URLs may contain credentials. The native proxy already
+        // logs a sanitized host/resource/status tuple for the same request.
+        console.warn(
+          '[ShakaPlayerAdapter]',
+          'Request aborted due to timeout',
+          `requestType=${requestType}`
+        );
       });
       timer.tickAfter(timeoutMs / 1000);
       operation.finally(() => timer.stop());
@@ -327,22 +333,14 @@ export class ShakaPlayerAdapter implements SabrPlayerAdapter {
         arrayBuffer
       });
     } catch (error) {
-      try {
-        const requestURL = new URL(uri);
-        console.error(
-          '[ShakaPlayerAdapter]',
-          'Request failed:',
-          `${requestURL.protocol}//${requestURL.host}${requestURL.pathname}`,
-          error instanceof Error ? error.message : String(error)
-        );
-      } catch {
-        console.error(
-          '[ShakaPlayerAdapter]',
-          'Request failed:',
-          uri.split('?')[0],
-          error instanceof Error ? error.message : String(error)
-        );
-      }
+      // Direct media URLs are signed, while proxied URLs contain a per-process
+      // capability. Native diagnostics log a sanitized host/resource/status.
+      console.error(
+        '[ShakaPlayerAdapter]',
+        'Request failed',
+        `requestType=${requestType}`,
+        error instanceof Error ? error.message : String(error)
+      );
       if (abortStatus.canceled) {
         throw new shaka.util.Error(
           shaka.util.Error.Severity.RECOVERABLE,

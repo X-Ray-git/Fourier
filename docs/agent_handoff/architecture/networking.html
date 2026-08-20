@@ -94,6 +94,14 @@ YouTube 播放：
   frame 加载失败时，才切到现有 YouTube 官方 iframe。官方回退仍使用
   `youtube-nocookie.com` 和可识别 Referer，以避免错误 `153`；不要删除
   这两层兼容兜底。
+- 播放启动超时按阶段计算：主页面、运行时就绪、manifest、metadata 和
+  canplay 每取得一次真实进展，都重新开始 35 秒无进展计时。不能用一个从
+  WebView 创建起覆盖整条 WEB_EMBEDDED/SABR/MWEB 回退链的总计时器，否则
+  前两条路径的正常失败会吃掉 MWEB 的启动时间，并把已经可播放的视频错误
+  回退到官方网页。
+- Debug 构建可记录无签名 URL、无 Token 的播放阶段、缓冲、画质和代理
+  host/resource/status 诊断；10 秒周期采样必须由注入配置关闭于 Release，
+  不得为长期排障给正式版本增加周期工作或泄露媒体能力 URL。
 - 两条链路都必须懒加载。文章初始渲染只显示缩略图，不得静默创建 WebView
   或请求 YouTube API。
 

@@ -64,7 +64,8 @@ abstract final class YouTubePlaybackServer {
     final config =
         'globalThis.__FOURIER_EMBED__ = '
         '{proxyBase:${jsonEncode(proxyBase)},'
-        'videoId:${jsonEncode(normalizedVideoId)}};\n';
+        'videoId:${jsonEncode(normalizedVideoId)},'
+        'diagnosticsEnabled:$kDebugMode};\n';
     return YouTubeEmbedSession(
       pageUri: Uri.parse(
         '$_youtubeNoCookieOrigin/embed/$normalizedVideoId'
@@ -287,6 +288,12 @@ abstract final class YouTubePlaybackServer {
   }) async {
     final method = localRequest.method;
     final host = target.host;
+    final stopwatch = Stopwatch()..start();
+    final resource = _proxyResource(target);
+    final itag = target.queryParameters['itag'];
+    final requestRange = _safeByteRange(
+      localRequest.headers.value(HttpHeaders.rangeHeader),
+    );
     try {
       final upstream = await _client.openUrl(method, target);
       upstream.followRedirects = false;
@@ -305,6 +312,9 @@ abstract final class YouTubePlaybackServer {
       final upstreamResponse = await upstream.close().timeout(
         _upstreamResponseTimeout,
       );
+      final contentRange = _safeByteRange(
+        upstreamResponse.headers.value(HttpHeaders.contentRangeHeader),
+      );
       final redirectLocation = upstreamResponse.headers.value(
         HttpHeaders.locationHeader,
       );
@@ -315,7 +325,9 @@ abstract final class YouTubePlaybackServer {
           fields: {
             'method': method,
             'host': host,
+            'resource': resource,
             'statusCode': upstreamResponse.statusCode,
+            'headerMs': stopwatch.elapsedMilliseconds,
             'redirectsRemaining': redirectsRemaining,
           },
         );
@@ -344,9 +356,18 @@ abstract final class YouTubePlaybackServer {
         fields: {
           'method': method,
           'host': host,
+          'resource': resource,
           'statusCode': upstreamResponse.statusCode,
+          'headerMs': stopwatch.elapsedMilliseconds,
           if (_isHostOrSubdomain(host, 'googlevideo.com'))
             'hasPot': target.queryParameters.containsKey('pot'),
+          if (itag != null && RegExp(r'^\d+$').hasMatch(itag)) 'itag': itag,
+          if (localRequest.headers.value(HttpHeaders.rangeHeader) != null)
+            'hasRange': true,
+          'range': ?requestRange,
+          'contentRange': ?contentRange,
+          if (upstreamResponse.contentLength >= 0)
+            'contentLength': upstreamResponse.contentLength,
           'redirectsRemaining': redirectsRemaining,
         },
       );
@@ -375,6 +396,8 @@ abstract final class YouTubePlaybackServer {
         fields: {
           'method': method,
           'host': host,
+          'resource': resource,
+          'elapsedMs': stopwatch.elapsedMilliseconds,
           'redirectsRemaining': redirectsRemaining,
           'errorType': e.runtimeType.toString(),
         },
@@ -411,6 +434,29 @@ abstract final class YouTubePlaybackServer {
         host == 'uytfe.sandbox.google.com' ||
         host.endsWith('.sandbox.googleapis.com') ||
         _isHostOrSubdomain(host, 'googlevideo.com');
+  }
+
+  static String _proxyResource(Uri target) {
+    final host = target.host.toLowerCase();
+    if (_isHostOrSubdomain(host, 'googlevideo.com')) return 'media';
+    if (target.path == '/youtubei/v1/player') return 'player-api';
+    if (target.path == '/api/jnn/v1/GenerateIT' ||
+        target.path == '/youtubei/v1/att/get') {
+      return 'attestation';
+    }
+    if (host == 'www.youtube-nocookie.com' &&
+        target.path.startsWith('/embed/')) {
+      return 'embed-page';
+    }
+    return 'other';
+  }
+
+  static String? _safeByteRange(String? value) {
+    if (value == null) return null;
+    final normalized = value.trim().toLowerCase();
+    return RegExp(r'^(bytes[ =])?\d+-\d+(\/\d+)?$').hasMatch(normalized)
+        ? normalized
+        : null;
   }
 
   static void _applyYouTubeEmbedHeaders(

@@ -87,7 +87,11 @@ void main() {
 
         final script = session.injectionScript;
         expect(script, contains('globalThis.__FOURIER_EMBED__'));
-        expect(script, contains('proxyBase:"https://127.0.0.1:'));
+        final proxyBase = Uri.parse(
+          RegExp(r'proxyBase:"([^"]+)"').firstMatch(script)!.group(1)!,
+        );
+        expect(proxyBase.scheme, Platform.isMacOS ? 'https' : 'http');
+        expect(proxyBase.host, InternetAddress.loopbackIPv4.address);
         expect(script, contains('videoId:"dQw4w9WgXcQ"'));
         expect(script, contains('diagnosticsEnabled:true'));
         expect(script, contains('FourierVideoPlayer'));
@@ -99,7 +103,7 @@ void main() {
       final proxyBase = Uri.parse(
         '${RegExp(r'proxyBase:"([^"]+)"').firstMatch(session.injectionScript)!.group(1)!}/',
       );
-      expect(proxyBase.scheme, 'https');
+      expect(proxyBase.scheme, Platform.isMacOS ? 'https' : 'http');
       expect(proxyBase.host, InternetAddress.loopbackIPv4.address);
       await HttpOverrides.runZoned(() async {
         final client = HttpClient()

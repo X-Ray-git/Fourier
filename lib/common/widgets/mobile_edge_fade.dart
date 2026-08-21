@@ -13,6 +13,15 @@ const _fadeSampleCount = 21;
 
 double _smoothStep(double value) => value * value * (3 - 2 * value);
 
+double _topFadeOpacity(double progress) {
+  final inverseSmoothStep = 1 - _smoothStep(progress);
+  final midpointCorrection =
+      16 * progress * progress * (1 - progress) * (1 - progress);
+  // Preserve the approved 85% -> 45% -> 0% values while keeping the curve
+  // monotonic with a zero slope at both ends of the transition.
+  return 0.85 * inverseSmoothStep + 0.025 * midpointCorrection;
+}
+
 LinearGradient mobileTopEdgeGradient({
   required Color background,
   required double totalExtent,
@@ -22,18 +31,25 @@ LinearGradient mobileTopEdgeGradient({
   final transitionStartStop = (transitionStart / totalExtent).clamp(0.0, 1.0);
   final transitionEndStop = ((transitionStart + transitionExtent) / totalExtent)
       .clamp(0.0, 1.0);
-  final transitionMidpointStop =
-      ((transitionStart + transitionExtent / 2) / totalExtent).clamp(0.0, 1.0);
+  final colors = <Color>[background.withValues(alpha: 0.85)];
+  final stops = <double>[0];
+  if (transitionStartStop > 0) {
+    colors.add(background.withValues(alpha: 0.85));
+    stops.add(transitionStartStop);
+  }
+  for (var i = 1; i < _fadeSampleCount; i++) {
+    final progress = i / (_fadeSampleCount - 1);
+    colors.add(background.withValues(alpha: _topFadeOpacity(progress)));
+    stops.add(
+      transitionStartStop +
+          (transitionEndStop - transitionStartStop) * progress,
+    );
+  }
   return LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      background.withValues(alpha: 0.85),
-      background.withValues(alpha: 0.85),
-      background.withValues(alpha: 0.45),
-      background.withValues(alpha: 0),
-    ],
-    stops: [0, transitionStartStop, transitionMidpointStop, transitionEndStop],
+    colors: colors,
+    stops: stops,
   );
 }
 

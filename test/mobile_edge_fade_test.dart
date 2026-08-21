@@ -3,6 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/common/widgets/mobile_edge_fade.dart';
 
 void main() {
+  test('top fade is smooth, monotonic, and preserves approved key values', () {
+    final gradient = mobileTopEdgeGradient(
+      background: Colors.white,
+      totalExtent: 100,
+      transitionStart: 20,
+      transitionExtent: 80,
+    );
+    final colors = gradient.colors;
+    final stops = gradient.stops!;
+
+    for (var i = 1; i < colors.length; i++) {
+      expect(colors[i].a, lessThanOrEqualTo(colors[i - 1].a));
+      expect(stops[i], greaterThan(stops[i - 1]));
+    }
+    expect(colors.first.a, closeTo(0.85, 0.0001));
+    final midpoint = stops.indexWhere((stop) => (stop - 0.6).abs() < 0.0001);
+    expect(midpoint, isNonNegative);
+    expect(colors[midpoint].a, closeTo(0.45, 0.0001));
+    expect(colors.last.a, closeTo(0, 0.0001));
+  });
+
   testWidgets('extended body uses the scaffold-provided top inset', (
     tester,
   ) async {

@@ -291,6 +291,7 @@ abstract final class SummaryService {
     final maxRetries =
         GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
+    List<String>? inlineImages;
 
     for (int attempt = 1; attempt <= totalAttempts; attempt++) {
       final llmConfig = LlmConfig.loadSummary();
@@ -322,6 +323,13 @@ abstract final class SummaryService {
             visionModel: LlmConfig.loadSummaryVisionModel(),
           );
           try {
+            inlineImages ??= await ArticleVisualContextService.loadInlineImages(
+              article.entryId,
+              visualContext.imageUrls,
+            );
+            if (!AccountSessionGuard.isCurrent(accountRevision)) {
+              throw const _StaleAccountOperation();
+            }
             final visionParsed = await _requestJson(
               apiKey: apiKey,
               articleId: article.entryId,
@@ -334,7 +342,7 @@ abstract final class SummaryService {
                 protocol: LlmMultimodalProtocol.summaryVision,
                 businessPrompt: systemPrompt,
                 articlePayload: articlePayload,
-                imageUrls: visualContext.imageUrls,
+                imageUrls: inlineImages,
               ),
             );
             finalSummary = _summaryFromJson(visionParsed);

@@ -100,6 +100,7 @@ abstract final class ArticleFilterService {
     final maxRetries =
         GStorage.setting.get('auto_retry_max_count', defaultValue: 3) as int;
     final totalAttempts = maxRetries > 0 ? maxRetries + 1 : 1;
+    List<String>? inlineImages;
 
     for (var attempt = 1; attempt <= totalAttempts; attempt++) {
       final config = LlmConfig.loadFilter();
@@ -129,6 +130,10 @@ abstract final class ArticleFilterService {
           visionModel: LlmConfig.loadFilterVisionModel(),
         );
         try {
+          inlineImages ??= await ArticleVisualContextService.loadInlineImages(
+            article.entryId,
+            visualContext.imageUrls,
+          );
           final visionParsed = await _requestJson(
             apiKey: apiKey,
             articleId: article.entryId,
@@ -140,7 +145,7 @@ abstract final class ArticleFilterService {
               protocol: LlmMultimodalProtocol.filterVision,
               businessPrompt: prompt,
               articlePayload: articlePayload,
-              imageUrls: visualContext.imageUrls,
+              imageUrls: inlineImages,
             ),
           );
           return _filterResultFromJson(visionParsed);

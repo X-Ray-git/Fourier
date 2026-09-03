@@ -55,6 +55,7 @@
 - YouTube 播放器 attestation 问题已定位并完成修复（macOS 真机验证通过）：根因是 BotGuard GenerateIT 只对真实 YouTube 页面环境签发 integrity token，127.0.0.1 裸页只能拿到 websafe fallback token（GVS 试用配额耗尽后播放中 403 卡死，或整链失败回退官方 iframe）。播放器 WebView 现加载真实 `youtube-nocookie.com/embed/<id>` 页面并在 onPageFinished 注入 IIFE 版运行时：接管 DOM、经代理重抓 embed 页 HTML 提取 `ytcfg`/`ytAtN(R/T)`、注入 `yt.config_`、用页面 challenge 走 GenerateIT（`/att/get`+eacrToken 仅回退）；loopback 代理补 CORS（请求头通配）与 OPTIONS 预检，macOS 另起自签名 HTTPS loopback 实例并经 `onSslAuthError` 仅对本站证书放行（绕开混合内容拦截）；运行时带 Trusted Types 直通策略 shim。完整排障证据、探针矩阵与逐层修复过程见 `features/media-playback-attestation.html`（探针脚本在已忽略的 `scratch/youtube-attestation-probe/`）。用户已验证：真实播放、hover 细线修复、关页/切文章后声音停止。遗留：SABR UMP 空响应由 MWEB 直连兜底（独立问题）、WEB_EMBEDDED 直连仍 "This video is unavailable"、Android 未真机验证。
 
 - `main` 是当前集成分支。
+- 摘要/质量过滤的多模态传图已改为读取本地文章图片缓存并发送 Base64，修复服务端无法下载 Twitter 图片导致的 HTTP 400；单图/双图真实 API 链路已通过，旧降级摘要不自动重建。详见 `features/translation-summary.html` 与 `status/verification.html`。
 - DeepSeek 思考模式关闭与实际响应出现推理 token 的错位已完成代码修复：统一请求体现在始终显式发送 `thinking.type=disabled/enabled`，仅启用时发送 `reasoning_effort`。历史 `llmUsageEvents` 不修改；待新版本实际发起翻译请求后，按时间确认关闭模式的新记录不再产生推理 token。
 - Fourier 品牌迁移与离线工程 Wiki 已通过独立 merge commit 合入 `main`。应用展示名、Dart package、Android application id、macOS bundle id、MethodChannel、构建产物和图标均已迁移；旧 Auto Folo 名称只允许存在于历史证据、旧设置导入与明确的迁移兼容说明中。
 - GitHub 仓库、本地目录和 `origin` 已统一迁移为大写品牌名 `Fourier`：远端是 `X-Ray-git/Fourier`，本地 clone 目录名是 `Fourier`。旧仓库 URL 只依赖 GitHub 重定向，不得再作为当前链接写入代码或文档。

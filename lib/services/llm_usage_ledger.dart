@@ -173,10 +173,56 @@ class LlmRequestTrace {
   }
 
   static String _compactError(Object error) {
-    final raw = error is DioException
-        ? '${error.type.name}: ${error.message ?? 'DeepSeek request failed'}'
+    var raw = error is DioException
+        ? '${error.type.name}: ${_providerError(error) ?? error.message ?? 'DeepSeek request failed'}'
         : '${error.runtimeType}: $error';
+    if (error is DioException) {
+      final authorization = error.requestOptions.headers.entries
+          .where((entry) => entry.key.toLowerCase() == 'authorization')
+          .map((entry) => entry.value.toString());
+      for (final header in authorization) {
+        final secret = header.replaceFirst(
+          RegExp(r'^Bearer\s+', caseSensitive: false),
+          '',
+        );
+        if (secret.isNotEmpty) raw = raw.replaceAll(secret, '[credential]');
+      }
+    }
+    raw = raw.replaceAll(RegExp(r'data:[^\s"\x27<>]+'), '[image data]');
+    raw = raw.replaceAllMapped(RegExp(r'https?://[^\s"\x27<>]+'), (match) {
+      final host = Uri.tryParse(match[0]!)?.host;
+      return host == null || host.isEmpty ? '[url]' : '[url:$host]';
+    });
+    raw = raw.replaceAll(RegExp(r'sk-[A-Za-z0-9_-]+'), '[credential]');
+    // Provider errors may quote rejected input. Keep diagnostics, not content.
+    raw = raw.replaceAll(
+      RegExp(r'"[^"\n]*"|\x27[^\x27\n]*\x27'),
+      '[quoted value]',
+    );
     return raw.length <= 500 ? raw : raw.substring(0, 500);
+  }
+
+  static String? _providerError(DioException error) {
+    dynamic data = error.response?.data;
+    try {
+      if (data is List<int>) {
+        if (data.length > 16384) return null;
+        data = utf8.decode(data);
+      }
+      if (data is String) {
+        if (data.length > 16384) return null;
+        data = jsonDecode(data);
+      }
+    } on FormatException {
+      return null;
+    }
+    if (data is! Map || data['error'] is! Map) return null;
+    final details = data['error'] as Map;
+    final fields = <String>[
+      for (final key in ['type', 'code', 'message'])
+        if (details[key] is String) '$key=${details[key]}',
+    ];
+    return fields.isEmpty ? null : fields.join('; ');
   }
 }
 

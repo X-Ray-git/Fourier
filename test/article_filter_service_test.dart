@@ -2,10 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/services/article_filter_service.dart';
+import 'package:fourier/services/article_visual_context_service.dart';
 import 'package:fourier/services/llm_usage_ledger.dart';
 import 'package:fourier/utils/storage.dart';
 
 import 'support/hive_test_helper.dart';
+import 'support/visual_image_test_helper.dart';
 
 ArticleModel _article() => ArticleModel(
   entryId: 'filter-entry',
@@ -50,6 +52,7 @@ DioException _requestFailure() => DioException(
 void main() {
   setUp(() async {
     await HiveTestHelper.setUp();
+    await VisualImageTestHelper.setUp();
     await GStorage.setting.put('deepseek_api_key', 'test-key');
     await GStorage.setting.put('auto_retry_max_count', 2);
     ArticleFilterService.debugRetryDelayOverride = (_) async {};
@@ -59,6 +62,7 @@ void main() {
     ArticleFilterService.debugPostOverride = null;
     ArticleFilterService.debugRetryDelayOverride = null;
     await HiveTestHelper.tearDown();
+    await VisualImageTestHelper.tearDown();
   });
 
   test('retries transient failures and records every attempt', () async {
@@ -112,6 +116,10 @@ void main() {
       final messages = body['messages'] as List<dynamic>;
       final userMessage = Map<String, dynamic>.from(messages.last as Map);
       expect(userMessage['content'], isA<List<dynamic>>());
+      expect(
+        userMessage['content'][1]['image_url']['url'],
+        startsWith('data:image/png;base64,'),
+      );
       return _successResponse('{"should_reject":false,"reason":"图片包含有效信息"}');
     };
 
@@ -123,6 +131,8 @@ void main() {
   });
 
   test('does not use vision when text evidence is sufficient', () async {
+    ArticleVisualContextService.debugImageFileLoader = (_, _) async =>
+        throw StateError('must not download');
     var requests = 0;
     ArticleFilterService.debugPostOverride = (_, {data, options}) async {
       requests++;
@@ -136,6 +146,45 @@ void main() {
     expect(requests, 1);
     expect(result.shouldReject, isFalse);
     expect(result.reason, '文字证据充分');
+  });
+
+  test('reuses prepared images across existing retries', () async {
+    var loads = 0;
+    var requests = 0;
+    ArticleVisualContextService.debugImageFileLoader = (_, _) async {
+      loads++;
+      return VisualImageTestHelper.image;
+    };
+    ArticleFilterService.debugPostOverride = (_, {data, options}) async {
+      requests++;
+      if ((data as Map)['model'] == 'deepseek-v4-flash') {
+        return _successResponse(
+          '{"needs_visual_context":true,"should_reject":false,"reason":"需要图片"}',
+        );
+      }
+      if (requests == 2) throw _requestFailure();
+      return _successResponse();
+    };
+    final result = await ArticleFilterService.filterArticle(_imageArticle());
+    expect(result.shouldReject, isFalse);
+    expect(requests, 4);
+    expect(loads, 1);
+  });
+
+  test('image preparation failure conservatively keeps article', () async {
+    await GStorage.setting.put('auto_retry_max_count', 0);
+    ArticleVisualContextService.debugImageFileLoader = (_, _) async =>
+        throw StateError('offline');
+    var requests = 0;
+    ArticleFilterService.debugPostOverride = (_, {data, options}) async {
+      requests++;
+      return _successResponse(
+        '{"needs_visual_context":true,"should_reject":true,"reason":"文字不足"}',
+      );
+    };
+    final result = await ArticleFilterService.filterArticle(_imageArticle());
+    expect(result.shouldReject, isFalse);
+    expect(requests, 1);
   });
 
   test(

@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fourier/services/llm_config.dart';
@@ -9,6 +12,88 @@ import 'support/hive_test_helper.dart';
 void main() {
   setUp(HiveTestHelper.setUp);
   tearDown(HiveTestHelper.tearDown);
+
+  for (final encoding in ['map', 'string', 'bytes']) {
+    test(
+      'captures provider error from $encoding without URLs or credentials',
+      () async {
+        final trace = LlmRequestTrace(
+          task: LlmTaskType.summary,
+          config: LlmConfig.summaryDefault,
+          prompt: 'private prompt',
+        );
+        final data = {
+          'error': {
+            'type': 'invalid_request_error',
+            'code': 'invalid_request_error',
+            'message': '.messages[1].image[0]: Failed to download image from https://pbs.twimg.com/private-path?token=secret with secret-key and "private prompt"',
+          },
+          'extra': 'private response',
+        };
+        final Object body = switch (encoding) {
+          'map' => data,
+          'string' => jsonEncode(data),
+          _ => utf8.encode(jsonEncode(data)),
+        };
+        final request = RequestOptions(
+          path: '/chat/completions',
+          headers: {'Authorization': 'Bearer secret-key'},
+        );
+        await trace.fail(
+          DioException(
+            requestOptions: request,
+            type: DioExceptionType.badResponse,
+            message: 'Generic 400',
+            response: Response(
+              requestOptions: request,
+              statusCode: 400,
+              data: body,
+            ),
+          ),
+        );
+        final record = GStorage.llmUsageEvents.get(trace.id) as Map;
+        expect(record['httpStatus'], 400);
+        expect(record['error'], contains('Failed to download image'));
+        expect(record['error'], contains('pbs.twimg.com'));
+        for (final secret in [
+          'private-path',
+          'token=secret',
+          'secret-key',
+          'private prompt',
+          'private response',
+        ]) {
+          expect(record['error'], isNot(contains(secret)));
+        }
+      },
+    );
+  }
+
+  test(
+    'non-JSON errors fall back safely without storing response body',
+    () async {
+      final trace = LlmRequestTrace(
+        task: LlmTaskType.summary,
+        config: LlmConfig.summaryDefault,
+        prompt: 'private',
+      );
+      final request = RequestOptions(path: '/chat/completions');
+      await trace.fail(
+        DioException(
+          requestOptions: request,
+          type: DioExceptionType.badResponse,
+          message: 'Gateway failed',
+          response: Response(
+            requestOptions: request,
+            statusCode: 502,
+            data: '<html>private body</html>',
+          ),
+        ),
+      );
+      final error = (GStorage.llmUsageEvents.get(trace.id) as Map)['error'];
+      expect(error, contains('Gateway failed'));
+      expect(error, isNot(contains('private body')));
+    },
+  );
 
   test(
     'records usage metadata without storing prompt or response content',

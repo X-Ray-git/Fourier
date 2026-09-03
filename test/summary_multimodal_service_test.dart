@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/services/summary_service.dart';
+import 'package:fourier/services/article_visual_context_service.dart';
 import 'package:fourier/utils/storage.dart';
 
 import 'support/hive_test_helper.dart';
+import 'support/visual_image_test_helper.dart';
 
 ArticleModel _imageArticle() => ArticleModel(
   entryId: 'summary-image-entry',
@@ -37,6 +39,7 @@ DioException _requestFailure() => DioException(
 void main() {
   setUp(() async {
     await HiveTestHelper.setUp();
+    await VisualImageTestHelper.setUp();
     await GStorage.setting.put('deepseek_api_key', 'test-key');
     await GStorage.setting.put('auto_retry_max_count', 0);
     SummaryService.resetForAccountChange();
@@ -46,6 +49,7 @@ void main() {
     SummaryService.debugPostOverride = null;
     SummaryService.resetForAccountChange();
     await HiveTestHelper.tearDown();
+    await VisualImageTestHelper.tearDown();
   });
 
   test(
@@ -63,6 +67,10 @@ void main() {
         final messages = body['messages'] as List<dynamic>;
         final userMessage = Map<String, dynamic>.from(messages.last as Map);
         expect(userMessage['content'], isA<List<dynamic>>());
+        expect(
+          userMessage['content'][1]['image_url']['url'],
+          startsWith('data:image/png;base64,'),
+        );
         return _response('{"summary":"图片展示了关键性能表格"}');
       };
 
@@ -78,6 +86,8 @@ void main() {
   );
 
   test('does not use vision when the text summary is sufficient', () async {
+    ArticleVisualContextService.debugImageFileLoader = (_, _) async =>
+        throw StateError('must not download');
     var requests = 0;
     SummaryService.debugPostOverride = (_, {data, options}) async {
       requests++;
@@ -94,6 +104,23 @@ void main() {
     expect(requests, 1);
     expect(record.status, SummaryStatus.done);
     expect(record.summaryText, '正文已经完整说明核心内容');
+  });
+
+  test('image download failure retains existing text fallback', () async {
+    ArticleVisualContextService.debugImageFileLoader = (_, _) async =>
+        throw StateError('offline');
+    var requests = 0;
+    SummaryService.debugPostOverride = (_, {data, options}) async {
+      requests++;
+      return _response('{"needs_visual_context":true,"summary":"文本降级结果"}');
+    };
+    final record = await SummaryService.summarizeArticle(
+      _imageArticle(),
+      deferRelationTail: true,
+    );
+    expect(requests, 1);
+    expect(record.summaryText, '文本降级结果');
+    expect(record.status, SummaryStatus.done);
   });
 
   test('keeps the text summary when the vision request fails', () async {

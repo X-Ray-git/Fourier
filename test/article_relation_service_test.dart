@@ -1,13 +1,13 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/common/constants/constants.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/models/article_relation.dart';
 import 'package:fourier/services/article_relation_service.dart';
 import 'package:fourier/services/summary_service.dart';
 import 'package:fourier/utils/storage.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
 
 import 'support/hive_test_helper.dart';
 
@@ -104,10 +104,12 @@ void main() {
     expect(ArticleRelationService.pendingCount, 1);
   });
 
-  test('历史窗口随成功批次增长并限制为 1024 篇', () async {
+  test('历史窗口随成功批次增长至独立上限', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
 
-    for (var batch = 0; batch < 9; batch++) {
+    final batchesToFill =
+        ArticleRelationService.historyLimit ~/ ArticleRelationService.batchSize;
+    for (var batch = 0; batch < batchesToFill; batch++) {
       for (
         var offset = 0;
         offset < ArticleRelationService.batchSize;
@@ -161,10 +163,12 @@ void main() {
     );
   });
 
-  test('历史窗口超限时固定淘汰 128 篇以稳定后续请求前缀', () async {
+  test('历史窗口超限时按独立步长淘汰以稳定后续请求前缀', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
 
-    for (var batch = 0; batch < 8; batch++) {
+    final batchesToFill =
+        ArticleRelationService.historyLimit ~/ ArticleRelationService.batchSize;
+    for (var batch = 0; batch < batchesToFill; batch++) {
       await _enqueueAndComplete(
         batch * ArticleRelationService.batchSize,
         ArticleRelationService.batchSize,
@@ -180,14 +184,24 @@ void main() {
       1,
       flushPartial: true,
     );
-    expect(ArticleRelationService.historyCount, 897);
+    expect(
+      ArticleRelationService.historyCount,
+      ArticleRelationService.historyLimit +
+          1 -
+          ArticleRelationService.historyEvictionSize,
+    );
 
     await _enqueueAndComplete(
       ArticleRelationService.historyLimit + 1,
       20,
       flushPartial: true,
     );
-    expect(ArticleRelationService.historyCount, 917);
+    expect(
+      ArticleRelationService.historyCount,
+      ArticleRelationService.historyLimit +
+          21 -
+          ArticleRelationService.historyEvictionSize,
+    );
   });
 
   test('尾批只有显式 flushPartial 时才发车', () async {
@@ -293,9 +307,9 @@ void main() {
       ),
     ]);
 
-    final eventGroups = ArticleRelationService.groupsFor(
-      'article-0',
-    ).where((group) => group.kind == ArticleRelationKind.sameEvent).toList();
+    final eventGroups = ArticleRelationService.groupsFor('article-0')
+        .where((group) => group.kind == ArticleRelationKind.sameEvent)
+        .toList();
     expect(eventGroups, hasLength(1));
     expect(eventGroups.single.memberIds.toSet(), {
       'article-0',
@@ -303,9 +317,8 @@ void main() {
       'article-3',
     });
     expect(
-      ArticleRelationService.groupsFor(
-        'article-0',
-      ).where((group) => group.kind == ArticleRelationKind.equivalent),
+      ArticleRelationService.groupsFor('article-0')
+          .where((group) => group.kind == ArticleRelationKind.equivalent),
       hasLength(1),
     );
   });

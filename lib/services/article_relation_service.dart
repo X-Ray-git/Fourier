@@ -57,7 +57,8 @@ class ArticleRelationDisplayItem {
 abstract final class ArticleRelationService {
   static const int schemaVersion = 3;
   static const int batchSize = 128;
-  static const int historyLimit = 1024;
+  static const int historyLimit = 2048;
+  static const int historyEvictionSize = 1024;
 
   static const String _activationKey = '__activation_at__';
   static const String _sequenceKey = '__sequence__';
@@ -266,7 +267,7 @@ abstract final class ArticleRelationService {
         ..removeWhere(newIds.contains)
         ..addAll(input.newNodes.map((node) => node.articleId));
       while (history.length > historyLimit) {
-        final evictionCount = batchSize.clamp(0, history.length);
+        final evictionCount = historyEvictionSize.clamp(0, history.length);
         history.removeRange(0, evictionCount);
       }
 
@@ -399,9 +400,9 @@ abstract final class ArticleRelationService {
     return _displayItems(kindsById);
   }
 
-  static bool hasSameEventGroup(String articleId) => groupsFor(
-    articleId,
-  ).any((group) => group.kind == ArticleRelationKind.sameEvent);
+  static bool hasSameEventGroup(String articleId) =>
+      groupsFor(articleId)
+          .any((group) => group.kind == ArticleRelationKind.sameEvent);
 
   static List<ArticleRelationDisplayItem> _displayItems(
     Map<String, ArticleRelationKind> kindsById,

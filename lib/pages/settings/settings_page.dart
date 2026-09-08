@@ -877,7 +877,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _buildShortcutItem(context, 'Cmd + ,', '打开设置'),
     _buildShortcutItem(context, 'Cmd + 1', '打开全部文章'),
     _buildShortcutItem(context, 'Cmd + 2', '打开垃圾拦截'),
-    _buildShortcutItem(context, 'Cmd + 0', '打开静默订阅源'),
     _buildShortcutItem(context, 'Cmd + Z', '撤销最近一次已读'),
     _buildShortcutItem(context, 'Esc', '关闭当前阅读文章'),
     _buildShortcutItem(context, '↑ / ↓', '上下滚动文章'),

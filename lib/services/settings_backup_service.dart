@@ -178,6 +178,21 @@ abstract final class SettingsBackupService {
       settings[key] = _normalizeValue(key, entry.value);
     }
 
+    final rawGroups = settings[FeedSilentSettingsService.groupsKey];
+    final groupIds = rawGroups is String
+        ? FeedSilentSettingsService.parseGroupsJson(rawGroups)
+              .map((group) => group.id)
+              .toSet()
+        : const <String>{};
+    settings.removeWhere(
+      (key, value) =>
+          key.startsWith(FeedSilentSettingsService.assignmentKeyPrefix) &&
+          (!groupIds.contains(value) ||
+              settings['${FeedSilentSettingsService.silentKeyPrefix}'
+                      '${key.substring(FeedSilentSettingsService.assignmentKeyPrefix.length)}'] !=
+                  true),
+    );
+
     return SettingsBackupPayload(
       settings: settings,
       summary: summarize(settings),
@@ -285,6 +300,12 @@ abstract final class SettingsBackupService {
         throw FormatException('$key 包含不支持的视觉模型：$value');
       }
       return value;
+    }
+
+    if (key == FeedSilentSettingsService.groupsKey ||
+        key.startsWith(FeedSilentSettingsService.assignmentKeyPrefix)) {
+      if (value is String) return value;
+      throw FormatException('$key 必须是字符串');
     }
 
     if (_stringKeys.contains(key) ||

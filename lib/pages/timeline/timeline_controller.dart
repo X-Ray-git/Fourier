@@ -51,12 +51,14 @@ class TimelineController extends GetxController {
   final filterCount = 0.obs;
   final isSyncing = false.obs;
   final isSilentSelected = false.obs;
+  final selectedSilentGroupId = RxnString();
+  final silentBatchProcessing = false.obs;
 
   bool _isRefreshingRecentRead = false;
   bool _isBatchingScopeChange = false;
   bool _reloadAfterAccountChange = false;
   int _timelineListResetVersion = 0;
-  String _timelineScopeKey = 'normal::';
+  String _timelineScopeKey = 'normal:::';
   final Map<String, Object> _deferredReadVisualUpdates = {};
   final Map<String, Object> _deferredArticleStateNotifications = {};
   final Map<String, Timer> _deferredArticleStateNotificationFallbacks = {};
@@ -66,6 +68,7 @@ class TimelineController extends GetxController {
   final Map<String, FeedModel> _feedMap = {};
   Future<void> Function()? _scrollToTopHandler;
   Worker? _accountWorker;
+  Worker? _silentSettingsWorker;
 
   @override
   void onInit() {
@@ -74,10 +77,28 @@ class TimelineController extends GetxController {
     ever(selectedFeedId, (_) => _handleScopeFieldChanged());
     ever(selectedCategory, (_) => _handleScopeFieldChanged());
     ever(isSilentSelected, (_) => _handleScopeFieldChanged());
+    ever(selectedSilentGroupId, (_) => _handleScopeFieldChanged());
     _accountWorker = ever(
       AccountService.instance.accountRevision,
       (_) => _handleAccountChanged(),
     );
+    _silentSettingsWorker = ever(FeedSilentSettingsService.version, (_) {
+      final normalized = isSilentSelected.value
+          ? _normalizeSilentGroupId(selectedSilentGroupId.value)
+          : null;
+      if (normalized != selectedSilentGroupId.value) {
+        _isBatchingScopeChange = true;
+        try {
+          selectedSilentGroupId.value = normalized;
+        } finally {
+          _isBatchingScopeChange = false;
+        }
+        _updateTimelineScopeKey();
+      }
+      resetTimelineListAnimation(reason: 'silent.settings');
+      _applyFilter();
+      _updateAppBadge();
+    });
 
     // 监听全局文章状态变更，精准更新内存数据，保持 UI 同步（如 AI 过滤拦截数）
     ever(ArticleStateNotifier.version, (_) {
@@ -98,6 +119,7 @@ class TimelineController extends GetxController {
     selectedFeedId.value = null;
     selectedCategory.value = null;
     isSilentSelected.value = false;
+    selectedSilentGroupId.value = null;
     filterCount.value = 0;
     if (!AccountService.instance.isLoggedIn.value) {
       loadingState.value = const LoadError('请先在“设置”页登录 Folo');
@@ -571,6 +593,7 @@ class TimelineController extends GetxController {
   @override
   void onClose() {
     _accountWorker?.dispose();
+    _silentSettingsWorker?.dispose();
     for (final timer in _deferredArticleStateNotificationFallbacks.values) {
       timer.cancel();
     }
@@ -583,22 +606,37 @@ class TimelineController extends GetxController {
   int get timelineListResetVersion => _timelineListResetVersion;
   String get timelineScopeKey => _timelineScopeKey;
 
+  String? _normalizeSilentGroupId(String? groupId) {
+    if (groupId == null || groupId == FeedSilentSettingsService.ungroupedId) {
+      return FeedSilentSettingsService.ungroupedId;
+    }
+    return FeedSilentSettingsService.groupById(groupId) != null
+        ? groupId
+        : FeedSilentSettingsService.ungroupedId;
+  }
+
   void setTimelineScope({
     bool silent = false,
+    String? silentGroupId,
     String? feedId,
     String? category,
   }) {
     assert(feedId == null || category == null);
+    assert(silent || silentGroupId == null);
+    silentGroupId = silent ? _normalizeSilentGroupId(silentGroupId) : null;
     if (isSilentSelected.value == silent &&
+        selectedSilentGroupId.value == silentGroupId &&
         selectedFeedId.value == feedId &&
         selectedCategory.value == category) {
       return;
     }
+    if (silentBatchProcessing.value) return;
 
     resetTimelineListAnimation(reason: 'scope.change');
     _isBatchingScopeChange = true;
     try {
       isSilentSelected.value = silent;
+      selectedSilentGroupId.value = silentGroupId;
       selectedFeedId.value = feedId;
       selectedCategory.value = category;
     } finally {
@@ -633,7 +671,8 @@ class TimelineController extends GetxController {
   void _updateTimelineScopeKey() {
     final silent = isSilentSelected.value ? 'silent' : 'normal';
     _timelineScopeKey =
-        '$silent:${selectedCategory.value ?? ''}:${selectedFeedId.value ?? ''}';
+        '$silent:${selectedSilentGroupId.value ?? ''}:'
+        '${selectedCategory.value ?? ''}:${selectedFeedId.value ?? ''}';
   }
 
   int get unreadCount => allArticles
@@ -644,16 +683,6 @@ class TimelineController extends GetxController {
       .length;
   int get allCount => allArticles
       .where((a) => !FeedSilentSettingsService.isSilent(a.feedId))
-      .length;
-
-  int get silentUnreadCount => allArticles
-      .where((a) => !a.isRead && FeedSilentSettingsService.isSilent(a.feedId))
-      .length;
-  int get silentReadCount => allArticles
-      .where((a) => a.isRead && FeedSilentSettingsService.isSilent(a.feedId))
-      .length;
-  int get silentAllCount => allArticles
-      .where((a) => FeedSilentSettingsService.isSilent(a.feedId))
       .length;
 
   void _updateAppBadge() {
@@ -720,12 +749,21 @@ class TimelineController extends GetxController {
     final feedId = selectedFeedId.value;
     final category = selectedCategory.value;
     final silentMode = isSilentSelected.value;
+    final silentGroupId = selectedSilentGroupId.value;
 
     final source = allArticles.where((a) {
       final isSilent = FeedSilentSettingsService.isSilent(a.feedId);
 
       if (silentMode) {
         if (!isSilent) return false;
+        if (silentGroupId != null) {
+          final assigned = FeedSilentSettingsService.groupIdFor(a.feedId);
+          if (silentGroupId == FeedSilentSettingsService.ungroupedId) {
+            if (assigned != null) return false;
+          } else if (assigned != silentGroupId) {
+            return false;
+          }
+        }
       } else {
         if (feedId == null && isSilent) return false;
       }

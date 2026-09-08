@@ -27,6 +27,7 @@ import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mac_empty_placeholder.dart';
 import '../../common/widgets/mac_header_pane.dart';
 import '../../common/widgets/macos_window_drag_area.dart';
+import '../../common/widgets/silent_group_dialog.dart';
 import '../../services/account_service.dart';
 import '../../services/account_session_guard.dart';
 import '../../services/article_image_service.dart';
@@ -48,6 +49,21 @@ import '../article/article_page.dart';
 import '../../utils/scroll_utils.dart';
 
 const _mobileFeedToolbarHeight = 68.0;
+
+Future<void> _chooseFeedSilentGroup(
+  BuildContext context,
+  FeedDetailController controller,
+) async {
+  final feedId = controller.filterFeedId;
+  if (feedId == null) return;
+  final selection = await showSilentGroupAssignmentDialog(
+    context,
+    feedId: feedId,
+  );
+  if (selection == null) return;
+  await selection.applyTo(feedId);
+  controller.refreshSilentStatus();
+}
 
 /// Feed 详情控制器 — 按订阅源或分类或 view 筛选文章
 class FeedDetailController extends GetxController {
@@ -518,9 +534,8 @@ class FeedDetailController extends GetxController {
           .toList();
       if (earliest.isNotEmpty) {
         earliest.sort();
-        final timeText = DateFormat(
-          'MM-dd HH:mm',
-        ).format(earliest.first.toLocal());
+        final timeText = DateFormat('MM-dd HH:mm')
+            .format(earliest.first.toLocal());
         AppFeedback.success('已同步已读', '最早文章：$timeText');
       } else {
         AppFeedback.success('已同步已读', '最近$_readSyncWindowDays天已同步完成');
@@ -899,12 +914,7 @@ class _MacFeedHeader extends StatelessWidget {
                   tooltip: isEnabled ? '已开启静默' : '设为静默',
                   selected: isEnabled,
                   useOwnLayer: false,
-                  onPressed: () async {
-                    await FeedSilentSettingsService.toggleSilent(
-                      controller.filterFeedId ?? '',
-                    );
-                    controller.refreshSilentStatus();
-                  },
+                  onPressed: () => _chooseFeedSilentGroup(context, controller),
                 );
               }),
           ],
@@ -1069,23 +1079,55 @@ class _MobileFeedSettingsSheet extends StatelessWidget {
               },
             ),
           ),
-          Obx(
-            () => _MobileFeedSettingTile(
+          Obx(() {
+            final _ = FeedSilentSettingsService.version.value;
+            final group = FeedSilentSettingsService.groupById(
+              FeedSilentSettingsService.groupIdFor(
+                controller.filterFeedId ?? '',
+              ),
+            );
+            return _MobileFeedActionTile(
               icon: Icons.notifications_off_outlined,
               title: '静默订阅源',
-              subtitle: '从原分类列表中隔离',
-              value: controller.isSilentEnabled.value,
-              danger: controller.isSilentEnabled.value,
-              onChanged: () async {
-                await FeedSilentSettingsService.toggleSilent(
-                  controller.filterFeedId ?? '',
-                );
-                controller.refreshSilentStatus();
-              },
-            ),
-          ),
+              subtitle: controller.isSilentEnabled.value
+                  ? '当前分组：${group?.name ?? '未分组'}'
+                  : '从原分类列表中隔离',
+              active: controller.isSilentEnabled.value,
+              onTap: () => _chooseFeedSilentGroup(context, controller),
+            );
+          }),
         ],
       ),
+    );
+  }
+}
+
+class _MobileFeedActionTile extends StatelessWidget {
+  const _MobileFeedActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ListTile(
+      minTileHeight: 60,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      leading: Icon(icon, color: active ? cs.primary : cs.onSurfaceVariant),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
     );
   }
 }
@@ -1095,7 +1137,6 @@ class _MobileFeedSettingTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool value;
-  final bool danger;
   final Future<void> Function() onChanged;
 
   const _MobileFeedSettingTile({
@@ -1104,13 +1145,12 @@ class _MobileFeedSettingTile extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
-    this.danger = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final activeColor = danger ? cs.error : cs.primary;
+    final activeColor = cs.primary;
     return ListTile(
       minTileHeight: 60,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1232,9 +1272,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                   width: double.infinity,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -1243,9 +1283,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                   width: MediaQuery.of(context).size.width * 0.6,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -1256,9 +1296,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                       width: 48,
                       height: 20,
                       decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
@@ -1267,9 +1307,9 @@ class _FeedDetailSkeleton extends StatelessWidget {
                       width: 64,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),

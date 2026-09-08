@@ -132,6 +132,12 @@ class _MainPageState extends State<MainPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        if (controller.currentIndex.value == 0 &&
+            _timelineController.isSilentSelected.value) {
+          _timelineController.setTimelineScope();
+          controller.selectIndex(2);
+          return;
+        }
         MoveToBackground.moveTaskToBack();
       },
       child: Scaffold(
@@ -154,7 +160,10 @@ class _MainPageState extends State<MainPage> {
             selectedIndex: controller.currentIndex.value,
             timelineUnreadCount: _timelineController.unreadCount,
             filterReviewCount: _timelineController.filterCount.value,
-            onSelected: controller.changeIndex,
+            onSelected: (index) {
+              if (index == 0) _timelineController.setTimelineScope();
+              controller.changeIndex(index);
+            },
           );
         }),
       ),
@@ -210,8 +219,13 @@ class _MobileMainAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final index = controller.currentIndex.value;
+      final _ = FeedSilentSettingsService.version.value;
       final usesArticleFade = index == 0 || index == 1;
       final mode = timelineController.selectedMode.value;
+      final silent = index == 0 && timelineController.isSilentSelected.value;
+      final silentGroup = FeedSilentSettingsService.groupById(
+        timelineController.selectedSilentGroupId.value,
+      );
       return MobileBlurAppBar(
         blurBackground: !usesArticleFade,
         clipBehavior: usesArticleFade ? Clip.none : Clip.hardEdge,
@@ -235,7 +249,9 @@ class _MobileMainAppBar extends StatelessWidget implements PreferredSizeWidget {
         title: index == 1
             ? const FilterReviewStatusTitle()
             : Text(
-                _MainPageState._mobileTitles[index],
+                silent
+                    ? (silentGroup?.name ?? '未分组')
+                    : _MainPageState._mobileTitles[index],
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 17,

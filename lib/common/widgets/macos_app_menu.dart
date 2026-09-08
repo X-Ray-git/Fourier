@@ -217,14 +217,6 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
               label: '最近阅读',
               onSelected: () => _selectSection(2),
             ),
-            PlatformMenuItem(
-              label: '静默订阅源',
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.digit0,
-                meta: true,
-              ),
-              onSelected: _selectSilentFeeds,
-            ),
           ],
         ),
         PlatformMenuItemGroup(
@@ -462,17 +454,6 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
     _syncMenuStates();
   }
 
-  void _selectSilentFeeds() {
-    _returnToMain();
-    if (Get.isRegistered<TimelineController>()) {
-      Get.find<TimelineController>().setTimelineScope(silent: true);
-    }
-    if (Get.isRegistered<MainController>()) {
-      Get.find<MainController>().selectIndex(0);
-    }
-    _syncMenuStates();
-  }
-
   void _setViewMode(TimelineViewMode mode) {
     if (Get.isRegistered<TimelineController>()) {
       Get.find<TimelineController>().setViewMode(mode);
@@ -517,10 +498,6 @@ class _MacOSAppMenuState extends State<MacOSAppMenu> {
       ], mainIndex == 0 && timeline?.isSilentSelected.value != true),
       _menuState(<String>['显示', '垃圾拦截'], mainIndex == 1),
       _menuState(<String>['显示', '最近阅读'], mainIndex == 2),
-      _menuState(<String>[
-        '显示',
-        '静默订阅源',
-      ], mainIndex == 0 && timeline?.isSilentSelected.value == true),
       _menuState(<String>[
         '显示',
         '文章范围',

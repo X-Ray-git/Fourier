@@ -9,6 +9,7 @@ import '../../../common/widgets/continuous_rectangle.dart';
 import '../../../common/widgets/diagnostic_activity_marker.dart';
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/macos_window_drag_area.dart';
+import '../../../common/widgets/silent_group_dialog.dart';
 import '../../../http/init.dart';
 import '../../../models/feed.dart';
 import '../../../services/feed_readability_settings_service.dart';
@@ -22,9 +23,11 @@ import '../../timeline/timeline_controller.dart';
 
 const macOSSidebarExpandedWidth = MacOSLayoutMetrics.sidebarExpandedWidth;
 
-enum _FeedManagementAction { edit, unsubscribe }
+enum _FeedManagementAction { silentGroup, edit, unsubscribe }
 
 enum _CategoryManagementAction { rename, ungroup }
+
+enum _SilentGroupManagementAction { rename, moveUp, moveDown, delete }
 
 class MacOSSidebar extends StatelessWidget {
   final int currentIndex;
@@ -42,248 +45,270 @@ class MacOSSidebar extends StatelessWidget {
     final timelineController = Get.find<TimelineController>();
     final subController = Get.find<SubscriptionsController>();
 
-    return _MacOSSidebarSlot(
-      width: macOSSidebarExpandedWidth,
-      child: _MacOSGlassPane(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _SidebarHeader(),
-            Obx(() {
-              final isSelected =
-                  currentIndex == 0 &&
-                  timelineController.isSilentSelected.value == false &&
-                  timelineController.selectedFeedId.value == null &&
-                  timelineController.selectedCategory.value == null;
-              final _ = FeedSilentSettingsService.version.value;
-              final unreadCount = timelineController.unreadCount;
-              return _SidebarItem(
-                icon: Icons.article_outlined,
-                label: '全部文章',
-                isSelected: isSelected,
-                badgeCount: unreadCount,
-                onTap: () {
-                  timelineController.setTimelineScope();
-                  onIndexChanged(0);
-                },
-              );
-            }),
-            Obx(() {
-              final filterCount = timelineController.filterCount.value;
-              return _SidebarItem(
-                icon: Icons.shield_outlined,
-                label: '垃圾拦截',
-                isSelected: currentIndex == 1,
-                badgeCount: filterCount,
-                onTap: () => onIndexChanged(1),
-              );
-            }),
-            _SidebarItem(
-              icon: Icons.history_rounded,
-              label: '最近阅读',
-              isSelected: currentIndex == 2,
-              badgeCount: 0,
-              onTap: () => onIndexChanged(2),
-            ),
-            const SizedBox(height: 10),
-            _SectionLabel(
-              label: '订阅源',
-              action: _SidebarSectionAction(
-                icon: Icons.add_rounded,
-                tooltip: '添加 RSS 订阅',
-                onPressed: () => _showAddSubscription(
-                  context,
-                  timelineController: timelineController,
-                  subController: subController,
+    return Obx(
+      () => AbsorbPointer(
+        absorbing: timelineController.silentBatchProcessing.value,
+        child: _MacOSSidebarSlot(
+          width: macOSSidebarExpandedWidth,
+          child: _MacOSGlassPane(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SidebarHeader(),
+                Obx(() {
+                  final isSelected =
+                      currentIndex == 0 &&
+                      timelineController.isSilentSelected.value == false &&
+                      timelineController.selectedFeedId.value == null &&
+                      timelineController.selectedCategory.value == null;
+                  final _ = FeedSilentSettingsService.version.value;
+                  final unreadCount = timelineController.unreadCount;
+                  return _SidebarItem(
+                    icon: Icons.article_outlined,
+                    label: '全部文章',
+                    isSelected: isSelected,
+                    badgeCount: unreadCount,
+                    onTap: () {
+                      timelineController.setTimelineScope();
+                      onIndexChanged(0);
+                    },
+                  );
+                }),
+                Obx(() {
+                  final filterCount = timelineController.filterCount.value;
+                  return _SidebarItem(
+                    icon: Icons.shield_outlined,
+                    label: '垃圾拦截',
+                    isSelected: currentIndex == 1,
+                    badgeCount: filterCount,
+                    onTap: () => onIndexChanged(1),
+                  );
+                }),
+                _SidebarItem(
+                  icon: Icons.history_rounded,
+                  label: '最近阅读',
+                  isSelected: currentIndex == 2,
+                  badgeCount: 0,
+                  onTap: () => onIndexChanged(2),
                 ),
-              ),
-            ),
-            Expanded(
-              child: Obx(() {
-                final state = subController.loadingState.value;
-                if (state is Loading) {
-                  return const Center(
-                    child: DiagnosticActivityMarker(
-                      kind: AnimationActivityKind.pageLoadingSpinner,
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-                if (state is LoadError) {
-                  return Center(
-                    child: Text(
-                      '加载失败',
-                      style: TextStyle(color: cs.onSurfaceVariant),
-                    ),
-                  );
-                }
-
-                final nodes = subController.sidebarNodes;
-                final silentFeeds = subController.silentFeeds;
-                if (nodes.isEmpty && silentFeeds.isEmpty) {
-                  return Center(
-                    child: Text(
-                      '暂无订阅源',
-                      style: TextStyle(color: cs.onSurfaceVariant),
-                    ),
-                  );
-                }
-
-                return _SidebarSubscriptionsScrollArea(
-                  children: [
-                    for (final viewNode in nodes)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _ViewLabel(label: viewNode.name),
-                          ...viewNode.categories.map((category) {
-                            final categoryKey =
-                                'cat:${viewNode.name}:${category.name}';
-                            return Obx(() {
-                              final selectedFeedId =
-                                  timelineController.selectedFeedId.value;
-                              final selectedCategory =
-                                  timelineController.selectedCategory.value;
-                              final isSelected =
-                                  currentIndex == 0 &&
-                                  selectedCategory == category.name &&
-                                  selectedFeedId == null;
-                              final containsSelectedFeed =
-                                  selectedFeedId != null &&
-                                  category.feeds.any(
-                                    (feed) => feed.feedId == selectedFeedId,
-                                  );
-                              final isSearchActive =
-                                  subController.searchQuery.value.isNotEmpty;
-                              final isRevealedBySelection =
-                                  currentIndex == 0 && containsSelectedFeed;
-                              final isTemporarilyRevealed =
-                                  isSearchActive || isRevealedBySelection;
-                              final isManuallyExpanded = subController
-                                  .isExpanded(categoryKey);
-                              final isExpanded =
-                                  isTemporarilyRevealed || isManuallyExpanded;
-                              return _CategoryGroup(
-                                category: category,
-                                isExpanded: isExpanded,
-                                isSelected: isSelected,
-                                badgeCount: subController.unreadForCategory(
-                                  category.name,
-                                  category.feeds,
-                                ),
-                                onToggle: isTemporarilyRevealed
-                                    ? null
-                                    : () {
-                                        subController.setExpanded(
-                                          categoryKey,
-                                          !isManuallyExpanded,
-                                        );
-                                      },
-                                toggleTooltip: isRevealedBySelection
-                                    ? '当前订阅源位于此分组'
-                                    : isSearchActive
-                                    ? '搜索期间保持展开'
-                                    : null,
-                                onTap: () {
-                                  timelineController.setTimelineScope(
-                                    category: category.name,
-                                  );
-                                  onIndexChanged(0);
-                                },
-                                onSecondaryTapDown: (details) =>
-                                    _showCategoryMenu(
-                                      context,
-                                      details.globalPosition,
-                                      category: category,
-                                      view: viewNode.view,
-                                      timelineController: timelineController,
-                                      subController: subController,
-                                    ),
-                                feedBuilder: (feed) {
-                                  return Obx(() {
-                                    final feedSelected =
-                                        currentIndex == 0 &&
-                                        timelineController
-                                                .selectedFeedId
-                                                .value ==
-                                            feed.feedId;
-                                    return _SidebarItem(
-                                      icon: Icons.rss_feed,
-                                      imageUrl: feed.image,
-                                      label: feed.title,
-                                      isSelected: feedSelected,
-                                      badgeCount: subController.unreadFor(
-                                        feed.feedId,
-                                      ),
-                                      indentLevel: 2,
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _FeedAutoReadabilityIcon(
-                                            feedId: feed.feedId,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          _FeedAutoTranslateIcon(
-                                            feedId: feed.feedId,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          _FeedSilentIcon(feedId: feed.feedId),
-                                        ],
-                                      ),
-                                      onTap: () {
-                                        timelineController.setTimelineScope(
-                                          feedId: feed.feedId,
-                                        );
-                                        onIndexChanged(0);
-                                      },
-                                      onSecondaryTapDown: (details) =>
-                                          _showFeedMenu(
-                                            context,
-                                            details.globalPosition,
-                                            feed: feed,
-                                            timelineController:
-                                                timelineController,
-                                            subController: subController,
-                                          ),
-                                    );
-                                  });
-                                },
-                              );
-                            });
-                          }),
-                        ],
-                      ),
-                    _SilentFeedsGroup(
-                      currentIndex: currentIndex,
+                const SizedBox(height: 10),
+                _SectionLabel(
+                  label: '订阅源',
+                  action: _SidebarSectionAction(
+                    icon: Icons.add_rounded,
+                    tooltip: '添加 RSS 订阅',
+                    onPressed: () => _showAddSubscription(
+                      context,
                       timelineController: timelineController,
                       subController: subController,
-                      onIndexChanged: onIndexChanged,
-                      onFeedSecondaryTapDown: (feed, details) => _showFeedMenu(
-                        context,
-                        details.globalPosition,
-                        feed: feed,
-                        timelineController: timelineController,
-                        subController: subController,
-                      ),
                     ),
-                  ],
-                );
-              }),
+                  ),
+                ),
+                Expanded(
+                  child: Obx(() {
+                    final state = subController.loadingState.value;
+                    if (state is Loading) {
+                      return const Center(
+                        child: DiagnosticActivityMarker(
+                          kind: AnimationActivityKind.pageLoadingSpinner,
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+                    if (state is LoadError) {
+                      return Center(
+                        child: Text(
+                          '加载失败',
+                          style: TextStyle(color: cs.onSurfaceVariant),
+                        ),
+                      );
+                    }
+
+                    final nodes = subController.sidebarNodes;
+                    final silentFeeds = subController.silentFeeds;
+                    if (nodes.isEmpty &&
+                        silentFeeds.isEmpty &&
+                        FeedSilentSettingsService.groups.isEmpty) {
+                      return Center(
+                        child: Text(
+                          '暂无订阅源',
+                          style: TextStyle(color: cs.onSurfaceVariant),
+                        ),
+                      );
+                    }
+
+                    return _SidebarSubscriptionsScrollArea(
+                      children: [
+                        for (final viewNode in nodes)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _ViewLabel(label: viewNode.name),
+                              ...viewNode.categories.map((category) {
+                                final categoryKey =
+                                    'cat:${viewNode.name}:${category.name}';
+                                return Obx(() {
+                                  final selectedFeedId =
+                                      timelineController.selectedFeedId.value;
+                                  final selectedCategory =
+                                      timelineController.selectedCategory.value;
+                                  final isSelected =
+                                      currentIndex == 0 &&
+                                      selectedCategory == category.name &&
+                                      selectedFeedId == null;
+                                  final containsSelectedFeed =
+                                      selectedFeedId != null &&
+                                      category.feeds.any(
+                                        (feed) => feed.feedId == selectedFeedId,
+                                      );
+                                  final isSearchActive = subController
+                                      .searchQuery
+                                      .value
+                                      .isNotEmpty;
+                                  final isRevealedBySelection =
+                                      currentIndex == 0 && containsSelectedFeed;
+                                  final isTemporarilyRevealed =
+                                      isSearchActive || isRevealedBySelection;
+                                  final isManuallyExpanded = subController
+                                      .isExpanded(categoryKey);
+                                  final isExpanded =
+                                      isTemporarilyRevealed ||
+                                      isManuallyExpanded;
+                                  return _CategoryGroup(
+                                    category: category,
+                                    isExpanded: isExpanded,
+                                    isSelected: isSelected,
+                                    badgeCount: subController.unreadForCategory(
+                                      category.name,
+                                      category.feeds,
+                                    ),
+                                    onToggle: isTemporarilyRevealed
+                                        ? null
+                                        : () {
+                                            subController.setExpanded(
+                                              categoryKey,
+                                              !isManuallyExpanded,
+                                            );
+                                          },
+                                    toggleTooltip: isRevealedBySelection
+                                        ? '当前订阅源位于此分组'
+                                        : isSearchActive
+                                        ? '搜索期间保持展开'
+                                        : null,
+                                    onTap: () {
+                                      timelineController.setTimelineScope(
+                                        category: category.name,
+                                      );
+                                      onIndexChanged(0);
+                                    },
+                                    onSecondaryTapDown: (details) =>
+                                        _showCategoryMenu(
+                                          context,
+                                          details.globalPosition,
+                                          category: category,
+                                          view: viewNode.view,
+                                          timelineController:
+                                              timelineController,
+                                          subController: subController,
+                                        ),
+                                    feedBuilder: (feed) {
+                                      return Obx(() {
+                                        final feedSelected =
+                                            currentIndex == 0 &&
+                                            timelineController
+                                                    .selectedFeedId
+                                                    .value ==
+                                                feed.feedId;
+                                        return _SidebarItem(
+                                          icon: Icons.rss_feed,
+                                          imageUrl: feed.image,
+                                          label: feed.title,
+                                          isSelected: feedSelected,
+                                          badgeCount: subController.unreadFor(
+                                            feed.feedId,
+                                          ),
+                                          indentLevel: 2,
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _FeedAutoReadabilityIcon(
+                                                feedId: feed.feedId,
+                                              ),
+                                              const SizedBox(width: 2),
+                                              _FeedAutoTranslateIcon(
+                                                feedId: feed.feedId,
+                                              ),
+                                              const SizedBox(width: 2),
+                                              _FeedSilentIcon(
+                                                feedId: feed.feedId,
+                                              ),
+                                            ],
+                                          ),
+                                          onTap: () {
+                                            timelineController.setTimelineScope(
+                                              feedId: feed.feedId,
+                                            );
+                                            onIndexChanged(0);
+                                          },
+                                          onSecondaryTapDown: (details) =>
+                                              _showFeedMenu(
+                                                context,
+                                                details.globalPosition,
+                                                feed: feed,
+                                                timelineController:
+                                                    timelineController,
+                                                subController: subController,
+                                              ),
+                                        );
+                                      });
+                                    },
+                                  );
+                                });
+                              }),
+                            ],
+                          ),
+                        _SilentFeedsGroup(
+                          currentIndex: currentIndex,
+                          timelineController: timelineController,
+                          subController: subController,
+                          onIndexChanged: onIndexChanged,
+                          onFeedSecondaryTapDown: (feed, details) =>
+                              _showFeedMenu(
+                                context,
+                                details.globalPosition,
+                                feed: feed,
+                                timelineController: timelineController,
+                                subController: subController,
+                              ),
+                          onCreateGroup: () => _createSilentGroup(context),
+                          onGroupSecondaryTapDown: (group, details) =>
+                              _showSilentGroupMenu(
+                                context,
+                                details.globalPosition,
+                                group: group,
+                                timelineController: timelineController,
+                              ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: cs.outlineVariant.withValues(alpha: 0.28),
+                ),
+                _SidebarItem(
+                  icon: Icons.settings_outlined,
+                  label: '设置',
+                  isSelected: currentIndex == 3,
+                  badgeCount: 0,
+                  onTap: () => onIndexChanged(3),
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
-            Divider(
-              height: 1,
-              thickness: 1,
-              color: cs.outlineVariant.withValues(alpha: 0.28),
-            ),
-            _SidebarItem(
-              icon: Icons.settings_outlined,
-              label: '设置',
-              isSelected: currentIndex == 3,
-              badgeCount: 0,
-              onTap: () => onIndexChanged(3),
-            ),
-            const SizedBox(height: 12),
-          ],
+          ),
         ),
       ),
     );
@@ -322,28 +347,43 @@ class MacOSSidebar extends StatelessWidget {
     required TimelineController timelineController,
     required SubscriptionsController subController,
   }) async {
-    if (feed.isInbox) return;
     final action = await AppContextMenu.show<_FeedManagementAction>(
       context,
       position: position,
-      entries: const [
-        AppContextMenuAction(
-          value: _FeedManagementAction.edit,
-          icon: Icons.edit_outlined,
-          label: '编辑订阅',
+      entries: [
+        const AppContextMenuAction(
+          value: _FeedManagementAction.silentGroup,
+          icon: Icons.notifications_off_outlined,
+          label: '静默分组…',
         ),
-        AppContextMenuDivider(),
-        AppContextMenuAction(
-          value: _FeedManagementAction.unsubscribe,
-          icon: Icons.remove_circle_outline_rounded,
-          label: '取消订阅',
-          destructive: true,
-        ),
+        if (!feed.isInbox) ...[
+          const AppContextMenuDivider(),
+          const AppContextMenuAction(
+            value: _FeedManagementAction.edit,
+            icon: Icons.edit_outlined,
+            label: '编辑订阅',
+          ),
+          const AppContextMenuDivider(),
+          const AppContextMenuAction(
+            value: _FeedManagementAction.unsubscribe,
+            icon: Icons.remove_circle_outline_rounded,
+            label: '取消订阅',
+            destructive: true,
+          ),
+        ],
       ],
     );
     if (!context.mounted || action == null) return;
 
     switch (action) {
+      case _FeedManagementAction.silentGroup:
+        final selection = await showSilentGroupAssignmentDialog(
+          context,
+          feedId: feed.feedId,
+        );
+        if (selection == null) return;
+        await selection.applyTo(feed.feedId);
+        return;
       case _FeedManagementAction.edit:
         await showMacSubscriptionEditor(
           context,
@@ -365,6 +405,94 @@ class MacOSSidebar extends StatelessWidget {
           timelineController.setTimelineScope();
         }
         AppFeedback.success('已取消订阅', '可使用 Command + Z 撤销');
+        return;
+    }
+  }
+
+  Future<void> _createSilentGroup(BuildContext context) async {
+    final name = await showSilentGroupNameDialog(context);
+    if (name == null) return;
+    try {
+      await FeedSilentSettingsService.createGroup(name);
+    } on FormatException catch (error) {
+      AppFeedback.warning('无法创建分组', error.message);
+    }
+  }
+
+  Future<void> _showSilentGroupMenu(
+    BuildContext context,
+    Offset position, {
+    required SilentFeedGroup group,
+    required TimelineController timelineController,
+  }) async {
+    final groups = FeedSilentSettingsService.groups;
+    final index = groups.indexWhere((candidate) => candidate.id == group.id);
+    final action = await AppContextMenu.show<_SilentGroupManagementAction>(
+      context,
+      position: position,
+      entries: [
+        const AppContextMenuAction(
+          value: _SilentGroupManagementAction.rename,
+          icon: Icons.edit_outlined,
+          label: '重命名',
+        ),
+        AppContextMenuAction(
+          value: _SilentGroupManagementAction.moveUp,
+          icon: Icons.arrow_upward_rounded,
+          label: '上移',
+          enabled: index > 0,
+        ),
+        AppContextMenuAction(
+          value: _SilentGroupManagementAction.moveDown,
+          icon: Icons.arrow_downward_rounded,
+          label: '下移',
+          enabled: index >= 0 && index < groups.length - 1,
+        ),
+        const AppContextMenuDivider(),
+        const AppContextMenuAction(
+          value: _SilentGroupManagementAction.delete,
+          icon: Icons.delete_outline_rounded,
+          label: '删除分组',
+          destructive: true,
+        ),
+      ],
+    );
+    if (!context.mounted || action == null) return;
+    switch (action) {
+      case _SilentGroupManagementAction.rename:
+        final name = await showSilentGroupNameDialog(
+          context,
+          initialValue: group.name,
+        );
+        if (name == null) return;
+        try {
+          await FeedSilentSettingsService.renameGroup(group.id, name);
+        } on FormatException catch (error) {
+          AppFeedback.warning('无法重命名', error.message);
+        }
+        return;
+      case _SilentGroupManagementAction.moveUp:
+        await FeedSilentSettingsService.moveGroup(group.id, -1);
+        return;
+      case _SilentGroupManagementAction.moveDown:
+        await FeedSilentSettingsService.moveGroup(group.id, 1);
+        return;
+      case _SilentGroupManagementAction.delete:
+        final count = FeedSilentSettingsService.feedCountForGroup(group.id);
+        if (!await showDeleteSilentGroupConfirmation(
+          context,
+          group: group,
+          feedCount: count,
+        )) {
+          return;
+        }
+        await FeedSilentSettingsService.deleteGroup(group.id);
+        if (timelineController.selectedSilentGroupId.value == group.id) {
+          timelineController.setTimelineScope(
+            silent: true,
+            silentGroupId: FeedSilentSettingsService.ungroupedId,
+          );
+        }
         return;
     }
   }
@@ -481,6 +609,9 @@ class _SilentFeedsGroup extends StatelessWidget {
   final ValueChanged<int> onIndexChanged;
   final void Function(FeedModel feed, TapDownDetails details)
   onFeedSecondaryTapDown;
+  final VoidCallback onCreateGroup;
+  final void Function(SilentFeedGroup group, TapDownDetails details)
+  onGroupSecondaryTapDown;
 
   const _SilentFeedsGroup({
     required this.currentIndex,
@@ -488,90 +619,148 @@ class _SilentFeedsGroup extends StatelessWidget {
     required this.subController,
     required this.onIndexChanged,
     required this.onFeedSecondaryTapDown,
+    required this.onCreateGroup,
+    required this.onGroupSecondaryTapDown,
   });
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final silentFeeds = subController.silentFeeds;
-      if (silentFeeds.isEmpty) return const SizedBox.shrink();
-
-      const groupKey = 'special:silent';
+      final silentGroups = subController.silentGroups;
       final isSilentSelected =
           currentIndex == 0 && timelineController.isSilentSelected.value;
-      final isExpanded = subController.isExpanded(groupKey);
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 10),
-          const _ViewLabel(label: '静默'),
-          _CategoryItem(
-            label: '静默订阅源',
-            collapsedIcon: Icons.notifications_off_outlined,
-            expandedIcon: Icons.notifications_off,
-            isSelected:
-                isSilentSelected &&
-                timelineController.selectedFeedId.value == null,
-            badgeCount: timelineController.silentUnreadCount,
-            isExpanded: isExpanded,
-            onToggle: () {
-              subController.setExpanded(groupKey, !isExpanded);
-            },
-            onTap: () {
-              timelineController.setTimelineScope(silent: true);
-              onIndexChanged(0);
-            },
-          ),
-          ClipRect(
-            child: AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: isExpanded
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: silentFeeds.map((feed) {
-                        return Obx(() {
-                          final feedSelected =
-                              currentIndex == 0 &&
-                              timelineController.selectedFeedId.value ==
-                                  feed.feedId &&
-                              timelineController.isSilentSelected.value;
-                          return _SidebarItem(
-                            icon: Icons.rss_feed,
-                            imageUrl: feed.image,
-                            label: feed.title,
-                            isSelected: feedSelected,
-                            badgeCount: subController.rawUnreadFor(feed.feedId),
-                            indentLevel: 2,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _FeedAutoReadabilityIcon(feedId: feed.feedId),
-                                const SizedBox(width: 2),
-                                _FeedAutoTranslateIcon(feedId: feed.feedId),
-                                const SizedBox(width: 2),
-                                _FeedSilentIcon(feedId: feed.feedId),
-                              ],
-                            ),
-                            onTap: () {
-                              timelineController.setTimelineScope(
-                                silent: true,
-                                feedId: feed.feedId,
-                              );
-                              onIndexChanged(0);
-                            },
-                            onSecondaryTapDown: (details) =>
-                                onFeedSecondaryTapDown(feed, details),
-                          );
-                        });
-                      }).toList(),
-                    )
-                  : const SizedBox(width: double.infinity),
+          _SectionLabel(
+            label: '静默',
+            action: _SidebarSectionAction(
+              icon: Icons.add_rounded,
+              tooltip: '新建静默分组',
+              onPressed: onCreateGroup,
             ),
           ),
+          ...silentGroups.map((node) {
+            final id = node.id;
+            final scopeId = id ?? FeedSilentSettingsService.ungroupedId;
+            final key = 'silent-group:${id ?? 'ungrouped'}';
+            final expanded = subController.isExpanded(key);
+            final selected =
+                isSilentSelected &&
+                timelineController.selectedFeedId.value == null &&
+                timelineController.selectedSilentGroupId.value == scopeId;
+            final unread = node.feeds.fold<int>(
+              0,
+              (sum, feed) => sum + subController.rawUnreadFor(feed.feedId),
+            );
+            return Column(
+              key: ValueKey(key),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CategoryItem(
+                  label: node.name,
+                  collapsedIcon: Icons.folder_outlined,
+                  expandedIcon: Icons.folder_open_outlined,
+                  isExpanded: expanded,
+                  isSelected: selected,
+                  badgeCount: unread,
+                  onToggle: () => subController.setExpanded(key, !expanded),
+                  onTap: () {
+                    timelineController.setTimelineScope(
+                      silent: true,
+                      silentGroupId: scopeId,
+                    );
+                    onIndexChanged(0);
+                  },
+                  onSecondaryTapDown: node.group == null
+                      ? null
+                      : (details) =>
+                            onGroupSecondaryTapDown(node.group!, details),
+                ),
+                ClipRect(
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: expanded
+                        ? Column(
+                            children: node.feeds
+                                .map(
+                                  (feed) => _SilentFeedItem(
+                                    feed: feed,
+                                    currentIndex: currentIndex,
+                                    timelineController: timelineController,
+                                    subController: subController,
+                                    onIndexChanged: onIndexChanged,
+                                    onSecondaryTapDown: (details) =>
+                                        onFeedSecondaryTapDown(feed, details),
+                                  ),
+                                )
+                                .toList(),
+                          )
+                        : const SizedBox(width: double.infinity),
+                  ),
+                ),
+              ],
+            );
+          }),
         ],
+      );
+    });
+  }
+}
+
+class _SilentFeedItem extends StatelessWidget {
+  const _SilentFeedItem({
+    required this.feed,
+    required this.currentIndex,
+    required this.timelineController,
+    required this.subController,
+    required this.onIndexChanged,
+    required this.onSecondaryTapDown,
+  });
+
+  final FeedModel feed;
+  final int currentIndex;
+  final TimelineController timelineController;
+  final SubscriptionsController subController;
+  final ValueChanged<int> onIndexChanged;
+  final void Function(TapDownDetails details) onSecondaryTapDown;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final selected =
+          currentIndex == 0 &&
+          timelineController.selectedFeedId.value == feed.feedId &&
+          timelineController.isSilentSelected.value;
+      return _SidebarItem(
+        icon: Icons.rss_feed,
+        imageUrl: feed.image,
+        label: feed.title,
+        isSelected: selected,
+        badgeCount: subController.rawUnreadFor(feed.feedId),
+        indentLevel: 2,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _FeedAutoReadabilityIcon(feedId: feed.feedId),
+            const SizedBox(width: 2),
+            _FeedAutoTranslateIcon(feedId: feed.feedId),
+            const SizedBox(width: 2),
+            _FeedSilentIcon(feedId: feed.feedId),
+          ],
+        ),
+        onTap: () {
+          timelineController.setTimelineScope(
+            silent: true,
+            feedId: feed.feedId,
+          );
+          onIndexChanged(0);
+        },
+        onSecondaryTapDown: onSecondaryTapDown,
       );
     });
   }
@@ -1208,9 +1397,13 @@ class _FeedSilentIcon extends StatelessWidget {
   final String feedId;
   const _FeedSilentIcon({required this.feedId});
 
-  void _toggle() {
-    final next = !FeedSilentSettingsService.isSilent(feedId);
-    FeedSilentSettingsService.setSilent(feedId, next);
+  Future<void> _choose(BuildContext context) async {
+    final selection = await showSilentGroupAssignmentDialog(
+      context,
+      feedId: feedId,
+    );
+    if (selection == null) return;
+    await selection.applyTo(feedId);
   }
 
   @override
@@ -1219,10 +1412,13 @@ class _FeedSilentIcon extends StatelessWidget {
     return Obx(() {
       final _ = FeedSilentSettingsService.version.value;
       final enabled = FeedSilentSettingsService.isSilent(feedId);
+      final group = FeedSilentSettingsService.groupById(
+        FeedSilentSettingsService.groupIdFor(feedId),
+      );
       return AppGlassTooltip(
-        message: enabled ? '已开启静默' : '设为静默',
+        message: enabled ? '静默分组：${group?.name ?? '未分组'}' : '设为静默',
         child: InkWell(
-          onTap: _toggle,
+          onTap: () => _choose(context),
           borderRadius: BorderRadius.circular(4),
           child: Padding(
             padding: const EdgeInsets.all(2),

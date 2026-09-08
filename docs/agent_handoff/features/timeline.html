@@ -77,7 +77,7 @@
 - macOS 主时间线、垃圾拦截、最近阅读和订阅源详情通过 `MacHeaderPane` 共享固定 header/body 几何。内容和 scrollbar 自然从 header 下方开始；thumb 宽度及右侧 margin 继续由 `MacGlassScrollbarStyle.articlePaneTheme` 提供（`8px`、`1px`），`MacArticleListChrome.contentPadding` 另保留 `2px` 右侧内容间隔。
 - macOS 订阅源详情页的 header 筛选复用同一个文章范围 morph 组件；不要重新引入 `仅已读` 入口。
 - 已读模式/页面仍在其他入口存在，不应删除。
-- 过滤支持选中订阅源、分类和静默订阅源。
+- 过滤支持选中订阅源、分类和静默订阅源；静默 scope 可进一步选择一个本地组或未分组，两端共用过滤逻辑。
 - 本地文章库支撑时间线状态。
 - 已读/未读变化会更新本地状态并通知其他视图。
 - 时间线和最近阅读列表合并本地已读状态时，使用 `LocalArticleDbService.readOverrideOf(entryId)`，没有覆盖时保留 `ArticleModel.isRead`。该规则同时支持本地标为已读和恢复未读，不要退回到只处理 `readStatus == true` 的旧逻辑。
@@ -86,8 +86,8 @@
 
 macOS 静默订阅源批量导出：
 
-- 批量入口只出现在“静默订阅源”汇总视图，不出现在单个静默订阅源中。进入批量模式时默认不选文章；卡片本体仍用于打开阅读，右上角独立的轻量标识负责切换勾选，不能复用当前文章的选中描边。
-- 全选/全不选作用于当前筛选后的整个静默文章集合，不局限于当前视口。离开静默汇总 scope 时退出批量模式并清空勾选。
+- 批量入口只出现在 macOS 的自定义静默组/未分组视图，不存在跨组的“全部静默”范围，也不出现在单个静默订阅源中。Android 明确不提供文章批量选择及后续导出。进入批量模式时默认不选文章；卡片本体仍用于打开阅读，右上角独立的轻量标识负责切换勾选，不能复用当前文章的选中描边。
+- 全选/全不选作用于当前筛选后的静默组文章集合，不局限于当前视口。切换任意组或其他 scope 都退出批量模式并清空勾选。导出执行期间通过 `silentBatchProcessing` 锁定导航/范围，侧边栏暂停交互，禁止中途改组或更改归属；导出仍使用点击时的文章快照。
 - 动作只有“复制 Markdown”“保存 Markdown”“复制并标为已读”“保存并标为已读”，不提供单独的批量标为已读。纯导出成功后保留批量模式和勾选；组合动作成功后退出批量模式并清空右侧详情。
 - 批量导出入口与文章范围、排序入口共用锚定在右上角的液态玻璃 morph 展开组件；它是命令菜单，不显示持久选中项或勾号。批量模式下按 `Esc` 必须复用右上角关闭按钮的退出路径，同时清空本次勾选；处理中的批量动作仍禁止中途退出。
 - 单篇复制和批量导出统一调用 `ArticleMarkdownExportService`，页面不得自行维护 Markdown 转换器。批量保持当前列表顺序，文章之间只用 `---` 分隔，不添加“静默订阅源导出”总标题或批次元数据。正文尚未缓存时仍输出标题、来源、链接，并写入 `> 正文尚未缓存`，不能为了导出临时联网拉正文。
@@ -119,7 +119,7 @@ macOS 分栏选择与移除协调：
 - 批量变化不播放逐项 diff 动画。它们包括切换未读/全部、切换订阅源/分类/静默范围、切换排序、本地库批量回填、同步/加载更多，以及会改变大量成员或顺序的元数据更新。
 - `TimelineController.timelineListResetVersion` 和 `ImplicitlyAnimatedList.batchUpdateVersion` 仍服务于保留该通用组件的其他路径；不要重新用它们承载 macOS 主时间线单项动画，也不要把这次页面专用结构扩散到垃圾拦截、最近阅读或 Android。
 - 列表外层 key 只包含 selected mode 和 scope key；模式/范围切换建立新的列表语义。单篇数据库通知仍应先比较过滤后的 entry id 顺序，标题、正文、摘要等非结构元数据更新不能重建整列。
-- `TimelineController.setTimelineScope()` 负责批量更新 `isSilentSelected`、`selectedFeedId`、`selectedCategory`，避免侧边栏一次点击触发多次 `_applyFilter()`。
+- `TimelineController.setTimelineScope()` 负责批量更新 `isSilentSelected`、`selectedSilentGroupId`、`selectedFeedId`、`selectedCategory`，避免侧边栏一次点击触发多次 `_applyFilter()`。scope key 与从来源跳转的返回快照均包含静默组 ID；失效组 ID 回落未分组。静默设置变化刷新筛选但不清空右侧正在阅读的文章。
 - 不要重新在侧边栏或文章页里直接连续设置 `selectedFeedId.value` / `selectedCategory.value` / `isSilentSelected.value`；这会恢复“多次过滤 + 多次重建”的卡顿。
 - 普通标记已读时，单项移除动画仍保留。
 - 首次长文/短文排序可能需要一次估算；用户验证时未观察到不可接受的成本。

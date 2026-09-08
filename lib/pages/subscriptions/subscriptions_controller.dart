@@ -35,6 +35,17 @@ class SourceViewNode {
   int get categoryCount => categories.length;
 }
 
+class SilentFeedGroupNode {
+  const SilentFeedGroupNode({required this.group, required this.feeds});
+
+  /// Null represents the built-in, non-deletable “未分组” bucket.
+  final SilentFeedGroup? group;
+  final List<FeedModel> feeds;
+
+  String? get id => group?.id;
+  String get name => group?.name ?? '未分组';
+}
+
 /// 订阅源控制器
 class SubscriptionsController extends GetxController {
   final loadingState = Rx<LoadingState<List<SourceViewNode>>>(const Loading());
@@ -189,6 +200,31 @@ class SubscriptionsController extends GetxController {
     return result;
   }
 
+  List<SilentFeedGroupNode> get silentGroups {
+    final feeds = silentFeeds;
+    final byGroup = <String?, List<FeedModel>>{};
+    for (final group in FeedSilentSettingsService.groups) {
+      byGroup[group.id] = <FeedModel>[];
+    }
+    for (final feed in feeds) {
+      byGroup
+          .putIfAbsent(
+            FeedSilentSettingsService.groupIdFor(feed.feedId),
+            () => <FeedModel>[],
+          )
+          .add(feed);
+    }
+    final result = <SilentFeedGroupNode>[
+      for (final group in FeedSilentSettingsService.groups)
+        SilentFeedGroupNode(group: group, feeds: byGroup[group.id] ?? const []),
+    ];
+    final ungrouped = byGroup[null];
+    if (ungrouped != null && ungrouped.isNotEmpty) {
+      result.add(SilentFeedGroupNode(group: null, feeds: ungrouped));
+    }
+    return result;
+  }
+
   List<SourceViewNode> get sidebarNodes {
     final result = <SourceViewNode>[];
     for (final view in filteredNodes) {
@@ -292,9 +328,9 @@ class SubscriptionsController extends GetxController {
             )
             .toList()
           ..sort(
-            (a, b) => SourceTaxonomy.viewOrderFromInt(
-              a.view,
-            ).compareTo(SourceTaxonomy.viewOrderFromInt(b.view)),
+            (a, b) =>
+                SourceTaxonomy.viewOrderFromInt(a.view)
+                    .compareTo(SourceTaxonomy.viewOrderFromInt(b.view)),
           );
     return nodes;
   }
@@ -316,7 +352,11 @@ class SubscriptionsController extends GetxController {
   }
 
   void _syncExpandedState(List<SourceViewNode> nodes) {
-    final allowed = <String>{'special:silent'};
+    final allowed = <String>{};
+    for (final group in FeedSilentSettingsService.groups) {
+      allowed.add('silent-group:${group.id}');
+    }
+    allowed.add('silent-group:ungrouped');
     for (final view in nodes) {
       allowed.add('view:${view.name}');
       for (final category in view.categories) {

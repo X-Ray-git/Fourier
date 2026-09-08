@@ -69,6 +69,45 @@ void main() {
       expect(payload.settings[StorageKeys.articleRelationEnabled], isTrue);
     });
 
+    test('keeps valid silent group definitions and assignments', () {
+      final payload = SettingsBackupService.parseJson(r'''
+{
+  "type": "fourier_settings",
+  "version": 1,
+  "settings": {
+    "feed_silent_feed-a": true,
+    "feed_silent_groups_v1": "[{\"id\":\"group-a\",\"name\":\"技术资料\"}]",
+    "feed_silent_group_assignment_feed-a": "group-a"
+  }
+}
+''');
+
+      expect(payload.settings['feed_silent_feed-a'], isTrue);
+      expect(
+        payload.settings['feed_silent_group_assignment_feed-a'],
+        'group-a',
+      );
+    });
+
+    test('drops an assignment to a missing silent group', () {
+      final payload = SettingsBackupService.parseJson(r'''
+{
+  "type": "fourier_settings",
+  "version": 1,
+  "settings": {
+    "feed_silent_feed-a": true,
+    "feed_silent_group_assignment_feed-a": "missing"
+  }
+}
+''');
+
+      expect(payload.settings['feed_silent_feed-a'], isTrue);
+      expect(
+        payload.settings,
+        isNot(contains('feed_silent_group_assignment_feed-a')),
+      );
+    });
+
     test('keeps supported summary and filter vision models', () {
       final payload = SettingsBackupService.parseJson('''
 {

@@ -8,6 +8,11 @@ class MainController extends GetxController {
   _TimelineSourceReturn? _timelineSourceReturn;
 
   void changeIndex(int index) {
+    if (index != currentIndex.value &&
+        Get.isRegistered<TimelineController>() &&
+        Get.find<TimelineController>().silentBatchProcessing.value) {
+      return;
+    }
     final now = DateTime.now();
     if (index == currentIndex.value) {
       if (index == 0 &&
@@ -34,6 +39,11 @@ class MainController extends GetxController {
   /// Selects a page without treating repeated keyboard navigation as a
   /// sidebar double-click that scrolls the timeline to the top.
   void selectIndex(int index) {
+    if (index != currentIndex.value &&
+        Get.isRegistered<TimelineController>() &&
+        Get.find<TimelineController>().silentBatchProcessing.value) {
+      return;
+    }
     currentIndex.value = index;
     _lastTimelineNavTapAt = null;
   }

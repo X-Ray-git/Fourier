@@ -49,7 +49,7 @@ class RefreshTimelineIntent extends Intent {
   const RefreshTimelineIntent();
 }
 
-enum MacSection { allArticles, filterReview, silentFeeds }
+enum MacSection { allArticles, filterReview }
 
 class NavigateMacSectionIntent extends Intent {
   const NavigateMacSectionIntent(this.section);
@@ -270,9 +270,6 @@ class FourierApp extends StatelessWidget {
                   SingleActivator(LogicalKeyboardKey.digit2, meta: true):
                       const NavigateMacSectionIntent(MacSection.filterReview),
                 if (Platform.isMacOS)
-                  SingleActivator(LogicalKeyboardKey.digit0, meta: true):
-                      const NavigateMacSectionIntent(MacSection.silentFeeds),
-                if (Platform.isMacOS)
                   const SingleActivator(LogicalKeyboardKey.arrowLeft):
                       const SelectUnselectedArticleBoundaryIntent(-1),
                 if (Platform.isMacOS)
@@ -362,10 +359,6 @@ class FourierApp extends StatelessWidget {
                             case MacSection.filterReview:
                               mainController.selectIndex(1);
                               break;
-                            case MacSection.silentFeeds:
-                              timelineController.setTimelineScope(silent: true);
-                              mainController.selectIndex(0);
-                              break;
                           }
                           return null;
                         },
@@ -396,9 +389,8 @@ class FourierApp extends StatelessWidget {
               result = _MacOSAppearanceSync(
                 mode: appearanceMode,
                 child: MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(platformBrightness: brightness),
+                  data: MediaQuery.of(context)
+                      .copyWith(platformBrightness: brightness),
                   child: result,
                 ),
               );

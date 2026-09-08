@@ -32,6 +32,7 @@ import '../../common/widgets/feedback_toast.dart';
 import '../../services/mac_article_shortcut_service.dart';
 import '../../services/article_markdown_export_service.dart';
 import '../../services/external_link_service.dart';
+import '../../services/feed_silent_settings_service.dart';
 import '../../services/undo_service.dart';
 import '../article/article_page.dart';
 import '../main/main_controller.dart';
@@ -44,11 +45,13 @@ enum _SilentBatchAction { copy, save, copyAndMarkRead, saveAndMarkRead }
 
 class _TimelineScopeSnapshot {
   final bool silent;
+  final String? silentGroupId;
   final String? feedId;
   final String? category;
 
   const _TimelineScopeSnapshot({
     required this.silent,
+    required this.silentGroupId,
     required this.feedId,
     required this.category,
   });
@@ -335,8 +338,9 @@ class _TimelinePageState extends State<TimelinePage> {
 
   Map<String, GlobalKey> get _itemKeys => _listCoordinator.itemKeys;
 
-  bool get _isSilentAggregateScope =>
+  bool get _isSilentGroupScope =>
       controller.isSilentSelected.value &&
+      controller.selectedSilentGroupId.value != null &&
       controller.selectedFeedId.value == null &&
       controller.selectedCategory.value == null;
 
@@ -365,9 +369,10 @@ class _TimelinePageState extends State<TimelinePage> {
         controller.isSilentSelected,
         controller.selectedFeedId,
         controller.selectedCategory,
+        controller.selectedSilentGroupId,
       ],
       (_) {
-        if (!_isSilentAggregateScope && _isSilentBatchMode) {
+        if (_isSilentBatchMode) {
           setState(_resetSilentBatchState);
         }
         _scheduleSourceReturnValidation();
@@ -401,6 +406,7 @@ class _TimelinePageState extends State<TimelinePage> {
   @override
   void dispose() {
     controller.bindScrollToTopHandler(null);
+    controller.silentBatchProcessing.value = false;
     UndoService.flushDeferredHistoryNotification();
     if (Platform.isMacOS) {
       HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
@@ -484,6 +490,7 @@ class _TimelinePageState extends State<TimelinePage> {
     _sourceReturnContext = _SourceReturnContext(
       previousScope: _TimelineScopeSnapshot(
         silent: controller.isSilentSelected.value,
+        silentGroupId: controller.selectedSilentGroupId.value,
         feedId: controller.selectedFeedId.value,
         category: controller.selectedCategory.value,
       ),
@@ -516,6 +523,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final scope = returnContext.previousScope;
     controller.setTimelineScope(
       silent: scope.silent,
+      silentGroupId: scope.silentGroupId,
       feedId: scope.feedId,
       category: scope.category,
     );
@@ -555,7 +563,7 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   void _enterSilentBatchMode() {
-    if (!_isSilentAggregateScope) return;
+    if (!Platform.isMacOS || !_isSilentGroupScope) return;
     setState(() {
       _isSilentBatchMode = true;
       _silentBatchSelection.clear();
@@ -571,6 +579,7 @@ class _TimelinePageState extends State<TimelinePage> {
     _isSilentBatchMode = false;
     _isSilentBatchProcessing = false;
     _silentBatchSelection.clear();
+    controller.silentBatchProcessing.value = false;
   }
 
   void _toggleSilentBatchArticle(String entryId) {
@@ -615,6 +624,7 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     setState(() => _isSilentBatchProcessing = true);
+    controller.silentBatchProcessing.value = true;
     try {
       final markdown = await ArticleMarkdownExportService.buildBatch(articles);
       if (markdown.trim().isEmpty) {
@@ -665,6 +675,7 @@ class _TimelinePageState extends State<TimelinePage> {
       if (mounted && _isSilentBatchMode) {
         setState(() => _isSilentBatchProcessing = false);
       }
+      controller.silentBatchProcessing.value = false;
     }
   }
 
@@ -2183,16 +2194,22 @@ class _MacTimelineAppBar extends StatelessWidget
     final cs = Theme.of(context).colorScheme;
 
     return Obx(() {
+      final _ = FeedSilentSettingsService.version.value;
       final feedId = controller.selectedFeedId.value;
       final category = controller.selectedCategory.value;
-      final isSilentAggregate =
+      final isSilentGroup =
           controller.isSilentSelected.value &&
+          controller.selectedSilentGroupId.value != null &&
           feedId == null &&
           category == null;
       final totalCount = controller.articles.length;
       final allSelected = totalCount > 0 && selectedCount == totalCount;
 
-      String title = isSilentAggregate ? '静默订阅源' : '时间线';
+      final selectedGroupId = controller.selectedSilentGroupId.value;
+      final selectedGroup = FeedSilentSettingsService.groupById(
+        selectedGroupId,
+      );
+      String title = isSilentGroup ? (selectedGroup?.name ?? '未分组') : '时间线';
       String? subtitle;
 
       if (batchMode) {
@@ -2276,7 +2293,7 @@ class _MacTimelineAppBar extends StatelessWidget
                 ],
                 _MacTimelineSortButton(controller: controller),
                 const SizedBox(width: 8),
-                if (isSilentAggregate) ...[
+                if (isSilentGroup) ...[
                   AppGlassIconButton(
                     icon: Icons.checklist_rounded,
                     tooltip: '批量处理静默文章',

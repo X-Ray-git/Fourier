@@ -11,11 +11,15 @@ import '../../common/widgets/refresh_aware_scroll_physics.dart';
 import '../../common/widgets/no_overscroll_indicator_behavior.dart';
 import '../../common/widgets/shimmer_card.dart';
 import '../../common/widgets/mobile_viewport_insets.dart';
+import '../../common/widgets/silent_group_dialog.dart';
 import '../../http/init.dart';
 import '../../models/feed.dart';
 import '../../router/app_pages.dart';
 import '../../services/article_image_service.dart';
+import '../../services/feed_silent_settings_service.dart';
 import '../../utils/source_taxonomy.dart';
+import '../main/main_controller.dart';
+import '../timeline/timeline_controller.dart';
 import 'subscriptions_controller.dart';
 
 /// 订阅源页 — 按 view → 分类 → 订阅源 树形展示
@@ -131,8 +135,13 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   ),
                 ),
                 Success() => () {
-                  final filtered = controller.filteredNodes;
+                  final filtered = controller.sidebarNodes;
                   if (filtered.isEmpty) {
+                    if (controller.searchQuery.value.isEmpty ||
+                        controller.silentFeeds.isNotEmpty ||
+                        FeedSilentSettingsService.groups.isNotEmpty) {
+                      return const SliverToBoxAdapter(child: SizedBox.shrink());
+                    }
                     return SliverFillRemaining(
                       child: _EmptyView(
                         message: '没有找到匹配的订阅源\n请尝试更换搜索关键词',
@@ -144,17 +153,12 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                     );
                   }
                   return SliverPadding(
-                    padding: EdgeInsets.only(
-                      top: 8,
-                      bottom:
-                          16 +
-                          kBottomNavigationBarHeight +
-                          MediaQuery.of(context).padding.bottom,
-                    ),
+                    padding: const EdgeInsets.only(top: 8, bottom: 8),
                     sliver: SliverList.builder(
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         return _ViewSection(
+                          key: ValueKey(filtered[index].name),
                           controller: controller,
                           viewNode: filtered[index],
                           defaultExpanded:
@@ -165,6 +169,18 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   );
                 }(),
               },
+              if (state is Success)
+                SliverPadding(
+                  padding: EdgeInsets.only(
+                    bottom:
+                        16 +
+                        kBottomNavigationBarHeight +
+                        MediaQuery.paddingOf(context).bottom,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _MobileSilentGroupsSection(controller: controller),
+                  ),
+                ),
             ],
           ),
         ),
@@ -209,6 +225,231 @@ class _RecentReadEntry extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+enum _MobileSilentGroupAction { rename, moveUp, moveDown, delete }
+
+class _MobileSilentGroupsSection extends StatelessWidget {
+  const _MobileSilentGroupsSection({required this.controller});
+
+  final SubscriptionsController controller;
+
+  void _openScope(String? groupId) {
+    final timeline = Get.find<TimelineController>();
+    timeline.setTimelineScope(silent: true, silentGroupId: groupId);
+    Get.find<MainController>().selectIndex(0);
+  }
+
+  Future<void> _create(BuildContext context) async {
+    final name = await showSilentGroupNameDialog(context);
+    if (name == null) return;
+    try {
+      await FeedSilentSettingsService.createGroup(name);
+    } on FormatException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+  }
+
+  Future<void> _manage(
+    BuildContext context,
+    SilentFeedGroup group,
+    _MobileSilentGroupAction action,
+  ) async {
+    switch (action) {
+      case _MobileSilentGroupAction.rename:
+        final name = await showSilentGroupNameDialog(
+          context,
+          initialValue: group.name,
+        );
+        if (name == null) return;
+        try {
+          await FeedSilentSettingsService.renameGroup(group.id, name);
+        } on FormatException catch (error) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(error.message)));
+          }
+        }
+        return;
+      case _MobileSilentGroupAction.moveUp:
+        await FeedSilentSettingsService.moveGroup(group.id, -1);
+        return;
+      case _MobileSilentGroupAction.moveDown:
+        await FeedSilentSettingsService.moveGroup(group.id, 1);
+        return;
+      case _MobileSilentGroupAction.delete:
+        final count = FeedSilentSettingsService.feedCountForGroup(group.id);
+        if (!await showDeleteSilentGroupConfirmation(
+          context,
+          group: group,
+          feedCount: count,
+        )) {
+          return;
+        }
+        await FeedSilentSettingsService.deleteGroup(group.id);
+        final timeline = Get.find<TimelineController>();
+        if (timeline.selectedSilentGroupId.value == group.id) {
+          timeline.setTimelineScope(
+            silent: true,
+            silentGroupId: FeedSilentSettingsService.ungroupedId,
+          );
+        }
+        return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final groups = controller.silentGroups;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 2, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '静默',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '新建静默分组',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _create(context),
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
+            ),
+          ),
+          for (final node in groups)
+            _MobileSilentGroupTile(
+              key: ValueKey(node.id ?? FeedSilentSettingsService.ungroupedId),
+              node: node,
+              controller: controller,
+              onOpen: () =>
+                  _openScope(node.id ?? FeedSilentSettingsService.ungroupedId),
+              onManage: node.group == null
+                  ? null
+                  : (action) => _manage(context, node.group!, action),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileSilentGroupTile extends StatefulWidget {
+  const _MobileSilentGroupTile({
+    super.key,
+    required this.node,
+    required this.controller,
+    required this.onOpen,
+    required this.onManage,
+  });
+
+  final SilentFeedGroupNode node;
+  final SubscriptionsController controller;
+  final VoidCallback onOpen;
+  final ValueChanged<_MobileSilentGroupAction>? onManage;
+
+  @override
+  State<_MobileSilentGroupTile> createState() => _MobileSilentGroupTileState();
+}
+
+class _MobileSilentGroupTileState extends State<_MobileSilentGroupTile> {
+  late bool _expanded;
+
+  String get _key => 'silent-group:${widget.node.id ?? 'ungrouped'}';
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.controller.isExpanded(_key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ListTile(
+          leading: IconButton(
+            tooltip: _expanded ? '折叠' : '展开',
+            onPressed: () => setState(() {
+              _expanded = !_expanded;
+              widget.controller.setExpanded(_key, _expanded);
+            }),
+            icon: AnimatedRotation(
+              turns: _expanded ? 0.25 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: const Icon(Icons.chevron_right_rounded),
+            ),
+          ),
+          title: Text(widget.node.name),
+          subtitle: Text('${widget.node.feeds.length} 个订阅源'),
+          onTap: widget.onOpen,
+          trailing: widget.onManage == null
+              ? null
+              : PopupMenuButton<_MobileSilentGroupAction>(
+                  tooltip: '管理静默分组',
+                  onSelected: widget.onManage,
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: _MobileSilentGroupAction.rename,
+                      child: Text('重命名'),
+                    ),
+                    PopupMenuItem(
+                      value: _MobileSilentGroupAction.moveUp,
+                      child: Text('上移'),
+                    ),
+                    PopupMenuItem(
+                      value: _MobileSilentGroupAction.moveDown,
+                      child: Text('下移'),
+                    ),
+                    PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: _MobileSilentGroupAction.delete,
+                      child: Text('删除分组'),
+                    ),
+                  ],
+                ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          child: _expanded
+              ? Column(
+                  children: [
+                    for (final feed in widget.node.feeds)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 20),
+                        child: _FeedCard(
+                          controller: widget.controller,
+                          feed: feed,
+                          showSilentUnread: true,
+                          viewColor: SourceTaxonomy.viewColorFromInt(
+                            feed.view ?? 0,
+                          ),
+                        ),
+                      ),
+                  ],
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
     );
   }
 }
@@ -408,6 +649,7 @@ class _ViewSection extends StatefulWidget {
   final bool defaultExpanded;
 
   const _ViewSection({
+    super.key,
     required this.controller,
     required this.viewNode,
     this.defaultExpanded = false,
@@ -712,11 +954,13 @@ class _FeedCard extends StatelessWidget {
   final SubscriptionsController controller;
   final FeedModel feed;
   final Color viewColor;
+  final bool showSilentUnread;
 
   const _FeedCard({
     required this.controller,
     required this.feed,
     required this.viewColor,
+    this.showSilentUnread = false,
   });
 
   @override
@@ -724,7 +968,9 @@ class _FeedCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Obx(() {
-      final unreadCount = controller.unreadFor(feed.feedId);
+      final unreadCount = showSilentUnread
+          ? controller.rawUnreadFor(feed.feedId)
+          : controller.unreadFor(feed.feedId);
       final hasUnread = unreadCount > 0;
 
       return Container(

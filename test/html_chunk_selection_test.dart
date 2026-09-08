@@ -392,14 +392,19 @@ void main() {
         (paragraph) =>
             paragraph.text.toPlainText().contains('This is a deliberately'),
       );
-      final lines = item.textPainter.computeLineMetrics();
+      final selectionBoxes = item.getBoxesForSelection(
+        TextSelection(
+          baseOffset: 0,
+          extentOffset: item.text.toPlainText().length,
+        ),
+      );
 
-      expect(lines.length, greaterThan(1));
+      expect(selectionBoxes.length, greaterThan(1));
       expect(
         item.localToGlobal(Offset.zero).dx,
         greaterThan(marker.localToGlobal(Offset.zero).dx),
       );
-      expect(lines[1].left, closeTo(lines[0].left, 0.01));
+      expect(selectionBoxes[1].left, closeTo(selectionBoxes[0].left, 0.01));
     },
   );
 

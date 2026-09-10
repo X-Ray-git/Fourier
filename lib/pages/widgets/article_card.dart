@@ -498,7 +498,7 @@ class _ArticleCardContentState extends State<_ArticleCardContent> {
                       text != null &&
                       text.isNotEmpty
                   ? StableSelectableHtml(
-                      data: SelectableHtmlCompatibility.normalizeTextFlow(
+                      data: SelectableHtmlCompatibility.normalizePlainText(
                         displayContent,
                       ),
                       renderConfigurationKey: Object.hash(

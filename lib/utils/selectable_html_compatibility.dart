@@ -31,6 +31,12 @@ abstract final class SelectableHtmlCompatibility {
     return _normalizeTextFlowNodes(fragment.nodes);
   }
 
+  /// Normalizes model-generated plain text without allowing code-like
+  /// sequences such as `<stdatomic.h>` to be parsed as HTML elements.
+  static String normalizePlainText(String text) {
+    return normalizeTextFlow(htmlEscape.convert(text));
+  }
+
   static String _normalizeTextFlowNodes(Iterable<dom.Node> nodes) {
     final parts = <String>[];
     final inline = StringBuffer();

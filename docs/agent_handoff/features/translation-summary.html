@@ -198,6 +198,7 @@ UI 注意点：
 - `SummaryService` 与 `TranslationService` 的记录 map 是普通 `Map`，不是 `RxMap`。GetX 的 `RxMap` 下标读取会把整个 map 注册为依赖，任何文章的记录变化都会令所有读取者失效；普通 map 将“数据存储”和“是否重建”的信号分开。
 - 两个 service 都通过 `versionFor(entryId)` 提供文章级 `RxInt`。当前文章详情、文章卡片、垃圾拦截审核行和详情控制器只观察自己的 entry；pending、完成、错误、删除和账号切换清理都必须触发对应 version。`recordsVersion` 只为任务中心的 done/pending/error 等聚合计数保留，不能拿它替代文章级观察。
 - 摘要 HTML 位于文章级 `SelectionArea` 内，使用 `StableSelectableHtml` 传入稳定 `anchorKey`。相同摘要内容和渲染配置下的父级重建保留 `flutter_html` parser 与选区；摘要文字或主题渲染配置改变时轮换 key，让新 HTML 正确解析。不要直接在这些位置重新构造无稳定 key 的 `Html`。
+- 模型摘要本质上是纯文本，即使显示层复用 `StableSelectableHtml`，也必须先经过 `SelectableHtmlCompatibility.normalizePlainText()`。否则摘要中的 `<stdatomic.h>`、`<threads.h>` 等代码片段会被 `flutter_html` 当成标签解析，导致后续文字消失；不要直接把摘要传给 `normalizeTextFlow()`。
 - 这套边界解释了为何“另一篇文章被标记垃圾”或“后台任务延迟完成”会表现为当前摘要高光消失：事件本身不是清除选区的业务动作，而是触发了全局 `RxMap` 依赖的重建，重建又替换了旧 parser。完整调查记录见[文章渲染专题](article-rendering.html#article-selection-stability)。
 
 ## 翻译持久化时序

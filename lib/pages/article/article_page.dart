@@ -3720,7 +3720,7 @@ class _SummaryCard extends StatelessWidget {
       final summary = (record?.summaryText ?? '').trim();
       if (!controller.showSummary.value) return const SizedBox.shrink();
       if (summary.isEmpty) return const SizedBox.shrink();
-      final htmlData = SelectableHtmlCompatibility.normalizeTextFlow(summary);
+      final htmlData = SelectableHtmlCompatibility.normalizePlainText(summary);
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Container(

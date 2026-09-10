@@ -8,6 +8,7 @@ import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
+import 'llm_failure_policy.dart';
 import 'llm_usage_ledger.dart';
 import 'account_session_guard.dart';
 import 'article_relation_service.dart';
@@ -208,6 +209,7 @@ abstract final class SummaryService {
     String targetLang = '简体中文',
     String? overrideContent,
     bool deferRelationTail = false,
+    bool automatic = false,
   }) {
     ensureHydrated();
     final existing = _inFlight[article.entryId];
@@ -220,6 +222,7 @@ abstract final class SummaryService {
       overrideContent,
       accountRevision,
       deferRelationTail,
+      automatic,
     );
     _inFlight[article.entryId] = future;
     void clearInFlight() {
@@ -241,7 +244,14 @@ abstract final class SummaryService {
     String? overrideContent,
     int accountRevision,
     bool deferRelationTail,
+    bool automatic,
   ) async {
+    if (!automatic) {
+      await LlmAutoRetryBlockService.clear(
+        LlmTaskType.summary,
+        article.entryId,
+      );
+    }
     final apiKey = getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw StateError('DeepSeek API key not configured');
@@ -351,7 +361,10 @@ abstract final class SummaryService {
                 !AccountSessionGuard.isCurrent(accountRevision)) {
               rethrow;
             }
-            if (attempt < totalAttempts) rethrow;
+            if (LlmFailurePolicy.classify(error) == null &&
+                attempt < totalAttempts) {
+              rethrow;
+            }
             debugPrint(
               '[Summary] Vision fallback failed for ${article.entryId}; '
               'using the text-only result.',
@@ -376,7 +389,15 @@ abstract final class SummaryService {
             !AccountSessionGuard.isCurrent(accountRevision)) {
           rethrow;
         }
-        if (attempt < totalAttempts) {
+        final failure = LlmFailurePolicy.classify(e);
+        if (failure != null) {
+          await LlmAutoRetryBlockService.block(
+            LlmTaskType.summary,
+            article.entryId,
+            failure,
+          );
+        }
+        if (failure == null && attempt < totalAttempts) {
           debugPrint(
             '[Summary] Attempt $attempt failed for ${article.entryId}, retrying in 1s...',
           );
@@ -384,22 +405,14 @@ abstract final class SummaryService {
           continue;
         }
 
-        String errorMessage;
-        if (e is DioException) {
-          errorMessage = e.message ?? 'DeepSeek request failed';
-        } else if (e is FormatException) {
-          errorMessage = e.message;
-        } else if (e is StateError) {
-          errorMessage = e.message;
-        } else {
-          errorMessage = e.toString();
-        }
+        final errorMessage = LlmFailurePolicy.displayMessage(e);
 
         _restoreAfterFailure(
           article.entryId,
           previous,
           errorMessage,
           accountRevision,
+          terminal: failure != null,
         );
         return SummaryRecord(
           status: SummaryStatus.error,
@@ -519,14 +532,17 @@ abstract final class SummaryService {
     String entryId,
     SummaryRecord? previous,
     String errorMessage,
-    int accountRevision,
-  ) {
+    int accountRevision, {
+    bool terminal = false,
+  }) {
     if (previous != null) {
       _writeRecord(
         entryId,
         previous.copyWith(
           status: previous.isSummarized
               ? SummaryStatus.done
+              : terminal
+              ? SummaryStatus.error
               : SummaryStatus.idle,
           errorMessage: errorMessage,
           updatedAt: DateTime.now().millisecondsSinceEpoch,

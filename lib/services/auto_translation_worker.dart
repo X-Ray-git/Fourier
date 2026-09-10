@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
 import '../models/article.dart';
 import 'llm_config.dart';
+import 'llm_failure_policy.dart';
+import 'llm_usage_ledger.dart';
 import 'translation_service.dart';
 import 'feed_translation_settings_service.dart';
 
@@ -33,6 +36,12 @@ abstract final class AutoTranslationWorker {
     if (article.feedId.isEmpty) return;
     if (TranslationService.hasTranslation(article.entryId)) return;
     if (TranslationService.isPending(article.entryId)) return;
+    if (LlmAutoRetryBlockService.isBlocked(
+      LlmTaskType.translation,
+      article.entryId,
+    )) {
+      return;
+    }
     final content = (article.content ?? '').trim();
     if (content.isEmpty) return;
     if (!FeedTranslationSettingsService.isAutoTranslateEnabled(
@@ -104,7 +113,11 @@ abstract final class AutoTranslationWorker {
       return;
     }
     try {
-      await TranslationService.translateArticle(article, targetLang: '简体中文');
+      await TranslationService.translateArticle(
+        article,
+        targetLang: '简体中文',
+        automatic: true,
+      );
       if (kDebugMode) {
         debugPrint('[AutoTranslation] completed');
       }

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
@@ -9,6 +10,8 @@ import 'analysis_event_ledger.dart';
 import 'article_filter_service.dart';
 import 'article_state_notifier.dart';
 import 'llm_config.dart';
+import 'llm_failure_policy.dart';
+import 'llm_usage_ledger.dart';
 import 'local_article_db_service.dart';
 
 /// 后台 AI 过滤任务队列 — 滚动补位调度
@@ -42,6 +45,12 @@ abstract final class AutoFilterWorker {
   /// 排队文章 AI 过滤
   static void enqueue(ArticleModel article) {
     if (article.entryId.isEmpty) return;
+    if (LlmAutoRetryBlockService.isBlocked(
+      LlmTaskType.filter,
+      article.entryId,
+    )) {
+      return;
+    }
     final local = GStorage.articleDb.get(article.entryId);
     if (local is Map) {
       if (local['filterReviewed'] == true) return;
@@ -126,7 +135,10 @@ abstract final class AutoFilterWorker {
     final accountRevision = AccountSessionGuard.revision;
     try {
       if (article.isRead) return; // 处理前再检查一次
-      final result = await ArticleFilterService.filterArticle(article);
+      final result = await ArticleFilterService.filterArticle(
+        article,
+        automatic: true,
+      );
       if (!AccountSessionGuard.isCurrent(accountRevision)) return;
       if (article.isRead) return; // 处理中可能被标已读
 

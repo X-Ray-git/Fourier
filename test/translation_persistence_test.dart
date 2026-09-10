@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
+import 'package:fourier/services/llm_failure_policy.dart';
 import 'package:fourier/services/translation_service.dart';
 import 'package:fourier/utils/storage.dart';
 
@@ -106,9 +107,9 @@ void main() {
     );
 
     expect(record.isTranslated, isTrue);
-    final translatedChunkCount = RegExp(
-      '译文内容',
-    ).allMatches(record.translatedContent!).length;
+    final translatedChunkCount = RegExp('译文内容')
+        .allMatches(record.translatedContent!)
+        .length;
     expect(translatedChunkCount, greaterThan(1));
     expect(_FakeResponseSpec.requestCount, translatedChunkCount + 1);
   });
@@ -127,6 +128,28 @@ void main() {
     expect(reloaded, isNotNull);
     expect(reloaded!.status, TranslationStatus.error);
     expect(reloaded.errorMessage, isNotNull);
+  });
+
+  test('内容安全拒绝不会重试，并持久化明确错误', () async {
+    await GStorage.setting.put('auto_retry_max_count', 3);
+    _FakeResponseSpec.current = const _FakeResponseSpec(
+      statusCode: 400,
+      body: '{"error":{"message":"Content Exists Risk","type":"invalid_request_error"}}',
+    );
+
+    final record = await TranslationService.translateArticle(
+      _article(),
+      automatic: true,
+    );
+
+    expect(_FakeResponseSpec.requestCount, 1);
+    expect(record.status, TranslationStatus.error);
+    expect(record.errorMessage, LlmFailurePolicy.contentRiskMessage);
+
+    TranslationService.resetForAccountChange();
+    final reloaded = TranslationService.recordOf('entry-persist');
+    expect(reloaded?.status, TranslationStatus.error);
+    expect(reloaded?.errorMessage, LlmFailurePolicy.contentRiskMessage);
   });
 
   test('pending 只存在内存中，重启后不恢复', () async {

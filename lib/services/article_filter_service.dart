@@ -8,6 +8,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'article_visual_context_service.dart';
 import 'llm_config.dart';
+import 'llm_failure_policy.dart';
 import 'llm_multimodal_protocol.dart';
 import 'llm_usage_ledger.dart';
 
@@ -67,7 +68,13 @@ abstract final class ArticleFilterService {
   }
 
   /// 判定单篇文章
-  static Future<FilterResult> filterArticle(ArticleModel article) async {
+  static Future<FilterResult> filterArticle(
+    ArticleModel article, {
+    bool automatic = false,
+  }) async {
+    if (!automatic) {
+      await LlmAutoRetryBlockService.clear(LlmTaskType.filter, article.entryId);
+    }
     final apiKey = getApiKey();
     if (apiKey.isEmpty) {
       throw StateError('DeepSeek API key not configured');
@@ -156,7 +163,16 @@ abstract final class ArticleFilterService {
             reason: '视觉信息暂不可用，证据不足，已保留',
           );
         }
-      } catch (_) {
+      } catch (error) {
+        final failure = LlmFailurePolicy.classify(error);
+        if (failure != null) {
+          await LlmAutoRetryBlockService.block(
+            LlmTaskType.filter,
+            article.entryId,
+            failure,
+          );
+          rethrow;
+        }
         if (attempt >= totalAttempts) rethrow;
         final delayOverride = debugRetryDelayOverride;
         if (delayOverride != null) {

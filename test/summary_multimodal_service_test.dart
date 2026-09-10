@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
+import 'package:fourier/services/llm_failure_policy.dart';
+import 'package:fourier/services/llm_usage_ledger.dart';
 import 'package:fourier/services/summary_service.dart';
 import 'package:fourier/services/article_visual_context_service.dart';
 import 'package:fourier/utils/storage.dart';
@@ -34,6 +36,18 @@ DioException _requestFailure() => DioException(
   requestOptions: RequestOptions(path: '/chat/completions'),
   type: DioExceptionType.connectionError,
   message: 'vision unavailable',
+);
+
+DioException _contentRiskFailure() => DioException(
+  requestOptions: RequestOptions(path: '/chat/completions'),
+  response: Response<dynamic>(
+    requestOptions: RequestOptions(path: '/chat/completions'),
+    statusCode: 400,
+    data: {
+      'error': {'message': 'Content Exists Risk'},
+    },
+  ),
+  type: DioExceptionType.badResponse,
 );
 
 void main() {
@@ -104,6 +118,56 @@ void main() {
     expect(requests, 1);
     expect(record.status, SummaryStatus.done);
     expect(record.summaryText, '正文已经完整说明核心内容');
+  });
+
+  test(
+    'content rejection stops retries and persists a readable error',
+    () async {
+      await GStorage.setting.put('auto_retry_max_count', 3);
+      var requests = 0;
+      SummaryService.debugPostOverride = (_, {data, options}) async {
+        requests++;
+        throw _contentRiskFailure();
+      };
+
+      final record = await SummaryService.summarizeArticle(
+        _imageArticle(),
+        deferRelationTail: true,
+        automatic: true,
+      );
+
+      expect(requests, 1);
+      expect(record.status, SummaryStatus.error);
+      expect(record.errorMessage, LlmFailurePolicy.contentRiskMessage);
+    },
+  );
+
+  test('manual summary retries clear an automatic retry block', () async {
+    const decision = LlmFailureDecision(
+      code: LlmFailureCode.contentRisk,
+      userMessage: LlmFailurePolicy.contentRiskMessage,
+    );
+    await LlmAutoRetryBlockService.block(
+      LlmTaskType.summary,
+      _imageArticle().entryId,
+      decision,
+    );
+    SummaryService.debugPostOverride = (_, {data, options}) async =>
+        _response('{"needs_visual_context":false,"summary":"手动重试成功"}');
+
+    final record = await SummaryService.summarizeArticle(
+      _imageArticle(),
+      deferRelationTail: true,
+    );
+
+    expect(record.summaryText, '手动重试成功');
+    expect(
+      LlmAutoRetryBlockService.isBlocked(
+        LlmTaskType.summary,
+        _imageArticle().entryId,
+      ),
+      isFalse,
+    );
   });
 
   test('image download failure retains existing text fallback', () async {

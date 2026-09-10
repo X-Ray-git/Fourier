@@ -7,6 +7,8 @@ import 'package:fourier/services/auto_filter_worker.dart';
 import 'package:fourier/services/auto_summary_worker.dart';
 import 'package:fourier/services/auto_translation_worker.dart';
 import 'package:fourier/services/feed_translation_settings_service.dart';
+import 'package:fourier/services/llm_failure_policy.dart';
+import 'package:fourier/services/llm_usage_ledger.dart';
 import 'package:fourier/services/local_article_db_service.dart';
 import 'package:fourier/services/summary_service.dart';
 import 'package:fourier/services/translation_service.dart';
@@ -47,6 +49,34 @@ void main() {
     AutoFilterWorker.debugRunOverride = null;
     await HiveTestHelper.tearDown();
   });
+
+  test(
+    'deterministic provider rejections stay out of automatic queues',
+    () async {
+      const decision = LlmFailureDecision(
+        code: LlmFailureCode.contentRisk,
+        userMessage: LlmFailurePolicy.contentRiskMessage,
+      );
+      for (final task in const [
+        LlmTaskType.translation,
+        LlmTaskType.summary,
+        LlmTaskType.filter,
+      ]) {
+        await LlmAutoRetryBlockService.block(task, 'entry-9', decision);
+      }
+
+      AutoTranslationWorker.enqueueIfEnabled(_article(9));
+      AutoSummaryWorker.enqueueIfNeeded(_article(9));
+      AutoFilterWorker.enqueue(_article(9));
+
+      expect(AutoTranslationWorker.queueSize, 0);
+      expect(AutoTranslationWorker.runningCount, 0);
+      expect(AutoSummaryWorker.queueSize, 0);
+      expect(AutoSummaryWorker.runningCount, 0);
+      expect(AutoFilterWorker.queueSize, 0);
+      expect(AutoFilterWorker.runningCount, 0);
+    },
+  );
 
   group('AutoTranslationWorker 滚动补位调度', () {
     test('最大并发不超过配置值 N', () async {

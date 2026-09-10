@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
 import '../models/article.dart';
 import 'llm_config.dart';
+import 'llm_failure_policy.dart';
+import 'llm_usage_ledger.dart';
 import 'summary_service.dart';
 import 'article_relation_service.dart';
 
@@ -30,6 +33,12 @@ abstract final class AutoSummaryWorker {
   static void enqueueIfNeeded(ArticleModel article) {
     if (article.entryId.isEmpty) return;
     if (SummaryService.hasSummary(article.entryId)) return;
+    if (LlmAutoRetryBlockService.isBlocked(
+      LlmTaskType.summary,
+      article.entryId,
+    )) {
+      return;
+    }
     final content = (article.content ?? '').trim();
     if (content.isEmpty) return;
 
@@ -88,7 +97,11 @@ abstract final class AutoSummaryWorker {
       return;
     }
     try {
-      await SummaryService.summarizeArticle(article, deferRelationTail: true);
+      await SummaryService.summarizeArticle(
+        article,
+        deferRelationTail: true,
+        automatic: true,
+      );
     } catch (e) {
       // 静默处理
     }

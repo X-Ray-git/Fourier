@@ -9,6 +9,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/html_entity_utils.dart';
 import '../utils/storage.dart';
 import 'llm_config.dart';
+import 'llm_failure_policy.dart';
 import 'llm_usage_ledger.dart';
 import 'account_session_guard.dart';
 
@@ -245,6 +246,7 @@ abstract final class TranslationService {
     ArticleModel article, {
     String targetLang = '简体中文',
     String? overrideContent,
+    bool automatic = false,
   }) {
     ensureHydrated();
     final existing = _inFlight[article.entryId];
@@ -256,6 +258,7 @@ abstract final class TranslationService {
       targetLang,
       overrideContent,
       accountRevision,
+      automatic,
     );
     _inFlight[article.entryId] = future;
     void clearInFlight() {
@@ -276,7 +279,14 @@ abstract final class TranslationService {
     String targetLang,
     String? overrideContent,
     int accountRevision,
+    bool automatic,
   ) async {
+    if (!automatic) {
+      await LlmAutoRetryBlockService.clear(
+        LlmTaskType.translation,
+        article.entryId,
+      );
+    }
     final apiKey = getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw StateError('DeepSeek API key not configured');
@@ -429,7 +439,15 @@ abstract final class TranslationService {
             !AccountSessionGuard.isCurrent(accountRevision)) {
           rethrow;
         }
-        if (attempt < totalAttempts) {
+        final failure = LlmFailurePolicy.classify(e);
+        if (failure != null) {
+          await LlmAutoRetryBlockService.block(
+            LlmTaskType.translation,
+            article.entryId,
+            failure,
+          );
+        }
+        if (failure == null && attempt < totalAttempts) {
           debugPrint(
             '[Translation] Attempt $attempt failed for ${article.entryId}, retrying in 1s...',
           );
@@ -437,22 +455,14 @@ abstract final class TranslationService {
           continue;
         }
 
-        String errorMessage;
-        if (e is DioException) {
-          errorMessage = e.message ?? 'DeepSeek request failed';
-        } else if (e is FormatException) {
-          errorMessage = e.message;
-        } else if (e is StateError) {
-          errorMessage = e.message;
-        } else {
-          errorMessage = e.toString();
-        }
+        final errorMessage = LlmFailurePolicy.displayMessage(e);
 
         await _restoreAfterFailure(
           article.entryId,
           previous,
           errorMessage,
           accountRevision,
+          terminal: failure != null,
         );
         return TranslationRecord(
           status: TranslationStatus.error,
@@ -510,14 +520,28 @@ abstract final class TranslationService {
       return result.record!;
     }
 
-    final errorMessage = result.failureSummary == null
-        ? '分块翻译失败，已重试${totalAttempts - 1}次'
-        : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：${result.failureSummary}';
+    final failure = result.failureCause == null
+        ? null
+        : LlmFailurePolicy.classify(result.failureCause!);
+    if (failure != null) {
+      await LlmAutoRetryBlockService.block(
+        LlmTaskType.translation,
+        article.entryId,
+        failure,
+      );
+    }
+
+    final errorMessage =
+        failure?.userMessage ??
+        (result.failureSummary == null
+            ? '分块翻译失败，已重试${totalAttempts - 1}次'
+            : '分块翻译失败，已重试${totalAttempts - 1}次；最后一次失败：${result.failureSummary}');
     await _restoreAfterFailure(
       article.entryId,
       previous,
       errorMessage,
       accountRevision,
+      terminal: failure != null,
     );
     return TranslationRecord(
       status: TranslationStatus.error,
@@ -564,6 +588,10 @@ abstract final class TranslationService {
           '[Translation] 🧩 第 ${i + 1}/${chunks.length} 块'
           '第 $attempt 次失败：${result.error}',
         );
+        if (result.failureCause != null &&
+            LlmFailurePolicy.classify(result.failureCause!) != null) {
+          break;
+        }
         if (attempt < totalAttempts) {
           await _waitBeforeRetry();
         }
@@ -571,6 +599,7 @@ abstract final class TranslationService {
       if (lastFailure != null) {
         return _ChunkBatchResult.failure(
           _formatChunkFailures([lastFailure], chunks.length),
+          failureCause: lastFailure.failureCause,
         );
       }
     }
@@ -694,7 +723,7 @@ abstract final class TranslationService {
       return result;
     } catch (e) {
       await trace.fail(e);
-      return _ChunkResult(i, error: e.toString());
+      return _ChunkResult(i, error: e.toString(), failureCause: e);
     }
   }
 
@@ -756,14 +785,17 @@ abstract final class TranslationService {
     String entryId,
     TranslationRecord? previous,
     String errorMessage,
-    int accountRevision,
-  ) async {
+    int accountRevision, {
+    bool terminal = false,
+  }) async {
     if (previous != null) {
       await _writeRecord(
         entryId,
         previous.copyWith(
           status: previous.isTranslated
               ? TranslationStatus.done
+              : terminal
+              ? TranslationStatus.error
               : TranslationStatus.idle,
           errorMessage: errorMessage,
           updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -895,15 +927,26 @@ class _StaleAccountOperation implements Exception {
 final class _ChunkBatchResult {
   final TranslationRecord? record;
   final String? failureSummary;
+  final Object? failureCause;
 
-  const _ChunkBatchResult._({this.record, this.failureSummary});
+  const _ChunkBatchResult._({
+    this.record,
+    this.failureSummary,
+    this.failureCause,
+  });
 
   factory _ChunkBatchResult.success(TranslationRecord record) {
     return _ChunkBatchResult._(record: record);
   }
 
-  factory _ChunkBatchResult.failure(String failureSummary) {
-    return _ChunkBatchResult._(failureSummary: failureSummary);
+  factory _ChunkBatchResult.failure(
+    String failureSummary, {
+    Object? failureCause,
+  }) {
+    return _ChunkBatchResult._(
+      failureSummary: failureSummary,
+      failureCause: failureCause,
+    );
   }
 }
 
@@ -912,5 +955,12 @@ final class _ChunkResult {
   final String? title;
   final String? html;
   final String? error;
-  _ChunkResult(this.index, {this.title, this.html, this.error});
+  final Object? failureCause;
+  _ChunkResult(
+    this.index, {
+    this.title,
+    this.html,
+    this.error,
+    this.failureCause,
+  });
 }

@@ -49,6 +49,18 @@ DioException _requestFailure() => DioException(
   message: 'temporary failure',
 );
 
+DioException _contentRiskFailure() => DioException(
+  requestOptions: RequestOptions(path: '/chat/completions'),
+  response: Response<dynamic>(
+    requestOptions: RequestOptions(path: '/chat/completions'),
+    statusCode: 400,
+    data: {
+      'error': {'message': 'Content Exists Risk'},
+    },
+  ),
+  type: DioExceptionType.badResponse,
+);
+
 void main() {
   setUp(() async {
     await HiveTestHelper.setUp();
@@ -101,6 +113,21 @@ void main() {
     expect(usage.requestCount, 3);
     expect(usage.failureCount, 3);
     expect(usage.successCount, 0);
+  });
+
+  test('does not retry deterministic provider content rejection', () async {
+    var attempts = 0;
+    ArticleFilterService.debugPostOverride = (_, {data, options}) async {
+      attempts++;
+      throw _contentRiskFailure();
+    };
+
+    await expectLater(
+      ArticleFilterService.filterArticle(_article(), automatic: true),
+      throwsA(isA<DioException>()),
+    );
+
+    expect(attempts, 1);
   });
 
   test('hands image-centric filtering to the configured vision model', () async {

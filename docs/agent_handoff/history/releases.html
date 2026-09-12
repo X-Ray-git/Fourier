@@ -171,6 +171,35 @@ Fourier 2.2.0 扩展了图片型内容的多模态摘要与质量过滤能力，
 
 **完整变更**：https://github.com/X-Ray-git/Fourier/compare/v2.1.0...v2.2.0' --push
 ```
+
+## v2.3.0
+
+```bash
+./scripts/release.sh 2.3.0 -m '## 本版重点
+
+Fourier 2.3.0 增加 DeepSeek V4.1 Flash 支持，并强化翻译、摘要和质量过滤面对 Provider 异常响应时的恢复与停止策略。本版本同时恢复 macOS 文章行内代码样式和相关文章切换动画，并降低长期图片加载失败时的持续渲染开销。
+
+## 新功能
+
+- 增加 DeepSeek V4.1 Flash，统一使用规范模型 ID `deepseek-flash`，并兼容迁移旧版 Flash 模型配置。
+- 摘要和质量过滤的视觉模型设置同步支持 V4.1 Flash，配置导入导出继续兼容旧版本。
+
+## 修复与改进
+
+- 修复 DeepSeek JSON 模式在翻译 HTML 中返回裸换行或 `\%` 非标准转义时，完整译文被错误丢弃的问题；真正截断的响应仍会保持失败状态。
+- 对 DeepSeek 内容安全拒绝建立统一策略：摘要、翻译和质量过滤不再重复提交相同的确定性失败请求，手动重试仍然可用。
+- 修复摘要中的尖括号代码文本被误当作 HTML 标签、导致后续内容消失的问题。
+- 恢复 macOS 行内代码的圆角、内边距和连续文本选择，并恢复相关文章原有的滑入淡入过渡与返回上下文。
+- 限制长期图片加载占位符的持续动画时间，图片请求和后续恢复仍继续进行，减少异常资源导致的后台高功耗。
+
+## 升级说明
+
+- 版本号更新为 `2.3.0+36`，配置与本地数据继续兼容 `v2.2.0`。
+- 旧版 `deepseek-v4-flash` 和 `deepseek-v4-flash-vision-exp` 配置会自动迁移为 `deepseek-flash`，无需重新填写 API Key 或 Prompt。
+- 此前已经进入错误态的翻译不会批量自动重做；需要时可手动重新翻译，并使用新的有限 JSON 恢复逻辑。
+
+**完整变更**：https://github.com/X-Ray-git/Fourier/compare/v2.2.0...v2.3.0' --push
+```
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

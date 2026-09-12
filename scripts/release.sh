@@ -214,7 +214,10 @@ with open(tmp, "wb") as handle:
 os.replace(tmp, path)
 ' "$release_history"
 
-git add pubspec.yaml "$release_history"
+./scripts/docs.sh index
+./scripts/docs.sh check
+
+git add pubspec.yaml "$release_history" docs/agent_handoff/assets/data/search-index.js
 git commit -m "chore: bump version to $version+$next_build"
 git tag -a "$tag" -m "$message"
 

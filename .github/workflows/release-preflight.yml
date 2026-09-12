@@ -1,0 +1,92 @@
+name: Release Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Candidate commit to validate before tagging
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preflight-${{ inputs.commit_sha }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Analyze and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit_sha }}
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.0'
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos lib test
+      - name: Test
+        run: flutter test --no-pub
+
+  android:
+    name: Android Smoke Build
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit_sha }}
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.0'
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build debug APK
+        run: flutter build apk --debug --no-pub
+
+  macos:
+    name: macOS Smoke Build
+    runs-on: macos-26
+    needs: quality
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit_sha }}
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.0'
+          cache: true
+      - name: Verify arm64 runner
+        run: test "$(uname -m)" = "arm64"
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build release app
+        run: flutter build macos --release --no-pub

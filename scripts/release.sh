@@ -21,10 +21,12 @@ If the release notes intentionally need to contain the literal characters \n,
 pass --allow-literal-backslash-n. Otherwise literal \n is treated as a likely
 quoting mistake and the script exits before creating commits or tags.
 
-The script reads the current pubspec build number, increments it by one,
-commits the pubspec bump and documentation footprint, creates an annotated tag
-v<version>, and optionally pushes main plus the tag to origin. Releases must be
-created from the main branch.
+With --push, the script first pushes the clean candidate commit and waits for
+the GitHub Release Preflight workflow to pass against the pinned official
+Flutter SDK. It then reads the current pubspec build number, increments it by
+one, commits the pubspec bump and documentation footprint, creates an annotated
+tag v<version>, and pushes main plus the tag to origin. Releases must be created
+from the main branch.
 EOF
 }
 
@@ -171,6 +173,58 @@ fi
 if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
   echo "Tag already exists on origin: $tag" >&2
   exit 1
+fi
+
+if [[ "$push_remote" == true ]]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "GitHub CLI is required for the release preflight." >&2
+    exit 1
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "GitHub CLI is not authenticated. Run gh auth login first." >&2
+    exit 1
+  fi
+
+  source_sha="$(git rev-parse HEAD)"
+  echo "Pushing release candidate $source_sha for clean-SDK preflight..."
+  git push origin main
+
+  previous_run_id="$(
+    gh run list \
+      --workflow release-preflight.yml \
+      --event workflow_dispatch \
+      --branch main \
+      --limit 1 \
+      --json databaseId \
+      --jq '.[0].databaseId // 0'
+  )"
+  gh workflow run release-preflight.yml \
+    --ref main \
+    -f "commit_sha=$source_sha"
+
+  preflight_run_id=""
+  for _ in {1..30}; do
+    preflight_run_id="$(
+      gh run list \
+        --workflow release-preflight.yml \
+        --event workflow_dispatch \
+        --branch main \
+        --limit 20 \
+        --json databaseId,headSha \
+        --jq ".[] | select(.headSha == \"$source_sha\" and .databaseId > $previous_run_id) | .databaseId" \
+        | head -n 1
+    )"
+    [[ -n "$preflight_run_id" ]] && break
+    sleep 2
+  done
+
+  if [[ -z "$preflight_run_id" ]]; then
+    echo "Could not locate the dispatched release preflight run." >&2
+    exit 1
+  fi
+
+  echo "Waiting for release preflight run $preflight_run_id..."
+  gh run watch "$preflight_run_id" --exit-status
 fi
 
 perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml

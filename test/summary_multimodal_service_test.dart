@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
+import 'package:fourier/services/llm_config.dart';
 import 'package:fourier/services/llm_failure_policy.dart';
 import 'package:fourier/services/llm_usage_ledger.dart';
 import 'package:fourier/services/summary_service.dart';
@@ -95,7 +96,7 @@ void main() {
 
       expect(record.status, SummaryStatus.done);
       expect(record.summaryText, '图片展示了关键性能表格');
-      expect(models, ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']);
+      expect(models, [LlmConfig.flashModel, LlmConfig.flashModel]);
     },
   );
 

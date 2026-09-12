@@ -121,7 +121,8 @@ Android UI：
 - 旧设置备份中的 `client_id`、`session_id` 继续允许导入但会被忽略并清理，保证旧 JSON 可迁移；新导出不再包含这两个字段。Folo 协议需要的 `X-Client-Id`、`X-Session-Id` 由应用内部生成，与这两个旧配置字段无关，也不要求用户管理。
 - “测试连接”读取输入框当前值但不保存：Folo 与实际保存/导入共用 `/better-auth/get-session` 验证会话结构，避免维护第二套 Cookie 和成功判定逻辑。DeepSeek 使用需 Bearer 认证的只读 `/models`，不发起推理、不产生推理 token。两项独立测试并分别反馈，单项失败不能阻止另一项完成；DeepSeek Key 留空时显示“未配置，已跳过”，不把可选配置计为失败。
 - LLM 参数卡片中，模型、思考模式、思考强度和 `max_tokens` 选择后立即保存；Temperature 和并发数按 Enter/失焦保存，编辑中的草稿不得阻塞或污染其他选项。重置默认立即落盘。
-- 摘要与质量过滤的 LLM 参数卡片各自增加“视觉模型”选择，沿用普通模型的跨平台选择交互，不另造控件。当前受支持白名单只有 `deepseek-v4-flash-vision-exp`，控件保持可展开且列表中只有一个选项；以后扩充 `LlmConfig.supportedVisionModels` 即可增加选项。两项设置分别持久化为 `llm_summary_vision_model`、`llm_filter_vision_model`，选择即保存，重置对应参数卡片时一并回到默认视觉模型。
+- 摘要与质量过滤的 LLM 参数卡片各自增加“视觉模型”选择，沿用普通模型的跨平台选择交互，不另造控件。当前受支持白名单只有具备原生视觉能力的 `deepseek-flash`，控件保持可展开且列表中只有一个选项；以后扩充 `LlmConfig.supportedVisionModels` 即可增加选项。两项设置分别持久化为 `llm_summary_vision_model`、`llm_filter_vision_model`，选择即保存，重置对应参数卡片时一并回到默认视觉模型。
+- 四类任务默认模型与普通模型选项统一从 `LlmConfig` 的规范目录读取。旧 `deepseek-v4-flash` 和 `deepseek-v4-flash-vision-exp` 配置会精确迁移为 `deepseek-flash`，新导出的配置也只写规范名称；迁移不覆盖用户已保存的 Prompt 或其他模型参数，也不擅自改写未知的自定义模型 ID。
 - 视觉模型选择属于用户配置，进入 version 1 设置导入导出；旧备份缺少该字段时自然使用默认模型，导入不受支持的值必须明确拒绝，磁盘中已有的非法值则安全回落默认。摘要/过滤 Prompt 下方展示的程序协议仍只读并随版本维护，协议文本不导出，但其中“视觉模型”一行必须实时反映该任务当前选择。
 - Prompt 保留卡片内保存/重置操作；不要重新引入设置页全局“保存全部”按钮。
 - 摘要、翻译、过滤和关系建立 Prompt 都使用同一份跨平台持久设置，Android/macOS 不维护两套默认值。代码默认值只在对应 key 从未保存时生效；用户手动保存或通过配置备份导入后，应用更新、覆盖安装和后续默认值调整都不得覆盖现有 Prompt。“重置此 Prompt”会删除持久值并显式回到当前代码默认值。

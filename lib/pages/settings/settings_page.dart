@@ -4476,7 +4476,7 @@ class _LlmConfigCardState extends State<_LlmConfigCard> {
   Future<void> _writeQueue = Future.value();
   int _writeRevision = 0;
 
-  static const _models = ['deepseek-v4-flash', 'deepseek-v4-pro'];
+  static const _models = LlmConfig.supportedModels;
   static const _efforts = ['high', 'max'];
   static const _maxTokenOptions = [2048, 8192, 32768, 131072];
 

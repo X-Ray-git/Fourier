@@ -78,6 +78,10 @@ void main() {
   });
 
   test('relation defaults use the expanded output budget', () {
+    expect(LlmConfig.translateDefault.model, LlmConfig.flashModel);
+    expect(LlmConfig.summaryDefault.model, LlmConfig.flashModel);
+    expect(LlmConfig.filterDefault.model, LlmConfig.flashModel);
+    expect(LlmConfig.relationDefault.model, LlmConfig.flashModel);
     expect(LlmConfig.relationDefault.maxTokens, 32768);
     expect(LlmConfig.relationDefault.concurrency, 1);
   });
@@ -111,6 +115,27 @@ void main() {
       );
     },
   );
+
+  test('legacy Flash aliases migrate to the canonical V4.1 model', () async {
+    await GStorage.setting.putAll({
+      'llm_translate_model': 'deepseek-v4-flash',
+      'llm_summary_model': 'deepseek-v4-flash-vision-exp',
+      LlmConfig.summaryVisionModelKey: 'deepseek-v4-flash-vision-exp',
+    });
+
+    expect(LlmConfig.loadTranslate().model, LlmConfig.flashModel);
+    expect(LlmConfig.loadSummary().model, LlmConfig.flashModel);
+    expect(LlmConfig.loadSummaryVisionModel(), LlmConfig.flashModel);
+
+    await LlmConfig.migrateLegacyModelAliases();
+
+    expect(GStorage.setting.get('llm_translate_model'), LlmConfig.flashModel);
+    expect(GStorage.setting.get('llm_summary_model'), LlmConfig.flashModel);
+    expect(
+      GStorage.setting.get(LlmConfig.summaryVisionModelKey),
+      LlmConfig.flashModel,
+    );
+  });
 
   test(
     'unsupported stored vision models fall back and cannot be saved',

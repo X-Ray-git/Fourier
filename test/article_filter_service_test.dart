@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/services/article_filter_service.dart';
 import 'package:fourier/services/article_visual_context_service.dart';
+import 'package:fourier/services/llm_config.dart';
 import 'package:fourier/services/llm_usage_ledger.dart';
 import 'package:fourier/utils/storage.dart';
 
@@ -154,7 +155,7 @@ void main() {
 
     expect(result.shouldReject, isFalse);
     expect(result.reason, '图片包含有效信息');
-    expect(models, ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']);
+    expect(models, [LlmConfig.flashModel, LlmConfig.flashModel]);
   });
 
   test('does not use vision when text evidence is sufficient', () async {
@@ -184,7 +185,11 @@ void main() {
     };
     ArticleFilterService.debugPostOverride = (_, {data, options}) async {
       requests++;
-      if ((data as Map)['model'] == 'deepseek-v4-flash') {
+      final body = Map<String, dynamic>.from(data! as Map);
+      final messages = body['messages'] as List<dynamic>;
+      final userMessage = Map<String, dynamic>.from(messages.last as Map);
+      final isVisualRequest = userMessage['content'] is List<dynamic>;
+      if (!isVisualRequest) {
         return _successResponse(
           '{"needs_visual_context":true,"should_reject":false,"reason":"需要图片"}',
         );

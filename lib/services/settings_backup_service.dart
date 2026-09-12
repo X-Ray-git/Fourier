@@ -123,7 +123,9 @@ abstract final class SettingsBackupService {
       if (rawKey is! String || !_isManagedKey(rawKey)) continue;
       final value = GStorage.setting.get(rawKey);
       if (_isJsonPrimitive(value)) {
-        settings[rawKey] = value;
+        settings[rawKey] = rawKey.endsWith('model') && value is String
+            ? LlmConfig.canonicalModelName(value)
+            : value;
       }
     }
     return settings;
@@ -296,10 +298,11 @@ abstract final class SettingsBackupService {
 
     if (LlmConfig.isVisionModelSettingKey(key)) {
       if (value is! String) throw FormatException('$key 必须是字符串');
-      if (!LlmConfig.isSupportedVisionModel(value)) {
+      final canonical = LlmConfig.canonicalModelName(value);
+      if (!LlmConfig.isSupportedVisionModel(canonical)) {
         throw FormatException('$key 包含不支持的视觉模型：$value');
       }
-      return value;
+      return canonical;
     }
 
     if (key == FeedSilentSettingsService.groupsKey ||
@@ -311,7 +314,11 @@ abstract final class SettingsBackupService {
     if (_stringKeys.contains(key) ||
         key.endsWith('model') ||
         key.endsWith('reasoning_effort')) {
-      if (value is String) return value;
+      if (value is String) {
+        return key.endsWith('model')
+            ? LlmConfig.canonicalModelName(value)
+            : value;
+      }
       throw FormatException('$key 必须是字符串');
     }
 

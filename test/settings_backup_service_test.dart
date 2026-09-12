@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
 
 import 'package:fourier/common/constants/constants.dart';
+import 'package:fourier/services/llm_config.dart';
 import 'package:fourier/services/settings_backup_service.dart';
+import 'package:fourier/utils/storage.dart';
 
 void main() {
   group('SettingsBackupService.summarize', () {
@@ -108,7 +113,7 @@ void main() {
       );
     });
 
-    test('keeps supported summary and filter vision models', () {
+    test('migrates retired summary and filter vision aliases', () {
       final payload = SettingsBackupService.parseJson('''
 {
   "type": "fourier_settings",
@@ -122,12 +127,25 @@ void main() {
 
       expect(
         payload.settings['llm_summary_vision_model'],
-        'deepseek-v4-flash-vision-exp',
+        LlmConfig.flashModel,
       );
-      expect(
-        payload.settings['llm_filter_vision_model'],
-        'deepseek-v4-flash-vision-exp',
-      );
+      expect(payload.settings['llm_filter_vision_model'], LlmConfig.flashModel);
+    });
+
+    test('migrates retired text model aliases without changing custom IDs', () {
+      final payload = SettingsBackupService.parseJson('''
+{
+  "type": "fourier_settings",
+  "version": 1,
+  "settings": {
+    "llm_summary_model": "deepseek-v4-flash",
+    "llm_translate_model": "custom-model"
+  }
+}
+''');
+
+      expect(payload.settings['llm_summary_model'], LlmConfig.flashModel);
+      expect(payload.settings['llm_translate_model'], 'custom-model');
     });
 
     test('rejects unsupported vision models', () {
@@ -166,6 +184,37 @@ void main() {
 '''),
         throwsFormatException,
       );
+    });
+  });
+
+  group('SettingsBackupService.exportSettings', () {
+    late Directory tempDir;
+
+    setUpAll(() async {
+      tempDir = await Directory.systemTemp.createTemp(
+        'fourier_settings_backup_test_',
+      );
+      Hive.init(tempDir.path);
+      GStorage.setting = await Hive.openBox('setting');
+    });
+
+    setUp(() => GStorage.setting.clear());
+
+    tearDownAll(() async {
+      await GStorage.setting.close();
+      await tempDir.delete(recursive: true);
+    });
+
+    test('exports retired model aliases using the canonical name', () async {
+      await GStorage.setting.putAll({
+        'llm_summary_model': 'deepseek-v4-flash',
+        'llm_summary_vision_model': 'deepseek-v4-flash-vision-exp',
+      });
+
+      final settings = SettingsBackupService.exportSettings();
+
+      expect(settings['llm_summary_model'], LlmConfig.flashModel);
+      expect(settings['llm_summary_vision_model'], LlmConfig.flashModel);
     });
   });
 }

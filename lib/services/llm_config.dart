@@ -4,10 +4,10 @@ import '../utils/storage.dart';
 class LlmConfig {
   static const int minConcurrency = 1;
   static const int maxConcurrency = 1024;
-  static const List<String> supportedVisionModels = [
-    'deepseek-v4-flash-vision-exp',
-  ];
-  static const String defaultVisionModel = 'deepseek-v4-flash-vision-exp';
+  static const String flashModel = 'deepseek-flash';
+  static const List<String> supportedModels = [flashModel, 'deepseek-v4-pro'];
+  static const List<String> supportedVisionModels = [flashModel];
+  static const String defaultVisionModel = flashModel;
   static const String summaryVisionModelKey = 'llm_summary_vision_model';
   static const String filterVisionModelKey = 'llm_filter_vision_model';
 
@@ -52,7 +52,7 @@ class LlmConfig {
   // ─── 默认值 ───
 
   static const LlmConfig translateDefault = LlmConfig(
-    model: 'deepseek-v4-flash',
+    model: flashModel,
     thinking: false,
     reasoningEffort: 'high',
     temperature: 0.2,
@@ -61,7 +61,7 @@ class LlmConfig {
   );
 
   static const LlmConfig summaryDefault = LlmConfig(
-    model: 'deepseek-v4-flash',
+    model: flashModel,
     thinking: true,
     reasoningEffort: 'max',
     temperature: 0.2,
@@ -70,7 +70,7 @@ class LlmConfig {
   );
 
   static const LlmConfig filterDefault = LlmConfig(
-    model: 'deepseek-v4-flash',
+    model: flashModel,
     thinking: true,
     reasoningEffort: 'max',
     temperature: 0.1,
@@ -79,7 +79,7 @@ class LlmConfig {
   );
 
   static const LlmConfig relationDefault = LlmConfig(
-    model: 'deepseek-v4-flash',
+    model: flashModel,
     thinking: true,
     reasoningEffort: 'max',
     temperature: 0,
@@ -123,7 +123,38 @@ class LlmConfig {
       key == summaryVisionModelKey || key == filterVisionModelKey;
 
   static bool isSupportedVisionModel(String model) =>
-      supportedVisionModels.contains(model);
+      supportedVisionModels.contains(canonicalModelName(model));
+
+  /// DeepSeek temporarily accepts these retired aliases, but new requests and
+  /// exported settings should use the canonical V4.1 Flash model name.
+  static String canonicalModelName(String model) {
+    switch (model) {
+      case 'deepseek-v4-flash':
+      case 'deepseek-v4-flash-vision-exp':
+        return flashModel;
+      default:
+        return model;
+    }
+  }
+
+  static Future<void> migrateLegacyModelAliases() async {
+    const keys = [
+      '${_translatePrefix}model',
+      '${_summaryPrefix}model',
+      '${_filterPrefix}model',
+      '${_relationPrefix}model',
+      summaryVisionModelKey,
+      filterVisionModelKey,
+    ];
+    final updates = <String, String>{};
+    for (final key in keys) {
+      final stored = GStorage.setting.get(key);
+      if (stored is! String) continue;
+      final canonical = canonicalModelName(stored);
+      if (canonical != stored) updates[key] = canonical;
+    }
+    if (updates.isNotEmpty) await GStorage.setting.putAll(updates);
+  }
 
   // ─── 构建 API 请求体 ───
 
@@ -147,8 +178,9 @@ class LlmConfig {
 
   static LlmConfig _load(String prefix, LlmConfig defaults) {
     return LlmConfig(
-      model:
-          (GStorage.setting.get('${prefix}model') as String?) ?? defaults.model,
+      model: canonicalModelName(
+        (GStorage.setting.get('${prefix}model') as String?) ?? defaults.model,
+      ),
       thinking:
           (GStorage.setting.get('${prefix}thinking') as bool?) ??
           defaults.thinking,
@@ -170,7 +202,7 @@ class LlmConfig {
 
   static Future<void> _save(String prefix, LlmConfig c) async {
     await GStorage.setting.putAll({
-      '${prefix}model': c.model,
+      '${prefix}model': canonicalModelName(c.model),
       '${prefix}thinking': c.thinking,
       '${prefix}reasoning_effort': c.reasoningEffort,
       '${prefix}temperature': c.temperature,
@@ -202,15 +234,17 @@ class LlmConfig {
 
   static String _loadVisionModel(String key) {
     final stored = GStorage.setting.get(key);
-    return stored is String && isSupportedVisionModel(stored)
-        ? stored
+    final canonical = stored is String ? canonicalModelName(stored) : null;
+    return canonical != null && isSupportedVisionModel(canonical)
+        ? canonical
         : defaultVisionModel;
   }
 
   static Future<void> _saveVisionModel(String key, String model) async {
-    if (!isSupportedVisionModel(model)) {
+    final canonical = canonicalModelName(model);
+    if (!isSupportedVisionModel(canonical)) {
       throw ArgumentError.value(model, 'model', '不支持的视觉模型');
     }
-    await GStorage.setting.put(key, model);
+    await GStorage.setting.put(key, canonical);
   }
 }

@@ -391,19 +391,7 @@ abstract final class TranslationService {
           throw StateError('DeepSeek returned an empty translation result');
         }
 
-        Map<String, dynamic> parsed;
-        try {
-          parsed = jsonDecode(
-            _normalizeJsonPayload(content),
-          ) as Map<String, dynamic>;
-        } on FormatException {
-          final recovered = _extractJsonObject(content);
-          if (recovered != null) {
-            parsed = recovered;
-          } else {
-            rethrow;
-          }
-        }
+        final parsed = _decodeJsonObject(content);
         final translatedTitle = HtmlEntityUtils.decodeText(
           (parsed['translated_title'] ?? parsed['title'] ?? '')
               .toString()
@@ -690,19 +678,13 @@ abstract final class TranslationService {
 
       Map<String, dynamic> parsed;
       try {
-        parsed =
-            jsonDecode(_normalizeJsonPayload(content)) as Map<String, dynamic>;
+        parsed = _decodeJsonObject(content);
       } on FormatException catch (e) {
-        final recovered = _extractJsonObject(content);
-        if (recovered != null) {
-          parsed = recovered;
-        } else {
-          final finishReason = _extractFinishReason(response.data);
-          final reason = finishReason == 'length'
-              ? '响应被截断'
-              : 'JSON 解析失败：${_compactFormatException(e)}';
-          throw FormatException(reason);
-        }
+        final finishReason = _extractFinishReason(response.data);
+        final reason = finishReason == 'length'
+            ? '响应被截断'
+            : 'JSON 解析失败：${_compactFormatException(e)}';
+        throw FormatException(reason);
       }
 
       final title = isFirst
@@ -857,16 +839,72 @@ abstract final class TranslationService {
     return content;
   }
 
-  /// JSON 解析失败时的恢复：尝试找最外层的 { } 对象
-  static Map<String, dynamic>? _extractJsonObject(String raw) {
-    final first = raw.indexOf('{');
-    final last = raw.lastIndexOf('}');
-    if (first < 0 || last <= first) return null;
+  static Map<String, dynamic> _decodeJsonObject(String raw) {
+    final normalized = _normalizeJsonPayload(raw);
     try {
-      return jsonDecode(raw.substring(first, last + 1)) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
+      return jsonDecode(normalized) as Map<String, dynamic>;
+    } on FormatException {
+      // Some DeepSeek JSON-mode responses contain literal line breaks inside
+      // translated_html or invalid escapes such as `\%`. Repair only those
+      // string-level violations; incomplete objects remain invalid.
+      return jsonDecode(_repairJsonStringCharacters(normalized))
+          as Map<String, dynamic>;
     }
+  }
+
+  static String _repairJsonStringCharacters(String raw) {
+    final repaired = StringBuffer();
+    var inString = false;
+    for (var i = 0; i < raw.length; i++) {
+      final codeUnit = raw.codeUnitAt(i);
+      final char = raw[i];
+      if (!inString) {
+        repaired.write(char);
+        if (char == '"') inString = true;
+        continue;
+      }
+
+      if (char == '"') {
+        repaired.write(char);
+        inString = false;
+        continue;
+      }
+      if (char == '\\') {
+        final next = i + 1 < raw.length ? raw[i + 1] : null;
+        if (next != null && '"\\/bfnrtu'.contains(next)) {
+          repaired.write(char);
+          repaired.write(next);
+          i++;
+        } else {
+          repaired.write(r'\\');
+        }
+        continue;
+      }
+      switch (codeUnit) {
+        case 0x08:
+          repaired.write(r'\b');
+          continue;
+        case 0x09:
+          repaired.write(r'\t');
+          continue;
+        case 0x0A:
+          repaired.write(r'\n');
+          continue;
+        case 0x0C:
+          repaired.write(r'\f');
+          continue;
+        case 0x0D:
+          repaired.write(r'\r');
+          continue;
+        default:
+          if (codeUnit < 0x20) {
+            repaired.write('\\u${codeUnit.toRadixString(16).padLeft(4, '0')}');
+          } else {
+            repaired.write(char);
+          }
+      }
+    }
+    return repaired.toString();
   }
 
   static String _compactFormatException(FormatException e) {

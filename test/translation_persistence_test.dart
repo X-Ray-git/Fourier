@@ -79,6 +79,72 @@ void main() {
     expect(reloaded.translatedTitle, '标题译文');
   });
 
+  test('JSON 模式返回字符串内裸换行时仍能保留完整译文', () async {
+    const malformed =
+        '{"translated_title":"标题译文","translated_html":"<p><a href=\\"https://example.com\\">第一段</a></p>\n\n<p>第二段</p>"}';
+    _FakeResponseSpec.current = _FakeResponseSpec(
+      statusCode: 200,
+      body: jsonEncode({
+        'choices': [
+          {
+            'message': {'role': 'assistant', 'content': malformed},
+            'finish_reason': 'stop',
+          },
+        ],
+      }),
+    );
+
+    final record = await TranslationService.translateArticle(_article());
+
+    expect(record.isTranslated, isTrue);
+    expect(
+      record.translatedContent,
+      '<p><a href="https://example.com">第一段</a></p>\n\n<p>第二段</p>',
+    );
+  });
+
+  test(r'JSON 模式返回非法 \% 转义时仍能保留原字符', () async {
+    const malformed =
+        r'{"translated_title":"标题译文","translated_html":"<p>提升 45\%</p>"}';
+    _FakeResponseSpec.current = _FakeResponseSpec(
+      statusCode: 200,
+      body: jsonEncode({
+        'choices': [
+          {
+            'message': {'role': 'assistant', 'content': malformed},
+            'finish_reason': 'stop',
+          },
+        ],
+      }),
+    );
+
+    final record = await TranslationService.translateArticle(_article());
+
+    expect(record.isTranslated, isTrue);
+    expect(record.translatedContent, r'<p>提升 45\%</p>');
+  });
+
+  test('真正截断的 JSON 不会被恢复为成功译文', () async {
+    const truncated =
+        '{"translated_title":"标题译文","translated_html":"<p>未完成</p>';
+    _FakeResponseSpec.current = _FakeResponseSpec(
+      statusCode: 200,
+      body: jsonEncode({
+        'choices': [
+          {
+            'message': {'role': 'assistant', 'content': truncated},
+            'finish_reason': 'stop',
+          },
+        ],
+      }),
+    );
+
+    final record = await TranslationService.translateArticle(_article());
+
+    expect(record.status, TranslationStatus.error);
+    expect(record.translatedContent, isNull);
+  });
+
   test('分块翻译：完成后立即重启，分块译文不丢失', () async {
     // 超过 35KB 触发分块翻译。
     final bigContent = '<p>${'块内容。' * 12000}</p>';

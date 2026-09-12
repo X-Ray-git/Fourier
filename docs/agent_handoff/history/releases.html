@@ -200,6 +200,23 @@ Fourier 2.3.0 增加 DeepSeek V4.1 Flash 支持，并强化翻译、摘要和质
 
 **完整变更**：https://github.com/X-Ray-git/Fourier/compare/v2.2.0...v2.3.0' --push
 ```
+
+## v2.3.1
+
+```bash
+./scripts/release.sh 2.3.1 -m '## 本版重点
+
+修复 GitHub Release 构建与本地构建之间的文本渲染差异，使文章正文的选择高亮和行内代码样式保持一致。
+
+## 修复与改进
+
+- 修复 macOS Release 版本中文字选择高亮高度参差不齐的问题。
+- 恢复行内代码的圆角、内边距与复制文本行为。
+- 为 GitHub Actions 引入经过约束的 Flutter 3.47.0 文本渲染补丁，避免本地与发布环境再次分叉。
+- 发布前在干净的官方 Flutter SDK 上执行完整测试、macOS Release 构建和 Android 烟雾构建。
+
+**完整变更**：https://github.com/X-Ray-git/Fourier/compare/v2.3.0...v2.3.1' --push
+```
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

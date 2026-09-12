@@ -219,7 +219,7 @@ os.replace(tmp, path)
 
 git add pubspec.yaml "$release_history" docs/agent_handoff/assets/data/search-index.js
 git commit -m "chore: bump version to $version+$next_build"
-git tag -a "$tag" -m "$message"
+git tag -a "$tag" --cleanup=verbatim -m "$message"
 
 echo "Created $tag with pubspec version $version+$next_build."
 

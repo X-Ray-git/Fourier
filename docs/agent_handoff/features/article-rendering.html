@@ -315,7 +315,7 @@ HTML entity 解码：
 ## macOS 行内代码
 
 - macOS 与 Android 行内代码的自身行高都固定为 `1.2`，避免继承正文 `1.5–1.7` 行高后让背景色块几乎占满整行。macOS vertical padding 为 1，Android 保留稍宽松的 2。
-- 行内代码使用 `WidgetSpan` 承载圆角为 `6px` 的实体背景，横向 padding 为 `4px`、横向 margin 为 `2px`，并保持 alphabetic baseline。Flutter `3.47.0` 提供的 `WidgetSpan.rawText` 必须写入代码原文，使跨越行内代码的选择与复制仍返回真实文字而不是 U+FFFC；不要为了选择兼容再次退化成只能绘制矩形背景的 `TextSpan.backgroundColor`。
+- 行内代码使用 `WidgetSpan` 承载圆角为 `6px` 的实体背景，横向 padding 为 `4px`、横向 margin 为 `2px`，并保持 alphabetic baseline。仓库维护的 Flutter `3.47.0` 最小选择补丁为 `WidgetSpan` 增加 `rawText`，这里必须写入代码原文，使跨越行内代码的选择与复制仍返回真实文字而不是 U+FFFC；不要为了官方 SDK 能直接分析而再次退化成只能绘制矩形背景的 `TextSpan.backgroundColor`。CI 在分析和构建前统一执行 `scripts/apply_flutter_patches.sh`。
 - 紧凑行高覆盖段落、列表、引用与兜底 HTML；字号 `14px` 和块级代码不受影响。回归测试同时锁定选择结果、圆角与内外边距。
 
 ## 图片加载占位与能耗

@@ -54,7 +54,7 @@
 
 背景：2026-09-03 为修复 Flutter 正文选择问题，行内代码从带圆角和 padding 的 `WidgetSpan` 退化为 `TextSpan.backgroundColor`，避免复制时出现 U+FFFC；这同时导致圆角消失、上下和横向尺寸改变。近期 macOS 能耗日志又确认，慢或挂起的图片请求可让不定进度加载环长期按高刷新率出帧，即使没有 AI 任务且窗口失焦仍维持较高 CPU。
 
-决策：基于当前最低 Flutter `3.47.0` 已支持的 `WidgetSpan.rawText` 恢复行内代码实体容器，保留 `6px` 圆角、`4px` 横向 padding、`2px` 横向 margin、macOS `1px` / Android `2px` 纵向 padding和 alphabetic baseline；`rawText` 写入真实代码文字，选择与复制不得出现对象替代符。图片请求、缓存和重试职责不变，但占位环只旋转 4 秒，随后成为静态弧，图片成功后仍正常替换。
+决策：基于仓库为 Flutter `3.47.0` 维护的最小选择补丁提供 `WidgetSpan.rawText`，恢复行内代码实体容器，保留 `6px` 圆角、`4px` 横向 padding、`2px` 横向 margin、macOS `1px` / Android `2px` 纵向 padding和 alphabetic baseline；`rawText` 写入真实代码文字，选择与复制不得出现对象替代符。补丁同时用统一行高绘制选择高亮，并由预检和正式发布工作流在分析前应用；官方 SDK 原版不具备该 API。图片请求、缓存和重试职责不变，但占位环只旋转 4 秒，随后成为静态弧，图片成功后仍正常替换。
 
 后果：视觉和选择能力不再二选一；测试必须同时覆盖真实复制文字与容器参数。图片慢请求本身未被取消，本决策只消除已由日志证实的无限 UI 动画耗电，不代表全部能耗来源均已解决。
 

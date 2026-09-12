@@ -84,7 +84,7 @@
 - macOS 使用 Folo 官方网页 + loopback callback；Android 动态提供 Email、Google、GitHub 登录，其中社交方式使用 Better Auth Expo 同类的系统浏览器 + 精确 `folo://fourier-auth` 回调。手动长期 Session Token 与 version 1 配置导入继续兼容。当前是单一活动账号，本地退出/Token 变化会保留普通设置并重建全部账号内容，不执行 Folo 远端 sign-out。两端设置页使用本地缓存的 Folo 头像和用户名表达登录身份，旧 Token 会按需补全资料，登录入口等待 provider 时有明确加载动画。macOS 与 Android Google 基础链路已由用户确认；Android 多方式选择、GitHub、Email/TOTP 及新账号卡视觉仍待验证。
 - 2026-09-12 macOS 相关文章详情进入第一阶段视觉恢复：保留右侧嵌套 `Navigator`、上一层 `ArticlePageView`、异步代次守卫和标为已读后的下一帧返回，但移除 2026-09-03 增加的正向不透明 `surface`，恢复功能初版 `160ms/140ms` 的透明淡入淡出与约 `2.5%` 水平滑动。用户需观察冷启动、重复切换、长时间运行及本地/Actions Release；只有反复闪烁再次出现时才进入带时序探针的第二阶段。
 - 2026-09-12 又确认一种独立的相关文章闪烁来源：关系组弹窗此前会在同一回调中同时关闭弹窗并压入文章路由，导致两套过渡重叠。现在先等待弹窗完整关闭，再打开所选文章；直接点击单条相关文章仍沿用既有受控转场。
-- Flutter `3.47.0` 的 `WidgetSpan.rawText` 已用于恢复行内代码的圆角实体背景，同时保持整段选择与复制为真实代码文字。macOS 使用 `1px` 纵向 padding，Android 使用 `2px`，两端保持 `4px` 横向 padding、`2px` 横向 margin 和 `6px` 圆角。
+- 仓库跟踪的 Flutter `3.47.0` 最小选择补丁提供 `WidgetSpan.rawText` 并统一选择高亮行高，用于恢复行内代码的圆角实体背景，同时保持整段选择与复制为真实代码文字。macOS 使用 `1px` 纵向 padding，Android 使用 `2px`，两端保持 `4px` 横向 padding、`2px` 横向 margin 和 `6px` 圆角；预检和正式发布均在分析、测试、构建前应用同一补丁。
 
 用户最近已验证：
 

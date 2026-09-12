@@ -620,24 +620,27 @@ void main() {
     expect(paragraphs, hasLength(1));
     final paragraph = paragraphs.single;
     final text = paragraph.text.toPlainText();
-    TextSpan? findInlineCodeSpan(InlineSpan span) {
-      if (span is TextSpan &&
-          span.toPlainText(includeSemanticsLabels: false) == 'inline_code' &&
-          span.style?.backgroundColor != null) {
-        return span;
+    WidgetSpan? inlineCodeSpan;
+    paragraph.text.visitChildren((span) {
+      if (span is WidgetSpan && span.rawText == 'inline_code') {
+        inlineCodeSpan = span;
       }
-      if (span is TextSpan) {
-        for (final child in span.children ?? const <InlineSpan>[]) {
-          final match = findInlineCodeSpan(child);
-          if (match != null) return match;
-        }
-      }
-      return null;
-    }
-
-    final inlineCodeSpan = findInlineCodeSpan(paragraph.text);
+      return true;
+    });
     expect(inlineCodeSpan, isNotNull);
-    expect(inlineCodeSpan!.style?.backgroundColor, isNotNull);
+    final inlineCodeContainer = inlineCodeSpan!.child as Container;
+    expect(
+      inlineCodeContainer.padding,
+      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+    );
+    expect(
+      inlineCodeContainer.margin,
+      const EdgeInsets.symmetric(horizontal: 2),
+    );
+    expect(
+      (inlineCodeContainer.decoration! as BoxDecoration).borderRadius,
+      BorderRadius.circular(6),
+    );
 
     Offset textPosition(int offset) => paragraph.localToGlobal(
       paragraph.getOffsetForCaret(

@@ -124,9 +124,11 @@
 - release tag 必须是 annotated tag。
 - GitHub Actions 会从 tag 构建 Android APK 和 macOS arm64 产物。
 - 本地和 GitHub Actions 统一使用 Flutter `3.47.0`；项目最低约束为 Flutter `>=3.47.0`、Dart `^3.13.0`。升级 SDK 时必须同步检查 `pubspec.yaml`、lockfile 和两个工作流中的 Flutter pin，不能只改本机。
-- GitHub 预检使用的干净官方 SDK 是发布兼容性的权威结果。本机 Flutter SDK
-  可能包含尚未上游化的实验修改，本地分析或测试通过不能替代预检；应用代码
-  不得直接调用这类私有新增 API。
+- GitHub 预检以干净的官方 SDK 为基线，再执行仓库跟踪的
+  `scripts/apply_flutter_patches.sh`；这是发布兼容性与视觉一致性的权威结果。
+  当前补丁只包含文章选择统一行高、`WidgetSpan.rawText` 及其复制映射，不得把
+  本机 Flutter SDK 中其他未审计实验修改混入发布。补丁固定校验 framework
+  revision，不匹配时必须先审计迁移，不能模糊应用。
 - macOS 发布包必须保持 arm64。
 - macOS job 固定使用 `macos-26` ARM64 runner。原生侧边栏使用了 macOS 26 SDK 的 `NSGlassEffectView`，不要改回默认仍可能选择 Xcode 16 的 `macos-latest`，否则 CI 可能在 Swift 编译阶段失败。
 - macOS 原生插件已迁移为纯 Swift Package Manager。仓库不再保留 `macos/Podfile`、`Podfile.lock` 或 Xcode Pods 引用；`screen_retriever` 至少保持 `0.2.2`，该版本修复了其 macOS SwiftPM manifest。若构建再次输出 `Running pod install`，应先排查是否误恢复 CocoaPods 集成。

@@ -1754,15 +1754,31 @@ class InlineCodeExtension extends HtmlExtension {
 
   @override
   InlineSpan build(ExtensionContext context) {
-    // Keep the code in the paragraph's real text flow. Official Flutter emits
-    // U+FFFC for WidgetSpan selections, so a rounded widget container would
-    // make copied article text incomplete.
-    final style = context.style!.generateTextStyle().copyWith(
-      backgroundColor: colorScheme.surfaceContainerHighest.withValues(
-        alpha: 0.6,
+    final children = context.inlineSpanChildren!;
+    final rawText = TextSpan(children: children)
+        .toPlainText(includeSemanticsLabels: false, includePlaceholders: false);
+    final child = CssBoxWidget.withInlineSpanChildren(
+      children: children,
+      style: context.style!,
+    );
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      rawText: rawText,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 4,
+          vertical: Platform.isMacOS ? 1 : 2,
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: child,
       ),
     );
-    return TextSpan(style: style, children: context.inlineSpanChildren!);
   }
 }
 

@@ -71,6 +71,7 @@
 - `AGENT_HANDOFF.md` 现在只作为短入口。维护型交接知识库位于 `docs/agent_handoff/`。
 - 旧单文件时间线已拆入 `docs/agent_handoff/history/archive/`；`history/chronology.html` 提供全部旧章节索引，`history/timeline.html` 仅保留兼容入口。当前事实不得写入历史归档。
 - macOS 能耗诊断已定位并门控失焦/屏外 GIF，但 2026-08-23 的历史样本复核证明仍存在动图计数为零、worker 为空时的高 CPU/持续出帧，不能视为完全解决。日志 schema 3 已补充匿名 UI 活动分类和更准确的动图流/首帧状态；需使用包含该版本的构建继续正常使用，再按 `animations.components` 对齐高峰来源。检查点不记录内容或凭据，也不改变界面行为。详情见 `features/performance.html`。
+- 2026-09-12 本地能耗日志进一步确认一类高峰：无 AI 队列时，单个图片加载占位长期保持活动并接近按 120Hz 持续出帧，失焦后也不停止。正文图片加载环现只旋转 4 秒，随后变为静态弧；底层图片请求、缓存、失败重试和最终替换行为不变。新构建日志已确认占位归零后，即使图片请求仍运行，帧数和 CPU 也能回落。此修复消除了已证实的无限 UI 动画来源，但不宣称所有高耗电情形均已解决，仍保留原诊断体系观察。
 
 当前产品形态：
 
@@ -81,7 +82,9 @@
 - Android application id、macOS bundle id、MethodChannel 命名空间使用 `io.github.xraygit.fourier`。
 - 这是 X-Ray 个人使用的软件，围绕 Folo 使用场景构建，但不能暗示官方 Folo 所有权。
 - macOS 使用 Folo 官方网页 + loopback callback；Android 动态提供 Email、Google、GitHub 登录，其中社交方式使用 Better Auth Expo 同类的系统浏览器 + 精确 `folo://fourier-auth` 回调。手动长期 Session Token 与 version 1 配置导入继续兼容。当前是单一活动账号，本地退出/Token 变化会保留普通设置并重建全部账号内容，不执行 Folo 远端 sign-out。两端设置页使用本地缓存的 Folo 头像和用户名表达登录身份，旧 Token 会按需补全资料，登录入口等待 provider 时有明确加载动画。macOS 与 Android Google 基础链路已由用户确认；Android 多方式选择、GitHub、Email/TOTP 及新账号卡视觉仍待验证。
-- 2026-09-03 macOS 相关文章详情转场已完成最终代码修复：保留右侧嵌套 `Navigator` 和上一层 `ArticlePageView`，将此前为隔离闪烁而采用的零时长方案恢复为受控的 `160ms` push / `140ms` pop 过渡。push 使用不透明 `surface` 前景承载淡入/滑入，pop 在 reverse 状态直接露出仍挂载的旧文章，避免返回时右侧区域短暂变暗/变空；相关文章 `M`/工具栏标为已读后的返回继续改为下一帧执行。根因、分层取舍、未修改的 Android/主时间线路径和剩余 macOS 真机视觉验证见[路由与状态](../architecture/routing-state.html)、[验证记录](verification.html)与[决策日志](../history/decisions.html#macos-related-detail-content-transition-2026-09-03)。
+- 2026-09-12 macOS 相关文章详情进入第一阶段视觉恢复：保留右侧嵌套 `Navigator`、上一层 `ArticlePageView`、异步代次守卫和标为已读后的下一帧返回，但移除 2026-09-03 增加的正向不透明 `surface`，恢复功能初版 `160ms/140ms` 的透明淡入淡出与约 `2.5%` 水平滑动。用户需观察冷启动、重复切换、长时间运行及本地/Actions Release；只有反复闪烁再次出现时才进入带时序探针的第二阶段。
+- 2026-09-12 又确认一种独立的相关文章闪烁来源：关系组弹窗此前会在同一回调中同时关闭弹窗并压入文章路由，导致两套过渡重叠。现在先等待弹窗完整关闭，再打开所选文章；直接点击单条相关文章仍沿用既有受控转场。
+- Flutter `3.47.0` 的 `WidgetSpan.rawText` 已用于恢复行内代码的圆角实体背景，同时保持整段选择与复制为真实代码文字。macOS 使用 `1px` 纵向 padding，Android 使用 `2px`，两端保持 `4px` 横向 padding、`2px` 横向 margin 和 `6px` 圆角。
 
 用户最近已验证：
 
@@ -159,7 +162,7 @@
 - Folo 接口边界已按上游 `@follow-app/client-sdk 0.3.95` 重新审计：认证 Dio 只允许访问 `https://api.folo.is`，公共文章抓取改用无认证客户端；订阅联合响应、创建响应、Inbox 分页、顶层 `read`、恢复未读 `isInbox` 与批量分类接口均按官方类型修正。用户凭据仍只有 Session Token；Client/Session ID 由应用内部生成，不进入配置备份。
 - 设置页保存语义已统一并经用户运行确认：离散选择直接保存，LLM 卡片不再保留整卡保存按钮；Temperature、并发数、正文宽度、滚动速度和已读窗口等单值数字输入按 Enter/失焦静默保存，不再排列保存按钮。Folo Session Token 与 DeepSeek API Key 已合并到“服务认证”，共用右下角“测试连接 + 保存认证”：Folo 测试与保存都调用 `/better-auth/get-session`，DeepSeek 测试调用 `/models`；DeepSeek 留空时显示“未配置，已跳过”，不影响 Folo 测试结果。Folo 用户凭据只要求 Session Token，DeepSeek 留空表示清除磁盘值和翻译/摘要服务的运行时 Key；旧备份中的 Client ID 和 Session ID 可被兼容导入但会忽略、清理且不再导出。Prompt 继续明确保存。macOS 外观 segmented 独占完整一行，重置默认立即落盘，快速离散切换按最后一次选择串行写入。
 - 仓库默认过滤 Prompt 已去除个人技术兴趣、来源白名单和媒体特例，改为仅拦截明确的空正文、抓取损坏、纯广告等通用低质量噪声。摘要/翻译默认值原本已是通用描述，保持不变。三个 Prompt 都只在对应设置 key 不存在时使用默认值；用户已保存或通过配置备份导入的 Prompt 不会被默认值升级覆盖。
-- 摘要与质量过滤现采用“纯文本先行、必要时视觉复核”的共享多模态转交协议。两者共用正文图片提取规则（正文顺序、去重、排除 SVG、最多 8 张），但分别保存视觉模型选择；当前受支持白名单只有 `deepseek-v4-flash-vision-exp`。用户 Prompt 继续只表达业务规则，版本化协议在设置页只读展示且不进入配置备份，视觉模型选择则进入备份。视觉最终失败时，摘要保留文本结果，过滤保守保留文章。
+- 摘要与质量过滤现采用“纯文本先行、必要时视觉复核”的共享多模态转交协议。两者共用正文图片提取规则（正文顺序、去重、排除 SVG、最多 8 张），但分别保存视觉模型选择；DeepSeek V4.1 Flash 的规范 API ID `deepseek-flash` 同时作为默认文本模型和当前唯一视觉白名单。旧 Flash/视觉实验别名会在启动和配置导入导出边界精确迁移。用户 Prompt 继续只表达业务规则，版本化协议在设置页只读展示且不进入配置备份，视觉模型选择则进入备份。视觉最终失败时，摘要保留文本结果，过滤保守保留文章。
 - macOS 红黄绿按钮已从“不受支持地移动系统标准按钮”切回可控的 AppKit 自绘 `NSControl` 容器。用户已验证 hover 和点击符合预期：任一圆形按钮触发三颗同步显示符号，按钮间空隙不触发，命中范围和视觉一致；动作仍转发给隐藏系统按钮的 target/action。
 - macOS 26 侧边栏已从“全窗口 `NSVisualEffectView` + Flutter 白色/模糊覆盖”迁移为局部 `NSGlassEffectView(.regular)`。用户确认纯原生版本整体观感很好；浅色/深色跟随应用 appearance，同一原生组件不分叉维护。旧系统保留局部 `NSVisualEffectView` 回退。
 - 侧边栏原生 backdrop 向 Flutter 连续曲率开口后方外扩 `1px`，堵住系统圆角与 Flutter 抗锯齿不一致造成的漏底细缝。最终轮廓为 `0.5px` 环境描边（浅色黑 `12%`、深色白 `12%`），浅色另加轻微外侧阴影；用户明确不增加原生玻璃之外的二次模糊。

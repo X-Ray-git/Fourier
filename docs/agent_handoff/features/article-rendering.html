@@ -149,9 +149,9 @@
 相关文章详情的渲染边界：
 
 - macOS 相关文章不是替换外层选中文章，而是在右侧 `MacArticleDetailStack` 的嵌套 `Navigator` 中保留旧 `ArticlePageView` 并压入新的详情页。这样可以恢复上一层滚动、目录和显示状态，但新页的正文解析生命周期仍然独立。
-- 新详情页初始化后可能先显示 `ArticleController.isParsingContent` 对应的排版 loading，再在 `Isolate.run()` 完成规范化和 `HtmlChunkParser` 分块后显示正文。整页透明 `FadeTransition` 会把旧详情、新页 loading、新页正文和 Scaffold 背景叠在同一个转场里，形成用户看到的闪烁；因此当前不能恢复旧的透明整页交叉转场。
-- 当前路由保留自然但受控的 `160ms` push / `140ms` pop 过渡：push 以不透明 `ColoredBox(surface)` 作为前景底层，再对 child 做 `easeOutCubic` 淡入和约 `2.5%` 水平滑入；pop 在明确的 reverse 状态移除该 surface，直接让当前 child 离开并露出仍挂载的上一层文章，反向 fade 使用 `easeInOutCubic` 以避免过早变空。这样既不交叉淡入两个异步详情树，也不牺牲完全瞬时切换之外的基本过渡感。
-- `M` 在相关文章中会先同步本地已读状态，再按 `ArticleNavigationPolicy` 返回上一层。返回回调必须通过 post-frame 调度，避免读状态通知、列表/角标刷新和 `Navigator.pop` 在同一帧竞争；`Esc` 直接触发上述反向过渡。详见[路由与状态](../architecture/routing-state.html)和[决策日志](../history/decisions.html#macos-related-detail-content-transition-2026-09-03)。
+- 新详情页初始化后可能先显示 `ArticleController.isParsingContent` 对应的排版 loading，再在 `Isolate.run()` 完成规范化和 `HtmlChunkParser` 分块后显示正文。历史上曾把一次偶发反复闪烁归因于整页透明转场，并改用不透明前景表面；用户后来确认该表面的滑入观感明显不如功能最初版本，而且当时闪烁也可能来自未更新到最新本地代码的构建，旧结论并非带完整时序证据的最终根因。
+- 当前第一阶段恢复最初的 `160ms` push / `140ms` pop：完整新页使用 `easeOutCubic` / `easeInCubic` 的透明淡入淡出，并配合约 `2.5%` 水平滑动，不再以完全不透明 `ColoredBox(surface)` 从首帧遮住旧文章。该方案保留原始动画语言，需分别在冷启动、长时间运行和本地/Actions Release 中观察。
+- `M` 在相关文章中仍会先同步本地已读状态，再按 `ArticleNavigationPolicy` 返回上一层。返回回调继续通过 post-frame 调度，避免读状态通知、列表/角标刷新和 `Navigator.pop` 在同一帧竞争；异步 controller 代次隔离、嵌套 Navigator 和关系组弹窗串行关闭均不回退。若反复闪烁再次出现，应先增加直接横条路径的路由/解析时序探针，再决定第二阶段修复，不得直接恢复不透明底板或同时改动多层状态。
 
 HTML 空段规范化：
 
@@ -315,7 +315,14 @@ HTML entity 解码：
 ## macOS 行内代码
 
 - macOS 与 Android 行内代码的自身行高都固定为 `1.2`，避免继承正文 `1.5–1.7` 行高后让背景色块几乎占满整行。macOS vertical padding 为 1，Android 保留稍宽松的 2。
-- 紧凑行高覆盖段落、列表、引用与兜底 HTML；字号 `14px`、alphabetic baseline、横向 padding 与块级代码不受影响。
+- 行内代码使用 `WidgetSpan` 承载圆角为 `6px` 的实体背景，横向 padding 为 `4px`、横向 margin 为 `2px`，并保持 alphabetic baseline。Flutter `3.47.0` 提供的 `WidgetSpan.rawText` 必须写入代码原文，使跨越行内代码的选择与复制仍返回真实文字而不是 U+FFFC；不要为了选择兼容再次退化成只能绘制矩形背景的 `TextSpan.backgroundColor`。
+- 紧凑行高覆盖段落、列表、引用与兜底 HTML；字号 `14px` 和块级代码不受影响。回归测试同时锁定选择结果、圆角与内外边距。
+
+## 图片加载占位与能耗
+
+- 正文图片请求仍由 `ArticleImageCacheService` 和既有缓存/重试链负责；UI 不擅自取消慢请求，也不把超时误判为永久失败。
+- 不确定时长的图片占位只在前 4 秒显示旋转加载环，之后停在静态进度弧。图片随后成功时仍会正常替换占位。这样可避免网络请求长期挂起时，单个不可见进展的加载环持续按屏幕刷新率出帧。
+- `DiagnosticActivityMarker.imagePlaceholder` 仅在加载环实际旋转时计为活动。能耗日志可据此区分短时正常加载与长期动画泄漏；静态占位不应继续制造帧。
 
 ## 文章链接 hover 生命周期
 

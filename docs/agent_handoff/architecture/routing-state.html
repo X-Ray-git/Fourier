@@ -67,10 +67,10 @@ macOS 相关文章详情栈：
 
 - `TimelinePage`、订阅源详情、垃圾拦截和最近阅读等 macOS 分栏入口都可以通过 `MacArticleDetailStack` 在右侧详情栏内打开相关文章；`_ArticleRelationsSection` 在 macOS 走这个回调，Android 仍走独立的 `Get.toNamed(Routes.article)` 全屏路由。
 - `MacArticleDetailStack` 使用内嵌 `Navigator`。打开相关文章时保留上一层 `ArticlePageView` 挂载在路由栈中，因此上一层的滚动位置、目录状态和已解析内容可以在 `Esc` 返回后继续使用；不要为了修复视觉问题把它改成外层选中项替换或统一成 Android 的全屏路由。
-- macOS 相关文章路由在 `lib/pages/article/article_page.dart` 的 `_MacArticleDetailStackState._openRelatedArticle()` 中创建。目标页仍会独立创建 `ArticleController`，其正文会经过 `ArticleController._initContent()` 和 `Isolate.run()` 异步规范化/分块，所以路由转场不能把整个 `Scaffold`、header、loading 状态和正文做透明交叉淡入淡出。
-- 当前相关文章路由使用受控的 `PageRouteBuilder`：push 为 `160ms`、约 `2.5%` 水平滑入和淡入，前景 child 外保持 `Theme.of(context).colorScheme.surface` 的不透明表面；pop 为 `140ms` 反向滑出/淡出，但在明确的 `AnimationStatus.reverse` 下移除该表面，直接露出仍挂载的上一层文章，避免返回时出现暗/空层。正向 slide/fade 使用 `easeOutCubic`，反向 slide 使用 `easeInCubic`，反向 fade 使用 `easeInOutCubic`。
+- macOS 相关文章路由在 `lib/pages/article/article_page.dart` 的 `_MacArticleDetailStackState._openRelatedArticle()` 中创建。目标页仍会独立创建 `ArticleController`，其正文会经过 `ArticleController._initContent()` 和 `Isolate.run()` 异步规范化/分块；异步回调受 controller 代次和账号 revision 守卫，不能在页面失效后回写 UI。
+- 当前相关文章路由恢复功能最初的 `PageRouteBuilder` 视觉：push 为 `160ms`、约 `2.5%` 水平滑入并透明淡入，pop 为 `140ms` 反向滑出/淡出；正向使用 `easeOutCubic`，反向使用 `easeInCubic`。2026-09-03 曾加入的不透明 `surface` 前景解决了当时推断的异步交叉闪烁，但用户确认其实体表面滑入观感不如初版；2026-09-12 将其移除并进入真机观察阶段。
 - `Esc` 直接弹出路由并进入上述反向过渡；相关文章页面的 `M` 或工具栏标为已读动作通过 `_popRelatedArticleAfterFrame()` 在当前帧结束后弹出，先让本地读状态、Hive/read-sync 和跨页面通知完成一帧渲染。
-- 这条延迟只用于“标为已读后返回”的相关文章回调，不改变普通文章的下一篇策略、恢复未读语义、Android 应用级返回或主时间线列表的 `180ms` 行级退场动画。完整问题链路和取舍见[2026-09-02 阶段性决策](../history/decisions.html#macos-related-detail-navigation-flicker-2026-09-02)及[2026-09-03 最终转场决策](../history/decisions.html#macos-related-detail-content-transition-2026-09-03)。
+- 这条延迟只用于“标为已读后返回”的相关文章回调，不改变普通文章的下一篇策略、恢复未读语义、Android 应用级返回或主时间线列表的 `180ms` 行级退场动画。完整演进见[2026-09-02 阶段性决策](../history/decisions.html#macos-related-detail-navigation-flicker-2026-09-02)、[2026-09-03 不透明转场决策](../history/decisions.html#macos-related-detail-content-transition-2026-09-03)与 2026-09-12 的初版视觉恢复记录。
 
 重要体验规则：
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -1231,14 +1232,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           width: renderWidth,
           height: renderHeight,
           child: const Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: DiagnosticActivityMarker(
-                kind: AnimationActivityKind.imagePlaceholder,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
+            child: _BoundedImageLoadingIndicator(size: 16, strokeWidth: 2),
           ),
         );
         final errorWidget = Container(
@@ -1495,13 +1489,9 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     width: displayWidth,
                     height: displayHeight,
                     child: const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: DiagnosticActivityMarker(
-                          kind: AnimationActivityKind.imagePlaceholder,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                      child: _BoundedImageLoadingIndicator(
+                        size: 24,
+                        strokeWidth: 2,
                       ),
                     ),
                   ),
@@ -1527,13 +1517,9 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     width: displayWidth,
                     height: displayHeight,
                     child: const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: DiagnosticActivityMarker(
-                          kind: AnimationActivityKind.imagePlaceholder,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                      child: _BoundedImageLoadingIndicator(
+                        size: 24,
+                        strokeWidth: 2,
                       ),
                     ),
                   ),
@@ -1575,13 +1561,9 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     width: displayWidth,
                     height: displayHeight,
                     child: const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: DiagnosticActivityMarker(
-                          kind: AnimationActivityKind.imagePlaceholder,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                      child: _BoundedImageLoadingIndicator(
+                        size: 24,
+                        strokeWidth: 2,
                       ),
                     ),
                   ),
@@ -1772,12 +1754,87 @@ class InlineCodeExtension extends HtmlExtension {
 
   @override
   InlineSpan build(ExtensionContext context) {
-    final style = context.style!.generateTextStyle().copyWith(
-      backgroundColor: colorScheme.surfaceContainerHighest.withValues(
-        alpha: 0.6,
+    final children = context.inlineSpanChildren!;
+    final rawText = TextSpan(children: children)
+        .toPlainText(includeSemanticsLabels: false, includePlaceholders: false);
+    final child = CssBoxWidget.withInlineSpanChildren(
+      children: children,
+      style: context.style!,
+    );
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      // Flutter 3.47 uses rawText when copying a selected WidgetSpan. This
+      // keeps the rounded box without turning inline code into U+FFFC.
+      rawText: rawText,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 4,
+          vertical: Platform.isMacOS ? 1 : 2,
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: child,
       ),
     );
-    return TextSpan(style: style, children: context.inlineSpanChildren!);
+  }
+}
+
+/// Keeps slow or stalled image requests from driving an indeterminate
+/// progress animation at the display refresh rate indefinitely.
+class _BoundedImageLoadingIndicator extends StatefulWidget {
+  const _BoundedImageLoadingIndicator({
+    required this.size,
+    required this.strokeWidth,
+  });
+
+  final double size;
+  final double strokeWidth;
+
+  @override
+  State<_BoundedImageLoadingIndicator> createState() =>
+      _BoundedImageLoadingIndicatorState();
+}
+
+class _BoundedImageLoadingIndicatorState
+    extends State<_BoundedImageLoadingIndicator> {
+  static const _animatedDuration = Duration(seconds: 4);
+
+  Timer? _settleTimer;
+  bool _isAnimated = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _settleTimer = Timer(_animatedDuration, () {
+      if (mounted) setState(() => _isAnimated = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: DiagnosticActivityMarker(
+        kind: AnimationActivityKind.imagePlaceholder,
+        active: _isAnimated,
+        child: CircularProgressIndicator(
+          value: _isAnimated ? null : 0.72,
+          strokeWidth: widget.strokeWidth,
+        ),
+      ),
+    );
   }
 }
 

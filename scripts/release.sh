@@ -224,7 +224,33 @@ if [[ "$push_remote" == true ]]; then
   fi
 
   echo "Waiting for release preflight run $preflight_run_id..."
-  gh run watch "$preflight_run_id" --exit-status
+  preflight_completed=false
+  for _ in {1..180}; do
+    if preflight_state="$(
+      gh run view "$preflight_run_id" \
+        --json status,conclusion \
+        --jq '[.status, (.conclusion // "")] | @tsv'
+    )"; then
+      IFS=$'\t' read -r run_status run_conclusion <<<"$preflight_state"
+      if [[ "$run_status" == "completed" ]]; then
+        if [[ "$run_conclusion" != "success" ]]; then
+          echo "Release preflight failed with conclusion: $run_conclusion" >&2
+          echo "Inspect it with: gh run view $preflight_run_id --log-failed" >&2
+          exit 1
+        fi
+        preflight_completed=true
+        break
+      fi
+    else
+      echo "GitHub status check failed temporarily; retrying..." >&2
+    fi
+    sleep 10
+  done
+
+  if [[ "$preflight_completed" != true ]]; then
+    echo "Timed out waiting for release preflight run $preflight_run_id." >&2
+    exit 1
+  fi
 fi
 
 perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml

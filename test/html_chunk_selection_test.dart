@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -631,7 +633,7 @@ void main() {
     final inlineCodeContainer = inlineCodeSpan!.child as Container;
     expect(
       inlineCodeContainer.padding,
-      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      EdgeInsets.symmetric(horizontal: 4, vertical: Platform.isMacOS ? 1 : 2),
     );
     expect(
       inlineCodeContainer.margin,

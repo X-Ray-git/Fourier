@@ -22,9 +22,32 @@ abstract final class ArticleContentCompatibility {
     _removeHuggingFaceAvatars(fragment);
 
     final host = Uri.tryParse(sourceUrl?.trim() ?? '')?.host.toLowerCase();
+    if (host == 'appinn.com' || host == 'www.appinn.com') {
+      _removeAppinnAiSummaryDisclaimer(fragment);
+    }
     if (host == 'marktechpost.com' || host == 'www.marktechpost.com') {
       _removeMarkTechPostCodeControls(fragment);
       _replaceBrokenMarkTechPostExplainers(fragment, sourceUrl!);
+    }
+  }
+
+  static void _removeAppinnAiSummaryDisclaimer(dom.DocumentFragment fragment) {
+    const prefix =
+        '你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，'
+        '可能与原文真实意图存在偏差。不代表小众软件观点和立场。请';
+    const suffix = '细致比对和校验。';
+
+    final candidates = fragment
+        .querySelectorAll('p, div, section, aside, blockquote')
+        .toList()
+        .reversed;
+    for (final candidate in candidates) {
+      final text = candidate.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (text.startsWith(prefix) &&
+          text.contains('点击链接阅读原文') &&
+          text.endsWith(suffix)) {
+        candidate.remove();
+      }
     }
   }
 

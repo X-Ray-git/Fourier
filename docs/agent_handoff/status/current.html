@@ -156,7 +156,7 @@
   播放和视觉验证。
 - 原文 Markdown 转换已从 `article_page.dart` 提取到 `ArticleMarkdownExportService`；单篇复制和批量构建共享标题去重、元数据、正文结构和转义规则。页面层只处理当前内容、剪贴板与反馈，后续静默订阅源批量功能不得再维护页面内 exporter。
 - 单篇 Markdown 转换现与批量导出一样运行在 isolate，并有连续触发保护；畸形嵌套列表不再递归回同一 HTML。真实阿里技术 568KB 级缓存样本已验证能完成导出，不再阻塞 UI 或栈溢出。
-- 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。所有 Inbox 邮件共用 `InboxEmailCompatibility`：保留正文、图片、数据表、邮件内锚点和全部有意义链接，只移除邮件客户端展示样式并把按钮退化为 Fourier 普通文本链接；跟踪像素、空链接和布局表继续由通用规范化清理。原文、已保存译文、AI 输入、图片预取、长度估算和 Markdown 导出都传递相同来源上下文，规范化缓存也包含 URL/feed/category；历史文章不需要数据库迁移。
+- 来源专属正文兼容已集中到 `ArticleContentCompatibility`。Hugging Face Blog 的 `BlogAuthorsByline` 会转换为单个紧凑作者 chunk，以 `36px` 圆形头像、姓名和账号横向换行展示；站点装饰头像仅在头像域名/路径和明确头像语义同时成立时移除。Appinn 仅在来源域名和完整固定文案签名同时命中时移除面向第三方 AI 检索场景的总结免责声明，不扩展为通用免责声明识别。所有 Inbox 邮件共用 `InboxEmailCompatibility`：保留正文、图片、数据表、邮件内锚点和全部有意义链接，只移除邮件客户端展示样式并把按钮退化为 Fourier 普通文本链接；跟踪像素、空链接和布局表继续由通用规范化清理。原文、已保存译文、AI 输入、图片预取、长度估算和 Markdown 导出都传递相同来源上下文，规范化缓存也包含 URL/feed/category；历史文章不需要数据库迁移。
 - 规范化现携带文章原文 URL：相对图片可按页面地址解析，正文、预取、图片查看器和 Markdown 使用一致的绝对地址；SVG 复用文章级磁盘缓存并由 `flutter_svg` 渲染。MarkTechPost 来源规则会移除失效的网页复制控件和确定泄漏的交互文档，代码块由阅读器提供统一轻量复制按钮。OpenAI News 缺少真实音频地址的问题仍不在本轮恢复。
 - Debug 与 Release 网络请求现在统一使用系统 HTTPS 证书信任链，不再通过 `badCertificateCallback` 无条件接受无效证书；自定义 `HttpClient` 的 `15s` idle timeout 保持不变。需要抓包时应安装并信任代理证书，而不是在应用内关闭校验。
 - Folo 接口边界已按上游 `@follow-app/client-sdk 0.3.95` 重新审计：认证 Dio 只允许访问 `https://api.folo.is`，公共文章抓取改用无认证客户端；订阅联合响应、创建响应、Inbox 分页、顶层 `read`、恢复未读 `isInbox` 与批量分类接口均按官方类型修正。用户凭据仍只有 Session Token；Client/Session ID 由应用内部生成，不进入配置备份。

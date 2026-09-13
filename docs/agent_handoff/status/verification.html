@@ -50,6 +50,13 @@
 <script type="text/markdown" id="wiki-content">
 # 验证记录
 
+## 2026-09-13 Appinn 固定 AI 总结免责声明清理
+
+- 小众软件会在正文中注入一段面向第三方 AI 检索场景的固定总结免责声明；Fourier 用户已经明确知道摘要由模型生成，因此该段在阅读、摘要、翻译和导出链路中属于重复噪声。本轮将规则放入既有 `ArticleContentCompatibility` 来源兼容层，没有修改通用 HTML 清洗器、Prompt 或数据库原始正文。
+- 规则以 `appinn.com`/`www.appinn.com` 原文域名和完整固定文案签名双重门禁，允许内部文章链接变化；同时兼容正常 `<a>` 与被转义为文本的链接。不得把规则扩展为按“AI”“观点和立场”或免责声明语义做通用删除。
+- `test/article_content_utils_test.dart` 新增 4 项定向覆盖：正常链接、转义链接、其他来源反例和 Appinn 相似但不完整正文反例。定向测试 35 项、全量 `flutter test --no-pub` 358 项通过；`dart analyze lib test` 无 error/warning，仅有 59 项既存 Liquid Glass `prefer_initializing_formals` info；文档 59 页检查和 `git diff --check` 通过。
+- 已保存的旧摘要不会自动重建；手动重新生成或后续新任务会使用清理后的输入。原始抓取内容不迁移，运行时规范化即可让历史正文显示和导出路径生效。
+
 ## 2026-09-04 本地静默分组
 
 - 本轮实现的是静默订阅源分组，不是前一轮多模态修复。最终平台范围：macOS 保留组内批量导出，Android 仅管理/浏览，没有文章勾选和后续批量动作；配置备份两端都支持。后续移除了重复的“全部静默”范围、macOS 菜单项与 <kbd>Cmd+0</kbd>，未指定组的旧调用归一到未分组。

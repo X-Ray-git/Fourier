@@ -102,6 +102,63 @@ void main() {
     expect(normalized, contains('Demo'));
   });
 
+  test('Appinn compatibility removes its fixed AI summary disclaimer', () {
+    const raw = '''
+<p>有意义的文章正文。</p>
+<p>你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，可能与原文真实意图存在偏差。不代表小众软件观点和立场。请<a href="https://www.appinn.com/eggs-26911/" target="_blank">点击链接阅读原文</a>细致比对和校验。<br><br></p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://www.appinn.com/example/',
+    );
+
+    expect(normalized, contains('有意义的文章正文'));
+    expect(normalized, isNot(contains('你看到的内容可能由第三方 AI')));
+    expect(normalized, isNot(contains('eggs-26911')));
+  });
+
+  test('Appinn compatibility also handles an escaped disclaimer link', () {
+    const raw = '''
+<p>正文。</p>
+<p>你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，可能与原文真实意图存在偏差。不代表小众软件观点和立场。请&lt;a href="https://www.appinn.com/example/" target="_blank"&gt;点击链接阅读原文&lt;/a&gt;细致比对和校验。</p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://appinn.com/example/',
+    );
+
+    expect(normalized, contains('正文'));
+    expect(normalized, isNot(contains('你看到的内容可能由第三方 AI')));
+  });
+
+  test('Appinn disclaimer rule does not affect another source', () {
+    const raw = '''
+<p>你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，可能与原文真实意图存在偏差。不代表小众软件观点和立场。请<a href="https://www.appinn.com/example/">点击链接阅读原文</a>细致比对和校验。</p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://example.com/article/',
+    );
+
+    expect(normalized, contains('你看到的内容可能由第三方 AI'));
+  });
+
+  test('Appinn disclaimer rule keeps incomplete similar prose', () {
+    const raw = '''
+<p>你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，但本文讨论如何识别这类内容。</p>
+''';
+
+    final normalized = ArticleContentUtils.normalizeHtml(
+      raw,
+      sourceUrl: 'https://www.appinn.com/example/',
+    );
+
+    expect(normalized, contains('但本文讨论如何识别这类内容'));
+  });
+
   test('normalizeHtml removes nested formatting-only spacer paragraphs', () {
     const raw = '''
 <p><span>第一句话。</span></p>

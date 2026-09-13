@@ -31,6 +31,7 @@ abstract final class ArticleImageService {
       normalized = 'https:$normalized';
     }
     normalized = normalized.replaceAll(' ', '%20');
+    normalized = _unwrapJintiankanshaWechatProxy(normalized);
 
     var uri = SecurityUtils.parseHttpUrl(normalized);
     if (uri == null) return null;
@@ -40,6 +41,38 @@ abstract final class ArticleImageService {
       uri = uri.replace(scheme: 'https');
     }
     return uri.toString();
+  }
+
+  static String _unwrapJintiankanshaWechatProxy(String rawUrl) {
+    final proxyUri = Uri.tryParse(rawUrl);
+    if (proxyUri == null ||
+        proxyUri.host.toLowerCase() != 'img2.jintiankansha.me' ||
+        proxyUri.path != '/get') {
+      return rawUrl;
+    }
+
+    final source = _rawQueryParameter(proxyUri, 'src')?.trim();
+    if (source == null || source.isEmpty) return rawUrl;
+    final sourceUri = SecurityUtils.parseHttpUrl(
+      source.startsWith('//') ? 'https:$source' : source,
+    );
+    if (sourceUri == null || sourceUri.host.toLowerCase() != 'mmbiz.qpic.cn') {
+      return rawUrl;
+    }
+    return sourceUri.toString();
+  }
+
+  static String? _rawQueryParameter(Uri uri, String name) {
+    final prefix = '$name=';
+    for (final component in uri.query.split('&')) {
+      if (!component.startsWith(prefix)) continue;
+      try {
+        return Uri.decodeComponent(component.substring(prefix.length));
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
   }
 
   /// 对需要特定 Referer 的 CDN 图片，通过 Folo 图片代理加载

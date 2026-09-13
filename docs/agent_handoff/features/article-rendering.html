@@ -224,6 +224,7 @@ HTML 空段规范化：
 图片：
 
 - 使用 `ArticleImageService` 处理代理/请求头。
+- `img2.jintiankansha.me/get?src=...` 包裹微信 `mmbiz.qpic.cn` 原图时，不再继续经过该第三方中转，而是由 `ArticleImageService` 精确解出嵌套地址并升级为 HTTPS 直连。规则同时校验代理 host/path 和原图 host；其他嵌套来源、相似代理地址及普通图片保持原样。嵌套 URL 使用原始 query component 解码，避免把合法 `+` 错当为空格；完整编码的原图查询参数会保留。
 - 图片规范化会用文章原文 URL 解析 `/path`、`./path` 和 `../path` 相对地址，再进行 HTTP/HTTPS 校验。没有可靠来源 URL 时继续保留原属性但不加载，不猜测站点域名。AddyOsmani.com 的 `Software Factories, Light and Dark` 已用真实缓存样本确认可解析出 4 个绝对 SVG 地址。
 - 正文与图片查看器支持 SVG；真正的 SVG 通过 `ArticleSvgImage` 读取 `ArticleImageCacheService` 的文章级磁盘缓存后交给 `flutter_svg`，不能改回独立网络加载，否则后台预取会对 SVG 失效。普通位图仍走 `CachedNetworkImage`。图片代理地址可能在路径末尾保留嵌套源文件的 `.svg`，但以 `f_auto` 等变换参数实际返回 PNG/WebP；`ArticleImageService.isSvg()` 必须先排除这种明确的自动格式输出，不能只看路径后缀。
 - macOS 与 Android 正文图片都使用 `ArticleImageCacheService` 的文章级缓存键。`HtmlChunkCard` 和 `ImageGalleryPage` 必须携带 `entryId`，确保正常阅读、后台预取、图片查看器和已读后清理命中同一套缓存；历史 `v2_` 缓存暂不迁移。
@@ -323,6 +324,7 @@ HTML entity 解码：
 
 - 正文图片请求仍由 `ArticleImageCacheService` 和既有缓存/重试链负责；UI 不擅自取消慢请求，也不把超时误判为永久失败。
 - 不确定时长的图片占位只在前 4 秒显示旋转加载环，之后停在静态进度弧。图片随后成功时仍会正常替换占位。这样可避免网络请求长期挂起时，单个不可见进展的加载环持续按屏幕刷新率出帧。
+- 静态进度弧本身不是失败状态；如果长期不被图片或错误占位替换，应检查 `ArticleImageCacheService` 中是否存在“已登记 cache key、缓存文件和 failed registry 均不存在”的悬挂下载。不要为让状态看起来活跃而恢复无限旋转，应修复具体网络链或给下载所有权增加可取消的超时。
 - `DiagnosticActivityMarker.imagePlaceholder` 仅在加载环实际旋转时计为活动。能耗日志可据此区分短时正常加载与长期动画泄漏；静态占位不应继续制造帧。
 
 ## 文章链接 hover 生命周期

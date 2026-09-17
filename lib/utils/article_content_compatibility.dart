@@ -9,6 +9,34 @@ abstract final class ArticleContentCompatibility {
   static const String authorTag = 'fourier-author';
   static const Set<String> _emptyWrapperTags = {'a', 'span', 'li', 'ul', 'ol'};
 
+  /// Paul Graham's legacy essays use a title image followed by a font element
+  /// with br-separated prose, so paragraph scoring has no candidates.
+  static dom.Element? extractReadabilityFallback(
+    dom.Document document, {
+    String? sourceUrl,
+  }) {
+    final host = Uri.tryParse(sourceUrl?.trim() ?? '')?.host.toLowerCase();
+    if (host != 'paulgraham.com' && host != 'www.paulgraham.com') return null;
+
+    final title = document.querySelector('title')?.text.trim() ?? '';
+    if (title.isEmpty) return null;
+    for (final body in document.querySelectorAll(
+      'td > font[size="2"][face="verdana"]',
+    )) {
+      final hasTitleImage = body.parent!.children.any(
+        (element) =>
+            element.localName == 'img' &&
+            element.attributes['alt']?.trim() == title,
+      );
+      if (hasTitleImage &&
+          body.text.trim().length >= 25 &&
+          body.querySelectorAll('br').length >= 2) {
+        return body;
+      }
+    }
+    return null;
+  }
+
   static void apply(
     dom.DocumentFragment fragment, {
     String? sourceUrl,

@@ -50,6 +50,18 @@
 <script type="text/markdown" id="wiki-content">
 # 决策日志
 
+## Paul Graham 旧式文章空正文的来源限定回退（2026-09-17）
+
+背景：用户报告 “Making Startups Powerful” 加载不出来。先核对只读 Hive 瞬时副本，区分 `Paul Graham: Essays` 的空正文原文与仅包含原文链接的 Twitter 转发；再请求原文 `https://paulgraham.com/powerful.html`，得到 HTTP 200。真实 HTML 中正文是表格单元格内的 font 元素，以 br 分段，缺少通用提取器使用的段落候选；原算法返回 null。因此已确认的故障发生在正文提取阶段，没有证据支持修改网络代理、图片加载或渲染组件。
+
+链路：非 Inbox 空正文文章在详情初始化时会自动补抓，调用 `PublicContentHttp` 后进入 `ArticleContentUtils.getReadabilityContent()`；返回 null 时不持久化正文，加载状态结束后仍显示空内容。该来源在本地未开启自动全文抓取，也没有抓取成功/失败标记；不能把后台没有补全文误判为 worker 崩溃。详情补抓与后台 worker 共用提取器，故两处都要传递原文 URL。
+
+决策：保持通用段落评分与既有清洗顺序，在通用算法无结果时才调用 `ArticleContentCompatibility.extractReadabilityFallback()`。仅接受 `paulgraham.com` / `www.paulgraham.com`，选取 `td > font[size="2"][face="verdana"]`，并要求同一单元格存在 alt 与页面 title 相同的标题图、正文至少 25 字符、至少两个 br。标题只用于验证页面自身结构，不硬编码本次文章名。只返回正文 font，保留正文节点、链接、强调与脚注，排除外层导航和布局。合成页面同时验证正例、相似域名/结构反例及普通段落提取优先。
+
+范围取舍：本例不足以支持替换通用 Readability 算法、放宽为整页 body 回退或重写所有表格/font 内容；这些做法可能把导航和装饰当正文。也不更改订阅源设置、后台重试策略、AI 调度或数据库迁移。空正文在新构建重新打开后应走既有抓取、持久化和规范化链路；不能手工写正式数据库来代替端到端验证。若站点以后改变结构，应重新检查真实 DOM，再决定是否调整兼容规则。
+
+验证与讨论结论：实际网页提取从 null 变为 16,629 字符，纯解析回归通过，但本机 Xcode 许可未接受导致 Flutter 原生测试依赖启动失败；独立 Dart 运行器只验证解析逻辑。用户随后明确询问“代码修复是否完成、真实效果是否尚不确定”，答复已区分这两个状态；用户在知悉应用内最终效果未验证的前提下，要求维护完整交接文档并提交。该授权不等于真机验收、构建安装或发布授权。证据、测试命令和待验收项见[验证记录](../status/verification.html)，长期规则见[文章渲染](../features/article-rendering.html)。
+
 ## 用 WidgetSpan.rawText 恢复行内代码视觉，并限制图片占位动画（2026-09-12）
 
 背景：2026-09-03 为修复 Flutter 正文选择问题，行内代码从带圆角和 padding 的 `WidgetSpan` 退化为 `TextSpan.backgroundColor`，避免复制时出现 U+FFFC；这同时导致圆角消失、上下和横向尺寸改变。近期 macOS 能耗日志又确认，慢或挂起的图片请求可让不定进度加载环长期按高刷新率出帧，即使没有 AI 任务且窗口失焦仍维持较高 CPU。

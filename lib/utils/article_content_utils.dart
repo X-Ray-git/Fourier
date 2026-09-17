@@ -435,7 +435,10 @@ abstract final class ArticleContentUtils {
   }
 
   /// 提取核心正文算法（类似 Readability）
-  static dom.Element? getReadabilityContent(dom.Document document) {
+  static dom.Element? getReadabilityContent(
+    dom.Document document, {
+    String? sourceUrl,
+  }) {
     // 1. Remove unwanted elements
     final junk = document.querySelectorAll(
       'script, style, noscript, nav, header, footer, aside, form, button',
@@ -502,7 +505,11 @@ abstract final class ArticleContentUtils {
       }
     });
 
-    return topCandidate;
+    return topCandidate ??
+        ArticleContentCompatibility.extractReadabilityFallback(
+          document,
+          sourceUrl: sourceUrl,
+        );
   }
 
   static final _urlRe = RegExp(

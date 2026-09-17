@@ -202,6 +202,7 @@ HTML 空段规范化：
 
 来源兼容规则：
 
+- Paul Graham 旧式文章使用 `td > font[size="2"][face="verdana"]` 与 `<br>` 排版，可能完全没有普通段落候选。`getReadabilityContent()` 在通用提取无结果时，才调用来源兼容层的窄回退：原文域名必须精确为 `paulgraham.com` 或 `www.paulgraham.com`，同一单元格还须有 alt 与页面 title 一致的文章标题图，并存在非空正文与换行结构。只返回正文 font，保留链接、强调和脚注，排除外层站点导航/布局；不按某篇固定标题匹配，不扩展为通用整页 body 回退。文章详情和自动全文 worker 都传递原文 URL，既有安全清洗先执行。空正文文章在新构建中重新打开时会重新抓取，不需要迁移或直接修改正在运行的 Hive。
 - 依赖站点 CSS 才能成立的窄兼容修复集中放在 `ArticleContentCompatibility`，由 `ArticleContentUtils.normalizeHtml()` 在通用安全清洗后、图片 URL 规范化前调用。不要把来源判断散落到 `HtmlChunkParser` 或普通图片 widget，也不要为单一规则引入动态规则引擎。
 - Hugging Face Blog 的作者头像没有 `width/height`，只使用 Tailwind 的 `size-9 sm:size-12` 或父容器 `h-5/w-5` 控制显示尺寸。图片文件的固有像素不能代表网页显示尺寸；不应直接按正文最大宽度放大，也不应加载上游整套 CSS。
 - 官方作者区有稳定的 `data-target="BlogAuthorsByline"`。兼容层将其转换为内部 `fourier-author-list/fourier-author` 语义结构，解析器继续兼容旧缓存中的 `auto-folo-*` 标签；`HtmlChunkParser` 生成单个 `authorList` chunk，`HtmlChunkCard` 以 `36px` 圆形头像、姓名和账号横向排列并自动换行；有主页地址时整项可点击。作者头像继续使用文章级图片缓存键。

@@ -50,6 +50,21 @@
 <script type="text/markdown" id="wiki-content">
 # 验证记录
 
+## 2026-09-17 Paul Graham 旧式正文提取
+
+- 用户指定的 “Making Startups Powerful” 在 `Paul Graham: Essays` 本地记录中正文为空，未生成翻译或摘要；同名 Twitter 转发是独立条目，不能混淆。仅对 Hive 瞬时副本读取，未修改正式数据库、设置或文章状态。
+- 原网页返回 HTTP 200、24,270 字节；真实 DOM 没有 `p/blockquote/article/div > text` 候选，正文位于旧式 font 元素并用 br 分段。原提取器实测返回 null，属于正文识别缺口。来源与结构双重限定的回退加入后，实际网页提取出 16,629 字符正文，规范化和 chunk 解析均产生非空结果。真实网页仅保存在临时目录。
+- 新增 4 项最小合成页面回归，覆盖正文/链接/强调/脚注保留、站点装饰排除、安全清洗、精确域名、必要结构反例与通用提取优先。因本机 Xcode 许可未接受，Flutter 测试在原生依赖构建前失败；仅为命令设置 Command Line Tools 目录仍未解决 hook 的 SDK 获取。改用临时独立 Dart 测试运行器，将两个纯解析测试文件的测试入口替换为 `package:test`，断言不变，合计 38 项通过；5 个变更 Dart 文件静态分析无问题。此结果不代表 Flutter worker、界面或新构建真机验证已通过。
+- 修复已接入文章详情补抓与后台全文抓取。仍需在包含修复的新构建中重新打开该空正文文章，确认实际阅读显示；不通过手工写入运行中数据库代替应用链路。
+
+复测入口与边界：
+
+- 代码位置：`lib/utils/article_content_compatibility.dart` 的 `extractReadabilityFallback()`、`lib/utils/article_content_utils.dart` 的 `getReadabilityContent()`；调用方为 `lib/pages/article/article_page.dart` 与 `lib/services/auto_readability_worker.dart`。新测试为 `test/legacy_readability_test.dart`；另运行既有 `test/article_content_utils_test.dart`，合计 38 项纯解析测试。
+- 正常环境定向命令：`flutter test --no-pub --reporter expanded test/legacy_readability_test.dart test/article_content_utils_test.dart test/auto_readability_worker_test.dart`。本机失败发生在 `objective_c` 原生构建 hook 获取 macOS SDK 路径时（`Bad state: No element`），`xcrun` 提示 Xcode 许可未接受；测试用例尚未执行，不计作断言失败，也不计作通过。没有代用户接受许可或修改全局 Xcode 选择。
+- 临时替代验证只复制前两个纯解析测试到独立目录，把 `package:flutter_test/flutter_test.dart` 改为 `package:test/test.dart`，其余断言不变；合并现有 Flutter tools 与工程 package config 后，以 SDK 内的 Dart 可执行文件运行 `package:test`，绕过 Flutter 原生构建 hook。该临时运行器不提交；常规复测仍以上述 Flutter 命令为准，worker 测试未由替代运行器执行。
+- 实际网页探针还经过 `normalizeHtml()` 与 `HtmlChunkParser.parseSync()`，得到非空 chunk，但这不能证明 UI 排版、交互、数据库写入或自动 worker 的完整链路正确。后续需使用包含本次改动的新构建，重新打开 `Paul Graham: Essays` 中的该文，确认加载状态结束后有正文，检查文末脚注与链接，并离开再打开以检查持久化；另抽查普通文章。后台路径应在隔离测试中验证，不必为本次修复开启用户的订阅源全文设置。
+- 用户确认代码修复已完成、应用内真实效果待验收后授权提交；不将本次提交记作真机验证或发布。完整原因与取舍见[决策日志](../history/decisions.html)。
+
 ## 2026-09-14 微信图片第三方代理悬挂
 
 - 用户指定文章“GPT-6 Astra开放Plus！20美元只能拿它干活，不能聊天”的只读 Hive 快照显示 13 个图片标签、8 个预取唯一图片；其中一张已登记文章级 cache key，但缓存数据库无文件、failed registry 也无记录，符合下载 Future 悬挂而非明确失败。正文加载环按既有节能规则在 4 秒后停止旋转，因此最终表现为不动的进度弧。

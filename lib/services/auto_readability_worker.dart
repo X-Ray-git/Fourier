@@ -200,7 +200,10 @@ abstract final class AutoReadabilityWorker {
       if (!AccountSessionGuard.isCurrent(accountRevision)) return null;
 
       final document = html_parser.parse(html);
-      final node = ArticleContentUtils.getReadabilityContent(document);
+      final node = ArticleContentUtils.getReadabilityContent(
+        document,
+        sourceUrl: article.url,
+      );
       if (node == null) {
         _markFetchFailure(
           entryId,

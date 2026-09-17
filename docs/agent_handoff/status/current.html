@@ -50,7 +50,9 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-截至 2026-09-04：
+最近更新：2026-09-17（各事项的验证时间以对应记录为准）。
+
+- “Making Startups Powerful” 空正文问题已完成代码修复：源站正常，Paul Graham 旧式 font/br 页面没有通用正文候选，现增加精确域名与页面结构共同限定的回退。真实网页解析、38 项纯解析回归及变更文件静态分析通过；当前应用未更新，Flutter 测试被本机 Xcode 许可问题阻断，应用内显示仍待新构建验收。用户知悉这一边界后授权提交，不代表已经确认界面效果。实现见[文章渲染](../features/article-rendering.html)，原因与取舍见[决策日志](../history/decisions.html)，复测步骤见[验证记录](verification.html)。
 
 - 本地静默分组已接入两端：分组/未分组独立于 Folo 分类，支持新建、改名、排序、移动归属、删组兜底及配置备份兼容。各组与未分组完整覆盖所有静默源，不再显示“全部静默”，也不保留其菜单或 <kbd>Cmd+0</kbd> 隐藏入口。macOS 每组复用现有批量导出；Android 按最终需求仅管理/浏览，不增加文章勾选、批量复制或导出。旧静默源自然归入未分组，无需手动迁移。代码验证与真机待检查项见 `status/verification.html`，完整设计见 `features/subscriptions.html`；尚待用户两端视觉验收。
 

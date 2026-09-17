@@ -288,7 +288,10 @@ class ArticleController extends GetxController {
         if (!AccountSessionGuard.isCurrent(accountRevision)) return;
         final htmlStr = response.data.toString();
         final document = html_parser.parse(htmlStr);
-        final articleNode = ArticleContentUtils.getReadabilityContent(document);
+        final articleNode = ArticleContentUtils.getReadabilityContent(
+          document,
+          sourceUrl: article.url,
+        );
         if (articleNode != null) {
           _persistFetchedContent(articleNode.outerHtml);
           if (_isUiCurrent(lifecycleGeneration, accountRevision)) {

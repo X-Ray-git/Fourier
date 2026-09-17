@@ -50,9 +50,11 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-最近更新：2026-09-17（各事项的验证时间以对应记录为准）。
+最近更新：2026-09-18（各事项的验证时间以对应记录为准）。
 
-- “Making Startups Powerful” 空正文问题已完成代码修复：源站正常，Paul Graham 旧式 font/br 页面没有通用正文候选，现增加精确域名与页面结构共同限定的回退。真实网页解析、38 项纯解析回归及变更文件静态分析通过；当前应用未更新，Flutter 测试被本机 Xcode 许可问题阻断，应用内显示仍待新构建验收。用户知悉这一边界后授权提交，不代表已经确认界面效果。实现见[文章渲染](../features/article-rendering.html)，原因与取舍见[决策日志](../history/decisions.html)，复测步骤见[验证记录](verification.html)。
+- 最新正式版为 [v2.3.2](https://github.com/X-Ray-git/Fourier/releases/tag/v2.3.2)，构建号 `38`；发布提交 `88f2d19`。干净 SDK 预检和两端正式发布均通过，APK、macOS arm64 ZIP 及签名 appcast 已齐备；macOS 完整测试 366 项通过。该版集中包含 Appinn 固定声明清理、微信图片代理直连与 Paul Graham 正文提取修复，无数据迁移。应用内阅读效果与更新安装尚待用户验收，详细证据见[验证记录](verification.html)。
+
+- “Making Startups Powerful” 空正文问题已完成代码修复：源站正常，Paul Graham 旧式 font/br 页面没有通用正文候选，现增加精确域名与页面结构共同限定的回退。真实网页解析与 38 项独立 Dart 解析回归通过；后续 `v2.3.2` CI 预检已补齐完整 Flutter 测试及 Android/macOS 构建验证，本机 Xcode 许可阻断只属于本地环境。应用内实际阅读显示仍待用户新构建验收，不能将 CI 通过等同于视觉确认。实现见[文章渲染](../features/article-rendering.html)，原因与取舍见[决策日志](../history/decisions.html)，复测步骤见[验证记录](verification.html)。
 
 - 本地静默分组已接入两端：分组/未分组独立于 Folo 分类，支持新建、改名、排序、移动归属、删组兜底及配置备份兼容。各组与未分组完整覆盖所有静默源，不再显示“全部静默”，也不保留其菜单或 <kbd>Cmd+0</kbd> 隐藏入口。macOS 每组复用现有批量导出；Android 按最终需求仅管理/浏览，不增加文章勾选、批量复制或导出。旧静默源自然归入未分组，无需手动迁移。代码验证与真机待检查项见 `status/verification.html`，完整设计见 `features/subscriptions.html`；尚待用户两端视觉验收。
 

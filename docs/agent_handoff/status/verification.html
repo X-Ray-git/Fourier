@@ -50,6 +50,15 @@
 <script type="text/markdown" id="wiki-content">
 # 验证记录
 
+## 2026-09-18 v2.3.2 发布验证
+
+- 用户在了解代码修复与应用内验收的区别后，明确授权开始发布。`scripts/release.sh 2.3.2 --notes-file … --push` 先推送候选 `e73a4d0`，通过预检后生成版本提交 `88f2d19`、annotated tag `v2.3.2`，版本为 `2.3.2+38`。三项修复为 Appinn 固定声明清理、微信图片代理直连和 Paul Graham 旧式正文提取。
+- [Release Preflight 35243558117](https://github.com/X-Ray-git/Fourier/actions/runs/35243558117) 成功：干净官方 Flutter `3.47.0` 加仓库最小补丁；Linux 完整测试 363 项通过，3 项 macOS 专属 tooltip 测试按平台跳过；静态分析无 error/warning，59 项既有 info；Android Debug 和 macOS arm64 Release 冒烟构建均通过。本轮 CI 已补齐此前受本机 Xcode 许可阻断的 Flutter 验证，不必继续把“只跑过独立 Dart 解析测试”作为当前结论。
+- [正式发布流程 35244343946](https://github.com/X-Ray-git/Fourier/actions/runs/35244343946) 全部成功；macOS 完整测试 366 项通过，发布包主程序确认为 `Mach-O 64-bit executable arm64`。Android 签名 APK、macOS ZIP 和 Sparkle 签名 appcast 均构建并上传成功。
+- [v2.3.2 Release](https://github.com/X-Ray-git/Fourier/releases/tag/v2.3.2) 于北京时间 2026-09-18 00:15:35 正式发布，非 draft、非 prerelease。三个附件为 `Fourier-android-v2.3.2.apk`（70,089,553 字节）、`Fourier-macOS-arm64-v2.3.2.zip`（12,873,620 字节）和 `appcast.xml`（1,862 字节），均有 GitHub 提供的 SHA-256 digest。
+- 已从实际 `releases/latest/download/appcast.xml` 入口下载清单，文件 SHA-256 与 Release 附件 digest 一致，版本字段为 `2.3.2` / `38`，enclosure URL 与 ZIP 附件地址一致、长度相符且含 Ed25519 签名字段。签名生成由成功的 CI 任务完成；本地没有重新下载全部安装包或运行 Sparkle 安装来独立验证签名与升级链路。
+- 未在用户设备安装或启动新构建，文章实际阅读排版、链接/脚注交互和应用内更新安装仍待用户验收；CI 通过和产物发布不能替代这部分验证。空正文文章升级后重新打开，按原有链路重新抓取；不改正式 Hive、不批量重做旧摘要。
+
 ## 2026-09-17 Paul Graham 旧式正文提取
 
 - 用户指定的 “Making Startups Powerful” 在 `Paul Graham: Essays` 本地记录中正文为空，未生成翻译或摘要；同名 Twitter 转发是独立条目，不能混淆。仅对 Hive 瞬时副本读取，未修改正式数据库、设置或文章状态。

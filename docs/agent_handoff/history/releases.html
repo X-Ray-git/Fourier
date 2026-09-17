@@ -217,6 +217,28 @@ Fourier 2.3.0 增加 DeepSeek V4.1 Flash 支持，并强化翻译、摘要和质
 
 **完整变更**：https://github.com/X-Ray-git/Fourier/compare/v2.3.0...v2.3.1' --push
 ```
+
+## v2.3.2
+
+```bash
+./scripts/release.sh 2.3.2 -m '## 本版重点
+
+改善部分订阅来源的正文与图片加载，清理阅读和 AI 处理中的重复内容。
+
+## 修复与改进
+
+- 修复 Paul Graham 部分旧式网页无法提取正文的问题，包括《Making Startups Powerful》，保留正文链接和脚注。
+- 优化微信转载文章的图片加载，直接使用微信原图地址，避免第三方图片代理悬挂导致图片长期无法显示。
+- 清理小众软件文章中固定的 AI 总结免责声明，减少阅读、摘要、翻译与导出中的重复噪声。
+
+## 升级说明
+
+- 版本更新为 `2.3.2+38`，无需迁移配置或本地数据。
+- 此前没有正文的 Paul Graham 文章可在升级后重新打开，让应用重新抓取正文。
+- 已保存的旧摘要不会自动重新生成，需要时可手动重新生成。
+
+**完整变更**：https://github.com/X-Ray-git/Fourier/compare/v2.3.1...v2.3.2' --push
+```
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

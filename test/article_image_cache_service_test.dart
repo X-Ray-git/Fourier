@@ -49,6 +49,25 @@ void main() {
       );
     });
 
+    test('excludes proxied animations and routes them to managed playback', () {
+      const proxy =
+          'https://img.folo.is?url=https%3A%2F%2Fcdnfile.sspai.com%2Fdemo.gif&width=&height=';
+      final plan = ArticleImageCacheService.buildPrefetchPlan([
+        {
+          'articleId': 'entry',
+          'content':
+              '<img src="https://cdnfile.sspai.com/demo.gif">'
+              '<img src="$proxy">'
+              '<img src="https://example.com/static.png">',
+        },
+      ]);
+      expect(plan, [
+        {'articleId': 'entry', 'imageUrl': 'https://example.com/static.png'},
+      ]);
+      expect(ArticleImageCacheService.isBackgroundPrefetchable(proxy), isFalse);
+      expect(ArticleImageCacheService.isLikelyAnimatedImage(proxy), isTrue);
+    });
+
     test('resolves relative images before building the prefetch plan', () {
       final plan = ArticleImageCacheService.buildPrefetchPlan([
         {

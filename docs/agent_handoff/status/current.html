@@ -50,7 +50,9 @@
 <script type="text/markdown" id="wiki-content">
 # 当前状态
 
-最近更新：2026-09-18（各事项的验证时间以对应记录为准）。
+最近更新：2026-09-19（各事项的验证时间以对应记录为准）。
+
+- 少数派文章高耗电已定位到 Folo 代理隐藏 GIF 后缀，绕过已有 macOS 动图暂停机制。真实样本 4 张 GIF 在旧分类中全部漏判，原生栈证实持续 GIF 解码；已补源码识别，9 项纯 Dart 图片服务测试及静态分析通过，尚未运行新构建验证降耗。详见[性能专题](../features/performance.html)与[验证记录](verification.html)。
 
 - `v2.3.2` 后发现 Appinn 声明清理遗漏：Wake Me Up 文章使用带明确摘要指令前缀的顶层文本/a/br，旧版规则未匹配。已补修来源兼容规则，真实正文与 41 项纯解析回归通过；尚未发布或应用内验收。旧摘要已被固定声明污染，需在含修复的新构建中手动重新生成。详见[验证记录](verification.html)与[文章渲染](../features/article-rendering.html)。
 

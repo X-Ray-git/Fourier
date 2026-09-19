@@ -3,6 +3,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/services/article_image_service.dart';
 
 void main() {
+  test('recognizes animations after Folo proxy URL normalization', () {
+    for (final source in [
+      'https://cdnfile.sspai.com/example.gif',
+      'https://cdnfile.sspai.com/example.APNG',
+      'https://cdnfile.sspai.com/image?format=gif',
+      'https://cdnfile.sspai.com/image?wx_fmt=apng',
+    ]) {
+      final proxied = ArticleImageService.toProxiedUrl(source)!;
+      expect(proxied, startsWith('https://img.folo.is?url='));
+      expect(ArticleImageService.isLikelyAnimatedImage(source), isTrue);
+      expect(ArticleImageService.isLikelyAnimatedImage(proxied), isTrue);
+      expect(ArticleImageService.toProxiedUrl(proxied), proxied);
+    }
+  });
+
+  test(
+    'does not classify static proxy sources or unrelated URLs as animated',
+    () {
+      for (final url in [
+        ArticleImageService.toProxiedUrl(
+          'https://cdnfile.sspai.com/example.png?format=webp',
+        )!,
+        'https://img.folo.is',
+        'https://img.folo.is?url=',
+        'https://img.folo.is?url=not-a-url.gif',
+        'https://img.folo.is?url=javascript:example.gif',
+        'https://img.folo.is?url=%FF',
+        'https://img.folo.is?url=%E0%A4',
+        'https://img.folo.is.example.com?url=https%3A%2F%2Fexample.com%2Fa.gif',
+        'https://img.folo.is/other?url=https%3A%2F%2Fexample.com%2Fa.gif',
+        'https://example.com/article?url=https%3A%2F%2Fexample.com%2Fa.gif',
+        'https://example.com/image.webp',
+      ]) {
+        expect(ArticleImageService.isLikelyAnimatedImage(url), isFalse);
+      }
+    },
+  );
+
   test('unwraps the known Jintiankansha proxy for WeChat images', () {
     const url =
         'http://img2.jintiankansha.me/get?src='

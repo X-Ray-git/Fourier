@@ -89,6 +89,33 @@ abstract final class ArticleImageService {
     return normalized;
   }
 
+  /// Recognize known animations even after our Folo proxy wraps the source.
+  /// The source URL is only inspected; downloads and cache keys stay proxied.
+  static bool isLikelyAnimatedImage(String imageUrl) {
+    final uri = Uri.tryParse(imageUrl);
+    if (uri != null &&
+        (uri.scheme == 'https' || uri.scheme == 'http') &&
+        uri.host.toLowerCase() == 'img.folo.is' &&
+        (uri.path.isEmpty || uri.path == '/')) {
+      final source = SecurityUtils.parseHttpUrl(
+        _rawQueryParameter(uri, 'url') ?? '',
+      );
+      if (source != null && _hasAnimatedFormat(source)) return true;
+    }
+    return uri != null && _hasAnimatedFormat(uri);
+  }
+
+  static bool _hasAnimatedFormat(Uri uri) {
+    final path = uri.path.toLowerCase();
+    final query = uri.query.toLowerCase();
+    return path.endsWith('.gif') ||
+        path.endsWith('.apng') ||
+        query.contains('format=gif') ||
+        query.contains('format=apng') ||
+        query.contains('wx_fmt=gif') ||
+        query.contains('wx_fmt=apng');
+  }
+
   static bool isSvg(String imageUrl) {
     final uri = Uri.tryParse(imageUrl);
     if (uri == null) return false;

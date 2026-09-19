@@ -175,15 +175,7 @@ abstract final class ArticleImageCacheService {
   }
 
   static bool isBackgroundPrefetchable(String imageUrl) {
-    final uri = Uri.tryParse(imageUrl);
-    final lowerPath = (uri?.path ?? imageUrl).toLowerCase();
-    final lowerQuery = (uri?.query ?? '').toLowerCase();
-    return !lowerPath.endsWith('.gif') &&
-        !lowerPath.endsWith('.apng') &&
-        !lowerQuery.contains('format=gif') &&
-        !lowerQuery.contains('format=apng') &&
-        !lowerQuery.contains('wx_fmt=gif') &&
-        !lowerQuery.contains('wx_fmt=apng');
+    return !ArticleImageService.isLikelyAnimatedImage(imageUrl);
   }
 
   /// URL-level best effort used to avoid mounting known multi-frame codecs in

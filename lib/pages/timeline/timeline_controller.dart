@@ -83,7 +83,7 @@ class TimelineController extends GetxController {
       (_) => _handleAccountChanged(),
     );
     _silentSettingsWorker = ever(FeedSilentSettingsService.version, (_) {
-      final normalized = isSilentSelected.value
+      final normalized = isSilentSelected.value && selectedFeedId.value == null
           ? _normalizeSilentGroupId(selectedSilentGroupId.value)
           : null;
       if (normalized != selectedSilentGroupId.value) {
@@ -623,7 +623,11 @@ class TimelineController extends GetxController {
   }) {
     assert(feedId == null || category == null);
     assert(silent || silentGroupId == null);
-    silentGroupId = silent ? _normalizeSilentGroupId(silentGroupId) : null;
+    // A specific feed is its own scope; an omitted group must not turn it
+    // into an intersection with the ungrouped feeds.
+    silentGroupId = silent && feedId == null
+        ? _normalizeSilentGroupId(silentGroupId)
+        : null;
     if (isSilentSelected.value == silent &&
         selectedSilentGroupId.value == silentGroupId &&
         selectedFeedId.value == feedId &&

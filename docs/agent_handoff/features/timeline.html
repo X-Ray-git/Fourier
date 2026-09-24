@@ -48,6 +48,12 @@
   <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
 </div>
 <script type="text/markdown" id="wiki-content">
+
+## 静默来源与分组范围
+
+单个静默订阅源以 feedId 为范围，不叠加缺省的“未分组”限制；只有未指定 feedId 的静默分组视图才规范 silentGroupId。静默配置变化时保持该约定，否则已归组来源会错误显示空列表而侧栏计数仍正常。
+
+
 # 时间线
 
 相关文件：

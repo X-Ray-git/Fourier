@@ -49,6 +49,14 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-09-24 v2.4.0 正式发布
+
+- 用户明确要求补齐此前只构建未发布的流程。执行 `scripts/release.sh 2.4.0 --notes-file /tmp/fourier-v2.4.0-notes.md --push`；脚本先通过 [Release Preflight 36021859860](https://github.com/X-Ray-git/Fourier/actions/runs/36021859860)，再生成 `2.4.0+39`、发布提交 `f4a639e` 与 annotated tag `v2.4.0`，均已推送。
+- [正式发布 36022884684](https://github.com/X-Ray-git/Fourier/actions/runs/36022884684) 全部成功：Android/macOS 分别完成分析、测试和正式构建，macOS 校验 arm64 并生成签名 appcast，发布任务上传完整资产。
+- [v2.4.0 Release](https://github.com/X-Ray-git/Fourier/releases/tag/v2.4.0) 于 2026-09-24 23:58:27 +08 发布，非草稿、非预发布；资产为 Fourier-android-v2.4.0.apk（70122273 字节）、Fourier-macOS-arm64-v2.4.0.zip（12877514 字节）、appcast.xml（2672 字节）。升级说明明确关系数据首次重建及保留范围、旧摘要需手动重生成。
+- 此记录证明云端构建与发布成功，不替代正式安装包升级后的人工运行验收。用户已确认的本地 Release 显示与长期观察边界仍按前述记录。
+
+
 ## 2026-09-24 新构建显示验收与分批提交
 
 用户重新执行 `flutter run --release -d macos`；进程于 23:05:15 启动，App.framework 同时更新，晚于图片网络层及任务中心滚动修复。用户未找到仍加载中的图片，随后明确确认“失败列表和相关文章的显示都正常”；关闭本轮 TASK-UI-01、RELATION-01 显示验收。目录此前已确认。未人工制造断网、清缓存或调用付费 API，真实慢网络恢复仍为后续观察；长期关系质量按用户要求延期，不作为提交阻塞项。

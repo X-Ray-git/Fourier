@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fourier/models/article.dart';
@@ -33,7 +35,7 @@ void main() {
           'message': {
             'content':
                 '{"groups":['
-                '{"type":"same_event","members":["N001","H001"],"reason":"同一发布","confidence":0.91},'
+                '{"type":"same_event","members":["N001","H001"],"reason":"同一发布","topic":"机构发布模型。","confidence":0.91},'
                 '{"type":"equivalent","members":["N001","H002"],"reason":"近似重复","confidence":0.95},'
                 '{"type":"equivalent","members":["H001","H002"],"reason":"历史内部","confidence":0.8},'
                 '{"type":"unknown","members":["N001","H002"],"reason":"未知类型","confidence":0.8}'
@@ -68,8 +70,7 @@ void main() {
           {
             'finish_reason': 'stop',
             'message': {
-              'content':
-                  '{"groups":[{"members":["N001","H001"],"reason":"旧输出","confidence":0.8}]}',
+              'content': '{"groups":[{"members":["N001","H001"],"reason":"旧输出","confidence":0.8}]}',
             },
           },
         ],
@@ -172,6 +173,109 @@ void main() {
     expect(ArticleRelationPromptService.getPrompt(), '我的自定义关系规则');
   });
 
+  test('加入已有组允许一个新成员，未知组和空主题新组被拒绝', () {
+    final existing = ArticleRelationGroup(
+      id: 'event-1',
+      batchId: 'old',
+      memberIds: ['history'],
+      reason: '',
+      confidence: .9,
+      createdAt: 1,
+      kind: ArticleRelationKind.sameEvent,
+      topic: '机构发布模型。',
+    );
+    final result = ArticleRelationWorker.parseResponse(
+      {
+        'choices': [
+          {
+            'finish_reason': 'stop',
+            'message': {
+              'content': jsonEncode({
+                'groups': [
+                  {
+                    'type': 'same_event',
+                    'group_id': 'event-1',
+                    'members': ['A000042'],
+                    'topic': '',
+                  },
+                  {
+                    'type': 'same_event',
+                    'group_id': 'missing',
+                    'members': ['A000042'],
+                  },
+                  {
+                    'type': 'same_event',
+                    'members': ['A000041', 'A000042'],
+                    'topic': '',
+                  },
+                  {
+                    'type': 'same_event',
+                    'group_id': 'event-1',
+                    'members': ['A000041'],
+                  },
+                  {
+                    'type': 'equivalent',
+                    'group_id': 'event-1',
+                    'members': ['A000041', 'A000042'],
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      },
+      {
+        'A000041': _node('history', sequence: 41),
+        'A000042': _node('new', sequence: 42),
+      },
+      newLabels: {'A000042'},
+      eventGroups: [existing],
+    );
+    expect(result.groups, hasLength(1));
+    expect(result.groups.single.groupId, 'event-1');
+    expect(result.groups.single.memberIds, ['new']);
+  });
+
+  test('组上下文变化只影响后缀，自定义 Prompt 也保持稳定输入', () async {
+    await ArticleRelationPromptService.setPrompt('用户修改的事件规则');
+    expect(ArticleRelationPromptService.usesStableInputSchema, isTrue);
+    final old = _node('old', sequence: 1);
+    final fresh = _node('new', sequence: 2);
+    final first = ArticleRelationWorker.buildUserPayload(
+      ArticleRelationBatchInput(
+        id: 'first',
+        newNodes: [fresh],
+        historyNodes: [old],
+      ),
+    );
+    final second = ArticleRelationWorker.buildUserPayload(
+      ArticleRelationBatchInput(
+        id: 'second',
+        newNodes: [fresh],
+        historyNodes: [old],
+        eventGroups: [
+          const ArticleRelationGroup(
+            id: 'event',
+            batchId: 'old',
+            memberIds: ['old'],
+            reason: '',
+            confidence: .9,
+            createdAt: 1,
+            kind: ArticleRelationKind.sameEvent,
+            topic: '具体事件。',
+          ),
+        ],
+      ),
+    );
+    expect(second['articles'], first['articles']);
+    expect(
+      second.keys.toList().indexOf('event_groups'),
+      greaterThan(second.keys.toList().indexOf('articles')),
+    );
+    expect(second['article_event_ids'], {'A000001': 'event'});
+    expect((second['event_groups'] as List).single['topic'], '具体事件。');
+  });
+
   test('关闭会丢弃待处理队列，重新开启不追溯关闭期间摘要', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
     await ArticleRelationWorker.initialize();
@@ -257,8 +361,8 @@ void main() {
         newArticleIds: ['new-1'],
         historyArticleIds: [],
         model: 'deepseek-v4-flash',
-        promptVersion: 'relation-v1@test',
-        schemaVersion: 1,
+        promptVersion: 'relation-v4@test',
+        schemaVersion: 4,
         startedAt: 1000,
         completedAt: 2000,
         error: '测试失败',

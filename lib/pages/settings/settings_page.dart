@@ -52,6 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   final _tokenController = TextEditingController();
   final _deepseekApiKeyController = TextEditingController();
+  final _relatedArticlesPreviewController = TextEditingController();
+  final _relatedArticlesPreviewFocusNode = FocusNode();
   final _readSyncWindowDaysController = TextEditingController();
   final _articleContentMaxWidthController = TextEditingController();
   final _macosMaxFlingVelocityController = TextEditingController();
@@ -134,6 +136,11 @@ class _SettingsPageState extends State<SettingsPage> {
     unawaited(_accountService.refreshProfileIfMissing());
 
     _loadPersistedSettings();
+    _relatedArticlesPreviewFocusNode.addListener(() {
+      if (!_relatedArticlesPreviewFocusNode.hasFocus) {
+        unawaited(_saveRelatedArticlesPreviewCount());
+      }
+    });
     _readSyncWindowDaysFocusNode.addListener(_onReadSyncWindowFocusChanged);
     _articleContentMaxWidthFocusNode.addListener(
       _onArticleContentWidthFocusChanged,
@@ -144,6 +151,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _loadPersistedSettings() {
+    _relatedArticlesPreviewController.text = ArticleRelationService.previewCount
+        .toString();
     _tokenController.text = _accountService.sessionToken ?? '';
     _deepseekApiKeyController.text = TranslationService.getApiKey() ?? '';
     final readWindowDays = GStorage.setting.get(
@@ -183,6 +192,8 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _tokenController.dispose();
     _deepseekApiKeyController.dispose();
+    _relatedArticlesPreviewController.dispose();
+    _relatedArticlesPreviewFocusNode.dispose();
     _readSyncWindowDaysController.dispose();
     _articleContentMaxWidthController.dispose();
     _macosMaxFlingVelocityController.dispose();
@@ -507,6 +518,39 @@ class _SettingsPageState extends State<SettingsPage> {
       AppFeedback.error('设置保存失败', '已读拉取窗口已恢复原值');
     }
   }
+
+  Future<void> _saveRelatedArticlesPreviewCount() async {
+    final previous = ArticleRelationService.previewCount;
+    final count = int.tryParse(_relatedArticlesPreviewController.text.trim());
+    if (count == null || count < 1) {
+      _relatedArticlesPreviewController.text = previous.toString();
+      AppFeedback.warning('已恢复原值', '相关文章默认展示条数请填写大于等于 1 的整数');
+      return;
+    }
+    if (count == previous) return;
+    try {
+      await GStorage.setting.put(
+        StorageKeys.relatedArticlesPreviewCount,
+        count,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _relatedArticlesPreviewController.text = previous.toString();
+      AppFeedback.error('设置保存失败', '相关文章默认展示条数已恢复原值');
+    }
+  }
+
+  Widget _relatedArticlesPreviewField() => _AutoSavedSettingsTextField(
+    controller: _relatedArticlesPreviewController,
+    focusNode: _relatedArticlesPreviewFocusNode,
+    label: '相关文章默认展示条数',
+    useGlass: Platform.isMacOS,
+    hint: '${AppConstants.defaultRelatedArticlesPreviewCount}',
+    helper: '默认 3 条；超出后折叠，可随时展开；最少 1 条',
+    keyboardType: TextInputType.number,
+    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+    onCommit: _saveRelatedArticlesPreviewCount,
+  );
 
   Future<void> _saveArticleContentMaxWidth() async {
     final previous = GStorage.setting.get(
@@ -1077,6 +1121,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   ],
                                   onCommit: _saveMacosMaxFlingVelocity,
                                 ),
+                                _relatedArticlesPreviewField(),
                                 _AutoSavedSettingsTextField(
                                   controller: _readSyncWindowDaysController,
                                   focusNode: _readSyncWindowDaysFocusNode,
@@ -1628,6 +1673,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     onChanged: _setBadgeStrategy,
                   ),
                   const SizedBox(height: 12),
+                  _relatedArticlesPreviewField(),
+                  const SizedBox(height: 12),
                   _AutoSavedSettingsTextField(
                     controller: _readSyncWindowDaysController,
                     focusNode: _readSyncWindowDaysFocusNode,
@@ -2150,6 +2197,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 12),
 
+          _relatedArticlesPreviewField(),
+          const SizedBox(height: 12),
           _AutoSavedSettingsTextField(
             controller: _readSyncWindowDaysController,
             focusNode: _readSyncWindowDaysFocusNode,

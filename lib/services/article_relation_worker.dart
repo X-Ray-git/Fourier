@@ -41,7 +41,7 @@ abstract final class ArticleRelationWorker {
   static const Duration _timeout = Duration(seconds: 300);
   static const int _maxAttempts = 3;
   static String get promptVersion =>
-      'relation-v3@${ArticleRelationPromptService.promptFingerprint}';
+      'relation-v4@${ArticleRelationPromptService.promptFingerprint}';
 
   static final Dio _dio = Dio(
     BaseOptions(
@@ -77,6 +77,7 @@ abstract final class ArticleRelationWorker {
     _initialized = true;
     await ArticleRelationPromptService.migrateLegacyDefaultPrompt();
     ArticleRelationService.registerScheduler(schedule);
+    await ArticleRelationService.migrateToAnchoredGroups();
     if (!ArticleRelationService.isEnabled) {
       await ArticleRelationService.discardPending();
       return;
@@ -310,13 +311,8 @@ abstract final class ArticleRelationWorker {
     if (apiKey.trim().isEmpty) {
       throw StateError('DeepSeek API key not configured');
     }
-    final usesStableInput = ArticleRelationPromptService.usesStableInputSchema;
-    final labels = usesStableInput
-        ? _labelsFor(input)
-        : _legacyLabelsFor(input);
-    final newLabels = usesStableInput
-        ? input.newNodes.map(_stableLabel).toSet()
-        : null;
+    final labels = _labelsFor(input);
+    final newLabels = input.newNodes.map(_stableLabel).toSet();
 
     final prompt = ArticleRelationPromptService.getPrompt();
     final trace = LlmRequestTrace(
@@ -338,14 +334,7 @@ abstract final class ArticleRelationWorker {
         data: {
           'messages': [
             {'role': 'system', 'content': prompt},
-            {
-              'role': 'user',
-              'content': jsonEncode(
-                usesStableInput
-                    ? buildUserPayload(input)
-                    : _buildLegacyUserPayload(labels),
-              ),
-            },
+            {'role': 'user', 'content': jsonEncode(buildUserPayload(input))},
           ],
           'response_format': {'type': 'json_object'},
           'stream': false,
@@ -356,7 +345,12 @@ abstract final class ArticleRelationWorker {
         response.data,
         httpStatus: response.statusCode,
       );
-      final result = parseResponse(response.data, labels, newLabels: newLabels);
+      final result = parseResponse(
+        response.data,
+        labels,
+        newLabels: newLabels,
+        eventGroups: input.eventGroups,
+      );
       await trace.complete();
       return result;
     } catch (error) {
@@ -370,6 +364,7 @@ abstract final class ArticleRelationWorker {
     dynamic responseData,
     Map<String, ArticleRelationNode> labels, {
     Set<String>? newLabels,
+    List<ArticleRelationGroup> eventGroups = const [],
   }) {
     if (responseData is! Map) {
       throw const FormatException('关系响应不是 JSON 对象');
@@ -408,12 +403,28 @@ abstract final class ArticleRelationWorker {
           ? ArticleRelationKind.equivalent
           : ArticleRelationKindX.tryParse(raw['type']);
       if (kind == null) continue;
-      final memberLabels = (raw['members'] as List<dynamic>? ?? const [])
-          .whereType<String>()
-          .where(labels.containsKey)
-          .toSet()
-          .toList(growable: false);
-      if (memberLabels.length < 2 ||
+      final rawMembers = raw['members'];
+      if (rawMembers is! List ||
+          rawMembers.any((id) => id is! String || !labels.containsKey(id))) {
+        continue;
+      }
+      final memberLabels = rawMembers.cast<String>().toSet().toList(
+        growable: false,
+      );
+      final rawGroupId = raw['group_id'];
+      if (rawGroupId != null && rawGroupId is! String) continue;
+      final groupId = rawGroupId as String?;
+      final joining = groupId != null;
+      if (joining &&
+          (kind != ArticleRelationKind.sameEvent ||
+              !eventGroups.any((g) => g.id == groupId))) {
+        continue;
+      }
+      final topic = raw['topic']?.toString().trim() ?? '';
+      if (kind == ArticleRelationKind.sameEvent && !joining && topic.isEmpty) {
+        continue;
+      }
+      if (memberLabels.length < (joining ? 1 : 2) ||
           !memberLabels.any(
             (label) => newLabels?.contains(label) ?? label.startsWith('N'),
           )) {
@@ -427,6 +438,8 @@ abstract final class ArticleRelationWorker {
       groups.add(
         ArticleRelationCandidateGroup(
           kind: kind,
+          groupId: groupId,
+          topic: topic,
           memberIds: memberLabels
               .map((label) => labels[label]!.articleId)
               .toList(growable: false),
@@ -461,6 +474,25 @@ abstract final class ArticleRelationWorker {
           _nodePayload(entry.key, entry.value),
       ],
       'new_ids': [for (final node in input.newNodes) _stableLabel(node)],
+      // Mutable group state belongs after the reusable article prefix.
+      'event_groups': [
+        for (final group in input.eventGroups)
+          {
+            'id': group.id,
+            'topic': group.topic,
+            'member_ids': [
+              for (final entry in labels.entries)
+                if (group.memberIds.contains(entry.value.articleId)) entry.key,
+            ].take(3).toList(),
+          },
+      ],
+      'article_event_ids': {
+        for (final group in input.eventGroups)
+          for (final entry in labels.entries)
+            if (group.memberIds.contains(entry.value.articleId))
+              entry.key: group.id,
+      },
+      'protocol': ArticleRelationPromptService.protocolSuffix,
     };
   }
 
@@ -476,38 +508,6 @@ abstract final class ArticleRelationWorker {
       labels[label] = node;
     }
     return labels;
-  }
-
-  static Map<String, ArticleRelationNode> _legacyLabelsFor(
-    ArticleRelationBatchInput input,
-  ) {
-    final labels = <String, ArticleRelationNode>{};
-    for (var i = 0; i < input.newNodes.length; i++) {
-      labels['N${(i + 1).toString().padLeft(3, '0')}'] = input.newNodes[i];
-    }
-    for (var i = 0; i < input.historyNodes.length; i++) {
-      labels['H${(i + 1).toString().padLeft(3, '0')}'] = input.historyNodes[i];
-    }
-    return labels;
-  }
-
-  static Map<String, dynamic> _buildLegacyUserPayload(
-    Map<String, ArticleRelationNode> labels,
-  ) {
-    return {
-      'history': [
-        for (final entry in labels.entries.where(
-          (entry) => entry.key.startsWith('H'),
-        ))
-          _nodePayload(entry.key, entry.value),
-      ],
-      'new': [
-        for (final entry in labels.entries.where(
-          (entry) => entry.key.startsWith('N'),
-        ))
-          _nodePayload(entry.key, entry.value),
-      ],
-    };
   }
 
   static String _stableLabel(ArticleRelationNode node) {
@@ -554,6 +554,10 @@ abstract final class ArticleRelationWorker {
       final record = ArticleRelationBatchRecord.fromJson(
         value.cast<dynamic, dynamic>(),
       );
+      if (record.schemaVersion != ArticleRelationService.schemaVersion ||
+          record.startedAt < (ArticleRelationService.activatedAt ?? 0)) {
+        continue;
+      }
       if (latest == null || record.startedAt > latest.startedAt) {
         latest = record;
       }

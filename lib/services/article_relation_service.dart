@@ -17,11 +17,15 @@ class ArticleRelationBatchInput {
     required this.id,
     required this.newNodes,
     required this.historyNodes,
+    this.eventGroups = const [],
+    this.epoch = 0,
   });
 
   final String id;
   final List<ArticleRelationNode> newNodes;
   final List<ArticleRelationNode> historyNodes;
+  final List<ArticleRelationGroup> eventGroups;
+  final int epoch;
 }
 
 class ArticleRelationCandidateGroup {
@@ -30,12 +34,16 @@ class ArticleRelationCandidateGroup {
     required this.memberIds,
     required this.reason,
     required this.confidence,
+    this.groupId,
+    this.topic = '',
   });
 
   final ArticleRelationKind kind;
   final List<String> memberIds;
   final String reason;
   final double confidence;
+  final String? groupId;
+  final String topic;
 }
 
 class ArticleRelationDisplayItem {
@@ -55,11 +63,13 @@ class ArticleRelationDisplayItem {
 /// 关系功能只消费启用时间之后完成的摘要。pending 与 history 都持久化，
 /// 因此请求失败或进程退出不会丢任务；只有一个合法批次完整落盘后才推进窗口。
 abstract final class ArticleRelationService {
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
   static const int batchSize = 128;
   static const int historyLimit = 2048;
   static const int historyEvictionSize = 1024;
 
+  static const String _schemaKey = '__schema_version__';
+  static int _epoch = 0;
   static const String _activationKey = '__activation_at__';
   static const String _sequenceKey = '__sequence__';
   static const String _batchSequenceKey = '__batch_sequence__';
@@ -81,6 +91,13 @@ abstract final class ArticleRelationService {
       ) ==
       true;
 
+  static int get previewCount {
+    final value = GStorage.setting.get(StorageKeys.relatedArticlesPreviewCount);
+    return value is int && value >= 1
+        ? value
+        : AppConstants.defaultRelatedArticlesPreviewCount;
+  }
+
   static int? get activatedAt =>
       GStorage.articleRelations.get(_activationKey) as int?;
 
@@ -100,6 +117,7 @@ abstract final class ArticleRelationService {
   }
 
   static Future<void> initialize() async {
+    await migrateToAnchoredGroups();
     if (!isEnabled) return;
     if (_initialized) return;
     _initialized = true;
@@ -113,6 +131,39 @@ abstract final class ArticleRelationService {
     }
     await recoverCompletedSummaries();
   }
+
+  /// v4 deliberately starts a fresh relation epoch. Preserve batch numbering
+  /// and the separate usage/batch ledger; never rewrite a live Hive box externally.
+  static Future<void> migrateToAnchoredGroups() => _serialWrite(() async {
+    final box = GStorage.articleRelations;
+    if (box.get(_schemaKey) == schemaVersion) return;
+    _epoch++;
+    final sequence = box.get(_sequenceKey) as int? ?? 0;
+    final batchSequence = box.get(_batchSequenceKey) as int? ?? 0;
+    // Write the boundary before deletion so interrupted migration never recovers
+    // old summaries into the new rules. The schema marker is written last.
+    final boundary = DateTime.now().millisecondsSinceEpoch;
+    await box.put(_activationKey, boundary);
+    await box.deleteAll(
+      box.keys
+          .where(
+            (key) => !{
+              _activationKey,
+              _sequenceKey,
+              _batchSequenceKey,
+            }.contains(key),
+          )
+          .toList(),
+    );
+    await box.putAll({
+      _sequenceKey: sequence,
+      _batchSequenceKey: batchSequence,
+      _pendingKey: <String>[],
+      _historyKey: <String>[],
+      _schemaKey: schemaVersion,
+    });
+    recordsVersion.value++;
+  });
 
   /// 摘要完成并落盘后的唯一正常入队入口。
   static Future<void> onSummaryCompleted(
@@ -130,7 +181,7 @@ abstract final class ArticleRelationService {
         (!activationWasMissing && record.updatedAt < activation)) {
       return;
     }
-    await _enqueueNode(article, record);
+    await _enqueueNode(article, record, allowInitial: activationWasMissing);
   }
 
   /// 恢复“摘要已持久化、关系 pending 尚未来得及写入”的崩溃窗口。
@@ -161,9 +212,13 @@ abstract final class ArticleRelationService {
     ArticleModel article,
     SummaryRecord record, {
     bool schedule = true,
+    bool allowInitial = false,
   }) {
     return _serialWrite(() async {
-      if (!isEnabled) return;
+      if (!isEnabled ||
+          (!allowInitial && record.updatedAt < (activatedAt ?? 0))) {
+        return;
+      }
       final summary = record.summaryText!.trim();
       final digest = sha256.convert(utf8.encode(summary)).toString();
       final existing = nodeOf(article.entryId);
@@ -249,6 +304,10 @@ abstract final class ArticleRelationService {
         id: 'relation-${batchSequence.toString().padLeft(6, '0')}',
         newNodes: newNodes,
         historyNodes: historyNodes,
+        epoch: _epoch,
+        eventGroups: allGroups()
+            .where((g) => g.kind == ArticleRelationKind.sameEvent)
+            .toList(),
       );
     });
   }
@@ -259,7 +318,7 @@ abstract final class ArticleRelationService {
   ) {
     return _serialWrite(() async {
       // 开关可能在网络响应返回与串行写入之间关闭，最终提交必须再次核对。
-      if (!isEnabled) return false;
+      if (!isEnabled || input.epoch != _epoch) return false;
       final now = DateTime.now().millisecondsSinceEpoch;
       final newIds = input.newNodes.map((node) => node.articleId).toSet();
       final pending = _readIds(_pendingKey)..removeWhere(newIds.contains);
@@ -271,17 +330,16 @@ abstract final class ArticleRelationService {
         history.removeRange(0, evictionCount);
       }
 
-      final existingGroups = <String, ArticleRelationGroup>{};
-      final staleGroupKeys = <String>{};
-      for (final key in GStorage.articleRelations.keys.whereType<String>()) {
-        if (!key.startsWith(_groupPrefix)) continue;
-        final raw = GStorage.articleRelations.get(key);
-        if (raw is! Map) continue;
-        final old = ArticleRelationGroup.fromJson(raw.cast<dynamic, dynamic>());
-        existingGroups[key] = old;
-        if (old.memberIds.any(newIds.contains)) staleGroupKeys.add(key);
-      }
-
+      final existing = {for (final g in allGroups()) g.id: g};
+      final owners = <String, String>{
+        for (final g in existing.values)
+          if (g.kind == ArticleRelationKind.sameEvent)
+            for (final id in g.memberIds) id: g.id,
+      };
+      final allowedIds = {
+        ...input.newNodes,
+        ...input.historyNodes,
+      }.map((n) => n.articleId).toSet();
       final updates = <dynamic, dynamic>{
         _pendingKey: pending,
         _historyKey: history,
@@ -291,52 +349,57 @@ abstract final class ArticleRelationService {
             .copyWith(processedAt: now, lastBatchId: input.id)
             .toJson();
       }
-      final newRecords = <ArticleRelationGroup>[];
       for (var i = 0; i < groups.length; i++) {
-        final group = groups[i];
-        final memberIds = group.memberIds.toSet();
-        if (group.kind == ArticleRelationKind.sameEvent) {
-          var merged = true;
-          while (merged) {
-            merged = false;
-            for (final entry in existingGroups.entries) {
-              if (staleGroupKeys.contains(entry.key) ||
-                  entry.value.kind != ArticleRelationKind.sameEvent ||
-                  !entry.value.memberIds.any(memberIds.contains)) {
-                continue;
-              }
-              memberIds.addAll(entry.value.memberIds);
-              staleGroupKeys.add(entry.key);
-              merged = true;
-            }
-            for (var index = newRecords.length - 1; index >= 0; index--) {
-              final existing = newRecords[index];
-              if (existing.kind != ArticleRelationKind.sameEvent ||
-                  !existing.memberIds.any(memberIds.contains)) {
-                continue;
-              }
-              memberIds.addAll(existing.memberIds);
-              newRecords.removeAt(index);
-              merged = true;
-            }
+        final candidate = groups[i];
+        final members = candidate.memberIds.toSet();
+        if (!members.every(allowedIds.contains) ||
+            !members.any(newIds.contains)) {
+          continue;
+        }
+        final joining = candidate.groupId != null;
+        final old = joining ? existing[candidate.groupId] : null;
+        if (joining &&
+            (old == null ||
+                old.kind != ArticleRelationKind.sameEvent ||
+                candidate.kind != ArticleRelationKind.sameEvent ||
+                !input.eventGroups.any((g) => g.id == old.id))) {
+          continue;
+        }
+        if (members.length < (joining ? 1 : 2)) continue;
+        final id = old?.id ?? '${input.id}-g${i + 1}';
+        if (candidate.kind == ArticleRelationKind.sameEvent) {
+          // Reject the whole ambiguous operation; never silently steal members,
+          // merge groups, or turn a rejected join into a new event.
+          if (members.any(
+            (member) => owners[member] != null && owners[member] != id,
+          )) {
+            continue;
+          }
+          if (old == null && candidate.topic.trim().isEmpty) continue;
+          for (final member in members) {
+            owners[member] = id;
           }
         }
+        final topic = candidate.kind == ArticleRelationKind.sameEvent
+            ? (candidate.topic.trim().isEmpty
+                  ? old!.topic
+                  : candidate.topic.trim())
+            : '';
+        final topicHistory = [...?old?.topicHistory];
+        if (old != null && old.topic != topic) topicHistory.add(old.topic);
         final record = ArticleRelationGroup(
-          id: '${input.id}-g${i + 1}',
+          id: id,
           batchId: input.id,
-          memberIds: memberIds.toList(growable: false),
-          reason: group.reason,
-          confidence: group.confidence,
-          createdAt: now,
-          kind: group.kind,
+          memberIds: {...?old?.memberIds, ...members}.toList(),
+          reason: candidate.reason,
+          confidence: candidate.confidence,
+          createdAt: old?.createdAt ?? now,
+          kind: candidate.kind,
+          topic: topic,
+          topicHistory: topicHistory,
         );
-        newRecords.add(record);
-      }
-      if (staleGroupKeys.isNotEmpty) {
-        await GStorage.articleRelations.deleteAll(staleGroupKeys.toList());
-      }
-      for (final record in newRecords) {
-        updates['$_groupPrefix${record.id}'] = record.toJson();
+        existing[id] = record;
+        updates['$_groupPrefix$id'] = record.toJson();
       }
       await GStorage.articleRelations.putAll(updates);
       recordsVersion.value++;
@@ -344,19 +407,17 @@ abstract final class ArticleRelationService {
     });
   }
 
-  static List<ArticleRelationGroup> groupsFor(String articleId) {
-    final result = <ArticleRelationGroup>[];
-    for (final key in GStorage.articleRelations.keys.whereType<String>()) {
-      if (!key.startsWith(_groupPrefix)) continue;
-      final raw = GStorage.articleRelations.get(key);
-      if (raw is! Map) continue;
-      final group = ArticleRelationGroup.fromJson(raw.cast<dynamic, dynamic>());
-      if (group.enabled && group.memberIds.contains(articleId)) {
-        result.add(group);
-      }
-    }
-    return result;
-  }
+  static List<ArticleRelationGroup> allGroups() => [
+    for (final key in GStorage.articleRelations.keys.whereType<String>())
+      if (key.startsWith(_groupPrefix) &&
+          GStorage.articleRelations.get(key) is Map)
+        ArticleRelationGroup.fromJson(
+          GStorage.articleRelations.get(key) as Map,
+        ),
+  ].where((g) => g.enabled).toList();
+
+  static List<ArticleRelationGroup> groupsFor(String articleId) =>
+      allGroups().where((g) => g.memberIds.contains(articleId)).toList();
 
   static List<ArticleRelationDisplayItem> directRelationsFor(String articleId) {
     final kindsById = <String, ArticleRelationKind>{};
@@ -371,34 +432,9 @@ abstract final class ArticleRelationService {
     return _displayItems(kindsById);
   }
 
-  static List<ArticleRelationDisplayItem> componentFor(String articleId) {
-    final kindsById = <String, ArticleRelationKind>{
-      articleId: ArticleRelationKind.equivalent,
-    };
-    final queue = <String>[articleId];
-    while (queue.isNotEmpty) {
-      final current = queue.removeAt(0);
-      final currentKind = kindsById[current]!;
-      for (final group in groupsFor(current)) {
-        for (final id in group.memberIds) {
-          final nextKind =
-              currentKind == ArticleRelationKind.equivalent &&
-                  group.kind == ArticleRelationKind.equivalent
-              ? ArticleRelationKind.equivalent
-              : ArticleRelationKind.sameEvent;
-          final previous = kindsById[id];
-          if (previous == null ||
-              (previous == ArticleRelationKind.sameEvent &&
-                  nextKind == ArticleRelationKind.equivalent)) {
-            kindsById[id] = nextKind;
-            if (id != current) queue.add(id);
-          }
-        }
-      }
-    }
-    kindsById.remove(articleId);
-    return _displayItems(kindsById);
-  }
+  // Kept as an API alias: relations never expand through another article.
+  static List<ArticleRelationDisplayItem> componentFor(String articleId) =>
+      directRelationsFor(articleId);
 
   static bool hasSameEventGroup(String articleId) =>
       groupsFor(articleId)
@@ -465,6 +501,7 @@ abstract final class ArticleRelationService {
   }
 
   static void resetForAccountChange() {
+    _epoch++;
     _initialized = false;
     _writeQueue = Future<void>.value();
     recordsVersion.value++;
@@ -474,6 +511,8 @@ abstract final class ArticleRelationService {
   static Future<void> resetForTest({int? activatedAt}) async {
     await GStorage.articleRelations.clear();
     await GStorage.relationBatches.clear();
+    _epoch = 0;
+    await GStorage.articleRelations.put(_schemaKey, schemaVersion);
     _initialized = false;
     _writeQueue = Future<void>.value();
     _scheduler = null;

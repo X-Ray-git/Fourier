@@ -3193,43 +3193,119 @@ class _MetadataSection extends StatelessWidget {
   }
 }
 
-class _ArticleRelationsSection extends StatelessWidget {
+class _ArticleRelationsSection extends StatefulWidget {
   const _ArticleRelationsSection({required this.article, this.onOpenArticle});
 
   final ArticleModel article;
   final ValueChanged<ArticleModel>? onOpenArticle;
 
   @override
+  State<_ArticleRelationsSection> createState() =>
+      _ArticleRelationsSectionState();
+}
+
+class _ArticleRelationsSectionState extends State<_ArticleRelationsSection> {
+  bool _expanded = false;
+  StreamSubscription<dynamic>? _previewCountSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _previewCountSubscription = GStorage.setting
+        .watch(key: StorageKeys.relatedArticlesPreviewCount)
+        .listen((_) {
+          if (mounted) setState(() => _expanded = false);
+        });
+  }
+
+  @override
+  void dispose() {
+    _previewCountSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ArticleRelationsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.article.entryId != widget.article.entryId) _expanded = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Obx(() {
       ArticleRelationService.recordsVersion.value;
-      final direct = ArticleRelationService.directRelationsFor(article.entryId);
+      final direct = ArticleRelationService.directRelationsFor(
+        widget.article.entryId,
+      );
       if (direct.isEmpty) return const SizedBox.shrink();
-      final component = ArticleRelationService.componentFor(article.entryId);
-      final hasSameEvent = ArticleRelationService.hasSameEventGroup(
-        article.entryId,
+      final events = ArticleRelationService.groupsFor(widget.article.entryId)
+          .where((g) => g.kind == ArticleRelationKind.sameEvent);
+      final topic = events.isEmpty ? '' : events.first.topic;
+      final previewCount = ArticleRelationService.previewCount;
+      final visible = _expanded ? direct : direct.take(previewCount).toList();
+      final cs = Theme.of(context).colorScheme;
+      final rows = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < visible.length; i++) ...[
+            if (i > 0) const SizedBox(height: 6),
+            _ArticleRelationRow(
+              item: visible[i],
+              onTap: () => _open(context, visible[i]),
+            ),
+          ],
+          if (direct.length > previewCount)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                icon: Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18,
+                ),
+                label: Text(
+                  _expanded ? '收起' : '展开其余 ${direct.length - previewCount} 篇',
+                ),
+              ),
+            ),
+        ],
+      );
+      final topicBox = Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          topic,
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
       );
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < direct.length; i++) ...[
-              if (i > 0) const SizedBox(height: 6),
-              _ArticleRelationRow(
-                item: direct[i],
-                onTap: () => _open(context, direct[i]),
-              ),
-            ],
-            if (component.length > direct.length) ...[
-              const SizedBox(height: 6),
-              _RelationGroupButton(
-                count: component.length + 1,
-                hasSameEvent: hasSameEvent,
-                onTap: () => _showGroup(context, component),
-              ),
-            ],
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (topic.isEmpty) return rows;
+            if (constraints.maxWidth >= 620) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: rows),
+                  const SizedBox(width: 10),
+                  SizedBox(width: 180, child: topicBox),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [topicBox, const SizedBox(height: 6), rows],
+            );
+          },
         ),
       );
     });
@@ -3241,8 +3317,8 @@ class _ArticleRelationsSection extends StatelessWidget {
   ) async {
     final localArticle = item.article;
     if (localArticle != null) {
-      if (Platform.isMacOS && onOpenArticle != null) {
-        onOpenArticle!(localArticle);
+      if (Platform.isMacOS && widget.onOpenArticle != null) {
+        widget.onOpenArticle!(localArticle);
         return;
       }
       await Get.toNamed(
@@ -3256,51 +3332,6 @@ class _ArticleRelationsSection extends StatelessWidget {
       return;
     }
     await ExternalLinkService.openUrlWithFeedback(item.node.url);
-  }
-
-  Future<void> _showGroup(
-    BuildContext context,
-    List<ArticleRelationDisplayItem> items,
-  ) async {
-    final cs = Theme.of(context).colorScheme;
-    final selected = await showDialog<ArticleRelationDisplayItem>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: cs.surface.withValues(alpha: 0.96),
-        title: Text(
-          ArticleRelationService.hasSameEventGroup(article.entryId)
-              ? '同一事件组'
-              : '近似重复组',
-        ),
-        content: SizedBox(
-          width: 520,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 520),
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 6),
-              itemBuilder: (_, index) {
-                final item = items[index];
-                return _ArticleRelationRow(
-                  item: item,
-                  onTap: () => Navigator.of(dialogContext).pop(item),
-                );
-              },
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-    if (selected != null && context.mounted) {
-      await _open(context, selected);
-    }
   }
 }
 
@@ -3452,41 +3483,6 @@ class _ArticleRelationStatus extends StatelessWidget {
         fontSize: 10,
       );
     });
-  }
-}
-
-class _RelationGroupButton extends StatelessWidget {
-  const _RelationGroupButton({
-    required this.count,
-    required this.hasSameEvent,
-    required this.onTap,
-  });
-
-  final int count;
-  final bool hasSameEvent;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.account_tree_outlined, size: 15, color: cs.primary),
-            const SizedBox(width: 7),
-            Text(
-              hasSameEvent ? '查看同一事件组（$count 篇）' : '查看近似重复组（$count 篇）',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

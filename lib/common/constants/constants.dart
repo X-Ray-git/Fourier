@@ -14,6 +14,7 @@ abstract final class AppConstants {
   static const int defaultPageSize = 50;
   static const int defaultTimeout = 30000;
   static const int defaultReadSyncWindowDays = 2;
+  static const int defaultRelatedArticlesPreviewCount = 3;
   static const int defaultArticleContentMaxWidth = 720;
   static const int defaultMacosMaxFlingVelocity = 4500;
   static const String defaultAppearanceMode = 'system';
@@ -37,6 +38,8 @@ abstract final class StorageKeys {
   static const String macosMaxFlingVelocity = 'macos_max_fling_velocity';
   static const String appearanceMode = 'appearance_mode';
   static const String articleRelationEnabled = 'article_relation_enabled';
+  static const String relatedArticlesPreviewCount =
+      'related_articles_preview_count';
   static const String readabilityFetchedPrefix = 'readability_fetched_';
   static const String readabilityFetchStatePrefix = 'readability_fetch_state_';
   static const String inboxDetailFetchedPrefix = 'inbox_detail_fetched_';

@@ -131,6 +131,8 @@ class ArticleRelationGroup {
     required this.createdAt,
     this.kind = ArticleRelationKind.equivalent,
     this.enabled = true,
+    this.topic = '',
+    this.topicHistory = const [],
   });
 
   final String id;
@@ -141,6 +143,8 @@ class ArticleRelationGroup {
   final int createdAt;
   final ArticleRelationKind kind;
   final bool enabled;
+  final String topic;
+  final List<String> topicHistory;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -151,6 +155,8 @@ class ArticleRelationGroup {
     'createdAt': createdAt,
     'kind': kind.storageValue,
     'enabled': enabled,
+    'topic': topic,
+    'topicHistory': topicHistory,
   };
 
   factory ArticleRelationGroup.fromJson(Map<dynamic, dynamic> json) {
@@ -168,6 +174,10 @@ class ArticleRelationGroup {
           ArticleRelationKindX.tryParse(json['kind']) ??
           ArticleRelationKind.equivalent,
       enabled: json['enabled'] as bool? ?? true,
+      topic: json['topic'] as String? ?? '',
+      topicHistory: (json['topicHistory'] as List? ?? const [])
+          .whereType<String>()
+          .toList(),
     );
   }
 }

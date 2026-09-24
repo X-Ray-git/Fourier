@@ -257,7 +257,7 @@ void main() {
     expect(ArticleRelationService.historyCount, 0);
   });
 
-  test('同一事件组跨批次显式合并，近似重复保持独立子组', () async {
+  test('通过稳定组 ID 加入事件并保持近似重复子组', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
     for (var index = 0; index < 3; index++) {
       await ArticleRelationService.onSummaryCompleted(
@@ -277,6 +277,7 @@ void main() {
         kind: ArticleRelationKind.sameEvent,
         memberIds: ['article-0', 'article-1'],
         reason: '同一发布',
+        topic: '机构发布模型。',
         confidence: 0.9,
       ),
       ArticleRelationCandidateGroup(
@@ -301,7 +302,9 @@ void main() {
     await ArticleRelationService.completeBatch(second!, const [
       ArticleRelationCandidateGroup(
         kind: ArticleRelationKind.sameEvent,
-        memberIds: ['article-1', 'article-3'],
+        memberIds: ['article-3'],
+        groupId: 'relation-000001-g1',
+        topic: '机构发布新版模型。',
         reason: '同一发布的新增报道',
         confidence: 0.88,
       ),
@@ -311,6 +314,9 @@ void main() {
         .where((group) => group.kind == ArticleRelationKind.sameEvent)
         .toList();
     expect(eventGroups, hasLength(1));
+    expect(eventGroups.single.id, 'relation-000001-g1');
+    expect(eventGroups.single.topicHistory, ['机构发布模型。']);
+    expect(eventGroups.single.topic, '机构发布新版模型。');
     expect(eventGroups.single.memberIds.toSet(), {
       'article-0',
       'article-1',
@@ -321,6 +327,148 @@ void main() {
           .where((group) => group.kind == ArticleRelationKind.equivalent),
       hasLength(1),
     );
+  });
+
+  test('共享成员不能合并事件，重复关系不产生跨两级关系', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    for (var i = 0; i < 5; i++) {
+      await ArticleRelationService.onSummaryCompleted(
+        _article(i),
+        SummaryRecord(
+          status: SummaryStatus.done,
+          summaryText: '摘要 $i',
+          updatedAt: 1000 + i,
+        ),
+      );
+    }
+    final first = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await ArticleRelationService.completeBatch(first, const [
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        memberIds: ['article-0', 'article-1'],
+        topic: '甲公司发布甲模型。',
+        reason: '',
+        confidence: .9,
+      ),
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        memberIds: ['article-2', 'article-3'],
+        topic: '乙公司发布乙模型。',
+        reason: '',
+        confidence: .9,
+      ),
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.equivalent,
+        memberIds: ['article-1', 'article-2'],
+        reason: '独立重复关系',
+        confidence: .9,
+      ),
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        memberIds: ['article-1', 'article-4'],
+        topic: '不应通过重叠成员创建。',
+        reason: '',
+        confidence: .9,
+      ),
+    ]);
+    expect(
+      ArticleRelationService.allGroups().where(
+        (g) => g.kind == ArticleRelationKind.sameEvent,
+      ),
+      hasLength(2),
+    );
+    expect(ArticleRelationService.groupsFor('article-4'), isEmpty);
+    expect(
+      ArticleRelationService.componentFor('article-0')
+          .map((i) => i.node.articleId),
+      ['article-1'],
+    );
+    await ArticleRelationService.onSummaryCompleted(
+      _article(5),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '桥接比较',
+        updatedAt: 2000,
+      ),
+    );
+    final next = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await ArticleRelationService.completeBatch(next, const [
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        groupId: 'relation-000001-g1',
+        memberIds: ['article-2', 'article-5'],
+        reason: '不得抢走其他事件的成员',
+        confidence: .9,
+      ),
+      ArticleRelationCandidateGroup(
+        kind: ArticleRelationKind.sameEvent,
+        groupId: 'missing',
+        memberIds: ['article-5'],
+        reason: '不存在的组',
+        confidence: .9,
+      ),
+    ]);
+    expect(ArticleRelationService.groupsFor('article-5'), isEmpty);
+    expect(ArticleRelationService.allGroups(), hasLength(3));
+  });
+
+  test('规则迁移清空派生状态，保留账本并拒绝旧批次写回', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    await ArticleRelationService.onSummaryCompleted(
+      _article(0),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '旧摘要',
+        updatedAt: 1000,
+      ),
+    );
+    final old = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await GStorage.relationBatches.put('audit', {'status': 'done'});
+    await GStorage.summaries.put('article-0', {
+      'status': 'done',
+      'summaryText': '旧摘要',
+      'updatedAt': 1000,
+    });
+    await GStorage.articleRelations.put('__schema_version__', 3);
+    await ArticleRelationService.migrateToAnchoredGroups();
+    expect(ArticleRelationService.pendingCount, 0);
+    expect(ArticleRelationService.historyCount, 0);
+    expect(ArticleRelationService.groupCount, 0);
+    expect(ArticleRelationService.nodeOf('article-0'), isNull);
+    expect(GStorage.relationBatches.get('audit'), isNotNull);
+    expect(GStorage.summaries.get('article-0'), isNotNull);
+    expect(await ArticleRelationService.completeBatch(old, const []), isFalse);
+    await ArticleRelationService.onSummaryCompleted(
+      _article(0),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '旧摘要',
+        updatedAt: 1000,
+      ),
+    );
+    expect(ArticleRelationService.pendingCount, 0);
+    final boundary = ArticleRelationService.activatedAt;
+    await ArticleRelationService.migrateToAnchoredGroups();
+    expect(ArticleRelationService.activatedAt, boundary);
+    await ArticleRelationService.onSummaryCompleted(
+      _article(1),
+      SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '新规则摘要',
+        updatedAt: boundary! + 1,
+      ),
+    );
+    final next = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    expect(next.id, 'relation-000002');
+    expect(next.newNodes.single.sequence, 2);
   });
 
   test('旧关系记录默认迁移为近似重复', () {

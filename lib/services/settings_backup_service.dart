@@ -74,6 +74,7 @@ abstract final class SettingsBackupService {
     StorageKeys.appearanceMode,
     StorageKeys.badgeStrategy,
     StorageKeys.articleContentMaxWidth,
+    StorageKeys.relatedArticlesPreviewCount,
     StorageKeys.macosMaxFlingVelocity,
     StorageKeys.articleRelationEnabled,
     _deepseekApiKey,
@@ -98,6 +99,7 @@ abstract final class SettingsBackupService {
   static const _intKeys = {
     StorageKeys.readSyncWindowDays,
     StorageKeys.articleContentMaxWidth,
+    StorageKeys.relatedArticlesPreviewCount,
     StorageKeys.macosMaxFlingVelocity,
     _autoRetryMaxCount,
   };
@@ -320,6 +322,16 @@ abstract final class SettingsBackupService {
             : value;
       }
       throw FormatException('$key 必须是字符串');
+    }
+
+    if (key == StorageKeys.relatedArticlesPreviewCount) {
+      if (value is num &&
+          value.isFinite &&
+          value == value.roundToDouble() &&
+          value >= 1) {
+        return value.toInt();
+      }
+      throw const FormatException('相关文章默认展示条数必须是大于等于 1 的整数');
     }
 
     if (_intKeys.contains(key) ||

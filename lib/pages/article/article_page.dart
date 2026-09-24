@@ -2296,45 +2296,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
             },
           ),
         ),
-        if (Platform.isMacOS && _isTocOpen)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => setState(() => _isTocOpen = false),
-            ),
-          ),
-        if (Platform.isMacOS)
-          Obx(() {
-            final showTrans =
-                controller.showTranslation.value &&
-                controller.translatedChunks.isNotEmpty;
-            final activeChunks = showTrans
-                ? controller.translatedChunks
-                : controller.chunks;
-            final entries = _tocEntriesFor(activeChunks, showTrans);
-            if (entries.isEmpty) return const SizedBox.shrink();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _scheduleActiveTocUpdate();
-              }
-            });
-            return Positioned(
-              top: _macToolbarButtonTop(context),
-              right: _macTocButtonRight,
-              child: ValueListenableBuilder<String?>(
-                valueListenable: _activeTocId,
-                builder: (context, activeTocId, child) {
-                  return _ArticleTocOverlay(
-                    entries: entries,
-                    activeTocId: activeTocId,
-                    isOpen: _isTocOpen,
-                    onToggle: () => setState(() => _isTocOpen = !_isTocOpen),
-                    onEntryTap: _scrollToTocEntry,
-                  );
-                },
-              ),
-            );
-          }),
         if (Platform.isMacOS)
           Obx(() {
             final showTrans =
@@ -2371,6 +2332,46 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                 onPressed: enabled
                     ? () => widget.onMisclassifyKeyPressed!()
                     : null,
+              ),
+            );
+          }),
+        // All toolbar actions must stay below the dismiss barrier and TOC.
+        if (Platform.isMacOS && _isTocOpen)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => setState(() => _isTocOpen = false),
+            ),
+          ),
+        if (Platform.isMacOS)
+          Obx(() {
+            final showTrans =
+                controller.showTranslation.value &&
+                controller.translatedChunks.isNotEmpty;
+            final activeChunks = showTrans
+                ? controller.translatedChunks
+                : controller.chunks;
+            final entries = _tocEntriesFor(activeChunks, showTrans);
+            if (entries.isEmpty) return const SizedBox.shrink();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _scheduleActiveTocUpdate();
+              }
+            });
+            return Positioned(
+              top: _macToolbarButtonTop(context),
+              right: _macTocButtonRight,
+              child: ValueListenableBuilder<String?>(
+                valueListenable: _activeTocId,
+                builder: (context, activeTocId, child) {
+                  return _ArticleTocOverlay(
+                    entries: entries,
+                    activeTocId: activeTocId,
+                    isOpen: _isTocOpen,
+                    onToggle: () => setState(() => _isTocOpen = !_isTocOpen),
+                    onEntryTap: _scrollToTocEntry,
+                  );
+                },
               ),
             );
           }),
@@ -2811,7 +2812,6 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
                                   child: _ArticleTocPanelContent(
                                     entries: widget.entries,
                                     activeTocId: widget.activeTocId,
-                                    onToggle: widget.onToggle,
                                     onEntryTap: widget.onEntryTap,
                                   ),
                                 ),
@@ -2825,6 +2825,24 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
               ),
             ),
           ),
+          // Anchor the smaller close control to the original trigger center,
+          // independently of the morphing panel and its content padding.
+          if (showContent)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Opacity(
+                opacity: contentOpacity,
+                child: IgnorePointer(
+                  ignoring: contentOpacity < 0.95,
+                  child: _TocIconButton(
+                    icon: Icons.keyboard_arrow_up_rounded,
+                    tooltip: '收起目录',
+                    onTap: widget.onToggle,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2857,13 +2875,11 @@ class _ArticleTocMorphLayerState extends State<_ArticleTocMorphLayer> {
 class _ArticleTocPanelContent extends StatelessWidget {
   final List<_ArticleTocEntry> entries;
   final String? activeTocId;
-  final VoidCallback onToggle;
   final ValueChanged<_ArticleTocEntry> onEntryTap;
 
   const _ArticleTocPanelContent({
     required this.entries,
     required this.activeTocId,
-    required this.onToggle,
     required this.onEntryTap,
   });
 
@@ -2874,31 +2890,29 @@ class _ArticleTocPanelContent extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
-          child: Row(
-            children: [
-              Icon(
-                Icons.format_list_bulleted_rounded,
-                size: 17,
-                color: cs.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '目录',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
+          padding: const EdgeInsets.fromLTRB(12, 0, 42, 16),
+          child: SizedBox(
+            height: 34,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.format_list_bulleted_rounded,
+                  size: 17,
+                  color: cs.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '目录',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
                   ),
                 ),
-              ),
-              _TocIconButton(
-                icon: Icons.keyboard_arrow_up_rounded,
-                tooltip: '收起目录',
-                onTap: onToggle,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.28)),
@@ -3081,11 +3095,16 @@ class _TocIconButtonState extends State<_TocIconButton> {
               curve: Curves.easeOutCubic,
               width: 34,
               height: 34,
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(999),
+              // Keep the original 34px target and center; shrink only the
+              // visible circle to 26px, independently of panel padding.
+              padding: const EdgeInsets.all(4),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(widget.icon, size: 18, color: cs.onSurface),
               ),
-              child: Icon(widget.icon, size: 18, color: cs.onSurface),
             ),
           ),
         ),

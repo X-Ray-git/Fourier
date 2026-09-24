@@ -38,13 +38,17 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
   Timer? _refreshTimer;
   bool _syncingReads = false;
   bool _tickerEnabled = true;
+  _AiTaskType? _activeFailureType;
+  double _overviewScrollOffset = 0;
   final _macScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _tickerEnabled) setState(() {});
+      if (mounted && _tickerEnabled && _activeFailureType == null) {
+        setState(() {});
+      }
     });
   }
 
@@ -77,6 +81,29 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     }
   }
 
+  void _openFailures(_AiTaskType type) {
+    if (Platform.isMacOS) {
+      // Keep drill-down inside the task surface, including its glass, close
+      // button, and surrounding settings context. No root page is pushed.
+      _overviewScrollOffset = _macScrollController.hasClients
+          ? _macScrollController.offset
+          : 0;
+      setState(() => _activeFailureType = type);
+      return;
+    }
+    Get.to(() => _AiFailureListPage(type: type));
+  }
+
+  void _showTaskOverview() {
+    setState(() => _activeFailureType = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_macScrollController.hasClients) return;
+      // A lazy list's first-frame extent is only an estimate. Restore the
+      // saved offset first; ScrollPosition corrects real bounds after layout.
+      _macScrollController.jumpTo(_overviewScrollOffset);
+    });
+  }
+
   void _openFilterReview() {
     if (Get.isRegistered<MainController>()) {
       final shouldCloseCurrentSurface = Platform.isMacOS
@@ -97,6 +124,15 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final failureType = _activeFailureType;
+    if (Platform.isMacOS && failureType != null) {
+      return _AiFailureListPage(
+        key: ValueKey(failureType),
+        type: failureType,
+        embedded: widget.embedded,
+        onBack: _showTaskOverview,
+      );
+    }
     final articles = LocalArticleDbService.readAllArticles();
     final pendingReads = ReadSyncService.pendingReadItems.length;
     final rejected = articles
@@ -187,10 +223,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
                 : null,
             onAction:
                 TranslationService.countByStatus(TranslationStatus.error) > 0
-                ? () => Get.to(
-                    () =>
-                        const _AiFailureListPage(type: _AiTaskType.translation),
-                  )
+                ? () => _openFailures(_AiTaskType.translation)
                 : null,
           ),
           const SizedBox(height: 8),
@@ -206,9 +239,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
                 ? '查看失败'
                 : null,
             onAction: SummaryService.countByStatus(SummaryStatus.error) > 0
-                ? () => Get.to(
-                    () => const _AiFailureListPage(type: _AiTaskType.summary),
-                  )
+                ? () => _openFailures(_AiTaskType.summary)
                 : null,
           ),
           const SizedBox(height: 8),
@@ -312,11 +343,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
                             TranslationStatus.error,
                           ) >
                           0
-                      ? () => Get.to(
-                          () => const _AiFailureListPage(
-                            type: _AiTaskType.translation,
-                          ),
-                        )
+                      ? () => _openFailures(_AiTaskType.translation)
                       : null,
                 ),
                 const SizedBox(height: 8),
@@ -334,11 +361,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
                       : null,
                   onAction:
                       SummaryService.countByStatus(SummaryStatus.error) > 0
-                      ? () => Get.to(
-                          () => const _AiFailureListPage(
-                            type: _AiTaskType.summary,
-                          ),
-                        )
+                      ? () => _openFailures(_AiTaskType.summary)
                       : null,
                 ),
                 const SizedBox(height: 8),
@@ -421,7 +444,15 @@ class _TaskCenterTitle extends StatelessWidget {
 class _AiFailureListPage extends StatefulWidget {
   final _AiTaskType type;
 
-  const _AiFailureListPage({required this.type});
+  final bool embedded;
+  final VoidCallback? onBack;
+
+  const _AiFailureListPage({
+    super.key,
+    required this.type,
+    this.embedded = false,
+    this.onBack,
+  });
 
   @override
   State<_AiFailureListPage> createState() => _AiFailureListPageState();
@@ -445,89 +476,69 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
     final failures = _failureItems();
 
     if (Platform.isMacOS) {
+      final content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              AppGlassIconButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                tooltip: '返回',
+                onPressed: widget.onBack ?? Get.back,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _FailureListTitle(
+                  isTranslation: _isTranslation,
+                  embedded: widget.embedded,
+                ),
+              ),
+              if (widget.embedded) const SizedBox(width: 46),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: failures.isEmpty
+                ? _MacEmptyTaskState(colorScheme: cs)
+                : MacGlassScrollArea(
+                    controller: _macScrollController,
+                    child: ListView.separated(
+                      controller: _macScrollController,
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.paddingOf(context).bottom + 24,
+                      ),
+                      itemBuilder: (context, index) {
+                        final item = failures[index];
+                        final article = item.article;
+                        final retrying =
+                            article != null &&
+                            _retrying.contains(article.entryId);
+                        return _FailureArticleCard(
+                          item: item,
+                          type: widget.type,
+                          retrying: retrying,
+                          onRetry: retrying || article == null
+                              ? null
+                              : () => _retry(article),
+                          onOpen: article == null
+                              ? null
+                              : () => _openArticle(article),
+                        );
+                      },
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemCount: failures.length,
+                    ),
+                  ),
+          ),
+        ],
+      );
+      if (widget.embedded) return content;
       return Scaffold(
         backgroundColor: cs.surface.withValues(alpha: 0.74),
         body: SafeArea(
           bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    AppGlassIconButton(
-                      icon: Icons.arrow_back_ios_new_rounded,
-                      tooltip: '返回',
-                      onPressed: Get.back,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: MacOSWindowDragArea(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _isTranslation ? '翻译失败文章' : '摘要失败文章',
-                              style: TextStyle(
-                                fontSize: 28,
-                                height: 1.1,
-                                fontWeight: FontWeight.w800,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '按文章排查失败原因，并支持单篇重试。',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: failures.isEmpty
-                      ? _MacEmptyTaskState(colorScheme: cs)
-                      : MacGlassScrollArea(
-                          controller: _macScrollController,
-                          child: ListView.separated(
-                            controller: _macScrollController,
-                            padding: EdgeInsets.only(
-                              bottom: MediaQuery.paddingOf(context).bottom + 24,
-                            ),
-                            itemBuilder: (context, index) {
-                              final item = failures[index];
-                              final article = item.article;
-                              final retrying =
-                                  article != null &&
-                                  _retrying.contains(article.entryId);
-                              return _FailureArticleCard(
-                                item: item,
-                                type: widget.type,
-                                retrying: retrying,
-                                onRetry: retrying || article == null
-                                    ? null
-                                    : () => _retry(article),
-                                onOpen: article == null
-                                    ? null
-                                    : () => _openArticle(article),
-                              );
-                            },
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 8),
-                            itemCount: failures.length,
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
+          child: Padding(padding: const EdgeInsets.all(8), child: content),
         ),
       );
     }
@@ -655,8 +666,44 @@ class _AiFailureListPageState extends State<_AiFailureListPage> {
     }
   }
 
-  void _openArticle(ArticleModel article) {
-    Get.toNamed(Routes.article, arguments: article);
+  Future<void> _openArticle(ArticleModel article) async {
+    await Get.toNamed(Routes.article, arguments: article);
+    if (mounted) setState(() {});
+  }
+}
+
+class _FailureListTitle extends StatelessWidget {
+  const _FailureListTitle({
+    required this.isTranslation,
+    required this.embedded,
+  });
+
+  final bool isTranslation;
+  final bool embedded;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          isTranslation ? '翻译失败文章' : '摘要失败文章',
+          style: TextStyle(
+            fontSize: embedded ? 22 : 28,
+            height: 1.1,
+            fontWeight: FontWeight.w800,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '按文章排查失败原因，并支持单篇重试。',
+          style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+        ),
+      ],
+    );
+    return embedded ? title : MacOSWindowDragArea(child: title);
   }
 }
 
@@ -747,50 +794,62 @@ class _FailureArticleCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Text(
                   _formatTime(item.record.updatedAt),
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
-                const Spacer(),
-                if (Platform.isMacOS)
-                  AppGlassButton(
-                    label: '打开',
-                    onPressed: canOpen ? onOpen : null,
-                  )
-                else
-                  TextButton(
-                    onPressed: canOpen ? onOpen : null,
-                    child: const Text('打开'),
-                  ),
-                const SizedBox(width: 6),
-                if (Platform.isMacOS)
-                  AppGlassButton(
-                    label: retrying ? '重试中' : retryBlockedReason ?? '重试',
-                    icon: type == _AiTaskType.translation
-                        ? Icons.translate
-                        : Icons.summarize,
-                    onPressed: canRetry ? onRetry : null,
-                    role: AppGlassButtonRole.primary,
-                  )
-                else
-                  FilledButton.icon(
-                    onPressed: canRetry ? onRetry : null,
-                    icon: retrying
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            type == _AiTaskType.translation
-                                ? Icons.translate
-                                : Icons.summarize,
-                            size: 16,
-                          ),
-                    label: Text(retrying ? '重试中' : retryBlockedReason ?? '重试'),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (Platform.isMacOS)
+                      AppGlassButton(
+                        label: '打开',
+                        onPressed: canOpen ? onOpen : null,
+                      )
+                    else
+                      TextButton(
+                        onPressed: canOpen ? onOpen : null,
+                        child: const Text('打开'),
+                      ),
+                    const SizedBox(width: 6),
+                    if (Platform.isMacOS)
+                      AppGlassButton(
+                        label: retrying ? '重试中' : retryBlockedReason ?? '重试',
+                        icon: type == _AiTaskType.translation
+                            ? Icons.translate
+                            : Icons.summarize,
+                        onPressed: canRetry ? onRetry : null,
+                        role: AppGlassButtonRole.primary,
+                      )
+                    else
+                      FilledButton.icon(
+                        onPressed: canRetry ? onRetry : null,
+                        icon: retrying
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                type == _AiTaskType.translation
+                                    ? Icons.translate
+                                    : Icons.summarize,
+                                size: 16,
+                              ),
+                        label: Text(
+                          retrying ? '重试中' : retryBlockedReason ?? '重试',
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ],

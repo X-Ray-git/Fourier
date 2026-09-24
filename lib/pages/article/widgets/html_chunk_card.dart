@@ -17,7 +17,6 @@ import 'package:html/parser.dart' as html_parser;
 import '../../../common/widgets/feedback_toast.dart';
 import '../../../common/widgets/app_context_menu.dart';
 import '../../../common/widgets/app_glass.dart';
-import '../../../common/widgets/diagnostic_activity_marker.dart';
 import '../../../utils/article_content_utils.dart';
 import '../../../utils/bilibili_embed_utils.dart';
 import '../../../utils/html_chunk_parser.dart';
@@ -27,10 +26,10 @@ import '../../../utils/image_clipboard.dart';
 import '../../../utils/macos_zoom_in_cursor.dart';
 import '../../../utils/selectable_html_compatibility.dart';
 import '../../../services/article_image_service.dart';
-import '../../../services/animation_activity_monitor.dart';
 import '../../../services/article_image_cache_service.dart';
 import '../../../services/external_link_service.dart';
 import 'bilibili_embed_player.dart';
+import 'image_loading_placeholder.dart';
 import 'article_svg_image.dart';
 import 'inline_video_player.dart';
 import 'youtube_embed_player.dart';
@@ -1209,6 +1208,20 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           explicitHeight ??= 20.0;
         }
 
+        // HTML-embedded photos need the same retry state as standalone chunks.
+        if (!isInlineEmoji) {
+          return _ArticleInlineImage(
+            articleId: widget.articleId,
+            imageUrl: imageUrl,
+            maxWidth: widget.maxWidth,
+            imageWidth: explicitWidth,
+            imageHeight: explicitHeight,
+            style: attrs['style'],
+            className: attrs['class'],
+            onTap: widget.onImageTap,
+          );
+        }
+
         final renderWidth = _resolvedImageWidth(
           widget.maxWidth,
           imageWidth: explicitWidth,
@@ -1232,7 +1245,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
           width: renderWidth,
           height: renderHeight,
           child: const Center(
-            child: _BoundedImageLoadingIndicator(size: 16, strokeWidth: 2),
+            child: ImageLoadingPlaceholder(size: 16, strokeWidth: 2),
           ),
         );
         final errorWidget = Container(
@@ -1489,10 +1502,7 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     width: displayWidth,
                     height: displayHeight,
                     child: const Center(
-                      child: _BoundedImageLoadingIndicator(
-                        size: 24,
-                        strokeWidth: 2,
-                      ),
+                      child: ImageLoadingPlaceholder(size: 24, strokeWidth: 2),
                     ),
                   ),
                   errorWidget: errorWidget,
@@ -1517,10 +1527,7 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     width: displayWidth,
                     height: displayHeight,
                     child: const Center(
-                      child: _BoundedImageLoadingIndicator(
-                        size: 24,
-                        strokeWidth: 2,
-                      ),
+                      child: ImageLoadingPlaceholder(size: 24, strokeWidth: 2),
                     ),
                   ),
                   errorWidget: errorWidget,
@@ -1561,10 +1568,7 @@ class _ArticleInlineImageState extends State<_ArticleInlineImage>
                     width: displayWidth,
                     height: displayHeight,
                     child: const Center(
-                      child: _BoundedImageLoadingIndicator(
-                        size: 24,
-                        strokeWidth: 2,
-                      ),
+                      child: ImageLoadingPlaceholder(size: 24, strokeWidth: 2),
                     ),
                   ),
                   errorWidget: (context, url, error) {
@@ -1777,60 +1781,6 @@ class InlineCodeExtension extends HtmlExtension {
           borderRadius: BorderRadius.circular(6),
         ),
         child: child,
-      ),
-    );
-  }
-}
-
-/// Keeps slow or stalled image requests from driving an indeterminate
-/// progress animation at the display refresh rate indefinitely.
-class _BoundedImageLoadingIndicator extends StatefulWidget {
-  const _BoundedImageLoadingIndicator({
-    required this.size,
-    required this.strokeWidth,
-  });
-
-  final double size;
-  final double strokeWidth;
-
-  @override
-  State<_BoundedImageLoadingIndicator> createState() =>
-      _BoundedImageLoadingIndicatorState();
-}
-
-class _BoundedImageLoadingIndicatorState
-    extends State<_BoundedImageLoadingIndicator> {
-  static const _animatedDuration = Duration(seconds: 4);
-
-  Timer? _settleTimer;
-  bool _isAnimated = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _settleTimer = Timer(_animatedDuration, () {
-      if (mounted) setState(() => _isAnimated = false);
-    });
-  }
-
-  @override
-  void dispose() {
-    _settleTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: DiagnosticActivityMarker(
-        kind: AnimationActivityKind.imagePlaceholder,
-        active: _isAnimated,
-        child: CircularProgressIndicator(
-          value: _isAnimated ? null : 0.72,
-          strokeWidth: widget.strokeWidth,
-        ),
       ),
     );
   }

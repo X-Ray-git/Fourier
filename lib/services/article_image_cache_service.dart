@@ -10,6 +10,7 @@ import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
 import 'article_image_retry_scheduler.dart';
 import 'article_image_service.dart';
+import 'image_network_cache.dart';
 
 @immutable
 class ArticleImageRetryState {
@@ -83,7 +84,7 @@ abstract final class ArticleImageCacheService {
   static bool _cleanupRunning = false;
   static bool? _enabledOverrideForTesting;
 
-  static BaseCacheManager get _cacheManager => DefaultCacheManager();
+  static BaseCacheManager get _cacheManager => ImageNetworkCache.instance;
 
   static bool get _enabled =>
       _enabledOverrideForTesting ?? (Platform.isMacOS || Platform.isAndroid);

@@ -18,6 +18,7 @@ dependencies:
 
   # 网络请求
   dio: ^5.7.0
+  http: ^1.6.0
 
   # 本地存储
   hive: ^2.2.3

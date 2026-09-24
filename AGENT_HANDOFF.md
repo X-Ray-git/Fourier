@@ -11,7 +11,7 @@
 
 当前硬性规则：
 
-- 除非用户明确要求，否则不要打 tag 或发布 release；发布只允许从 `main` 分支通过 `scripts/release.sh` 进行。
+- 除非用户明确要求，否则不要打 tag 或发布 release；用户约定（2026-09-24）：今后“打包”默认包含正式发布 Release，属于发布授权；明确“只构建”或“不发布”时除外。发布只允许从 `main` 分支通过 `scripts/release.sh` 进行。
 - Flutter 项目健康检查优先使用 `dart analyze lib test`、`flutter analyze lib test` 和有针对性的 `flutter test`；完整 `dart analyze` 会扫描 `reference/` 并报告无关错误。
 - 不要把密钥、API 响应、抓取的真实文章 HTML、临时脚本提交进 git。此类内容放进已忽略的 `scratch/`。
 - 当前应用标识命名空间是 `io.github.xraygit.fourier`。历史 `io.github.xraygit.autofolo`、`com.folo.*` 与 `com.autofolo` 仅用于迁移兼容或历史记录，不得重新作为当前命名引入。

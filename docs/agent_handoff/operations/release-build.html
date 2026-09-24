@@ -52,6 +52,8 @@
 
 除非用户明确要求，否则不要创建 release。
 
+用户约定（2026-09-24）：今后用户说“打包”，默认要求完成构建并发布正式 GitHub Release，构成发布授权；不得只触发 workflow_dispatch 产物构建就视为完成。明确说“只构建”“不发布”时按限定范围执行。仍须遵循下述 main 分支、release.sh、版本规则、预检、annotated tag 与发布验证流程。该约定面向后续请求，不自动把此前已触发的仅构建任务升级为发布。
+
 <div class="dg dg-release">
 
 <svg viewBox="0 0 940 400" role="img" aria-labelledby="rel-title rel-desc">

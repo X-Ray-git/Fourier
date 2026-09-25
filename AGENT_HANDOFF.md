@@ -11,12 +11,12 @@
 
 当前硬性规则：
 
-- 除非用户明确要求，否则不要打 tag 或发布 release；用户约定（2026-09-24）：今后“打包”默认包含正式发布 Release，属于发布授权；明确“只构建”或“不发布”时除外。发布只允许从 `main` 分支通过 `scripts/release.sh` 进行。
+- 除非用户明确要求，否则不要打 tag 或发布 release；用户约定（2026-09-24）：今后“打包”默认包含正式发布 Release，属于发布授权；明确“只构建”或“不发布”时除外。发布只允许从 `main` 分支通过 `scripts/release.sh --push` 触发 `Publish Release` 完整云端流程；禁止 nohup 本机后台等待或用仅构建工作流代替。
 - Flutter 项目健康检查优先使用 `dart analyze lib test`、`flutter analyze lib test` 和有针对性的 `flutter test`；完整 `dart analyze` 会扫描 `reference/` 并报告无关错误。
 - 不要把密钥、API 响应、抓取的真实文章 HTML、临时脚本提交进 git。此类内容放进已忽略的 `scratch/`。
 - 当前应用标识命名空间是 `io.github.xraygit.fourier`。历史 `io.github.xraygit.autofolo`、`com.folo.*` 与 `com.autofolo` 仅用于迁移兼容或历史记录，不得重新作为当前命名引入。
 - macOS 发布产物必须保持 arm64。
-- 发布等待约定（2026-09-25）：启动完整发布流程并确认工作流已启动后返回链接，不持续盯到构建结束；错误由用户反馈后再排查。不可将仅产物构建当作正式发布，也不可因此跳过发布预检。
+- 发布等待约定（2026-09-25）：启动完整发布流程并确认工作流已启动后返回链接，不持续盯到构建结束；错误由用户反馈后再排查。不可将仅产物构建或单独预检当作完整发布，也不可因此跳过发布预检。云端自行完成预检、版本/tag、构建和 Release 附件核验；本机触发后无需存活。
 
 Wiki 维护：
 

@@ -1,0 +1,80 @@
+name: Publish Release
+run-name: Publish v${{ inputs.version }} from ${{ inputs.candidate_sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (X.Y.Z)
+        required: true
+        type: string
+      candidate_sha:
+        description: Exact main commit to release (full SHA)
+        required: true
+        type: string
+      notes:
+        description: Structured Markdown release notes
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: fourier-publish-release
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate release request
+        env:
+          VERSION: ${{ inputs.version }}
+          CANDIDATE: ${{ inputs.candidate_sha }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          python3 - <<'PY'
+          import os, re
+          assert re.fullmatch(r'\d+\.\d+\.\d+', os.environ['VERSION'])
+          assert re.fullmatch(r'[0-9a-f]{40}', os.environ['CANDIDATE'])
+          notes = os.environ['NOTES']
+          assert '## 本版重点' in notes and '**完整变更**' in notes
+          assert any(x in notes for x in ['## 新功能', '## 修复与改进', '## 升级说明', '## 重要变更', '## 性能改进'])
+          PY
+          git merge-base --is-ancestor "$CANDIDATE" origin/main
+  preflight:
+    needs: validate
+    uses: ./.github/workflows/release-preflight.yml
+    with:
+      commit_sha: ${{ inputs.candidate_sha }}
+  prepare:
+    needs: preflight
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.prepare.outputs.tag }}
+      sha: ${{ steps.prepare.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Prepare version, annotated tag and history
+        id: prepare
+        env:
+          VERSION: ${{ inputs.version }}
+          CANDIDATE: ${{ inputs.candidate_sha }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf '%s' "$NOTES" > "$RUNNER_TEMP/release-notes.md"
+          python3 scripts/prepare_release.py --version "$VERSION" \
+            --candidate "$CANDIDATE" --expected-main "$GITHUB_SHA" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+  publish:
+    needs: prepare
+    uses: ./.github/workflows/internal-release.yml
+    with:
+      release_tag: ${{ needs.prepare.outputs.tag }}
+      target_ref: ${{ needs.prepare.outputs.sha }}
+    secrets: inherit

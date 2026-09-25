@@ -58,7 +58,7 @@
 
 <svg viewBox="0 0 940 400" role="img" aria-labelledby="rel-title rel-desc">
 <title id="rel-title">构建发布流程</title>
-<desc id="rel-desc">main 候选提交先由官方 Flutter SDK 完成跨平台预检，成功后 release.sh 才更新 pubspec 并创建 annotated tag，GitHub Actions 再签名和发布 Android APK 与 macOS arm64 产物。</desc>
+<desc id="rel-desc">main 候选提交先由官方 Flutter SDK 完成跨平台预检，成功后云端 prepare_release.py 更新 pubspec 并创建 annotated tag，同一云端流程继续签名和发布 Android APK 与 macOS arm64 产物。</desc>
 <defs>
   <marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path d="M 0 0 L 10 5 L 0 10 z" class="dg-arrow-head"/>
@@ -75,7 +75,7 @@
 
   <rect x="260" y="40" width="210" height="72" rx="12" class="dg-node"/>
   <text x="365" y="66" class="dg-label">scripts/release.sh</text>
-  <text x="365" y="86" class="dg-sub">仅 main · 发布前预检</text>
+  <text x="365" y="86" class="dg-sub">仅 main · 触发完整云端流程</text>
 
   <rect x="510" y="40" width="190" height="72" rx="12" class="dg-node"/>
   <text x="605" y="66" class="dg-label">annotated tag</text>
@@ -115,16 +115,13 @@
 
 当前发布流程：
 
-- 使用 `scripts/release.sh`。用户约定：确认完整发布流程已启动后返回链接，不持续等待构建结束；预检仍需执行，可让脚本在后台等待并于预检通过后继续创建 tag、触发正式发布。不要把启动状态记录为发布成功。
-- 脚本只允许在 `main` 分支运行；不要从功能分支直接创建发布 tag。
-- 使用 `--push` 时，脚本先把当前干净的 `main` 候选提交推送到远端，并等待
-  `Release Preflight` 使用固定的官方 Flutter SDK 完成静态分析、完整测试、
-  Android Debug 和 macOS Release 冒烟构建。只有预检成功后，才修改版本号、
-  写入发布足迹和创建 tag。
-- 预检失败时不会产生版本提交或正式 tag。修复后重新运行同一条发布命令即可，
-  不要绕过预检手工打 tag。
-- release tag 必须是 annotated tag。
-- GitHub Actions 会从 tag 构建 Android APK 和 macOS arm64 产物。
+- 唯一正式发布入口：在干净 `main` 执行 `scripts/release.sh <version> --notes-file <file> --push`。本机只推送并 dispatch `.github/workflows/publish-release.yml`，确认受理即返回；不用 nohup，不依赖终端或 agent 继续存活。不带 --push 仅做 dry-run，不创建本地 tag。
+- `Publish Release` 同一 run 按依赖执行：校验版本/候选 SHA/说明 → reusable Release Preflight（静态分析、测试、Android/macOS 冒烟）→ prepare_release.py 创建版本提交、历史记录、annotated tag → reusable 构建发布 worker → 核验正式 Release 与 APK、arm64 ZIP、appcast 完整上传。
+- 不依赖 GITHUB_TOKEN 推 tag 触发下游工作流，因为 GitHub 会抑制该 push 的递归触发；父工作流直接 uses 调用发布 worker，并传入准确发布 SHA 和 tag、inherit secrets。
+- `internal-release.yml` 的手动入口明确命名为 Build Artifacts / Release Worker，只用于明确要求的仅构建；不能把其手动运行当成发布。历史用户推 tag 仍兼容。
+- 全链路串行发布。预检失败不创建版本/tag；预检期间 main 前移会明确失败，重新 dispatch 即可。main 与 tag 原子推送，绝不 force-push。创建 tag 后若构建/上传失败，可重跑：先核对 tag 的父提交、版本与说明完全匹配，复用 tag，不再升构建号。
+- 一般候选是当前 main。补发历史 main 候选时明确传 `--candidate <full-sha>`：云端确认属于 main 历史，仅在候选上增加发布元数据后打 tag；main 单独同步版本与历史，保留后续代码，避免把未授权依赖变更混入补发。发布工作流代码来自触发时 main，应用代码固定为候选；两者不得混淆。
+- “完整流程已受理”不等于“已发布”。按用户约定只确认完整 Publish Release run 已启动并提供链接，不持续等待最终结果；实际成功由末尾 Release/附件核验决定，失败由用户反馈后排查。
 - 本地和 GitHub Actions 统一使用 Flutter `3.47.0`；项目最低约束为 Flutter `>=3.47.0`、Dart `^3.13.0`。升级 SDK 时必须同步检查 `pubspec.yaml`、lockfile 和两个工作流中的 Flutter pin，不能只改本机。
 - GitHub 预检以干净的官方 SDK 为基线，再执行仓库跟踪的
   `scripts/apply_flutter_patches.sh`；这是发布兼容性与视觉一致性的权威结果。
@@ -134,7 +131,7 @@
 - macOS 发布包必须保持 arm64。
 - macOS job 固定使用 `macos-26` ARM64 runner。原生侧边栏使用了 macOS 26 SDK 的 `NSGlassEffectView`，不要改回默认仍可能选择 Xcode 16 的 `macos-latest`，否则 CI 可能在 Swift 编译阶段失败。
 - macOS 原生插件已迁移为纯 Swift Package Manager。仓库不再保留 `macos/Podfile`、`Podfile.lock` 或 Xcode Pods 引用；`screen_retriever` 至少保持 `0.2.2`，该版本修复了其 macOS SwiftPM manifest。若构建再次输出 `Running pod install`，应先排查是否误恢复 CocoaPods 集成。
-- 每次发布的可复现命令由 `scripts/release.sh` 追加到 `docs/agent_handoff/history/releases.html`（内嵌 Markdown）；根 `AGENT_HANDOFF.md` 始终保持为短入口。
+- 每次发布的候选 SHA、构建号和说明由云端 `scripts/prepare_release.py` 追加到 `docs/agent_handoff/history/releases.html`（内嵌 Markdown）；根 `AGENT_HANDOFF.md` 始终保持为短入口。
 
 ## 依赖维护（2026-09-25）
 
@@ -153,7 +150,7 @@
 - `X.Y.Z` 是用户可见版本，并对应 annotated tag `vX.Y.Z`。
 - `N` 是单调递增的内部构建号；Android 使用它作为 `versionCode`，macOS 使用它作为 `CFBundleVersion`。
 - Major、Minor 或 Patch 变化时都不能重置构建号。
-- 普通 commit 不修改版本号；只有真正创建发布时才由 `scripts/release.sh` 更新版本并把构建号加一。
+- 普通 commit 不修改版本号；只有真正创建发布时才由云端 `scripts/prepare_release.py` 更新版本并把构建号加一。
 - 不要手工同步 Android、macOS、设置页或请求头中的版本；这些位置应继续从 Flutter/pubspec 版本读取。
 
 面向当前个人应用的版本语义：
@@ -172,8 +169,7 @@ Release notes 规则：
   `新功能`、`修复与改进` 或 `升级说明`），以及 `完整变更` 对比链接。
 - 较长说明优先写入临时 Markdown 文件并通过 `--notes-file <path>` 传入，避免
   shell 多行引号破坏格式；`-m` 仍可直接传入完整 Markdown。
-- 如果某次发布确实需要不同结构，必须显式使用
-  `--allow-unstructured-notes`；不要把普通的简略 bullet list 当作正式正文。
+- 正式云端发布要求上述统一结构；旧例外选项仅用于本地验证，不用于云端发布。
 - `scripts/release.sh` 默认拒绝 `-m` 中的字面量 `\n`。
 - 真实换行使用 ANSI-C quoting：
 

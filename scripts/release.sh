@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/release.sh <version> (-m "<message>" | --notes-file <path>) [--push]
+  scripts/release.sh <version> (-m "<message>" | --notes-file <path>) [--push] [--candidate <full-sha>]
     [--allow-literal-backslash-n] [--allow-unstructured-notes]
 
 Example:
@@ -21,12 +21,11 @@ If the release notes intentionally need to contain the literal characters \n,
 pass --allow-literal-backslash-n. Otherwise literal \n is treated as a likely
 quoting mistake and the script exits before creating commits or tags.
 
-With --push, the script first pushes the clean candidate commit and waits for
-the GitHub Release Preflight workflow to pass against the pinned official
-Flutter SDK. It then reads the current pubspec build number, increments it by
-one, commits the pubspec bump and documentation footprint, creates an annotated
-tag v<version>, and pushes main plus the tag to origin. Releases must be created
-from the main branch.
+With --push, pushes main and dispatches the complete cloud Publish Release
+workflow, then returns immediately. Cloud preflight, version/tag preparation,
+builds and Release publication no longer depend on a local background process.
+Use --candidate <full-sha> only to recover a historical main release candidate.
+Without --push this command is a dry-run; it never creates local release tags.
 EOF
 }
 
@@ -41,6 +40,7 @@ shift
 message=""
 notes_file=""
 push_remote=false
+candidate=""
 allow_literal_backslash_n=false
 allow_unstructured_notes=false
 
@@ -61,6 +61,10 @@ while [[ $# -gt 0 ]]; do
     --allow-unstructured-notes)
       allow_unstructured_notes=true
       shift
+      ;;
+    --candidate)
+      candidate="$2"
+      shift 2
       ;;
     --push)
       push_remote=true
@@ -155,159 +159,37 @@ if [[ -n "$(git status --short)" ]]; then
   exit 1
 fi
 
-current_line="$(grep -E '^version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$' pubspec.yaml || true)"
-if [[ -z "$current_line" ]]; then
-  echo "Could not parse pubspec.yaml version line." >&2
+
+candidate="${candidate:-$(git rev-parse HEAD)}"
+if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Candidate must be a full commit SHA." >&2
   exit 1
 fi
-
-current_build="${current_line##*+}"
-next_build=$((current_build + 1))
-tag="v$version"
-
-if git rev-parse "$tag" >/dev/null 2>&1; then
-  echo "Tag already exists locally: $tag" >&2
+git merge-base --is-ancestor "$candidate" main
+if [[ "$push_remote" != true ]]; then
+  echo "Dry run: publish v$version from $candidate. Add --push to dispatch the complete cloud release."
+  exit 0
+fi
+if [[ "$allow_literal_backslash_n" == true || "$allow_unstructured_notes" == true ]]; then
+  echo "Cloud releases require standard notes; exception flags are only supported for local validation." >&2
   exit 1
 fi
-
-if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-  echo "Tag already exists on origin: $tag" >&2
-  exit 1
-fi
-
-if [[ "$push_remote" == true ]]; then
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "GitHub CLI is required for the release preflight." >&2
-    exit 1
-  fi
-  if ! gh auth status >/dev/null 2>&1; then
-    echo "GitHub CLI is not authenticated. Run gh auth login first." >&2
-    exit 1
-  fi
-
-  source_sha="$(git rev-parse HEAD)"
-  echo "Pushing release candidate $source_sha for clean-SDK preflight..."
-  git push origin main
-
-  previous_run_id="$(
-    gh run list \
-      --workflow release-preflight.yml \
-      --event workflow_dispatch \
-      --branch main \
-      --limit 1 \
-      --json databaseId \
-      --jq '.[0].databaseId // 0'
-  )"
-  gh workflow run release-preflight.yml \
-    --ref main \
-    -f "commit_sha=$source_sha"
-
-  preflight_run_id=""
-  for _ in {1..30}; do
-    preflight_run_id="$(
-      gh run list \
-        --workflow release-preflight.yml \
-        --event workflow_dispatch \
-        --branch main \
-        --limit 20 \
-        --json databaseId,headSha \
-        --jq ".[] | select(.headSha == \"$source_sha\" and .databaseId > $previous_run_id) | .databaseId" \
-        | head -n 1
-    )"
-    [[ -n "$preflight_run_id" ]] && break
-    sleep 2
-  done
-
-  if [[ -z "$preflight_run_id" ]]; then
-    echo "Could not locate the dispatched release preflight run." >&2
-    exit 1
-  fi
-
-  echo "Waiting for release preflight run $preflight_run_id..."
-  preflight_completed=false
-  for _ in {1..180}; do
-    if preflight_state="$(
-      gh run view "$preflight_run_id" \
-        --json status,conclusion \
-        --jq '[.status, (.conclusion // "")] | @tsv'
-    )"; then
-      IFS=$'\t' read -r run_status run_conclusion <<<"$preflight_state"
-      if [[ "$run_status" == "completed" ]]; then
-        if [[ "$run_conclusion" != "success" ]]; then
-          echo "Release preflight failed with conclusion: $run_conclusion" >&2
-          echo "Inspect it with: gh run view $preflight_run_id --log-failed" >&2
-          exit 1
-        fi
-        preflight_completed=true
-        break
-      fi
-    else
-      echo "GitHub status check failed temporarily; retrying..." >&2
-    fi
-    sleep 10
-  done
-
-  if [[ "$preflight_completed" != true ]]; then
-    echo "Timed out waiting for release preflight run $preflight_run_id." >&2
-    exit 1
-  fi
-fi
-
-perl -0pi -e "s/^version:\\s*\\d+\\.\\d+\\.\\d+\\+\\d+$/version: $version+$next_build/m" pubspec.yaml
-
-release_history="docs/agent_handoff/history/releases.html"
-# macOS ships an older Bash whose printf %q can split UTF-8 code points under
-# some locales. Python's shell quoting keeps release history valid and remains
-# readable when notes contain Chinese or real newlines.
-message_arg="$(printf '%s' "$message" | python3 -c '
-import shlex
-import sys
-sys.stdout.write(shlex.quote(sys.stdin.read()))
-')"
-release_flags=""
-if [[ "$allow_literal_backslash_n" == true ]]; then
-  release_flags+=" --allow-literal-backslash-n"
-fi
-if [[ "$allow_unstructured_notes" == true ]]; then
-  release_flags+=" --allow-unstructured-notes"
-fi
-if [[ "$push_remote" == true ]]; then
-  release_flags+=" --push"
-fi
-{
-  printf '\n## %s\n\n```bash\n' "$tag"
-  printf './scripts/release.sh %s -m %s%s\n' "$version" "$message_arg" "$release_flags"
-  printf '```\n'
-} | python3 -c '
-import os
-import sys
-frag = sys.stdin.read().replace("</script>", "<\\\\/script>")
-path = sys.argv[1]
-src = open(path, encoding="utf-8").read()
-marker = "</script>"
-idx = src.find(marker)
-assert idx != -1 and "id=\"wiki-content\"" in src[:idx], "releases.html wiki-content block not found"
-payload = (src[:idx] + frag + src[idx:]).encode("utf-8")
-tmp = path + ".tmp"
-with open(tmp, "wb") as handle:
-    handle.write(payload)
-os.replace(tmp, path)
-' "$release_history"
-
-./scripts/docs.sh index
-./scripts/docs.sh check
-
-git add pubspec.yaml "$release_history" docs/agent_handoff/assets/data/search-index.js
-git commit -m "chore: bump version to $version+$next_build"
-git tag -a "$tag" --cleanup=verbatim -m "$message"
-
-echo "Created $tag with pubspec version $version+$next_build."
-
-if [[ "$push_remote" == true ]]; then
-  git push origin main
-  git push origin "$tag"
-else
-  echo "Next steps:"
-  echo "  git push origin main"
-  echo "  git push origin $tag"
-fi
+command -v gh >/dev/null
+gh auth status >/dev/null 2>&1
+git push origin main
+payload="$(mktemp)"
+trap 'rm -f "$payload"' EXIT
+export FOURIER_RELEASE_VERSION="$version" FOURIER_RELEASE_CANDIDATE="$candidate" FOURIER_RELEASE_NOTES="$message"
+python3 - <<'PY_PAYLOAD' > "$payload"
+import json, os
+print(json.dumps({'ref':'main', 'inputs': {
+  'version':os.environ['FOURIER_RELEASE_VERSION'],
+  'candidate_sha':os.environ['FOURIER_RELEASE_CANDIDATE'],
+  'notes':os.environ['FOURIER_RELEASE_NOTES'],
+}}))
+PY_PAYLOAD
+repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+gh api --method POST "repos/$repo/actions/workflows/publish-release.yml/dispatches" --input "$payload"
+echo "Complete cloud release accepted: v$version from $candidate"
+echo "https://github.com/$repo/actions/workflows/publish-release.yml"
+echo "This confirms dispatch, not release completion. No local process needs to remain running."

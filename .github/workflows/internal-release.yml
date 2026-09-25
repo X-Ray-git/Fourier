@@ -1,16 +1,28 @@
-name: Internal Release Builds
+name: Build Artifacts / Release Worker
 
 on:
+  workflow_call:
+    inputs:
+      target_ref:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
   workflow_dispatch:
 
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
+  ARTIFACT_LABEL: ${{ inputs.release_tag || github.ref_name }}
+
 permissions:
   contents: write
 
 concurrency:
-  group: internal-release-${{ github.ref }}
+  group: internal-release-${{ inputs.release_tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -21,19 +33,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_ref || github.sha }}
+          fetch-depth: 0
 
       - name: Validate tag matches pubspec
-        if: startsWith(github.ref, 'refs/tags/')
+        if: inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           PUBSPEC_VERSION="$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+$/\1/p' pubspec.yaml)"
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${RELEASE_TAG#v}"
           if [ -z "$PUBSPEC_VERSION" ]; then
             echo "Could not parse pubspec.yaml version."
             exit 1
           fi
           if [ "$TAG_VERSION" != "$PUBSPEC_VERSION" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match pubspec version $PUBSPEC_VERSION."
+            echo "Tag $RELEASE_TAG does not match pubspec version $PUBSPEC_VERSION."
             exit 1
           fi
 
@@ -45,6 +60,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_ref || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -97,7 +115,7 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/Fourier-android-${GITHUB_REF_NAME}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/Fourier-android-${ARTIFACT_LABEL}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
@@ -114,6 +132,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_ref || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -153,11 +174,11 @@ jobs:
           ! file "dist/Fourier.app/Contents/MacOS/Fourier" | grep x86_64
           ditto -c -k --sequesterRsrc --keepParent \
             "dist/Fourier.app" \
-            "dist/Fourier-macOS-arm64-${GITHUB_REF_NAME}.zip"
+            "dist/Fourier-macOS-arm64-${ARTIFACT_LABEL}.zip"
           rm -rf "dist/Fourier.app"
 
       - name: Generate signed Sparkle appcast
-        if: startsWith(github.ref, 'refs/tags/')
+        if: inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/')
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -170,13 +191,13 @@ jobs:
             echo "Could not locate Sparkle generate_appcast tool."
             exit 1
           fi
-          ARCHIVE="dist/Fourier-macOS-arm64-${GITHUB_REF_NAME}.zip"
+          ARCHIVE="dist/Fourier-macOS-arm64-${ARTIFACT_LABEL}.zip"
           NOTES="${ARCHIVE%.zip}.md"
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$NOTES"
+          git tag -l --format='%(contents)' "$RELEASE_TAG" > "$NOTES"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
             "$SPARKLE_TOOLS_DIR/generate_appcast" \
               --ed-key-file - \
-              --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+              --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${ARTIFACT_LABEL}/" \
               --embed-release-notes \
               --maximum-deltas 0 \
               -o dist/appcast.xml \
@@ -198,12 +219,13 @@ jobs:
     needs:
       - android
       - macos
-    if: startsWith(github.ref, 'refs/tags/')
+    if: inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/')
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.target_ref || github.sha }}
           fetch-depth: 0
 
       - name: Download build artifacts
@@ -216,7 +238,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ env.RELEASE_TAG }}
         run: |
           git fetch --force --no-tags origin "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME"
           if [ "$(git cat-file -t "refs/tags/$TAG_NAME")" != "tag" ]; then
@@ -233,5 +255,24 @@ jobs:
           else
             gh release create "$TAG_NAME" dist/* \
               --title "$TAG_NAME" \
-              --notes "$ANNOTATION"
+              --notes "$ANNOTATION" --verify-tag
           fi
+
+      - name: Verify published release and required assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ env.RELEASE_TAG }}
+        run: |
+          gh release view "$TAG_NAME" --json isDraft,isPrerelease,assets,url > release.json
+          python3 - <<'PY'
+          import json, os
+          r = json.load(open('release.json'))
+          tag = os.environ['TAG_NAME']
+          assert not r['isDraft'] and not r['isPrerelease'], 'Release is not public/stable'
+          assets = {a['name']: a for a in r['assets']}
+          for name in [f'Fourier-android-{tag}.apk', f'Fourier-macOS-arm64-{tag}.zip', 'appcast.xml']:
+              assert name in assets and assets[name]['size'] > 0 and assets[name]['state'] == 'uploaded', name
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write(f"Published: {r['url']}\n")
+          PY

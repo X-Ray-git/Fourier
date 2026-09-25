@@ -72,7 +72,8 @@ def prepare(version, candidate, notes, expected_main):
         raise ValueError('Release version must increase')
     build = current_build + 1
     # Historical main candidates support recovery without silently including
-    # later changes. main receives metadata only; the tag keeps candidate code.
+    # later changes. main receives metadata only; the tag keeps candidate application code
+    # and current approved release automation.
     if candidate == expected_main:
         release_sha = write_metadata('.', version, build, candidate, notes)
     else:
@@ -80,6 +81,18 @@ def prepare(version, candidate, notes, expected_main):
             checkout = str(Path(tmp) / 'candidate')
             git('worktree', 'add', '--detach', checkout, candidate)
             try:
+                # GitHub treats a historical tag's workflow difference from
+                # default main as a workflow write. Keep approved automation
+                # identical to main; application code/lockfile stay pinned.
+                paths = ['.github/workflows']
+                for path in ('scripts/release.sh', 'scripts/prepare_release.py',
+                             'scripts/tests/test_prepare_release.py'):
+                    if git('ls-tree', expected_main, '--', path):
+                        paths.append(path)
+                git('restore', '--source', expected_main, '--staged', '--worktree',
+                    '--', *paths, cwd=checkout)
+                if git('diff', '--cached', expected_main, '--', '.github/workflows', cwd=checkout):
+                    raise ValueError('Release workflows must match approved main')
                 release_sha = write_metadata(checkout, version, build, candidate, notes)
             finally:
                 git('worktree', 'remove', checkout)

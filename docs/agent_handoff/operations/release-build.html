@@ -120,7 +120,7 @@
 - 不依赖 GITHUB_TOKEN 推 tag 触发下游工作流，因为 GitHub 会抑制该 push 的递归触发；父工作流直接 uses 调用发布 worker，并传入准确发布 SHA 和 tag、inherit secrets。
 - `internal-release.yml` 的手动入口明确命名为 Build Artifacts / Release Worker，只用于明确要求的仅构建；不能把其手动运行当成发布。历史用户推 tag 仍兼容。
 - 全链路串行发布。预检失败不创建版本/tag；预检期间 main 前移会明确失败，重新 dispatch 即可。main 与 tag 原子推送，绝不 force-push。创建 tag 后若构建/上传失败，可重跑：先核对 tag 的父提交、版本与说明完全匹配，复用 tag，不再升构建号。
-- 一般候选是当前 main。补发历史 main 候选时明确传 `--candidate <full-sha>`：云端确认属于 main 历史，仅在候选上增加发布元数据后打 tag；main 单独同步版本与历史，保留后续代码，避免把未授权依赖变更混入补发。发布工作流代码来自触发时 main，应用代码固定为候选；两者不得混淆。
+- 一般候选是当前 main。补发历史 main 候选时明确传 `--candidate <full-sha>`：云端确认属于 main 历史，在候选上增加发布元数据，并同步当前已批准的 .github/workflows 及发布脚本后打 tag；main 单独同步版本与历史，保留后续代码，避免把未授权依赖变更混入补发。发布工作流代码来自触发时 main，应用代码固定为候选；两者不得混淆。GitHub 对历史标签与默认分支不同的工作流要求 workflows 写权限；保持标签工作流与 main 完全一致，避免为了补发增加高权限令牌。应用代码与锁文件仍来自原候选。
 - “完整流程已受理”不等于“已发布”。按用户约定只确认完整 Publish Release run 已启动并提供链接，不持续等待最终结果；实际成功由末尾 Release/附件核验决定，失败由用户反馈后排查。
 - 本地和 GitHub Actions 统一使用 Flutter `3.47.0`；项目最低约束为 Flutter `>=3.47.0`、Dart `^3.13.0`。升级 SDK 时必须同步检查 `pubspec.yaml`、lockfile 和两个工作流中的 Flutter pin，不能只改本机。
 - GitHub 预检以干净的官方 SDK 为基线，再执行仓库跟踪的

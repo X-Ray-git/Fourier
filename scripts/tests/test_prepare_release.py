@@ -28,6 +28,9 @@ class ReleaseTest(unittest.TestCase):
         release.git('remote', 'add', 'origin', str(self.remote))
         Path('pubspec.yaml').write_text('version: 2.4.0+39\n')
         Path('feature.txt').write_text('original candidate')
+        Path('.github/workflows').mkdir(parents=True)
+        Path('.github/workflows/build.yml').write_text('old workflow')
+        Path('.github/workflows/obsolete.yml').write_text('obsolete workflow')
         Path('docs/agent_handoff/history').mkdir(parents=True)
         Path('docs/agent_handoff/assets/data').mkdir(parents=True)
         Path('docs/agent_handoff/history/releases.html').write_text('<script type="text/markdown" id="wiki-content">\n</script>')
@@ -55,6 +58,13 @@ class ReleaseTest(unittest.TestCase):
 
     def test_historical_candidate_does_not_release_later_code(self):
         Path('feature.txt').write_text('later dependency changes')
+        Path('.github/workflows/build.yml').write_text('approved workflow')
+        Path('.github/workflows/obsolete.yml').unlink()
+        Path('.github/workflows/publish.yml').write_text('new approved workflow')
+        # Model GitHub's refusal to introduce different workflows via a tag.
+        hook = self.remote / 'hooks/pre-receive'
+        hook.write_text('#!/bin/sh\nwhile read old new ref; do\ncase "$ref" in refs/tags/*) git diff --quiet refs/heads/main "$new" -- .github/workflows || exit 1;; esac\ndone\n')
+        hook.chmod(0o755)
         release.git('add', '.')
         release.git('commit', '-m', 'later changes')
         head = release.git('rev-parse', 'HEAD')
@@ -62,6 +72,7 @@ class ReleaseTest(unittest.TestCase):
         tag, sha = release.prepare('2.4.1', self.candidate, NOTES, head)
         self.assertEqual(release.git('show', f'{tag}:feature.txt'), 'original candidate')
         self.assertEqual(Path('feature.txt').read_text(), 'later dependency changes')
+        self.assertEqual(release.git('rev-parse', f'{tag}:.github/workflows'), release.git('rev-parse', 'main:.github/workflows'))
         self.assertEqual(Path('pubspec.yaml').read_text(), 'version: 2.4.1+40\n')
         self.assertNotEqual(sha, release.git('rev-parse', 'main'))
         self.assertEqual(release.prepare('2.4.1', self.candidate, NOTES, head), (tag, sha))

@@ -49,6 +49,13 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-09-25 历史候选发布的工作流权限补修
+
+Publish Release 36118746311 的静态检查、测试、Android/macOS 冒烟均成功；prepare 原子推送失败，GitHub 明确拒绝历史 v2.4.1 标签中与默认分支不同的 internal-release.yml（GITHUB_TOKEN 没有 workflows 写权限）。远端 main 未前移且没有 v2.4.1 tag，发布 worker 被跳过。这是新增发布流程遗漏的权限边界，不是应用构建失败。
+
+历史候选 worktree 现在只同步当前 main 已批准的 .github/workflows、release.sh、prepare_release.py 和其回归脚本，再生成发布元数据；应用及依赖仍来自 92ddd94。无需扩大令牌权限，不改变原发布范围。测试加入远端 pre-receive hook 拒绝工作流树差异，包含新增/修改/删除工作流场景：修复前 4 项中历史候选用例失败，修复后全部通过，并断言应用代码仍为原候选、工作流树与 main 相同。actionlint 与 diff 检查通过。提交修复后重新 dispatch 同一 v2.4.1 候选，不在旧工作流定义上盲目 rerun。
+
+
 ## 2026-09-25 发布中断根因与完整云端流程
 
 用户再次发现 v2.4.1 没有 Release。查证预检 36114106555 对 92ddd94 成功，最新 Release 仍 v2.4.0，既无 v2.4.1 tag 也无正式发布 run。后台日志停在推送候选；无法确认进程具体终止原因，但原链路依赖本机等待后创建 tag，预检不会自己发布。此前将 nohup 后台启动等同于可靠交接是执行错误，文档允许该方式也是缺陷。

@@ -44,17 +44,14 @@ import '../../services/summary_service.dart';
 import '../../services/article_state_notifier.dart';
 import '../../utils/article_content_utils.dart';
 import '../../utils/html_chunk_parser.dart';
-import '../../utils/selectable_html_compatibility.dart';
 import '../../utils/storage.dart';
 import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
 import 'article_navigation.dart';
 import 'widgets/html_chunk_card.dart';
-
-import 'package:flutter_html/flutter_html.dart';
+import 'widgets/article_info_card.dart';
 
 import 'widgets/image_gallery_page.dart';
-import 'widgets/stable_selectable_html.dart';
 import '../../common/widgets/hero_dialog_route.dart';
 
 enum _ArticleSyncResult { success, failed, staleAccount }
@@ -1821,6 +1818,16 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                             article: controller.article,
                             onOpenArticle: widget.onOpenRelatedArticle,
                           ),
+                          if (widget.isReviewContext &&
+                              (widget.article.filterReason?.trim().isNotEmpty ??
+                                  false))
+                            ArticleInfoCard(
+                              title: '拒绝理由',
+                              icon: Icons.auto_awesome,
+                              text: widget.article.filterReason!.trim(),
+                              foregroundColor: const Color(0xFFD97706),
+                              backgroundColor: const Color(0xFFD97706),
+                            ),
                           _SummaryCard(controller: controller),
                         ],
                       ),
@@ -3288,24 +3295,12 @@ class _ArticleRelationsSectionState extends State<_ArticleRelationsSection> {
       );
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (topic.isEmpty) return rows;
-            if (constraints.maxWidth >= 620) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: rows),
-                  const SizedBox(width: 10),
-                  SizedBox(width: 180, child: topicBox),
-                ],
-              );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [topicBox, const SizedBox(height: 6), rows],
-            );
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (topic.isNotEmpty) ...[topicBox, const SizedBox(height: 6)],
+            rows,
+          ],
         ),
       );
     });
@@ -3713,78 +3708,10 @@ class _SummaryCard extends StatelessWidget {
       final summary = (record?.summaryText ?? '').trim();
       if (!controller.showSummary.value) return const SizedBox.shrink();
       if (summary.isEmpty) return const SizedBox.shrink();
-      final htmlData = SelectableHtmlCompatibility.normalizePlainText(summary);
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).brightness == Brightness.light
-                ? Theme.of(context).colorScheme.secondaryContainer
-                      .withValues(alpha: 0.10)
-                : Theme.of(context).colorScheme.secondaryContainer
-                      .withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.summarize,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '文章摘要',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.secondary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              StableSelectableHtml(
-                data: htmlData,
-                renderConfigurationKey: Object.hash(
-                  Theme.of(context).brightness,
-                  Theme.of(context).colorScheme.primary,
-                ),
-                style: {
-                  // Html 会把 block wrapper 转为 WidgetSpan；与外层
-                  // SelectionArea 组合时必须让根节点和摘要文本保持同一流。
-                  'html': Style(display: Display.inline),
-                  'body': Style(
-                    display: Display.inline,
-                    fontSize: FontSize(14),
-                    lineHeight: const LineHeight(1.5),
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                  ),
-                  'div': Style(display: Display.inline),
-                  'p': Style(
-                    display: Display.inline,
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                  ),
-                  'a': Style(
-                    color: Theme.of(context).colorScheme.primary,
-                    textDecoration: TextDecoration.none,
-                  ),
-                },
-                onLinkTap: (url, attributes, element) async {
-                  if (url != null && url.isNotEmpty) {
-                    await ExternalLinkService.openUrlWithFeedback(url);
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
+      return ArticleInfoCard(
+        title: '文章摘要',
+        icon: Icons.summarize,
+        text: summary,
       );
     });
   }

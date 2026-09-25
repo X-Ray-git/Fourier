@@ -270,6 +270,27 @@ Fourier 2.3.0 增加 DeepSeek V4.1 Flash 支持，并强化翻译、摘要和质
 
 **完整变更**：[v2.3.2...v2.4.0](https://github.com/X-Ray-git/Fourier/compare/v2.3.2...v2.4.0)' --push
 ```
+
+## v2.4.1
+
+Cloud release; candidate `92ddd9481fea0754d4751c4ec5b054d2a297b028`, build `40`.
+
+## 本版重点
+
+完善选择面板对齐和文章阅读布局，垃圾拦截审核可在正文区域阅读完整拒绝理由。
+
+## 修复与改进
+
+- 修复文章范围、排序、批量导出等共享选择面板的返回按钮偏移：保持锚点和 34px 点击范围，可见圆形缩为 26px，保留变形动画及窗口边缘避让。
+- 关系组主题统一显示为相关文章列表上方的同宽横幅，宽窗口也不再左右排列。
+- 垃圾拦截页在右侧摘要上方显示完整拒绝理由，可选中复制；隐藏摘要时理由仍保留，左侧卡片保持原样。
+- 摘要与拒绝理由共用轻量信息卡组件，统一显示样式；普通阅读及相关文章跳转不显示审核理由。
+
+## 升级说明
+
+本次不新增数据迁移，不修改关系构建规则。macOS 安装包为 Apple Silicon（arm64）。
+
+**完整变更**：[v2.4.0...v2.4.1](https://github.com/X-Ray-git/Fourier/compare/v2.4.0...v2.4.1)
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

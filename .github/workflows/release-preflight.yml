@@ -1,6 +1,11 @@
 name: Release Preflight
 
 on:
+  workflow_call:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       commit_sha:

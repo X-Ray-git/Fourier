@@ -136,6 +136,16 @@
 - macOS 原生插件已迁移为纯 Swift Package Manager。仓库不再保留 `macos/Podfile`、`Podfile.lock` 或 Xcode Pods 引用；`screen_retriever` 至少保持 `0.2.2`，该版本修复了其 macOS SwiftPM manifest。若构建再次输出 `Running pod install`，应先排查是否误恢复 CocoaPods 集成。
 - 每次发布的可复现命令由 `scripts/release.sh` 追加到 `docs/agent_handoff/history/releases.html`（内嵌 Markdown）；根 `AGENT_HANDOFF.md` 始终保持为短入口。
 
+## 依赖维护（2026-09-25）
+
+`pub get` 的 available / newer versions incompatible with dependency constraints 列表是版本提醒，不能等同于解析失败；必须看是否 Got dependencies，以及实际 error。用户原粘贴日志真正阻断运行的是 Xcode 许可未接受，已另行解决。锁文件用于固定可复现依赖，不为了清除提示一键升级所有包。
+
+本次优先提高 `dio` 最低版本至 ^5.11.1、`flutter_cache_manager` 至 ^3.4.5；解析只更新这两项及后者要求的 `uuid` 4.6.0。缓存管理器修复图片缩放解码错误传递、缓存元数据写入与删除路径，Dio 修复流式背压和请求/拦截器挂起；不能将这些上游修复直接认定为此前卡图的根因。继续保留应用自有图片下载超时、缓存目录与动图暂停逻辑。
+
+其余依赖安排：路径/窗口等小版本需按对应原生变更单独验证；cached_network_image 4、分享、权限、取色及弹窗大版本需要迁移评估；video_player 和 WebView 虽有约束内更新，也需媒体播放/登录回归后再升级。SDK 固定及工程 Flutter 选择补丁保持原样，SDK 固定的传递包不使用 dependency_overrides 强行追新。升级后仍有 76 项新版提示是预期，Flutter SDK 升级提示也不自动构成升级任务。
+
+本机 Xcode 组件初始化（如 sudo xcodebuild -runFirstLaunch）只影响本机，不会经 Git 同步到 GitHub Actions；pubspec.yaml 与 pubspec.lock 的依赖变更提交推送后才影响后续云端构建。本轮仅提交推送，不触发构建工作流、不修改版本号或创建 tag。
+
 ## 版本号规则
 
 `pubspec.yaml` 的 `version: X.Y.Z+N` 是唯一版本来源：

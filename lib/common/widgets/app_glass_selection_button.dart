@@ -156,9 +156,7 @@ class _AppGlassMorphSelectionButtonState<T>
         cursor: widget.enabled
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
-        onEnter: widget.enabled
-            ? (_) => setState(() => _hovered = true)
-            : null,
+        onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
         onExit: (_) => setState(() {
           _hovered = false;
           _pressed = false;
@@ -448,7 +446,6 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
                               panelWidth: panelWidth,
                               panelHeight: panelHeight,
                               onSelected: onSelected,
-                              onClose: onClose,
                             ),
                           ),
                         ),
@@ -456,6 +453,20 @@ class _AppGlassMorphSelectionOverlay<T> extends StatelessWidget {
                   ),
                 ),
               ),
+              // Keep the close control at the collapsed trigger's anchor,
+              // independent of header padding and elastic panel dimensions.
+              if (showContent)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Opacity(
+                    opacity: contentOpacity,
+                    child: IgnorePointer(
+                      ignoring: contentOpacity < 0.95,
+                      child: _AppGlassSelectionCloseButton(onTap: onClose),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -494,7 +505,6 @@ class _AppGlassSelectionPanelContent<T> extends StatelessWidget {
   final String title;
   final IconData titleIcon;
   final ValueChanged<T> onSelected;
-  final VoidCallback onClose;
   final double panelWidth;
   final double panelHeight;
 
@@ -505,7 +515,6 @@ class _AppGlassSelectionPanelContent<T> extends StatelessWidget {
     required this.title,
     required this.titleIcon,
     required this.onSelected,
-    required this.onClose,
     required this.panelWidth,
     required this.panelHeight,
   });
@@ -519,23 +528,27 @@ class _AppGlassSelectionPanelContent<T> extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
-            child: Row(
-              children: [
-                Icon(titleIcon, size: 17, color: cs.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: cs.onSurface,
+            padding: const EdgeInsets.fromLTRB(12, 0, 42, 8),
+            child: SizedBox(
+              height: 34,
+              child: Row(
+                children: [
+                  Icon(titleIcon, size: 17, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
-                ),
-                _AppGlassSelectionCloseButton(onTap: onClose),
-              ],
+                ],
+              ),
             ),
           ),
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.28)),
@@ -699,21 +712,27 @@ class _AppGlassSelectionCloseButtonState
           scale: _pressed ? 0.96 : 1.0,
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: _pressed
-                ? Duration.zero
-                : const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Icon(
-              Icons.keyboard_arrow_up_rounded,
-              size: 18,
-              color: cs.onSurface,
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Center(
+              child: AnimatedContainer(
+                duration: _pressed
+                    ? Duration.zero
+                    : const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Icon(
+                  Icons.keyboard_arrow_up_rounded,
+                  size: 18,
+                  color: cs.onSurface,
+                ),
+              ),
             ),
           ),
         ),

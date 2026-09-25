@@ -108,6 +108,7 @@ macOS 原生侧边栏玻璃：
 - 第一阶段只把散落的 hover、pressed、active、border、disabled 色值收敛到 palette，刻意保持原视觉体感基本不变。
 - `AppGlassRoundControlChrome` 是固定 `34px` 圆形工具按钮的共享外壳。文章右上角普通按钮、时间线范围/排序按钮和同步按钮应复用它，而不是各自手写 `AppGlassSurface`。
 - `AppGlassMorphSelectionButton<T>` 是低选项数量 header 选择器的共享实现：闭合时复用圆形 control chrome，展开时保持右上角锚点并使用统一的弹性 morph、选项 hover/press、关闭按钮和点击外部收回。当前排序和文章范围共用它；选项很多或需要滚动时仍使用常规菜单，不要无限扩展该组件。
+- 2026-09-25 共享选择面板返回按钮从标题行移到外层 Stack 的右上锚点，固定 34px 点击范围、26px 可见圆形，图标 18px；标题行高 34px，右侧预留 42px，长标题单行省略。与目录采用相同定位规则，但保持独立布局/动画实现，不引入通用面板大组件。覆盖时间线范围、订阅源详情范围、排序、静默批量导出、订阅已有分类、内容类型共六个入口。窗口边缘已有的整体面板 clamp 避让保留：极边缘可整体移位，不承诺该情形仍与屏幕上的原按钮同心；本次消除的是标题行 padding 导致的额外偏移。
 - 主时间线与 macOS 订阅源详情的文章范围只暴露“未读/全部”，使用 `filter_alt_rounded` / `filter_alt_off_rounded`。触发图标不使用橙色选中态：深色固定白色，浅色使用 `onSurface`；展开菜单中的当前项仍按通用 option palette 表达选择。
 - 旧 `AppGlassCompactSwitch` 已删除。此前 `58px` 轨道、`42px` 滑块、`1px` rim、空余轨道 `5%` 和 overshoot 裁切规则只属于已废弃视觉实验，不得作为当前实现恢复；设置页 segmented 仍有自己的组件和参数。
 - 圆形/header 工具按钮统一使用中性玻璃背景和中性 hover/press。除文章范围这个明确例外外，选中、主动作或状态提示通常只让图标变橙，背景不得叠橙色。红色危险操作、绿色保留操作等语义按钮不属于这一规则。

@@ -48,6 +48,13 @@
   <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
 </div>
 <script type="text/markdown" id="wiki-content">
+
+## 2026-09-25 正文区域显示拒绝理由
+
+用户要求左侧审核卡片保持原样，并在右侧正文区域像摘要一样展示完整拒绝理由。复用现有 ArticlePageView 的 isReviewContext，仅审核上下文且 filterReason 非空时在相关文章之后、文章摘要之前显示理由卡；独立于摘要显隐开关，不按文章存在历史理由就在其他入口显示。从审核页进入相关文章继续使用普通阅读上下文，不继承原文理由。
+
+摘要和理由共用 widgets/article_info_card.dart 的 ArticleInfoCard，统一标题、图标、间距、浅深色背景与 StableSelectableHtml 文本选择/复制行为，正文文本经 normalizePlainText 处理。组件只接收展示数据，不读取 Hive、不控制审核或摘要状态；调用方负责数据和可见性。拒绝理由使用橙色，摘要保留既有样式；没有另建审核正文页，也没有引入通用页面配置框架。此次不改变 Android 审核入口或左侧卡片。
+
 # 垃圾拦截与审核
 
 <div class="dg dg-frev">

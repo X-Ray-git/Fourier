@@ -48,6 +48,34 @@
   <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
 </div>
 <script type="text/markdown" id="wiki-content">
+
+## 2026-09-26 手势断言进一步定位：Mos 为首要对照对象
+
+本机 Flutter 3.47.0，发布工作流也固定3.47.0；已安装与本地Release FlutterMacOS的Mach-O UUID相同（4C4C4422-5555-3144-A1B0-38B941BF65AA），文件哈希不同不能直接判定引擎不同，签名也会影响哈希。当前引擎665行对应孤立手势结束时NSAssert（没有内部开始状态，仅允许取消），与既有scrollWheel调用栈相符。
+
+发现 Flutter 官方 [issue #155148](https://github.com/flutter/flutter/issues/155148)：2024-09-13 已在macOS14.6.1 / Flutter3.24.2报告 Mos 平滑滚动触发同类“Received gesture event with unexpected phase”断言。评论确认普通项目可能只有断言，配置NSApplicationCrashOnExceptions才进一步导致进程崩溃。该issue本次读取仍open、无关联修复PR记录；不能据此承诺升级Flutter已解决，也不能证明每个手势phase异常完全同因。Fourier源码未配置该崩溃选项。
+
+本机只读核对：Mos、LinearMouse和Logi Options+同时运行；Mos全局smooth=true，allowlist=false，应用例外中没有Fourier。LinearMouse对已配置MX Anywhere 3S的平滑滚动明确关闭，但另有滚动参数，所以尚不能排除工具组合影响。未修改这些工具的设置。现有证据优先支持滚动增强工具与Flutter输入状态机兼容边界，而非macOS27独有问题。
+
+用户已确认主要使用触控板，Mos、LinearMouse 与 Logi Options+ 经常同时运行，但实际崩溃频率很低。因此工具组合只是待验证因素，不能认定 Mos 是根因；尚未进行 A/B 对照。用户同意本轮调查告一段落，后续有明确复现时再核对设备、工具启停与断言时间。未修改第三方设置、Flutter 引擎或 SDK，也未宣称问题已修复。
+
+
+## 2026-09-26 macOS 27 升级后兼容性核验
+
+用户反馈已在 macOS 27 使用一段时间、表面无问题，要求检查底层。实际系统 `macOS 27.0 / 26A428`，Xcode `27.0 / 27A266a`；安装记录 2026-09-25 05:33:58 UTC（北京时间 13:33:58）。已安装应用 `/Applications/Fourier.app` 为 2.4.1+40；此次检查时进程已退出，不自行启动或操作真实文章。工作区还含关系 v5、信息框与导航修复，不能把现有应用运行记录等同于这些未提交改动已验证。
+
+验证：
+- `xcodebuild -checkFirstLaunchStatus` exit 0，当前工作区 `flutter build macos --release --no-pub` 成功（35.0MB），产物 Mach-O arm64。未安装/启动产物，未推送/发布。Xcode 27 的 x86_64/arm64 配置提示是信息，不是失败。
+- 原生玻璃使用 `#available(macOS 26.0, *)`，因此 27 继续走 NSGlassEffectView；WebKit 全屏、低功耗/温度诊断和光标接口也按最低版本保护，没有发现仅匹配“等于26”而使27回退的分支。原生代码构建通过不等于所有菜单、媒体和视觉交互逐项实测。
+- 用户与系统 DiagnosticReports 未找到升级后的 Fourier 崩溃报告。找到的 9月19日崩溃与 9月22日磁盘写入资源报告均属 macOS 26.6.2、Fourier 2.3.2，不能归因于本次升级。磁盘报告为约20小时2.15GB写入告警，单独保留历史线索，未证明当前仍存在。
+- 升级后已有能耗日志共1175条；按采样时 appActive=false 的1005条，CPU中位数0.03%、P95 3.53%，未见普遍持续后台满载证据；前台170条中位数16.85%、P95 64.39%，混合滚动/切页/加载操作，不能等价于静态页空闲耗电。1174条热状态0、1条热状态1。记录是采样窗口且状态为采样时刻，不能据某条隐藏时非零 CPU 推断隐藏后持续渲染，也不据此承诺无泄漏。
+
+发现需保留的异常：
+- 升级后系统日志有4次 `FlutterViewController.mm:665` 断言（北京时间9月25日18:04:29、18:04:43，9月26日10:09:34、10:31:57），后接 NSInternalInconsistencyException、FlutterMacOS/NSView scrollWheel 调用栈。本机 Flutter 引擎源码对应 `Received gesture event with unexpected phase`：收到手势结束但内部没有开始状态。日志原因私有化，源码与调用栈支持手势状态边界判断，但不能单凭它确认是macOS27回归或用户可见故障。没有对应退出崩溃文件，不应声称完全无异常；后续单独追踪滚动/切窗边界，不能直接修改本机 SDK 冒充可复现工程修复。
+- 另有 AppIntents/linkd 4097 注册失败、私有 Metal 警告、CoreAnimation 更新返回 NO；SQLite 缺文件指向系统 `/private/var/db/DetachedSignatures`，不是 Fourier 的 Hive 文章库。没有足够证据对应具体功能损坏，不盲目改权限、签名或关闭安全检查。
+
+结论：具备继续使用的构建和运行证据，未发现需要回退系统的阻断问题；保留手势断言作为未关闭问题。此次只做检查和文档记录，未修改兼容性代码。完整398项测试此前已在同一macOS27环境通过；实际媒体、休眠恢复和长时间前台闲置不能据测试结果全部宣告通过。
+
 # macOS 说明
 
 <div class="dg dg-win">

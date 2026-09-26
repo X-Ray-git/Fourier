@@ -17,14 +17,14 @@ class ArticleRelationBatchInput {
     required this.id,
     required this.newNodes,
     required this.historyNodes,
-    this.eventGroups = const [],
+    this.relationGroups = const [],
     this.epoch = 0,
   });
 
   final String id;
   final List<ArticleRelationNode> newNodes;
   final List<ArticleRelationNode> historyNodes;
-  final List<ArticleRelationGroup> eventGroups;
+  final List<ArticleRelationGroup> relationGroups;
   final int epoch;
 }
 
@@ -63,7 +63,7 @@ class ArticleRelationDisplayItem {
 /// 关系功能只消费启用时间之后完成的摘要。pending 与 history 都持久化，
 /// 因此请求失败或进程退出不会丢任务；只有一个合法批次完整落盘后才推进窗口。
 abstract final class ArticleRelationService {
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
   static const int batchSize = 128;
   static const int historyLimit = 2048;
   static const int historyEvictionSize = 1024;
@@ -117,7 +117,7 @@ abstract final class ArticleRelationService {
   }
 
   static Future<void> initialize() async {
-    await migrateToAnchoredGroups();
+    await migrateToSingleKind();
     if (!isEnabled) return;
     if (_initialized) return;
     _initialized = true;
@@ -132,36 +132,19 @@ abstract final class ArticleRelationService {
     await recoverCompletedSummaries();
   }
 
-  /// v4 deliberately starts a fresh relation epoch. Preserve batch numbering
-  /// and the separate usage/batch ledger; never rewrite a live Hive box externally.
-  static Future<void> migrateToAnchoredGroups() => _serialWrite(() async {
+  /// v5 preserves every historical group and queue entry. Only the kind changes;
+  /// write the schema marker last so an interrupted conversion can safely resume.
+  static Future<void> migrateToSingleKind() => _serialWrite(() async {
     final box = GStorage.articleRelations;
     if (box.get(_schemaKey) == schemaVersion) return;
     _epoch++;
-    final sequence = box.get(_sequenceKey) as int? ?? 0;
-    final batchSequence = box.get(_batchSequenceKey) as int? ?? 0;
-    // Write the boundary before deletion so interrupted migration never recovers
-    // old summaries into the new rules. The schema marker is written last.
-    final boundary = DateTime.now().millisecondsSinceEpoch;
-    await box.put(_activationKey, boundary);
-    await box.deleteAll(
-      box.keys
-          .where(
-            (key) => !{
-              _activationKey,
-              _sequenceKey,
-              _batchSequenceKey,
-            }.contains(key),
-          )
-          .toList(),
-    );
-    await box.putAll({
-      _sequenceKey: sequence,
-      _batchSequenceKey: batchSequence,
-      _pendingKey: <String>[],
-      _historyKey: <String>[],
-      _schemaKey: schemaVersion,
-    });
+    for (final key in box.keys.whereType<String>().toList()) {
+      if (!key.startsWith(_groupPrefix)) continue;
+      final raw = box.get(key);
+      if (raw is! Map) continue;
+      await box.put(key, {...raw, 'kind': 'equivalent'});
+    }
+    await box.put(_schemaKey, schemaVersion);
     recordsVersion.value++;
   });
 
@@ -305,9 +288,7 @@ abstract final class ArticleRelationService {
         newNodes: newNodes,
         historyNodes: historyNodes,
         epoch: _epoch,
-        eventGroups: allGroups()
-            .where((g) => g.kind == ArticleRelationKind.sameEvent)
-            .toList(),
+        relationGroups: allGroups(),
       );
     });
   }
@@ -331,11 +312,14 @@ abstract final class ArticleRelationService {
       }
 
       final existing = {for (final g in allGroups()) g.id: g};
-      final owners = <String, String>{
-        for (final g in existing.values)
-          if (g.kind == ArticleRelationKind.sameEvent)
-            for (final id in g.memberIds) id: g.id,
-      };
+      // Historical groups may overlap. Preserve all memberships, but never use
+      // a new operation to merge groups or transfer one group's members.
+      final owners = <String, Set<String>>{};
+      for (final group in existing.values) {
+        for (final member in group.memberIds) {
+          (owners[member] ??= <String>{}).add(group.id);
+        }
+      }
       final allowedIds = {
         ...input.newNodes,
         ...input.historyNodes,
@@ -359,32 +343,26 @@ abstract final class ArticleRelationService {
         final joining = candidate.groupId != null;
         final old = joining ? existing[candidate.groupId] : null;
         if (joining &&
-            (old == null ||
-                old.kind != ArticleRelationKind.sameEvent ||
-                candidate.kind != ArticleRelationKind.sameEvent ||
-                !input.eventGroups.any((g) => g.id == old.id))) {
+            (old == null || !input.relationGroups.any((g) => g.id == old.id))) {
           continue;
         }
         if (members.length < (joining ? 1 : 2)) continue;
         final id = old?.id ?? '${input.id}-g${i + 1}';
-        if (candidate.kind == ArticleRelationKind.sameEvent) {
-          // Reject the whole ambiguous operation; never silently steal members,
-          // merge groups, or turn a rejected join into a new event.
-          if (members.any(
-            (member) => owners[member] != null && owners[member] != id,
-          )) {
-            continue;
-          }
-          if (old == null && candidate.topic.trim().isEmpty) continue;
-          for (final member in members) {
-            owners[member] = id;
-          }
+        if (members.any(
+          (member) =>
+              (owners[member] ?? const <String>{}).any((owner) => owner != id),
+        )) {
+          continue;
         }
-        final topic = candidate.kind == ArticleRelationKind.sameEvent
-            ? (candidate.topic.trim().isEmpty
-                  ? old!.topic
-                  : candidate.topic.trim())
-            : '';
+        final topic = candidate.topic.trim().isEmpty
+            ? old?.topic.trim() ?? ''
+            : candidate.topic.trim();
+        if (topic.isEmpty || topic == '暂无关系概述') {
+          throw const FormatException('关系缺少一句话概述');
+        }
+        for (final member in members) {
+          (owners[member] ??= <String>{}).add(id);
+        }
         final topicHistory = [...?old?.topicHistory];
         if (old != null && old.topic != topic) topicHistory.add(old.topic);
         final record = ArticleRelationGroup(
@@ -423,10 +401,7 @@ abstract final class ArticleRelationService {
     final kindsById = <String, ArticleRelationKind>{};
     for (final group in groupsFor(articleId)) {
       for (final id in group.memberIds.where((id) => id != articleId)) {
-        final current = kindsById[id];
-        if (current == null || group.kind == ArticleRelationKind.equivalent) {
-          kindsById[id] = group.kind;
-        }
+        kindsById[id] = group.kind;
       }
     }
     return _displayItems(kindsById);
@@ -435,10 +410,6 @@ abstract final class ArticleRelationService {
   // Kept as an API alias: relations never expand through another article.
   static List<ArticleRelationDisplayItem> componentFor(String articleId) =>
       directRelationsFor(articleId);
-
-  static bool hasSameEventGroup(String articleId) =>
-      groupsFor(articleId)
-          .any((group) => group.kind == ArticleRelationKind.sameEvent);
 
   static List<ArticleRelationDisplayItem> _displayItems(
     Map<String, ArticleRelationKind> kindsById,

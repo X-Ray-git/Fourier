@@ -257,218 +257,197 @@ void main() {
     expect(ArticleRelationService.historyCount, 0);
   });
 
-  test('通过稳定组 ID 加入事件并保持近似重复子组', () async {
+  test('统一关系支持稳定 ID 加入并保留概述历史', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
-    for (var index = 0; index < 3; index++) {
-      await ArticleRelationService.onSummaryCompleted(
-        _article(index),
-        SummaryRecord(
-          status: SummaryStatus.done,
-          summaryText: '摘要 $index',
-          updatedAt: 1000 + index,
-        ),
-      );
-    }
-    final first = await ArticleRelationService.prepareNextBatch(
-      flushPartial: true,
-    );
-    await ArticleRelationService.completeBatch(first!, const [
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        memberIds: ['article-0', 'article-1'],
-        reason: '同一发布',
-        topic: '机构发布模型。',
-        confidence: 0.9,
-      ),
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.equivalent,
-        memberIds: ['article-0', 'article-1'],
-        reason: '内容可替代',
-        confidence: 0.95,
-      ),
-    ]);
-
-    await ArticleRelationService.onSummaryCompleted(
-      _article(3),
-      const SummaryRecord(
-        status: SummaryStatus.done,
-        summaryText: '摘要 3',
-        updatedAt: 2000,
-      ),
-    );
-    final second = await ArticleRelationService.prepareNextBatch(
-      flushPartial: true,
-    );
-    await ArticleRelationService.completeBatch(second!, const [
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        memberIds: ['article-3'],
-        groupId: 'relation-000001-g1',
-        topic: '机构发布新版模型。',
-        reason: '同一发布的新增报道',
-        confidence: 0.88,
-      ),
-    ]);
-
-    final eventGroups = ArticleRelationService.groupsFor('article-0')
-        .where((group) => group.kind == ArticleRelationKind.sameEvent)
-        .toList();
-    expect(eventGroups, hasLength(1));
-    expect(eventGroups.single.id, 'relation-000001-g1');
-    expect(eventGroups.single.topicHistory, ['机构发布模型。']);
-    expect(eventGroups.single.topic, '机构发布新版模型。');
-    expect(eventGroups.single.memberIds.toSet(), {
-      'article-0',
-      'article-1',
-      'article-3',
-    });
-    expect(
-      ArticleRelationService.groupsFor('article-0')
-          .where((group) => group.kind == ArticleRelationKind.equivalent),
-      hasLength(1),
-    );
-  });
-
-  test('共享成员不能合并事件，重复关系不产生跨两级关系', () async {
-    await ArticleRelationService.resetForTest(activatedAt: 1);
-    for (var i = 0; i < 5; i++) {
-      await ArticleRelationService.onSummaryCompleted(
-        _article(i),
-        SummaryRecord(
-          status: SummaryStatus.done,
-          summaryText: '摘要 $i',
-          updatedAt: 1000 + i,
-        ),
-      );
-    }
+    await _enqueue(0, 2);
     final first = (await ArticleRelationService.prepareNextBatch(
       flushPartial: true,
     ))!;
-    await ArticleRelationService.completeBatch(first, const [
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        memberIds: ['article-0', 'article-1'],
-        topic: '甲公司发布甲模型。',
-        reason: '',
-        confidence: .9,
-      ),
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        memberIds: ['article-2', 'article-3'],
-        topic: '乙公司发布乙模型。',
-        reason: '',
-        confidence: .9,
-      ),
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.equivalent,
-        memberIds: ['article-1', 'article-2'],
-        reason: '独立重复关系',
-        confidence: .9,
-      ),
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        memberIds: ['article-1', 'article-4'],
-        topic: '不应通过重叠成员创建。',
-        reason: '',
-        confidence: .9,
+    await ArticleRelationService.completeBatch(first, [
+      _candidate(['article-0', 'article-1'], topic: '同一篇论文。'),
+    ]);
+    await _enqueue(2, 1);
+    final second = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    expect(second.relationGroups, hasLength(1));
+    await ArticleRelationService.completeBatch(second, [
+      _candidate(
+        ['article-2'],
+        groupId: 'relation-000001-g1',
+        topic: '同一篇关于记忆的论文。',
       ),
     ]);
-    expect(
-      ArticleRelationService.allGroups().where(
-        (g) => g.kind == ArticleRelationKind.sameEvent,
-      ),
-      hasLength(2),
-    );
+    final group = ArticleRelationService.allGroups().single;
+    expect(group.memberIds, ['article-0', 'article-1', 'article-2']);
+    expect(group.topicHistory, ['同一篇论文。']);
+    expect(group.topic, '同一篇关于记忆的论文。');
+    await _enqueue(3, 1);
+    final third = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await ArticleRelationService.completeBatch(third, [
+      _candidate(['article-3'], groupId: group.id),
+    ]);
+    expect(ArticleRelationService.allGroups().single.topic, group.topic);
+  });
+
+  test('新关系不合并组或转移成员，也不创建新的重叠归属', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    await _enqueue(0, 5);
+    final first = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await ArticleRelationService.completeBatch(first, [
+      _candidate(['article-0', 'article-1'], topic: '甲原文。'),
+      _candidate(['article-2', 'article-3'], topic: '乙原文。'),
+      _candidate(['article-1', 'article-4'], topic: '不应借已有成员另建组。'),
+    ]);
+    expect(ArticleRelationService.allGroups(), hasLength(2));
     expect(ArticleRelationService.groupsFor('article-4'), isEmpty);
+    await _enqueue(5, 1);
+    final next = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await ArticleRelationService.completeBatch(next, [
+      _candidate(['article-2', 'article-5'], groupId: 'relation-000001-g1'),
+      _candidate(['article-5'], groupId: 'missing'),
+    ]);
+    expect(ArticleRelationService.groupsFor('article-5'), isEmpty);
     expect(
       ArticleRelationService.componentFor('article-0')
           .map((i) => i.node.articleId),
       ['article-1'],
     );
-    await ArticleRelationService.onSummaryCompleted(
-      _article(5),
-      const SummaryRecord(
-        status: SummaryStatus.done,
-        summaryText: '桥接比较',
-        updatedAt: 2000,
-      ),
-    );
-    final next = (await ArticleRelationService.prepareNextBatch(
-      flushPartial: true,
-    ))!;
-    await ArticleRelationService.completeBatch(next, const [
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        groupId: 'relation-000001-g1',
-        memberIds: ['article-2', 'article-5'],
-        reason: '不得抢走其他事件的成员',
-        confidence: .9,
-      ),
-      ArticleRelationCandidateGroup(
-        kind: ArticleRelationKind.sameEvent,
-        groupId: 'missing',
-        memberIds: ['article-5'],
-        reason: '不存在的组',
-        confidence: .9,
-      ),
-    ]);
-    expect(ArticleRelationService.groupsFor('article-5'), isEmpty);
-    expect(ArticleRelationService.allGroups(), hasLength(3));
   });
 
-  test('规则迁移清空派生状态，保留账本并拒绝旧批次写回', () async {
+  test('旧类型迁移完整保留组、概述、重叠归属和队列，幂等且拒绝旧批次', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
-    await ArticleRelationService.onSummaryCompleted(
-      _article(0),
-      const SummaryRecord(
-        status: SummaryStatus.done,
-        summaryText: '旧摘要',
-        updatedAt: 1000,
-      ),
-    );
-    final old = (await ArticleRelationService.prepareNextBatch(
+    await _enqueue(0, 3);
+    final completed = (await ArticleRelationService.prepareNextBatch(
       flushPartial: true,
     ))!;
-    await GStorage.relationBatches.put('audit', {'status': 'done'});
-    await GStorage.summaries.put('article-0', {
-      'status': 'done',
-      'summaryText': '旧摘要',
-      'updatedAt': 1000,
+    await ArticleRelationService.completeBatch(completed, const []);
+    await _enqueue(3, 1);
+    final stale = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    final oldEvent = {
+      'id': 'event',
+      'batchId': 'old',
+      'kind': 'same_event',
+      'memberIds': ['article-0', 'article-1'],
+      'reason': '历史理由',
+      'topic': '已有概述。',
+      'topicHistory': ['更早概述。'],
+      'confidence': .8,
+      'createdAt': 123,
+      'enabled': true,
+    };
+    final oldDuplicate = {
+      ...oldEvent,
+      'id': 'duplicate',
+      'kind': 'equivalent',
+      'memberIds': ['article-1', 'article-2'],
+      'topic': '',
+    };
+    await GStorage.articleRelations.putAll({
+      'group:event': oldEvent,
+      'group:duplicate': oldDuplicate,
+      'group:disabled': {...oldEvent, 'id': 'disabled', 'enabled': false},
+      '__schema_version__': 4,
     });
-    await GStorage.articleRelations.put('__schema_version__', 3);
-    await ArticleRelationService.migrateToAnchoredGroups();
-    expect(ArticleRelationService.pendingCount, 0);
-    expect(ArticleRelationService.historyCount, 0);
-    expect(ArticleRelationService.groupCount, 0);
-    expect(ArticleRelationService.nodeOf('article-0'), isNull);
-    expect(GStorage.relationBatches.get('audit'), isNotNull);
-    expect(GStorage.summaries.get('article-0'), isNotNull);
-    expect(await ArticleRelationService.completeBatch(old, const []), isFalse);
-    await ArticleRelationService.onSummaryCompleted(
-      _article(0),
-      const SummaryRecord(
-        status: SummaryStatus.done,
-        summaryText: '旧摘要',
-        updatedAt: 1000,
-      ),
+    await GStorage.relationBatches.put('audit', {'status': 'done'});
+    await GStorage.summaries.put('article-0', {'summaryText': '原摘要'});
+    await GStorage.setting.put(StorageKeys.articleRelationEnabled, false);
+    final before = GStorage.articleRelations.toMap();
+    await ArticleRelationService.migrateToSingleKind();
+    final after = GStorage.articleRelations.toMap();
+    expect(after.keys.toSet(), before.keys.toSet());
+    for (final key in before.keys) {
+      if (key == '__schema_version__') {
+        expect(after[key], 5);
+      } else if (key.toString().startsWith('group:')) {
+        expect(after[key], {...(before[key] as Map), 'kind': 'equivalent'});
+      } else {
+        expect(after[key], before[key]);
+      }
+    }
+    expect(GStorage.relationBatches.get('audit'), {'status': 'done'});
+    expect(GStorage.summaries.get('article-0'), {'summaryText': '原摘要'});
+    expect(ArticleRelationService.groupsFor('article-1'), hasLength(2));
+    expect(
+      ArticleRelationService.componentFor('article-0')
+          .map((i) => i.node.articleId),
+      ['article-1'],
     );
-    expect(ArticleRelationService.pendingCount, 0);
-    final boundary = ArticleRelationService.activatedAt;
-    await ArticleRelationService.migrateToAnchoredGroups();
-    expect(ArticleRelationService.activatedAt, boundary);
-    await ArticleRelationService.onSummaryCompleted(
-      _article(1),
-      SummaryRecord(
-        status: SummaryStatus.done,
-        summaryText: '新规则摘要',
-        updatedAt: boundary! + 1,
-      ),
+    expect(
+      ArticleRelationService.groupsFor('article-2').single.displayTopic,
+      '暂无关系概述',
     );
+    await GStorage.setting.put(StorageKeys.articleRelationEnabled, true);
+    expect(
+      await ArticleRelationService.completeBatch(stale, const []),
+      isFalse,
+    );
+    await ArticleRelationService.migrateToSingleKind();
+    expect(GStorage.articleRelations.toMap(), after);
     final next = (await ArticleRelationService.prepareNextBatch(
       flushPartial: true,
     ))!;
-    expect(next.id, 'relation-000002');
-    expect(next.newNodes.single.sequence, 2);
+    expect(next.id, 'relation-000003');
+    expect(next.newNodes.single.sequence, 4);
+    // The empty historical topic must be filled when adding a new member.
+    await ArticleRelationService.completeBatch(next, [
+      _candidate(['article-3'], groupId: 'duplicate', topic: '补充共同原文概述。'),
+    ]);
+    expect(
+      ArticleRelationService.groupsFor('article-3').single.topic,
+      '补充共同原文概述。',
+    );
+  });
+
+  test('迁移可从部分写入状态恢复，也保留无 schema 的旧记录', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    await GStorage.articleRelations.delete('__schema_version__');
+    await GStorage.articleRelations.putAll({
+      'group:a': {
+        'id': 'a',
+        'kind': 'equivalent',
+        'memberIds': ['a', 'b'],
+      },
+      'group:b': {
+        'id': 'b',
+        'kind': 'same_event',
+        'memberIds': ['b', 'c'],
+        'topic': '旧主题。',
+      },
+    });
+    await ArticleRelationService.migrateToSingleKind();
+    expect(ArticleRelationService.allGroups(), hasLength(2));
+    expect(ArticleRelationService.allGroups().map((g) => g.kind).toSet(), {
+      ArticleRelationKind.equivalent,
+    });
+    expect(ArticleRelationService.activatedAt, 1);
+  });
+
+  test('缺失概述时整个批次不落盘、不出队、不推进历史', () async {
+    await ArticleRelationService.resetForTest(activatedAt: 1);
+    await _enqueue(3, 4);
+    final next = (await ArticleRelationService.prepareNextBatch(
+      flushPartial: true,
+    ))!;
+    await expectLater(
+      ArticleRelationService.completeBatch(next, [
+        _candidate(['article-3', 'article-4'], topic: '有效概述。'),
+        _candidate(['article-5', 'article-6']),
+      ]),
+      throwsFormatException,
+    );
+    expect(ArticleRelationService.pendingCount, 4);
+    expect(ArticleRelationService.historyCount, 0);
+    expect(ArticleRelationService.groupCount, 0);
+    expect(ArticleRelationService.nodeOf('article-3')!.processedAt, isNull);
   });
 
   test('旧关系记录默认迁移为近似重复', () {
@@ -519,3 +498,29 @@ ArticleModel _article(int index) {
     publishedAt: '2026-08-08T00:00:00Z',
   );
 }
+
+Future<void> _enqueue(int start, int count) async {
+  for (var i = start; i < start + count; i++) {
+    await ArticleRelationService.onSummaryCompleted(
+      _article(i),
+      SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '摘要 $i',
+        updatedAt: 1000 + i,
+      ),
+    );
+  }
+}
+
+ArticleRelationCandidateGroup _candidate(
+  List<String> ids, {
+  String? groupId,
+  String topic = '',
+}) => ArticleRelationCandidateGroup(
+  kind: ArticleRelationKind.equivalent,
+  memberIds: ids,
+  groupId: groupId,
+  topic: topic,
+  reason: '重复依据',
+  confidence: .9,
+);

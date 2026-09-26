@@ -89,6 +89,38 @@ void main() {
     expect(revealed, ['c']);
   });
 
+  test('late removal never steals a manually changed selection', () {
+    expect(coordinator.beginRemoval('b'), isTrue);
+    articles = [articles[0], articles[2]];
+    selected = articles.first;
+    coordinator.onRemoveEnd(_article('b'));
+    expect(selected?.entryId, 'a');
+    expect(revealed, isEmpty);
+    expect(coordinator.isRemovingSelectedArticle, isFalse);
+  });
+
+  test('late removal preserves an explicitly cleared selection', () {
+    expect(coordinator.beginRemoval('b'), isTrue);
+    articles = [articles[0], articles[2]];
+    selected = null;
+    coordinator.onRemoveEnd(_article('b'));
+    expect(selected, isNull);
+    expect(revealed, isEmpty);
+  });
+
+  test('removing a related member does not change the root selection', () {
+    expect(coordinator.beginRemoval('a'), isTrue);
+    articles.removeAt(0);
+    coordinator.reconcileSelection();
+    coordinator.onRemoveEnd(_article('a'));
+    expect(selected?.entryId, 'b');
+    // A related article outside the list also leaves the root untouched.
+    expect(coordinator.beginRemoval('outside'), isTrue);
+    coordinator.onRemoveEnd(_article('outside'));
+    expect(selected?.entryId, 'b');
+    expect(revealed, isEmpty);
+  });
+
   test('undo during removal prevents the pending successor from winning', () {
     final restored = articles[1];
     expect(coordinator.beginRemoval('b'), isTrue);

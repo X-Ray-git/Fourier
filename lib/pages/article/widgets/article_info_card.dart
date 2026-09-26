@@ -12,14 +12,25 @@ class ArticleInfoCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.icon,
-    required this.text,
+    required String this.text,
     this.foregroundColor,
     this.backgroundColor,
-  });
+  }) : child = null;
+
+  /// Reuses the same title, surface and spacing for structured reader content.
+  const ArticleInfoCard.content({
+    super.key,
+    required this.title,
+    required this.icon,
+    required Widget this.child,
+    this.foregroundColor,
+    this.backgroundColor,
+  }) : text = null;
 
   final String title;
   final IconData icon;
-  final String text;
+  final String? text;
+  final Widget? child;
   final Color? foregroundColor;
   final Color? backgroundColor;
 
@@ -65,40 +76,41 @@ class ArticleInfoCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            StableSelectableHtml(
-              data: SelectableHtmlCompatibility.normalizePlainText(text),
-              renderConfigurationKey: Object.hash(
-                Theme.of(context).brightness,
-                Theme.of(context).colorScheme.primary,
-              ),
-              style: {
-                // Html 会把 block wrapper 转为 WidgetSpan；与外层
-                // SelectionArea 组合时必须让根节点和摘要文本保持同一流。
-                'html': Style(display: Display.inline),
-                'body': Style(
-                  display: Display.inline,
-                  fontSize: FontSize(14),
-                  lineHeight: const LineHeight(1.5),
-                  margin: Margins.zero,
-                  padding: HtmlPaddings.zero,
+            child ??
+                StableSelectableHtml(
+                  data: SelectableHtmlCompatibility.normalizePlainText(text!),
+                  renderConfigurationKey: Object.hash(
+                    Theme.of(context).brightness,
+                    Theme.of(context).colorScheme.primary,
+                  ),
+                  style: {
+                    // Html 会把 block wrapper 转为 WidgetSpan；与外层
+                    // SelectionArea 组合时必须让根节点和摘要文本保持同一流。
+                    'html': Style(display: Display.inline),
+                    'body': Style(
+                      display: Display.inline,
+                      fontSize: FontSize(14),
+                      lineHeight: const LineHeight(1.5),
+                      margin: Margins.zero,
+                      padding: HtmlPaddings.zero,
+                    ),
+                    'div': Style(display: Display.inline),
+                    'p': Style(
+                      display: Display.inline,
+                      margin: Margins.zero,
+                      padding: HtmlPaddings.zero,
+                    ),
+                    'a': Style(
+                      color: Theme.of(context).colorScheme.primary,
+                      textDecoration: TextDecoration.none,
+                    ),
+                  },
+                  onLinkTap: (url, attributes, element) async {
+                    if (url != null && url.isNotEmpty) {
+                      await ExternalLinkService.openUrlWithFeedback(url);
+                    }
+                  },
                 ),
-                'div': Style(display: Display.inline),
-                'p': Style(
-                  display: Display.inline,
-                  margin: Margins.zero,
-                  padding: HtmlPaddings.zero,
-                ),
-                'a': Style(
-                  color: Theme.of(context).colorScheme.primary,
-                  textDecoration: TextDecoration.none,
-                ),
-              },
-              onLinkTap: (url, attributes, element) async {
-                if (url != null && url.isNotEmpty) {
-                  await ExternalLinkService.openUrlWithFeedback(url);
-                }
-              },
-            ),
           ],
         ),
       ),

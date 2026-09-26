@@ -1455,8 +1455,11 @@ class _TimelinePageState extends State<TimelinePage> {
                   }
                   final restore = _takeArticleRestore(selected.entryId);
                   bool isDetailActive() =>
-                      !Get.isRegistered<MainController>() ||
-                      Get.find<MainController>().currentIndex.value == 0;
+                      mounted &&
+                      controller.selectedArticle.value?.entryId ==
+                          selected.entryId &&
+                      (!Get.isRegistered<MainController>() ||
+                          Get.find<MainController>().currentIndex.value == 0);
                   return MacArticleDetailStack(
                     key: ValueKey(selected.entryId),
                     isActive: isDetailActive,

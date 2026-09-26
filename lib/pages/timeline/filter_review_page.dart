@@ -942,14 +942,19 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                 );
               }
               bool isDetailActive() =>
-                  !Get.isRegistered<MainController>() ||
-                  Get.find<MainController>().currentIndex.value == 1;
+                  mounted &&
+                  _selectedArticle.value?.entryId == selected.entryId &&
+                  (!Get.isRegistered<MainController>() ||
+                      Get.find<MainController>().currentIndex.value == 1);
               return MacArticleDetailStack(
                 key: ValueKey(selected.entryId),
                 isActive: isDetailActive,
                 onOpenSource: _openArticleSource,
                 onRelatedNavigationChanged: (isViewingRelated) {
-                  _isViewingRelatedArticle = isViewingRelated;
+                  if (mounted &&
+                      _selectedArticle.value?.entryId == selected.entryId) {
+                    _isViewingRelatedArticle = isViewingRelated;
+                  }
                 },
                 rootBuilder: (_, openRelatedArticle) => ArticlePageView(
                   article: selected,

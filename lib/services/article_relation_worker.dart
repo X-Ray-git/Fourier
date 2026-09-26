@@ -41,7 +41,7 @@ abstract final class ArticleRelationWorker {
   static const Duration _timeout = Duration(seconds: 300);
   static const int _maxAttempts = 3;
   static String get promptVersion =>
-      'relation-v4@${ArticleRelationPromptService.promptFingerprint}';
+      'relation-v5@${ArticleRelationPromptService.promptFingerprint}';
 
   static final Dio _dio = Dio(
     BaseOptions(
@@ -77,7 +77,7 @@ abstract final class ArticleRelationWorker {
     _initialized = true;
     await ArticleRelationPromptService.migrateLegacyDefaultPrompt();
     ArticleRelationService.registerScheduler(schedule);
-    await ArticleRelationService.migrateToAnchoredGroups();
+    await ArticleRelationService.migrateToSingleKind();
     if (!ArticleRelationService.isEnabled) {
       await ArticleRelationService.discardPending();
       return;
@@ -349,7 +349,7 @@ abstract final class ArticleRelationWorker {
         response.data,
         labels,
         newLabels: newLabels,
-        eventGroups: input.eventGroups,
+        relationGroups: input.relationGroups,
       );
       await trace.complete();
       return result;
@@ -364,7 +364,7 @@ abstract final class ArticleRelationWorker {
     dynamic responseData,
     Map<String, ArticleRelationNode> labels, {
     Set<String>? newLabels,
-    List<ArticleRelationGroup> eventGroups = const [],
+    List<ArticleRelationGroup> relationGroups = const [],
   }) {
     if (responseData is! Map) {
       throw const FormatException('关系响应不是 JSON 对象');
@@ -397,12 +397,12 @@ abstract final class ArticleRelationWorker {
     final groups = <ArticleRelationCandidateGroup>[];
     for (final raw in rawGroups) {
       if (raw is! Map) continue;
-      // 兼容关系 v1 及旧自定义 prompt：当时只有“近似重复”一种语义，
-      // 输出没有 type。明确给出未知 type 时仍跳过，避免误解新语义。
-      final kind = raw['type'] == null
-          ? ArticleRelationKind.equivalent
-          : ArticleRelationKindX.tryParse(raw['type']);
-      if (kind == null) continue;
+      // Storage conversion is deliberately separate from the current API contract.
+      // Never accept a newly generated same_event as a near-duplicate relation.
+      final kind = ArticleRelationKindX.tryParse(raw['type']);
+      if (kind == null) {
+        throw const FormatException('关系类型必须为 equivalent，请检查关系提示词');
+      }
       final rawMembers = raw['members'];
       if (rawMembers is! List ||
           rawMembers.any((id) => id is! String || !labels.containsKey(id))) {
@@ -415,13 +415,7 @@ abstract final class ArticleRelationWorker {
       if (rawGroupId != null && rawGroupId is! String) continue;
       final groupId = rawGroupId as String?;
       final joining = groupId != null;
-      if (joining &&
-          (kind != ArticleRelationKind.sameEvent ||
-              !eventGroups.any((g) => g.id == groupId))) {
-        continue;
-      }
-      final topic = raw['topic']?.toString().trim() ?? '';
-      if (kind == ArticleRelationKind.sameEvent && !joining && topic.isEmpty) {
+      if (joining && !relationGroups.any((g) => g.id == groupId)) {
         continue;
       }
       if (memberLabels.length < (joining ? 1 : 2) ||
@@ -429,6 +423,17 @@ abstract final class ArticleRelationWorker {
             (label) => newLabels?.contains(label) ?? label.startsWith('N'),
           )) {
         continue;
+      }
+      final rawTopic = raw['topic'];
+      if (rawTopic != null && rawTopic is! String) {
+        throw const FormatException('关系概述必须为一句话文本');
+      }
+      final topic = (rawTopic as String? ?? '').trim();
+      final inheritedTopic = joining
+          ? relationGroups.firstWhere((g) => g.id == groupId).topic.trim()
+          : '';
+      if ((topic.isEmpty && inheritedTopic.isEmpty) || topic == '暂无关系概述') {
+        throw const FormatException('关系缺少一句话概述');
       }
       final reason = raw['reason']?.toString().trim() ?? '';
       final confidence = ((raw['confidence'] as num?)?.toDouble() ?? 0.5).clamp(
@@ -475,8 +480,8 @@ abstract final class ArticleRelationWorker {
       ],
       'new_ids': [for (final node in input.newNodes) _stableLabel(node)],
       // Mutable group state belongs after the reusable article prefix.
-      'event_groups': [
-        for (final group in input.eventGroups)
+      'relation_groups': [
+        for (final group in input.relationGroups)
           {
             'id': group.id,
             'topic': group.topic,
@@ -486,11 +491,15 @@ abstract final class ArticleRelationWorker {
             ].take(3).toList(),
           },
       ],
-      'article_event_ids': {
-        for (final group in input.eventGroups)
-          for (final entry in labels.entries)
-            if (group.memberIds.contains(entry.value.articleId))
-              entry.key: group.id,
+      'article_group_ids': {
+        for (final entry in labels.entries)
+          if (input.relationGroups.any(
+            (g) => g.memberIds.contains(entry.value.articleId),
+          ))
+            entry.key: [
+              for (final group in input.relationGroups)
+                if (group.memberIds.contains(entry.value.articleId)) group.id,
+            ],
       },
       'protocol': ArticleRelationPromptService.protocolSuffix,
     };

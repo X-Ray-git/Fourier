@@ -22,64 +22,70 @@ void main() {
     await HiveTestHelper.tearDown();
   });
 
-  test('解析有效关系并忽略不含新文章的关系组', () {
-    final labels = {
-      'N001': _node('new-1'),
-      'H001': _node('history-1'),
-      'H002': _node('history-2'),
-    };
-    final result = ArticleRelationWorker.parseResponse({
-      'choices': [
-        {
-          'finish_reason': 'stop',
-          'message': {
-            'content':
-                '{"groups":['
-                '{"type":"same_event","members":["N001","H001"],"reason":"同一发布","topic":"机构发布模型。","confidence":0.91},'
-                '{"type":"equivalent","members":["N001","H002"],"reason":"近似重复","confidence":0.95},'
-                '{"type":"equivalent","members":["H001","H002"],"reason":"历史内部","confidence":0.8},'
-                '{"type":"unknown","members":["N001","H002"],"reason":"未知类型","confidence":0.8}'
-                ']}',
+  test('解析唯一关系类型、概述和用量，忽略纯历史操作', () {
+    final result = ArticleRelationWorker.parseResponse(
+      _response(
+        [
+          {
+            'type': 'equivalent',
+            'members': ['N001', 'H001'],
+            'topic': '同一篇论文。',
+            'confidence': .91,
           },
+          {
+            'type': 'equivalent',
+            'members': ['H001', 'H002'],
+            'topic': '纯历史。',
+          },
+        ],
+        usage: {
+          'prompt_cache_hit_tokens': 80,
+          'prompt_cache_miss_tokens': 20,
+          'total_tokens': 120,
         },
-      ],
-      'usage': {
-        'prompt_tokens': 100,
-        'completion_tokens': 20,
-        'prompt_cache_hit_tokens': 80,
-        'prompt_cache_miss_tokens': 20,
-        'total_tokens': 120,
+      ),
+      {
+        'N001': _node('new-1'),
+        'H001': _node('history-1'),
+        'H002': _node('history-2'),
       },
-    }, labels);
-
-    expect(result.groups, hasLength(2));
-    expect(result.groups.first.kind, ArticleRelationKind.sameEvent);
-    expect(result.groups.first.memberIds, ['new-1', 'history-1']);
-    expect(result.groups.first.confidence, 0.91);
-    expect(result.groups.last.kind, ArticleRelationKind.equivalent);
-    expect(result.groups.last.memberIds, ['new-1', 'history-2']);
+    );
+    expect(result.groups, hasLength(1));
+    expect(result.groups.single.kind, ArticleRelationKind.equivalent);
+    expect(result.groups.single.topic, '同一篇论文。');
+    expect(result.groups.single.memberIds, ['new-1', 'history-1']);
+    expect(result.groups.single.confidence, .91);
     expect(result.cacheHitTokens, 80);
     expect(result.cacheMissTokens, 20);
     expect(result.totalTokens, 120);
   });
 
-  test('旧版无类型关系输出兼容为近似重复', () {
-    final result = ArticleRelationWorker.parseResponse(
+  test('旧 API 类型、缺失类型和缺失概述均报错，不能静默当无关系成功', () {
+    for (final fields in [
+      {'type': 'same_event', 'topic': '同一事件。'},
+      {'type': 'unknown', 'topic': '未知。'},
+      {'topic': '无类型。'},
+      {'type': 'equivalent'},
+      {'type': 'equivalent', 'topic': '   '},
+      {'type': 'equivalent', 'topic': '暂无关系概述'},
       {
-        'choices': [
-          {
-            'finish_reason': 'stop',
-            'message': {
-              'content': '{"groups":[{"members":["N001","H001"],"reason":"旧输出","confidence":0.8}]}',
-            },
-          },
-        ],
+        'type': 'equivalent',
+        'topic': ['错误类型'],
       },
-      {'N001': _node('new-1'), 'H001': _node('history-1')},
-    );
-
-    expect(result.groups, hasLength(1));
-    expect(result.groups.single.kind, ArticleRelationKind.equivalent);
+    ]) {
+      expect(
+        () => ArticleRelationWorker.parseResponse(
+          _response([
+            {
+              ...fields,
+              'members': ['N001', 'H001'],
+            },
+          ]),
+          {'N001': _node('new'), 'H001': _node('old')},
+        ),
+        throwsFormatException,
+      );
+    }
   });
 
   test('截断响应不能被当成成功批次', () {
@@ -138,7 +144,7 @@ void main() {
             'message': {
               'content':
                   '{"groups":['
-                  '{"type":"equivalent","members":["A000041","A000042"],"reason":"有效","confidence":0.9},'
+                  '{"type":"equivalent","members":["A000041","A000042"],"reason":"有效","topic":"重复原文。","confidence":0.9},'
                   '{"type":"equivalent","members":["A000041","A000099"],"reason":"无新文章","confidence":0.9}'
                   ']}',
             },
@@ -173,67 +179,83 @@ void main() {
     expect(ArticleRelationPromptService.getPrompt(), '我的自定义关系规则');
   });
 
-  test('加入已有组允许一个新成员，未知组和空主题新组被拒绝', () {
-    final existing = ArticleRelationGroup(
-      id: 'event-1',
+  test('显式加入允许一个新成员、继承非空概述，旧空概述必须补充', () {
+    const existing = ArticleRelationGroup(
+      id: 'group-1',
       batchId: 'old',
-      memberIds: ['history'],
+      memberIds: ['old'],
       reason: '',
       confidence: .9,
       createdAt: 1,
-      kind: ArticleRelationKind.sameEvent,
-      topic: '机构发布模型。',
+      topic: '同一原文。',
     );
+    const empty = ArticleRelationGroup(
+      id: 'group-2',
+      batchId: 'old',
+      memberIds: ['old'],
+      reason: '',
+      confidence: .9,
+      createdAt: 1,
+    );
+    final labels = {
+      'A000041': _node('old', sequence: 41),
+      'A000042': _node('new', sequence: 42),
+    };
     final result = ArticleRelationWorker.parseResponse(
-      {
-        'choices': [
-          {
-            'finish_reason': 'stop',
-            'message': {
-              'content': jsonEncode({
-                'groups': [
-                  {
-                    'type': 'same_event',
-                    'group_id': 'event-1',
-                    'members': ['A000042'],
-                    'topic': '',
-                  },
-                  {
-                    'type': 'same_event',
-                    'group_id': 'missing',
-                    'members': ['A000042'],
-                  },
-                  {
-                    'type': 'same_event',
-                    'members': ['A000041', 'A000042'],
-                    'topic': '',
-                  },
-                  {
-                    'type': 'same_event',
-                    'group_id': 'event-1',
-                    'members': ['A000041'],
-                  },
-                  {
-                    'type': 'equivalent',
-                    'group_id': 'event-1',
-                    'members': ['A000041', 'A000042'],
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      },
-      {
-        'A000041': _node('history', sequence: 41),
-        'A000042': _node('new', sequence: 42),
-      },
+      _response([
+        {
+          'type': 'equivalent',
+          'group_id': 'group-1',
+          'members': ['A000042'],
+          'topic': '',
+        },
+        {
+          'type': 'equivalent',
+          'group_id': 'missing',
+          'members': ['A000042'],
+        },
+        {
+          'type': 'equivalent',
+          'group_id': 'group-1',
+          'members': ['A000041'],
+        },
+      ]),
+      labels,
       newLabels: {'A000042'},
-      eventGroups: [existing],
+      relationGroups: [existing],
     );
     expect(result.groups, hasLength(1));
-    expect(result.groups.single.groupId, 'event-1');
+    expect(result.groups.single.groupId, 'group-1');
     expect(result.groups.single.memberIds, ['new']);
+    expect(
+      () => ArticleRelationWorker.parseResponse(
+        _response([
+          {
+            'type': 'equivalent',
+            'group_id': 'group-2',
+            'members': ['A000042'],
+          },
+        ]),
+        labels,
+        newLabels: {'A000042'},
+        relationGroups: [empty],
+      ),
+      throwsFormatException,
+    );
+    final repaired = ArticleRelationWorker.parseResponse(
+      _response([
+        {
+          'type': 'equivalent',
+          'group_id': 'group-2',
+          'members': ['A000042'],
+          'topic': '共同原文概述。',
+        },
+      ]),
+      labels,
+      newLabels: {'A000042'},
+      relationGroups: [empty],
+    );
+    expect(repaired.groups.single.topic, '共同原文概述。');
   });
 
   test('组上下文变化只影响后缀，自定义 Prompt 也保持稳定输入', () async {
@@ -253,7 +275,15 @@ void main() {
         id: 'second',
         newNodes: [fresh],
         historyNodes: [old],
-        eventGroups: [
+        relationGroups: [
+          const ArticleRelationGroup(
+            id: 'legacy-overlap',
+            batchId: 'old',
+            memberIds: ['old'],
+            reason: '',
+            confidence: .9,
+            createdAt: 1,
+          ),
           const ArticleRelationGroup(
             id: 'event',
             batchId: 'old',
@@ -261,7 +291,7 @@ void main() {
             reason: '',
             confidence: .9,
             createdAt: 1,
-            kind: ArticleRelationKind.sameEvent,
+            kind: ArticleRelationKind.equivalent,
             topic: '具体事件。',
           ),
         ],
@@ -269,11 +299,13 @@ void main() {
     );
     expect(second['articles'], first['articles']);
     expect(
-      second.keys.toList().indexOf('event_groups'),
+      second.keys.toList().indexOf('relation_groups'),
       greaterThan(second.keys.toList().indexOf('articles')),
     );
-    expect(second['article_event_ids'], {'A000001': 'event'});
-    expect((second['event_groups'] as List).single['topic'], '具体事件。');
+    expect(second['article_group_ids'], {
+      'A000001': ['legacy-overlap', 'event'],
+    });
+    expect((second['relation_groups'] as List).last['topic'], '具体事件。');
   });
 
   test('关闭会丢弃待处理队列，重新开启不追溯关闭期间摘要', () async {
@@ -361,8 +393,8 @@ void main() {
         newArticleIds: ['new-1'],
         historyArticleIds: [],
         model: 'deepseek-v4-flash',
-        promptVersion: 'relation-v4@test',
-        schemaVersion: 4,
+        promptVersion: 'relation-v5@test',
+        schemaVersion: 5,
         startedAt: 1000,
         completedAt: 2000,
         error: '测试失败',
@@ -441,3 +473,18 @@ const _legacyRelationDefaultPrompt = '''
 
 没有可靠关系时返回：{"groups":[]}
 ''';
+
+Map<String, dynamic> _response(
+  List<Map<String, dynamic>> groups, {
+  Map<String, int>? usage,
+}) => {
+  'choices': [
+    {
+      'finish_reason': 'stop',
+      'message': {
+        'content': jsonEncode({'groups': groups}),
+      },
+    },
+  ],
+  'usage': ?usage,
+};

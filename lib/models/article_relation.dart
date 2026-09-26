@@ -101,22 +101,19 @@ class ArticleRelationNode {
   }
 }
 
-enum ArticleRelationKind { equivalent, sameEvent }
+enum ArticleRelationKind { equivalent }
 
 extension ArticleRelationKindX on ArticleRelationKind {
   String get storageValue => switch (this) {
     ArticleRelationKind.equivalent => 'equivalent',
-    ArticleRelationKind.sameEvent => 'same_event',
   };
 
   String get label => switch (this) {
     ArticleRelationKind.equivalent => '近似重复',
-    ArticleRelationKind.sameEvent => '同一事件',
   };
 
   static ArticleRelationKind? tryParse(Object? raw) => switch (raw) {
     'equivalent' => ArticleRelationKind.equivalent,
-    'same_event' => ArticleRelationKind.sameEvent,
     _ => null,
   };
 }
@@ -146,6 +143,8 @@ class ArticleRelationGroup {
   final String topic;
   final List<String> topicHistory;
 
+  String get displayTopic => topic.trim().isEmpty ? '暂无关系概述' : topic;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'batchId': batchId,
@@ -169,7 +168,7 @@ class ArticleRelationGroup {
       reason: json['reason'] as String? ?? '',
       confidence: (json['confidence'] as num?)?.toDouble() ?? 0,
       createdAt: json['createdAt'] as int? ?? 0,
-      // v1 关系只有“内容可替代”一种语义，兼容为近似重复。
+      // 历史类型只在存储读取边界统一；API 解析不能接受 same_event。
       kind:
           ArticleRelationKindX.tryParse(json['kind']) ??
           ArticleRelationKind.equivalent,

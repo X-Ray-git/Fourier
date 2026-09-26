@@ -15,7 +15,7 @@ abstract final class ArticleRelationPromptService {
     return stored;
   }
 
-  // v4 always uses stable IDs, including user-edited prompts.
+  // v5 always uses stable IDs, including user-edited prompts.
   static bool get usesStableInputSchema => true;
 
   /// 只迁移仓库曾发布过的逐字默认值，不猜测或覆盖用户自定义 Prompt。
@@ -38,6 +38,37 @@ abstract final class ArticleRelationPromptService {
       sha256.convert(utf8.encode(getPrompt())).toString().substring(0, 12);
 
   static const String defaultPrompt = '''
+你是文章重复内容分析器，只建立有明确证据的稀疏关系。判断与文章是否已读、用户兴趣或质量无关。
+
+输入 articles 按时间稳定排列，每篇含稳定 ID、标题、来源等元信息和摘要；new_ids 标明本批新文章。末尾 relation_groups 提供既有关系组 ID、一句话概述 topic 和当前窗口内的部分代表成员 ID；article_group_ids 列出当前输入文章已有的全部组 ID。只使用输入中实际存在的文章 ID 和组 ID。
+
+只建立 equivalent（近似重复）一种关系：指向同一篇原始内容、明确转载，或核心信息基本可替代，阅读其中信息完整的一篇后，其余基本不提供实质新增信息。完全重复也属于这一类型。仅报道同一事件，但包含实质新增事实、分析、评测或后续进展的文章，不建立关系。
+
+先检查原始内容身份：完整、具体且具有辨识度的标题一致，元信息与摘要相容，足以确认同一篇论文或原始文章时，应建立关系。来源或收录时间不同、一方正文截断或摘要不足，不应单独否定这一强信号。通用标题、栏目标题、相同链接或仅主题相近都不足以证明重复；存在不同对象、版本或核心事实等冲突时不适用。无法确认身份且信息不足时，不建立关系。同一原文的截断版与完整版可以关联，但不表示读过截断版就已读完全部内容。
+
+分组规则：
+- 优先判断新文章是否与既有组所指向的原始内容或核心信息近似重复，符合时用 group_id 显式加入，members 只列新增成员，不借某个旧成员另建组。
+- 没有合适既有组时，用至少两篇文章建立新组，至少一篇属于 new_ids。新组成员不能已有组归属；本批新成员最多加入一个组。历史重叠归属原样保留，不合并、拆分或重新分配既有组。
+- 所有成员应共享同一份原始内容或基本可替代的核心信息。不能因 A 与 B 重复、B 与 C 重复就推导 A 与 C 重复；不能只形成首尾相接的相似链。
+- 历史组可能由旧“同一事件”规则转换，范围可能较宽。保留它们不代表放宽新增标准；只凭概述主题相符或某一成员相似不够，缺乏充分证据就不加入。
+- 每个新组的 topic 必须是一句简短、具体的中文概述，直接说明共同原文或重复的核心内容，不能只写“内容相似”、段落或列表，也不能填写占位文字。
+- 加入既有组默认沿用概述，topic 可留空；若旧组 topic 为空，必须提供一句话概述。只有必要时微调措辞，不得通过扩大概述容纳有实质新增信息的文章，也不得通过连续微调逐步改变核心内容。
+
+不要为日报、周报、链接合集、综合摘要或纯图片文章建立关系。不确定时不建立关系。每次操作都必须包含本批新文章，不要仅修改历史关系或概述。
+
+只返回 JSON 对象，顶层为 groups 数组，不要 Markdown、解释或代码块。每项包含 type（固定为 equivalent）、members、reason、confidence。新组另含 topic；加入既有组另含 group_id。reason 简短说明重复依据，confidence 为 0 到 1 的数字。
+
+示例结构（ID 仅为示意）：
+{"groups":[{"type":"equivalent","members":["A000123","A000456"],"topic":"两篇文章收录同一篇关于视频生成记忆机制的论文。","reason":"完整论文标题一致，摘要相容。","confidence":0.98},{"type":"equivalent","group_id":"relation-000001-g1","members":["A000789"],"topic":"","reason":"转载组内同一篇原文。","confidence":0.96}]}
+
+没有可靠关系时返回：{"groups":[]}
+''';
+
+  static const String protocolSuffix = '''
+关系输入输出协议 v5：只有 equivalent（近似重复）一种类型，仅同一事件不建立关系。articles 使用稳定 A ID；relation_groups 提供既有组，member_ids 仅为代表成员；article_group_ids 为当前输入文章的全部归属列表，历史重叠归属保留。只返回 {"groups": [...]}。新组至少两个成员，必须提供一句话非空 topic；加入既有组必须提供 group_id，members 仅为新增成员，可只有一篇，topic 留空沿用已有非空概述，旧组概述为空则必须补充。每项至少含一个 new_ids 成员。不创建新的重叠归属，不合并组、不沿成员传递关系，旧组范围较宽不构成放宽新成员重复标准的理由。
+''';
+
+  static const String _legacyV4DefaultPrompt = '''
 你是文章信息关系分析器，只建立有明确证据的稀疏关系。判断与文章是否已读、用户兴趣或质量无关。
 
 输入中的 articles 是按时间稳定排列的文章，每篇包含稳定 ID、标题、来源等元信息和摘要；new_ids 标明本批新文章。末尾的 event_groups 提供既有事件组的稳定 ID、一句话主题及部分代表文章 ID。article_event_ids 标明当前输入文章已有的事件归属，不得重新分配。只使用输入中实际存在的文章 ID 和组 ID。
@@ -66,10 +97,6 @@ abstract final class ArticleRelationPromptService {
 没有可靠关系时返回：{"groups":[]}
 ''';
 
-  static const String protocolSuffix = '''
-关系输入输出协议 v4：articles 使用稳定 A ID；event_groups 是既有事件组，member_ids 仅为代表成员，article_event_ids 才是当前输入文章的完整事件归属。不得重新分配已有归属的文章。只返回 {"groups": [...]}。same_event 新组需要至少两个成员和一句话 topic；加入既有组必须提供 group_id，members 仅为新增成员，可只有一篇，topic 留空沿用主题。equivalent 至少两个成员，不使用 group_id。每项至少包含一个 new_ids 成员。不得合并事件组或沿成员传递关系。
-''';
-
   static const String _legacyV3DefaultPrompt = '''
 你是文章信息关系分析器。输入 JSON 包含按时间稳定排列的文章数组 articles，以及本批新文章 ID 数组 new_ids。每篇文章只有稳定 ID、元信息和摘要。
 
@@ -91,6 +118,7 @@ abstract final class ArticleRelationPromptService {
     _legacyV1DefaultPrompt,
     _legacyV2DefaultPrompt,
     _legacyV3DefaultPrompt,
+    _legacyV4DefaultPrompt,
   };
 
   static const String _legacyV1DefaultPrompt = '''

@@ -17,6 +17,7 @@ import '../../http/public_content_http.dart';
 import '../../models/article.dart';
 import '../../models/article_relation.dart';
 import '../../router/app_pages.dart';
+import '../../common/widgets/article_relation_topics.dart';
 import '../../common/constants/constants.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/app_glass.dart';
@@ -48,6 +49,7 @@ import '../../utils/storage.dart';
 import '../../services/undo_service.dart';
 import '../timeline/timeline_controller.dart';
 import 'article_navigation.dart';
+import 'article_detail_navigation.dart';
 import 'widgets/html_chunk_card.dart';
 import 'widgets/article_info_card.dart';
 
@@ -82,6 +84,38 @@ class ArticleController extends GetxController {
   int _contentGeneration = 0;
 
   ArticleController(this.article);
+
+  static final Map<ArticleController, int> _viewOwners = {};
+
+  /// Keep the existing article-ID lookup used by Undo/menu actions, but make
+  /// lifetime belong to all mounted views, not whichever route closes first.
+  static ArticleController retainForView(ArticleModel article) {
+    final controller = Get.isRegistered<ArticleController>(tag: article.entryId)
+        ? Get.find<ArticleController>(tag: article.entryId)
+        : Get.put(
+            ArticleController(article),
+            tag: article.entryId,
+            permanent: true,
+          );
+    _viewOwners[controller] = (_viewOwners[controller] ?? 0) + 1;
+    return controller;
+  }
+
+  static bool releaseForView(ArticleController controller) {
+    final owners = _viewOwners[controller];
+    if (owners == null) return false;
+    if (owners > 1) {
+      _viewOwners[controller] = owners - 1;
+      return false;
+    }
+    _viewOwners.remove(controller);
+    final id = controller.article.entryId;
+    if (Get.isRegistered<ArticleController>(tag: id) &&
+        identical(Get.find<ArticleController>(tag: id), controller)) {
+      Get.delete<ArticleController>(tag: id, force: true);
+    }
+    return !_viewOwners.keys.any((other) => other.article.entryId == id);
+  }
 
   @override
   void onInit() {
@@ -777,69 +811,62 @@ class MacArticleDetailStack extends StatefulWidget {
 
 class _MacArticleDetailStackState extends State<MacArticleDetailStack> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  int _relatedDepth = 0;
+  late final ArticleDetailNavigation _navigation;
+
+  @override
+  void initState() {
+    super.initState();
+    _navigation = ArticleDetailNavigation((related) {
+      if (mounted) widget.onRelatedNavigationChanged?.call(related);
+    });
+    widget.onRelatedNavigationChanged?.call(false);
+  }
 
   void _openRelatedArticle(ArticleModel article) {
     final navigator = _navigatorKey.currentState;
-    if (navigator == null) return;
+    if (!mounted ||
+        navigator == null ||
+        (widget.isActive != null && !widget.isActive!())) {
+      return;
+    }
 
-    _relatedDepth += 1;
-    widget.onRelatedNavigationChanged?.call(true);
-    final popped = navigator.push<void>(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 160),
-        reverseTransitionDuration: const Duration(milliseconds: 140),
-        pageBuilder: (_, _, _) => ArticlePageView(
-          article: article,
-          isSplitView: true,
-          isActive: widget.isActive,
-          onClose: _popRelatedArticle,
-          onMarkedReadAndReturn: _popRelatedArticleAfterFrame,
-          onOpenSource: widget.onOpenSource,
-          onOpenRelatedArticle: _openRelatedArticle,
-        ),
-        transitionsBuilder: (_, animation, _, child) {
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          );
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.025, 0),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            ),
-          );
-        },
+    late final PageRoute<void> route;
+    route = PageRouteBuilder<void>(
+      transitionDuration: const Duration(milliseconds: 160),
+      reverseTransitionDuration: const Duration(milliseconds: 140),
+      pageBuilder: (_, _, _) => ArticlePageView(
+        article: article,
+        isSplitView: true,
+        isActive: widget.isActive,
+        onClose: () => _navigation.pop(route),
+        onMarkedReadAndReturn: () => _navigation.pop(route, afterFrame: true),
+        onOpenSource: widget.onOpenSource,
+        onOpenRelatedArticle: _openRelatedArticle,
       ),
+      transitionsBuilder: (_, animation, _, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.025, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
-    popped.whenComplete(() {
-      _relatedDepth -= 1;
-      widget.onRelatedNavigationChanged?.call(_relatedDepth > 0);
-    });
-  }
-
-  void _popRelatedArticle() {
-    _navigatorKey.currentState?.maybePop();
-  }
-
-  void _popRelatedArticleAfterFrame() {
-    if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _popRelatedArticle();
-    });
+    navigator.push<void>(route);
   }
 
   @override
   void dispose() {
-    if (_relatedDepth > 0) {
-      widget.onRelatedNavigationChanged?.call(false);
-    }
+    _navigation.dispose();
     super.dispose();
   }
 
@@ -847,6 +874,7 @@ class _MacArticleDetailStackState extends State<MacArticleDetailStack> {
   Widget build(BuildContext context) {
     return Navigator(
       key: _navigatorKey,
+      observers: [_navigation],
       onGenerateInitialRoutes: (_, _) => [
         PageRouteBuilder<void>(
           pageBuilder: (routeContext, _, _) =>
@@ -913,7 +941,6 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   static const double _macToolbarButtonRightInset = 10;
   static const double _articleTitleTopOffset = 20;
 
-  late final String _tag;
   late final ArticleController controller;
   late final ScrollController _scrollController;
   late final FocusNode _focusNode;
@@ -946,8 +973,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   @override
   void initState() {
     super.initState();
-    _tag = widget.article.entryId;
-    controller = Get.put(ArticleController(widget.article), tag: _tag);
+    controller = ArticleController.retainForView(widget.article);
     if (Platform.isMacOS) {
       _registerMacOSMenuTarget();
       _menuStateWorker = everAll(<RxInterface<dynamic>>[
@@ -1044,9 +1070,8 @@ class _ArticlePageViewState extends State<ArticlePageView> {
     _hoveredUrl.dispose();
     _activeTocId.dispose();
     _focusNode.dispose();
-    ArticleImageCacheService.markArticleInactive(widget.article.entryId);
-    if (Get.isRegistered<ArticleController>(tag: _tag)) {
-      Get.delete<ArticleController>(tag: _tag);
+    if (ArticleController.releaseForView(controller)) {
+      ArticleImageCacheService.markArticleInactive(widget.article.entryId);
     }
     super.dispose();
   }
@@ -3245,12 +3270,10 @@ class _ArticleRelationsSectionState extends State<_ArticleRelationsSection> {
         widget.article.entryId,
       );
       if (direct.isEmpty) return const SizedBox.shrink();
-      final events = ArticleRelationService.groupsFor(widget.article.entryId)
-          .where((g) => g.kind == ArticleRelationKind.sameEvent);
-      final topic = events.isEmpty ? '' : events.first.topic;
+      final groups = ArticleRelationService.groupsFor(widget.article.entryId);
+      final cs = Theme.of(context).colorScheme;
       final previewCount = ArticleRelationService.previewCount;
       final visible = _expanded ? direct : direct.take(previewCount).toList();
-      final cs = Theme.of(context).colorScheme;
       final rows = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3266,6 +3289,9 @@ class _ArticleRelationsSectionState extends State<_ArticleRelationsSection> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: () => setState(() => _expanded = !_expanded),
+                style: TextButton.styleFrom(
+                  foregroundColor: cs.onSurfaceVariant,
+                ),
                 icon: Icon(
                   _expanded ? Icons.expand_less : Icons.expand_more,
                   size: 18,
@@ -3277,28 +3303,16 @@ class _ArticleRelationsSectionState extends State<_ArticleRelationsSection> {
             ),
         ],
       );
-      final topicBox = Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-        ),
-        child: Text(
-          topic,
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.5,
-            color: cs.onSurfaceVariant,
-          ),
-        ),
-      );
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
+      return ArticleInfoCard.content(
+        title: '相关文章',
+        icon: Icons.hub_outlined,
+        foregroundColor: cs.onSurfaceVariant,
+        backgroundColor: const Color(0xFF808080),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (topic.isNotEmpty) ...[topicBox, const SizedBox(height: 6)],
+            ArticleRelationTopics(groups: groups),
+            const SizedBox(height: 10),
             rows,
           ],
         ),
@@ -3340,18 +3354,15 @@ class _ArticleRelationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final imageUrl = item.node.feedImage;
-    final relationColor = item.kind == ArticleRelationKind.equivalent
-        ? cs.primary
-        : Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF9BAFC3)
-        : const Color(0xFF52687D);
+    final relationColor = cs.onSurfaceVariant;
     return InkWell(
       onTap: onTap,
+      hoverColor: const Color(0x14808080),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.52),
+          color: const Color(0x14808080),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(

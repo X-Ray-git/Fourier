@@ -79,6 +79,8 @@ class MacSplitArticleListCoordinator {
     final pending = _pendingRemoval;
     if (pending == null || pending.removedEntryId != article.entryId) return;
     _pendingRemoval = null;
+    // A delayed removal must not replace a newer explicit selection (or Esc).
+    if (_selectedArticle()?.entryId != pending.removedEntryId) return;
 
     final articles = _articles();
     if (articles.isEmpty) {

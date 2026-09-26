@@ -1,5 +1,5 @@
 /* 由 scripts/docs-index.js 生成，随内容提交；阅读端零生成。 */
-window.WIKI_SEARCH_MANIFEST = "c427f27c688f0bdf";
+window.WIKI_SEARCH_MANIFEST = "40b86b737dae8f88";
 window.WIKI_SEARCH_INDEX = [
  {
   "path": "architecture/networking.html",
@@ -4149,6 +4149,22 @@ window.WIKI_SEARCH_INDEX = [
    },
    {
     "id": "升级说明",
+    "text": "升级说明"
+   },
+   {
+    "id": "v250",
+    "text": "v2.5.0"
+   },
+   {
+    "id": "本版重点-1",
+    "text": "本版重点"
+   },
+   {
+    "id": "修复与改进-1",
+    "text": "修复与改进"
+   },
+   {
+    "id": "升级说明-1",
     "text": "升级说明"
    }
   ],

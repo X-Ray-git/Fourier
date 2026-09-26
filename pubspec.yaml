@@ -1,7 +1,7 @@
 name: fourier
 description: "Fourier - RSS 信息流浏览器"
 publish_to: 'none'
-version: 2.4.1+40
+version: 2.5.0+41
 
 environment:
   sdk: ^3.13.0

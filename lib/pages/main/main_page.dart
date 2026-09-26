@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../common/constants/app_semantic_colors.dart';
+import '../../common/constants/macos_layout_metrics.dart';
 import '../../common/widgets/feedback_toast.dart';
 import '../../common/widgets/continuous_rectangle.dart';
 import '../../common/widgets/app_glass.dart';
@@ -24,8 +25,6 @@ import '../recent_read/recent_read_page.dart';
 import '../widgets/article_search_delegate.dart';
 import 'main_controller.dart';
 import 'widgets/macos_sidebar.dart';
-
-const _macOSWindowContentRadius = 24.0;
 
 /// 主页面 — 移动端保留底部导航，macOS 使用桌面分栏布局。
 class MainPage extends StatefulWidget {
@@ -80,7 +79,7 @@ class _MainPageState extends State<MainPage> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ContinuousRectangleClip(
-        radius: _macOSWindowContentRadius,
+        radius: MacOSLayoutMetrics.windowContentRadius,
         child: Stack(
           clipBehavior: Clip.none,
           children: [

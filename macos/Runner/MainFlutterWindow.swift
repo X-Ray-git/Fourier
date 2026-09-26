@@ -11,10 +11,11 @@ class MainFlutterWindow: NSWindow {
   private var sidebarRadius = Metrics.defaultSidebarRadius
 
   private enum Metrics {
-    static let windowRadius: CGFloat = 24
+    // Keep in sync with Dart MacOSLayoutMetrics; sidebar geometry is also sent at startup.
+    static let windowRadius: CGFloat = 18
     static let defaultSidebarWidth: CGFloat = 290
     static let defaultSidebarMargin: CGFloat = 8
-    static let defaultSidebarRadius: CGFloat = 18
+    static let defaultSidebarRadius: CGFloat = windowRadius - 6
     static let sidebarBackdropBleed: CGFloat = 1
     static let trafficLightCenterX: CGFloat = 24
     static let trafficLightCenterYFromTop: CGFloat = 24

@@ -49,6 +49,46 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-02 微博表情接入：来源特化显示规则
+
+用户批准合并开源映射，并明确希望微博逻辑单独放入特化规则库，保持内核干净。已采用“来源规则生成中性标记、共享渲染器只负责行内图标”的边界；没有把微博名称或域名判断散进各个 widget，也没有顺带实施此前搁置的 AI 缓存/联合请求方案。
+
+- `lib/utils/source_rules/weibo_emoticons.dart`：微博专用显示转换。仅匹配文章 URL 的 weibo.com / weibo.cn 及 www/m 子域名；不根据标题、订阅名称或其他域名猜测来源。仅替换文本节点中已收录的完整 `[名称]`，未知名称原样保留；跳过链接、代码、脚本、样式、textarea 及已转换图标，属性不参与替换。重复应用不会重复转换。
+- `weibo_emoticon_data.dart`：938 个名称/别名。新 EqualMa 配置简体优先、繁体补充，再补旧配置和 itorr 历史别名；这是名称数量，不是不同图片数量。主要映射固定 commit `0e8520732ad7b8ca46dddf4dd87a7b5a09fdc1a4`，itorr 固定 `4592e058d8931f144486b9c6009699113839aaea`，不在应用运行时拉取或执行仓库代码。
+- `ArticleContentCompatibility.forDisplay()`：来源规则登记入口，与共用 `apply()` / `normalizeHtml()` 分离。`HtmlChunkParser` 的可选 `sourceUrl` 支持普通及 isolate 路径；文章初始化先取得 display HTML，供 chunk 与相册 URL 提取共同使用。原文、首次读取译文、后续译文刷新和即时翻译结果均接入显示规则。
+- 中性标记 `fourier-inline-icon` 只有图片地址和作为子文本的名称；共享 `ArticleInlineIconExtension` / `ArticleInlineIcon` 不知道“微博”。标签文本同时用于复制、无障碍说明及失败回退。段落、标题、引用、列表和通用 HTML 路径复用扩展；macOS 既有纯文本表格仍显示名称，不为这一改动重构表格。
+- 尺寸为周围字体的 1.2 倍，垂直居中，水平留 1px。RichText 自动缩放 WidgetSpan，自身不再重复放大；缓存解码尺寸按实际文字缩放和屏幕像素比计算。加载中或失败显示原名称，不使用转圈占位。使用当前正文网络缓存、请求头和文章缓存键登记；GIF 在 macOS 复用失焦/离屏暂停组件。
+- 上游已经提供 `face.t.sinajs.cn` / `img.t.sinajs.cn` 的 `/appstyle/expression/` 图片且有 alt 时，也在分块前转成行内标记，普通照片保持原路径。读者相册取 display HTML 的 `<img>`，因此表情不会作为照片放大或进入相册。
+
+原始/规范化正文、数据库、过滤/摘要输入、视觉图片候选选择机制保持原路径，生成的表情 URL 不会进入 AI 正文或增加视觉图片计数。复制选择使用现有 Flutter SDK `WidgetSpan.rawText` 支持，将布局中的对象占位符恢复为 `[名称]`；Markdown 导出会保留标记子文本，不导出新增图标 URL。上游原本就有的图片在显示/单篇导出中改为名称，批量导出仍按原始 HTML 路径处理。
+
+维护映射时运行 `python3 scripts/update_weibo_emoticons.py`，再运行 `dart format lib/utils/source_rules/weibo_emoticon_data.dart`。脚本只解析公开 JSON 和 JS 中的字面量表，不执行下载的 JS，不下载图片；新增名称应通过更新固定上游版本生成，避免手改生成文件。两份 MIT 文本已加入 `third_party/licenses/`、第三方声明和应用许可证列表；图片仍按原地址请求，代码 MIT 不代表图像权利被转授。未来新表情或失效 CDN URL 会回退到文字，不能宣称支持所有历史/未来表情。
+
+测试覆盖来源范围、现代/繁体/历史名称、未知文字与转义、代码/链接/属性保护、重复转换、原生表情与照片分块、相册 URL、规范化/AI 输入隔离、Markdown 保留文字、isolate 分块、真实选择复制、加载失败、字体继承与缩放、GIF 复用。尚未安装或操作正在运行的 Fourier，实际 CDN 加载与浅深色视觉需下次新构建验收；当前未提交/推送/发布。调查证据与最终实现分别记录，以下“只调查”是批准接入之前的历史阶段。
+
+## 2026-10-02 微博专用表情开源实现调查（接入前）
+
+用户要求广泛检索开源仓库。检索GitHub/Web/npm，核对仓库API最后push/是否归档/实际license与源码，不只看updatedAt或第三方目录的旧元数据。只读正式articleDb临时副本：238条微博来源正文，110条存在方括号标记，常见[嘻嘻]/[赞]/[允悲]/[doge]/[流浪地球2]；未发现expression/emoticon/face类原生表情图片标签。这批样本主要缺名称到图片转换，不是仅字体缺字。统计只存表情名及频次，不输出用户正文。
+
+| 仓库 | 形式与核实情况 | 取舍 |
+|---|---|---|
+| [EqualMa/weibo-emoji](https://github.com/EqualMa/weibo-emoji) | MIT；最后push 2025-10-20。src/data/config-20251017.json收录微博/ajax/statuses/config格式，ZH_CN有556个不同名称；latest.ts合并新配置和旧public/data.json。简繁合并885不同名称，不能把它当成885不同图片。本机频率前25种名称在新配置中全部覆盖。 | 推荐作为主要映射来源；旧public/data.json本身较旧，只覆盖20/25，不能只摘该旧文件。 |
+| [itorr/weibo-face](https://github.com/itorr/weibo-face) | MIT；npm 1.0.4，2022发布。实际入口html/index.js，导出WeiboFaceByValues、weiboFaceParse；将方括号名称转为带alt的img，未知名称保留。 | 推荐参考解析模块；需移植少量逻辑到Dart，无需嵌JS运行时；映射应补新版本。根face.js是微博旧脚本，不是npm入口。 |
+| [YiJio/emoji-chinese](https://github.com/YiJio/emoji-chinese) | GPL-3.0；最后push 2025-02-21。_map/wb.json有241条、309名称/别名，包含PNG/GIF和历史临时表情。 | 备选映射和本地资源目录，可覆盖21/25种高频名称，需补别名和更新。 |
+| [walinejs/emojis](https://github.com/walinejs/emojis) | GPL-3.0；最后push 2026-08-30。weibo目录约90个PNG，info.json按英文资源名组织；来自MiniValine，声明图片权利归原作者。 | 常用静态图片资源，缺完整微博中文标签映射，不可直接当全量解析器。 |
+| [taengstagram/weiboticons](https://github.com/taengstagram/weiboticons) | package.json声明MIT，未见根LICENSE；最后push 2017-01-10。2004名称映射，replace函数和抓取脚本，旧HTTP/GIF URL多。 | 可作历史别名补充，仅覆盖18/25；不建议直接作主库。 |
+| [ArvinZJC/WeiboEmoji](https://github.com/ArvinZJC/WeiboEmoji) | 已归档，636图片；GPL脚本，README明确图片不可商业使用。 | 档案参考，不优先打包引入，代码与图片授权分开核对。 |
+| [icebluesky2666/weibo-emoji](https://github.com/icebluesky2666/weibo-emoji) / [boofw/weibo-emoji-js](https://github.com/boofw/weibo-emoji-js) | 前者Vue选择器、最后代码push2019，无根LICENSE；后者MIT、2016，仅默认名称映射。 | 用途偏输入面板/旧表，不适合直接引入Flutter阅读器。 |
+
+还检查[RSSHub微博utils](https://github.com/DIYgod/RSSHub/blob/master/lib/routes/weibo/utils.ts)：当前代码showEmojiInDescription缺省false，会将上游url-icon图片转为alt文本；部分文档镜像仍称true，以当前源代码为准。因此Folo/RSS源已经给出方括号文本是合理输入形态。可改RSS源保留图片，但不能依赖它补好本机历史文章。当前检索未找到专用于微博标记解析、可直接接入Flutter的成熟包；普通emoji选择器和Twemoji不能解决平台专用名称，Twemoji README明确不支持custom emoji。
+
+调查时建议：采用新EqualMa映射+小型Dart转换/行内渲染，限制微博来源，仅在文本节点匹配已知名称，未知名称保留，避开属性、代码、链接，18～20px随字体调整与基线对齐；复用现有缓存，不引入WebView/Node或输入面板。当时HtmlChunkCard仅识别WordPress emoji URL或class恰好emoji；后续已按上节接入中性行内图标。
+
+显示转换应与原文/AI输入边界明确：如果在共用normalizeHtml中把表情转img，现有ArticleVisualContextService会将其当正文图片计数并可能触发视觉模型，复制/摘要语义也可能改变。优先做展示层适配、保留原始方括号文本和alt/fallback，不将显示修复顺带扩展成此前已决定暂不改的AI流程。涉及图片本地打包时，代码license和微博图像权利分别记录，不能从MIT推导原图无条件授权。GIF需沿用失焦/离屏暂停以避免此前能耗问题。
+
+调查阶段只检索和读样本格式，源码尚未改，未下载图片资源或执行外部JS。公开JSON/JS快照及元数据、只读统计在忽略目录scratch/weibo-emojis-20261002。后续接入状态以上节为准，仍不把25种覆盖声称全表情支持。
+
+
 ## 图片慢加载与超时（2026-09-24）
 
 图片显示与后台预取统一使用 ImageNetworkCache，沿用 libCachedImageData 目录和原缓存键，不清缓存。下载连接独立持有：等待响应头最多 20 秒、连续无数据最多 20 秒、单次总时长最多 90 秒；超时关闭实际连接并向调用方报错，避免仅 Future.timeout 留下后台占用。正文沿用最多 3 次自动重试及 1/2/4 秒退避，耗尽后显示手动重试。HTML 内嵌非 emoji 图片复用正文独立图片的状态组件，避免只有 broken-image 图标而无法重试。加载圈在 4 秒后替换为图片图标及“等待图片加载”，窄小图片以提示图标显示，不再冻结为 72% 圆弧；这不是下载百分比。动图离屏/失焦不构成网络失败，不触发重试。
@@ -141,6 +181,8 @@
 - `lib/services/article_markdown_export_service.dart`
 - `lib/utils/article_content_utils.dart`
 - `lib/utils/article_content_compatibility.dart`
+- `lib/utils/source_rules/weibo_emoticons.dart` / `weibo_emoticon_data.dart`
+- `lib/pages/article/widgets/article_inline_icon.dart`
 - `lib/utils/inbox_email_compatibility.dart`
 - `lib/utils/html_chunk_parser.dart`
 

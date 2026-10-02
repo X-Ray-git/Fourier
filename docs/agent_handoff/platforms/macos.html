@@ -49,6 +49,24 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-09-27 关系历史丢失：旧版误执行向下迁移
+
+用户明确从未手动清理关系/缓存，仅安装更新。只读批次记录显示 9/26 10:09、10:51 已使用 schema5；11:23:19.263 系统启动 /Applications/Fourier.app（PID8153），进程 Mach-O UUID 为 920E05F0-DC05-3CB2-B44D-F1527771D12A。从 GitHub 正式 v2.4.1 附件提取可执行文件，dwarfdump UUID 完全一致，故此次启动版本已确认为 v2.4.1，而非仅依据文件时间猜测。关系激活边界为 11:23:20.606，启动后约 1.4 秒；首条能耗记录 11:23:20.906 显示窗口尚不可见。v2.5.0 正式 Release 11:31:19 才发布，当前安装包 13:07:41～44 替换/启动，晚于数据重置。
+
+v2.4.1 的 migrateToAnchoredGroups 只在 schema==4 时跳过；遇到已由开发构建写入的 schema5，会重设 activation、删除 group/node/pending/history，再写 schema4，却保留 sequence/batchSequence 和独立批次账本。这与当前“旧摘要和批次仍在，但旧关系节点/组/历史消失”的现象一致。结论：证据高度支持已运行开发版 schema5 后，又启动已安装正式版 v2.4.1，引发破坏性向下迁移；不是用户手动清理，也不能归因于 v2.5.0 正常 4→5 迁移。后者保留已有数据，但无法恢复此前被删部分。
+
+具体样本：Just Ask Jev 较早版本已不在 9/27 relation-000290 输入中，无法建立关系；Two Thoughts 两份曾同时在 relation-000287 输入（469篇、104560输入tokens），但原始响应和重置前最终分组快照缺失，不能确认当时是漏判、过滤还是之后丢组。当前 pending0/history144 不能代表当时模型输入很短。
+
+下一步讨论优先级：先明确不支持旧版本读取更高 schema，未来迁移只允许向上并对未知更高版本停止关系读写；旧发布二进制无法被新源码补丁追溯修复。再讨论从已有 49 组快照/现存摘要恢复丢失关系，或定向补算；未授权恢复前不改正式数据库。Prompt 已包含标题强信号规则，暂不以这次丢数据证据为理由继续加长 Prompt。原始证据保存在忽略目录 scratch/relation-misses-20260927，不入库真实文章内容。
+
+
+## 2026-09-27 白色覆盖层现场与诊断补强
+
+2026-09-27 01:40 左右出现全窗半透明浅色覆盖，原生按钮正常，底下审核页键盘正常、鼠标受阻；Esc 取消选中但覆盖持续。Flutter release RenderErrorBox 默认颜色 0xF0C0C0C0 且 hitTestSelf=true，符合现象，但缺少堆栈，不能认定具体浮层或 macOS/引擎是根因。
+
+新增 UiDiagnosticService，在 binding 初始化后、存储初始化前接入 FlutterError.onError 和 PlatformDispatcher.onError，保留原有处理器及 handled 语义。应用支持目录 diagnostics/ui.jsonl 记录时间、进程、异常类型、最多 40 个 package/dart 栈帧，以及 tooltip/selection 打开关闭 ID；不保存异常消息正文、文章标题/正文、URL 或凭据。当前文件约 512KiB 时轮转到单个 .previous，待写队列最多 64，写入失败不递归报错且不阻止运行。日志在新进程启动后生效；不会恢复已丢失异常，不修改 ErrorWidget 外观、不吞掉业务异常、不自动关闭浮层。
+
+
 ## 2026-09-26 手势断言进一步定位：Mos 为首要对照对象
 
 本机 Flutter 3.47.0，发布工作流也固定3.47.0；已安装与本地Release FlutterMacOS的Mach-O UUID相同（4C4C4422-5555-3144-A1B0-38B941BF65AA），文件哈希不同不能直接判定引擎不同，签名也会影响哈希。当前引擎665行对应孤立手势结束时NSAssert（没有内部开始状态，仅允许取消），与既有scrollWheel调用栈相符。

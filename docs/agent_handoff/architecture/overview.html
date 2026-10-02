@@ -167,6 +167,7 @@
 - Folo 凭据保存在 Hive settings 中。
 - 时间线先加载订阅源，再加载 entries，然后合并本地已读/过滤状态。
 - 文章详情会规范化 HTML、解析 chunk，并通过 chunk widget 渲染。
+- 来源特化显示规则通过 `ArticleContentCompatibility.forDisplay()` 登记，具体映射/转换放在 `lib/utils/source_rules/`；与 AI 和存储共用的规范化分离。共享 widget 只处理来源无关的行内图标标记，微博等来源名不进入渲染器。见[文章渲染](../features/article-rendering.html)。
 - 翻译与摘要服务把记录存入 Hive，并暴露响应式 map。
 
 实现偏好：

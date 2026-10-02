@@ -137,6 +137,8 @@ Fourier 以 Folo 服务端为数据权威，本地 Hive 提供缓存与已读覆
 - 自动翻译/摘要只在正文持久化后、准备入队时读取最新本地已读状态：当时已读则不入队，当时未读则正常入队且后续不因标记已读而取消。
 - 所有实际 `POST /reads` 出口统一写入 `AnalysisEventLedger` 的 attempt/result 审计事件，来源包括 `articleController`、`singleAction`、`batchAction` 和 `pendingQueue`。待同步队列请求同时携带最初入队时间；请求结果记录耗时、HTTP 状态或失败类型。账本写入是尽力而为，存储异常不得阻断已读同步。
 - 本地 `mark_read` / `mark_unread` 事件描述状态变化意图，远端 attempt/result 描述实际网络请求，`syncInference` 描述后续服务端快照。诊断时必须联合三类证据，不能把服务端已读快照直接等同于本机用户操作。
+- 2026-10-02：读/未读 HTTP 按同账号/文章 ID 共用 `RemoteReadRequestCoordinator` 顺序，其他文章保持并发；待同步项带 revision，取消/重试/成功清理必须校验任务身份。用户恢复未读在 LocalArticleDbService 统一取消旧项，不可只在详情控制器取消。标未读也记录 attempt/result，过时未发送的请求记录 suppressed，旧账号异步工作不能进入新账本或补偿请求。
+- 完整性由 `EntrySnapshotCollector` 明确提供。正常结束的未读快照才可推断缺失项；部分 inbox 失败、异常分页及非法包络只能更新已返回文章，不能将其他缓存文章置已读。推断事件的 snapshotSequence 对应完整性/分页诊断；syncInference 仍是列表缺失的本地推断，不等同于逐条远端 read=true。
 
 ## 账号切换隔离
 

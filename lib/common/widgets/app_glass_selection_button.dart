@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../services/ui_diagnostic_service.dart';
 import '../liquid_glass/liquid_glass.dart' as glass;
 import 'app_glass.dart';
 
@@ -80,6 +81,7 @@ class _AppGlassMorphSelectionButtonState<T>
   final _buttonKey = GlobalKey();
   late final glass.GlassMorphController _morphController;
   OverlayEntry? _overlayEntry;
+  int? _diagnosticOverlayId;
   bool _hovered = false;
   bool _pressed = false;
   bool _isMenuOpen = false;
@@ -136,6 +138,8 @@ class _AppGlassMorphSelectionButtonState<T>
 
     final entry = _overlayEntry;
     _overlayEntry = null;
+    UiDiagnosticService.overlayClosed('selection', _diagnosticOverlayId);
+    _diagnosticOverlayId = null;
     entry?.remove();
     if (mounted) {
       setState(() => _isMenuOpen = false);
@@ -265,6 +269,7 @@ class _AppGlassMorphSelectionButtonState<T>
       },
     );
     overlayState.insert(_overlayEntry!);
+    _diagnosticOverlayId = UiDiagnosticService.overlayOpened('selection');
     setState(() => _isMenuOpen = true);
     _morphController.open();
   }
@@ -273,6 +278,8 @@ class _AppGlassMorphSelectionButtonState<T>
     final entry = _overlayEntry;
     if (entry == null) return;
     if (immediate) {
+      UiDiagnosticService.overlayClosed('selection', _diagnosticOverlayId);
+      _diagnosticOverlayId = null;
       entry.remove();
       _overlayEntry = null;
       _isMenuOpen = false;

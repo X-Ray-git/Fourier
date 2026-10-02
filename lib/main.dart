@@ -22,6 +22,7 @@ import 'router/app_pages.dart';
 import 'pages/main/main_controller.dart';
 import 'pages/timeline/timeline_controller.dart';
 import 'services/account_service.dart';
+import 'services/ui_diagnostic_service.dart';
 import 'services/image_network_cache.dart';
 import 'services/app_license_service.dart';
 import 'services/app_version_service.dart';
@@ -80,6 +81,7 @@ class SelectUnselectedArticleBoundaryAction
 
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
+  await UiDiagnosticService.initialize();
   ImageNetworkCache.initialize();
   AppLicenseService.register();
 

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/animation_activity_monitor.dart';
+import '../../services/ui_diagnostic_service.dart';
 import '../liquid_glass/liquid_glass.dart';
 import 'continuous_rectangle.dart';
 import 'diagnostic_activity_marker.dart';
@@ -600,6 +601,7 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
   final GlobalKey _targetKey = GlobalKey();
   Timer? _timer;
   OverlayEntry? _entry;
+  int? _diagnosticOverlayId;
 
   @override
   void dispose() {
@@ -673,6 +675,7 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
       },
     );
     overlay.insert(_entry!);
+    _diagnosticOverlayId = UiDiagnosticService.overlayOpened('tooltip');
   }
 
   void _hideTooltip() {
@@ -681,6 +684,8 @@ class _AppGlassTooltipState extends State<AppGlassTooltip> {
   }
 
   void _removeTooltip() {
+    UiDiagnosticService.overlayClosed('tooltip', _diagnosticOverlayId);
+    _diagnosticOverlayId = null;
     _entry?.remove();
     _entry = null;
   }

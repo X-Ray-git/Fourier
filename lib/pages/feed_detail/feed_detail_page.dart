@@ -32,6 +32,7 @@ import '../../services/account_service.dart';
 import '../../services/account_session_guard.dart';
 import '../../services/article_image_service.dart';
 import '../../services/analysis_event_ledger.dart';
+import '../../services/entry_snapshot_collector.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
@@ -359,15 +360,20 @@ class FeedDetailController extends GetxController {
     }
 
     final filteredUnread = unreadData.where(_matchesScope).toList();
-    final feedsOk = unreadResult is Success<List<ArticleModel>>;
-    final socialOk = socialResult is Success<List<ArticleModel>>;
-    final inboxOk = inboxResult is Success<List<ArticleModel>>;
+    final feedsOk = EntrySnapshotCollector.isComplete(unreadResult);
+    final socialOk = EntrySnapshotCollector.isComplete(socialResult);
+    final inboxOk = EntrySnapshotCollector.isComplete(inboxResult);
 
     _applyUnreadSnapshot(
       filteredUnread,
       feedsOk: feedsOk,
       socialOk: socialOk,
       inboxOk: inboxOk,
+      snapshotSequences: {
+        'feeds': EntrySnapshotCollector.sequenceOf(unreadResult),
+        'social': EntrySnapshotCollector.sequenceOf(socialResult),
+        'inbox': EntrySnapshotCollector.sequenceOf(inboxResult),
+      },
     );
 
     final all = LocalArticleDbService.readAllArticles()
@@ -419,6 +425,7 @@ class FeedDetailController extends GetxController {
     bool feedsOk = true,
     bool socialOk = true,
     bool inboxOk = true,
+    Map<String, int?> snapshotSequences = const {},
   }) {
     final unreadIds = unreadData.map((a) => a.entryId).toSet();
     final localArticles = LocalArticleDbService.readAllArticles()
@@ -448,6 +455,12 @@ class FeedDetailController extends GetxController {
         local.entryId,
         true,
         source: ReadStateChangeSource.syncInference,
+        snapshotSequence:
+            snapshotSequences[local.category == 'inbox'
+                ? 'inbox'
+                : local.category == 'social'
+                ? 'social'
+                : 'feeds'],
       );
     }
 

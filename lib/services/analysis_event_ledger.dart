@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -60,6 +61,7 @@ abstract final class AnalysisEventLedger {
     final event = <String, dynamic>{
       'type': type,
       'ts': DateTime.now().millisecondsSinceEpoch,
+      'pid': pid,
       ..._articleFieldsOrEmpty(article),
       'articleId': ?entryId,
       'feedId': ?feedId,
@@ -111,15 +113,46 @@ abstract final class AnalysisEventLedger {
     required bool isRead,
     required ArticleModel before,
     required ReadStateChangeSource source,
+    int? snapshotSequence,
   }) {
     record(
       type: isRead ? 'mark_read' : 'mark_unread',
       article: before,
       data: {
         'source': source.name,
+        'snapshotSequence': ?snapshotSequence,
         'after': {'isRead': isRead},
       },
     );
+  }
+
+  static int? recordEntrySnapshot({
+    required String source,
+    required bool read,
+    required bool complete,
+    required String stopReason,
+    required int limit,
+    required int count,
+    required List<Map<String, Object?>> pages,
+    List<int>? childSequences,
+  }) {
+    try {
+      return record(
+        type: 'entry_snapshot_result',
+        data: {
+          'source': source,
+          'read': read,
+          'complete': complete,
+          'stopReason': stopReason,
+          'limit': limit,
+          'count': count,
+          'pages': pages,
+          'childSequences': ?childSequences,
+        },
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 文章打开事件（进入阅读视图，不含相邻预构建页）。
@@ -136,6 +169,7 @@ abstract final class AnalysisEventLedger {
     required bool isInbox,
     required RemoteReadRequestSource source,
     Map<String, int>? queuedAtByEntryId,
+    bool targetIsRead = true,
   }) {
     try {
       final ids = entryIds
@@ -143,7 +177,9 @@ abstract final class AnalysisEventLedger {
           .where((id) => id.isNotEmpty)
           .toList(growable: false);
       return record(
-        type: 'remote_mark_read_attempt',
+        type: targetIsRead
+            ? 'remote_mark_read_attempt'
+            : 'remote_mark_unread_attempt',
         entryId: ids.length == 1 ? ids.single : null,
         data: {
           'source': source.name,
@@ -168,6 +204,7 @@ abstract final class AnalysisEventLedger {
     required int durationMs,
     int? statusCode,
     String? failureKind,
+    bool targetIsRead = true,
   }) {
     try {
       final ids = entryIds
@@ -175,7 +212,9 @@ abstract final class AnalysisEventLedger {
           .where((id) => id.isNotEmpty)
           .toList(growable: false);
       record(
-        type: 'remote_mark_read_result',
+        type: targetIsRead
+            ? 'remote_mark_read_result'
+            : 'remote_mark_unread_result',
         entryId: ids.length == 1 ? ids.single : null,
         data: {
           'source': source.name,
@@ -189,6 +228,26 @@ abstract final class AnalysisEventLedger {
       );
     } catch (error) {
       debugPrint('[AnalysisLedger] remote mark-read result skipped: $error');
+    }
+  }
+
+  static void recordReadRequestSuppressed({
+    required List<String> entryIds,
+    required RemoteReadRequestSource source,
+    required bool targetIsRead,
+  }) {
+    try {
+      record(
+        type: 'read_request_suppressed',
+        data: {
+          'entryIds': entryIds,
+          'source': source.name,
+          'targetIsRead': targetIsRead,
+          'reason': 'superseded_or_cancelled',
+        },
+      );
+    } catch (_) {
+      // Best-effort audit must not interfere with cancellation.
     }
   }
 

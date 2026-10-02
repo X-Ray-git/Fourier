@@ -17,6 +17,7 @@ import 'batch_read_sync_service.dart';
 import 'bounded_history.dart';
 import 'local_article_db_service.dart';
 import 'read_sync_service.dart';
+import 'account_session_guard.dart';
 
 enum UndoActionType {
   read,
@@ -423,6 +424,7 @@ class UndoService {
     bool showSuccess = true,
     bool deferTimelineVisualUpdate = false,
   }) async {
+    final accountRevision = AccountSessionGuard.revision;
     if (article.isRead || article.entryId.trim().isEmpty) return;
     if (!deferTimelineVisualUpdate &&
         Get.isRegistered<ArticleController>(tag: article.entryId)) {
@@ -446,15 +448,20 @@ class UndoService {
     );
 
     final isInbox = article.category == 'inbox';
+    final task = ReadSyncService.enqueue(article.entryId, isInbox: isInbox);
+    bool current() => ReadSyncService.isCurrent(task);
     final ok = await _retrySync(
       action: () => FeedHttp.markRead(
         entryIds: [article.entryId],
         isInbox: isInbox,
         auditSource: RemoteReadRequestSource.singleAction,
+        shouldSend: current,
       ),
+      shouldContinue: current,
     );
 
-    ReadSyncService.removeMany([article.entryId]);
+    if (!AccountSessionGuard.isCurrent(accountRevision) || !current()) return;
+    ReadSyncService.removeMatching([task]);
 
     if (!ok) {
       clearForEntry(article.entryId);
@@ -477,9 +484,16 @@ class UndoService {
   static Future<BatchReadSyncResult> markBatchAsRead(
     List<ArticleModel> source,
   ) {
+    final revision = AccountSessionGuard.revision;
     return _enqueueOperation(() async {
       final articles = _uniqueUnreadArticles(source);
+      if (!AccountSessionGuard.isCurrent(revision)) {
+        return _cancelledBatch(articles);
+      }
       final result = await _syncBatchReadState(articles, isRead: true);
+      if (!AccountSessionGuard.isCurrent(revision)) {
+        return _cancelledBatch(articles);
+      }
       if (result.changedArticles.isNotEmpty) {
         _applyBatchReadLocally(result.changedArticles, isRead: true);
         recordBatchRead(result.changedArticles);
@@ -487,6 +501,15 @@ class UndoService {
       return result;
     });
   }
+
+  static BatchReadSyncResult _cancelledBatch(List<ArticleModel> articles) =>
+      BatchReadSyncResult(
+        requestedArticles: articles,
+        targetIsRead: true,
+        operationSucceededIds: const {},
+        compensationSucceededIds: const {},
+        compensationAttempted: false,
+      );
 
   static List<ArticleModel> _uniqueUnreadArticles(
     Iterable<ArticleModel> source,
@@ -535,11 +558,14 @@ class UndoService {
     List<ArticleModel> articles, {
     required bool isRead,
   }) {
+    final revision = AccountSessionGuard.revision;
+    bool current() => AccountSessionGuard.isCurrent(revision);
     return BatchReadSyncService.transition(
       articles,
       targetIsRead: isRead,
       markRead: (chunk, {required isInbox}) {
         return _retrySync(
+          shouldContinue: current,
           action: () => FeedHttp.markRead(
             entryIds: chunk.map((article) => article.entryId).toList(),
             isInbox: isInbox,
@@ -548,10 +574,14 @@ class UndoService {
         );
       },
       markUnread: (article) {
+        if (!current()) return Future.value(false);
+        ReadSyncService.removeMany([article.entryId]);
         return _retrySync(
+          shouldContinue: current,
           action: () => FeedHttp.markUnread(
             entryId: article.entryId,
             isInbox: article.category == 'inbox',
+            auditSource: RemoteReadRequestSource.batchAction,
           ),
         );
       },
@@ -563,6 +593,7 @@ class UndoService {
   }
 
   static Future<ArticleModel?> _undoLastAction() async {
+    final accountRevision = AccountSessionGuard.revision;
     final action = _history.takeUndo();
     if (action == null) return null;
     _notifyHistoryChanged();
@@ -580,6 +611,7 @@ class UndoService {
 
     if (action.type == UndoActionType.batchRead) {
       final result = await _syncBatchReadState(action.articles, isRead: false);
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return null;
       final restored = result.changedArticles;
       if (restored.isEmpty) {
         _rollbackUndo(action);
@@ -656,12 +688,22 @@ class UndoService {
     }
     _notifyRestored(action);
 
+    bool current() =>
+        LocalArticleDbService.readArticle(article.entryId)?.isRead != true;
+
     final ok = await _retrySync(
       action: () => FeedHttp.markUnread(
         entryId: article.entryId,
         isInbox: article.category == 'inbox',
+        auditSource: RemoteReadRequestSource.singleAction,
+        shouldSend: current,
       ),
+      shouldContinue: current,
     );
+
+    if (!AccountSessionGuard.isCurrent(accountRevision) || !current()) {
+      return null;
+    }
 
     if (!ok) {
       if (Get.isRegistered<TimelineController>()) {
@@ -689,12 +731,14 @@ class UndoService {
   }
 
   static Future<ArticleModel?> _redoLastAction() async {
+    final revision = AccountSessionGuard.revision;
     final action = _history.nextRedo;
     if (action == null) return null;
     if (!_prepareRedo(action)) return null;
 
     if (action.type == UndoActionType.batchRead) {
       final result = await _syncBatchReadState(action.articles, isRead: true);
+      if (!AccountSessionGuard.isCurrent(revision)) return null;
       final redoneArticles = result.changedArticles;
       if (redoneArticles.isEmpty) {
         AppFeedback.error('重做失败', '服务端状态未改变，整批文章仍为未读');
@@ -903,9 +947,19 @@ class UndoService {
 
   static Future<bool> _retrySync({
     required Future<LoadingState<void>> Function() action,
+    bool Function()? shouldContinue,
   }) async {
+    final revision = AccountSessionGuard.revision;
     for (var attempt = 1; attempt <= 5; attempt++) {
+      if (!AccountSessionGuard.isCurrent(revision) ||
+          (shouldContinue != null && !shouldContinue())) {
+        return false;
+      }
       final result = await action();
+      if (!AccountSessionGuard.isCurrent(revision) ||
+          (shouldContinue != null && !shouldContinue())) {
+        return false;
+      }
       if (result is Success<void>) return true;
       if (attempt < 5) {
         await Future<void>.delayed(Duration(milliseconds: 800 * attempt));

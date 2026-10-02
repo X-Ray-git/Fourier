@@ -8,17 +8,20 @@ class PendingReadSyncItem {
   final String entryId;
   final bool isInbox;
   final int updatedAt;
+  final int revision;
 
   const PendingReadSyncItem({
     required this.entryId,
     required this.isInbox,
     required this.updatedAt,
+    this.revision = 0,
   });
 
   Map<String, dynamic> toJson() => {
     'entryId': entryId,
     'isInbox': isInbox,
     'updatedAt': updatedAt,
+    'revision': revision,
   };
 
   factory PendingReadSyncItem.fromJson(Map<dynamic, dynamic> json) {
@@ -26,6 +29,7 @@ class PendingReadSyncItem {
       entryId: json['entryId'] as String? ?? '',
       isInbox: json['isInbox'] as bool? ?? false,
       updatedAt: json['updatedAt'] as int? ?? 0,
+      revision: json['revision'] as int? ?? 0,
     );
   }
 }
@@ -34,7 +38,9 @@ class PendingReadSyncItem {
 abstract final class ReadSyncService {
   static const String _pendingReadIdsKey = 'pending_read_items';
   static const String _lastReadSyncAtKey = 'last_read_sync_at';
+  static const String _revisionKey = 'pending_read_revision';
   static Future<void>? _syncInFlight;
+  static int? _syncAccountRevision;
 
   static List<PendingReadSyncItem> get pendingReadItems {
     final raw = GStorage.localCache.get(_pendingReadIdsKey);
@@ -56,18 +62,22 @@ abstract final class ReadSyncService {
         .toList();
   }
 
-  static void enqueue(String entryId, {required bool isInbox}) {
+  static PendingReadSyncItem enqueue(String entryId, {required bool isInbox}) {
     final normalized = entryId.trim();
-    if (normalized.isEmpty) return;
+    if (normalized.isEmpty) throw ArgumentError.value(entryId, 'entryId');
 
     final items = <String, PendingReadSyncItem>{
       for (final item in pendingReadItems) item.entryId: item,
     };
-    items[normalized] = PendingReadSyncItem(
+    final revision = (GStorage.localCache.get(_revisionKey) as int? ?? 0) + 1;
+    GStorage.localCache.put(_revisionKey, revision);
+    final task = PendingReadSyncItem(
       entryId: normalized,
       isInbox: isInbox,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
+      revision: revision,
     );
+    items[normalized] = task;
     GStorage.localCache.put(
       _pendingReadIdsKey,
       items.values.map((item) => item.toJson()).toList()..sort((a, b) {
@@ -76,6 +86,39 @@ abstract final class ReadSyncService {
         return left.compareTo(right);
       }),
     );
+    return task;
+  }
+
+  static bool isCurrent(PendingReadSyncItem task) =>
+      pendingReadItems.any((item) => _sameTask(item, task));
+
+  static bool _sameTask(PendingReadSyncItem a, PendingReadSyncItem b) =>
+      a.entryId == b.entryId &&
+      a.isInbox == b.isInbox &&
+      a.updatedAt == b.updatedAt &&
+      a.revision == b.revision;
+
+  /// A completed old request must not remove a newer task for the same ID.
+  static void removeMatching(Iterable<PendingReadSyncItem> completed) {
+    final tasks = completed.toList();
+    if (tasks.isEmpty) return;
+    final previous = pendingReadItems;
+    final remaining = previous
+        .where((item) => !tasks.any((task) => _sameTask(item, task)))
+        .toList();
+    if (remaining.length == previous.length) return;
+    _save(remaining);
+  }
+
+  static void _save(List<PendingReadSyncItem> items) {
+    if (items.isEmpty) {
+      GStorage.localCache.delete(_pendingReadIdsKey);
+    } else {
+      GStorage.localCache.put(
+        _pendingReadIdsKey,
+        items.map((item) => item.toJson()).toList(),
+      );
+    }
   }
 
   static void removeMany(Iterable<String> entryIds) {
@@ -85,31 +128,29 @@ abstract final class ReadSyncService {
         .toSet();
     if (removeSet.isEmpty) return;
 
-    final items = pendingReadItems
+    final previous = pendingReadItems;
+    final items = previous
         .where((item) => !removeSet.contains(item.entryId))
         .toList();
-    if (items.isEmpty) {
-      clear();
-      return;
-    }
-
-    GStorage.localCache.put(
-      _pendingReadIdsKey,
-      items.map((e) => e.toJson()).toList(),
-    );
+    if (items.length == previous.length) return;
+    _save(items);
   }
 
   static Future<void> syncPendingReads() {
-    if (_syncInFlight != null) return _syncInFlight!;
+    final accountRevision = AccountSessionGuard.revision;
+    if (_syncInFlight != null && _syncAccountRevision == accountRevision) {
+      return _syncInFlight!;
+    }
     final future = _syncPendingReadsInternal();
     _syncInFlight = future;
+    _syncAccountRevision = accountRevision;
     return future.whenComplete(() {
       if (identical(_syncInFlight, future)) _syncInFlight = null;
     });
   }
 
   static void clear() {
-    _syncInFlight = null;
+    // Do not forget an active drain when its persistent queue becomes empty.
     GStorage.localCache.delete(_pendingReadIdsKey);
   }
 
@@ -120,48 +161,58 @@ abstract final class ReadSyncService {
 
   static Future<void> _syncPendingReadsInternal() async {
     final accountRevision = AccountSessionGuard.revision;
-    final items = pendingReadItems;
-    if (items.isEmpty) {
-      GStorage.localCache.put(
-        _lastReadSyncAtKey,
-        DateTime.now().millisecondsSinceEpoch,
+    final visited = <(String, int, int)>{};
+    while (AccountSessionGuard.isCurrent(accountRevision)) {
+      final candidates = pendingReadItems
+          .where(
+            (item) => !visited.contains((
+              item.entryId,
+              item.revision,
+              item.updatedAt,
+            )),
+          )
+          .toList();
+      if (candidates.isEmpty) break;
+      final isInbox = candidates.first.isInbox;
+      final chunk = candidates
+          .where((item) => item.isInbox == isInbox)
+          .take(50)
+          .toList();
+      for (final item in chunk) {
+        visited.add((item.entryId, item.revision, item.updatedAt));
+      }
+      List<PendingReadSyncItem> current() => chunk
+          .where(
+            (item) =>
+                isCurrent(item) &&
+                GStorage.readStatus.get(item.entryId) != false,
+          )
+          .toList();
+      // Migrate an old, explicitly cancelled item without sending it.
+      removeMatching(
+        chunk.where((item) => GStorage.readStatus.get(item.entryId) == false),
       );
-      return;
-    }
-
-    final grouped = <bool, List<PendingReadSyncItem>>{};
-    for (final item in items) {
-      grouped.putIfAbsent(item.isInbox, () => <PendingReadSyncItem>[]);
-      grouped[item.isInbox]!.add(item);
-    }
-
-    for (final entry in grouped.entries) {
-      final ids = entry.value.map((item) => item.entryId).toList();
-      for (var i = 0; i < ids.length; i += 50) {
+      for (var retry = 0; retry < 3; retry++) {
         if (!AccountSessionGuard.isCurrent(accountRevision)) return;
-        final end = i + 50 > ids.length ? ids.length : i + 50;
-        final chunk = ids.sublist(i, end);
-        var ok = false;
-        for (int retry = 0; retry < 3; retry++) {
-          final result = await FeedHttp.markRead(
-            entryIds: chunk,
-            isInbox: entry.key,
-            auditSource: RemoteReadRequestSource.pendingQueue,
-            queuedAtByEntryId: {
-              for (final item in entry.value)
-                if (chunk.contains(item.entryId)) item.entryId: item.updatedAt,
-            },
-          );
-          if (!AccountSessionGuard.isCurrent(accountRevision)) return;
-          if (result is Success<void>) {
-            ok = true;
-            break;
-          }
-          if (retry < 2) {
-            await Future.delayed(Duration(seconds: 1 << retry));
-          }
+        final active = current();
+        if (active.isEmpty) break;
+        final result = await FeedHttp.markRead(
+          entryIds: active.map((item) => item.entryId).toList(),
+          isInbox: isInbox,
+          auditSource: RemoteReadRequestSource.pendingQueue,
+          currentEntryIds: () => current().map((item) => item.entryId).toList(),
+          queuedAtByEntryId: {
+            for (final item in active) item.entryId: item.updatedAt,
+          },
+        );
+        if (!AccountSessionGuard.isCurrent(accountRevision)) return;
+        if (result is Success<void>) {
+          removeMatching(active);
+          break;
         }
-        if (ok) removeMany(chunk);
+        if (retry < 2 && current().isNotEmpty) {
+          await Future.delayed(Duration(seconds: 1 << retry));
+        }
       }
     }
     if (!AccountSessionGuard.isCurrent(accountRevision)) return;

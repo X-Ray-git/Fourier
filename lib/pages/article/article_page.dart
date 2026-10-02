@@ -57,7 +57,7 @@ import 'widgets/article_info_card.dart';
 import 'widgets/image_gallery_page.dart';
 import '../../common/widgets/hero_dialog_route.dart';
 
-enum _ArticleSyncResult { success, failed, staleAccount }
+enum _ArticleSyncResult { success, failed, staleAccount, superseded }
 
 /// 文章详情控制器
 class ArticleController extends GetxController {
@@ -363,7 +363,7 @@ class ArticleController extends GetxController {
 
   /// 标为已读（本地 + 云端同步 + 失败重试最多 5 次）
   Future<void> markAsRead({bool showSuccess = true}) async {
-    if (isRead.value) return;
+    if (isRead.value || article.entryId.trim().isEmpty) return;
     if (isUpdatingReadState.value) return;
     final lifecycleGeneration = _lifecycleGeneration;
     final accountRevision = AccountSessionGuard.revision;
@@ -380,7 +380,8 @@ class ArticleController extends GetxController {
       );
     }
     final isInbox = article.category == 'inbox';
-    ReadSyncService.enqueue(article.entryId, isInbox: isInbox);
+    final task = ReadSyncService.enqueue(article.entryId, isInbox: isInbox);
+    bool current() => ReadSyncService.isCurrent(task);
     isRead.value = true;
     UndoService.recordRead(article);
     ArticleStateNotifier.tick(article.entryId);
@@ -390,20 +391,25 @@ class ArticleController extends GetxController {
         entryIds: [article.entryId],
         isInbox: isInbox,
         auditSource: RemoteReadRequestSource.articleController,
+        shouldSend: current,
       ),
       successMsg: showSuccess ? '已标记已读' : null,
       maxRetries: 5,
       lifecycleGeneration: lifecycleGeneration,
       accountRevision: accountRevision,
+      shouldContinue: current,
     );
 
-    if (syncResult == _ArticleSyncResult.staleAccount) {
-      ReadSyncService.removeMany([article.entryId]);
+    if (syncResult == _ArticleSyncResult.staleAccount ||
+        syncResult == _ArticleSyncResult.superseded) {
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isUpdatingReadState.value = false;
+      }
       return;
     }
 
     // 同步结束后移出待同步队列；本地已读覆盖保留到未读快照确认。
-    ReadSyncService.removeMany([article.entryId]);
+    ReadSyncService.removeMatching([task]);
 
     if (syncResult == _ArticleSyncResult.failed) {
       // 5 次失败 → 恢复本地未读，与服务器保持一致
@@ -443,19 +449,30 @@ class ArticleController extends GetxController {
     }
     isRead.value = false;
     ArticleStateNotifier.tick(article.entryId);
+    bool current() =>
+        LocalArticleDbService.readArticle(article.entryId)?.isRead != true;
 
     final syncResult = await _retrySync(
       action: () => FeedHttp.markUnread(
         entryId: article.entryId,
         isInbox: article.category == 'inbox',
+        auditSource: RemoteReadRequestSource.articleController,
+        shouldSend: current,
       ),
       successMsg: '已恢复未读',
       maxRetries: 5,
       lifecycleGeneration: lifecycleGeneration,
       accountRevision: accountRevision,
+      shouldContinue: current,
     );
 
-    if (syncResult == _ArticleSyncResult.staleAccount) return;
+    if (syncResult == _ArticleSyncResult.staleAccount ||
+        syncResult == _ArticleSyncResult.superseded) {
+      if (_isUiCurrent(lifecycleGeneration, accountRevision)) {
+        isUpdatingReadState.value = false;
+      }
+      return;
+    }
 
     if (syncResult == _ArticleSyncResult.failed) {
       // 5 次失败 → 恢复本地已读
@@ -488,14 +505,21 @@ class ArticleController extends GetxController {
     required int lifecycleGeneration,
     required int accountRevision,
     int maxRetries = 5,
+    bool Function()? shouldContinue,
   }) async {
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       if (!AccountSessionGuard.isCurrent(accountRevision)) {
         return _ArticleSyncResult.staleAccount;
       }
+      if (shouldContinue != null && !shouldContinue()) {
+        return _ArticleSyncResult.superseded;
+      }
       final result = await action();
       if (!AccountSessionGuard.isCurrent(accountRevision)) {
         return _ArticleSyncResult.staleAccount;
+      }
+      if (shouldContinue != null && !shouldContinue()) {
+        return _ArticleSyncResult.superseded;
       }
       if (result is Success<void>) {
         if (successMsg != null &&

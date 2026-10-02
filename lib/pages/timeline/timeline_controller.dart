@@ -18,6 +18,7 @@ import '../../services/account_session_guard.dart';
 import '../../services/account_service.dart';
 import '../../services/article_image_cache_service.dart';
 import '../../services/analysis_event_ledger.dart';
+import '../../services/entry_snapshot_collector.dart';
 import '../../services/content_cache_service.dart';
 import '../../services/feed_silent_settings_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -216,19 +217,27 @@ class TimelineController extends GetxController {
       hasError = true;
     }
 
+    hasError =
+        hasError ||
+        results.any((result) => !EntrySnapshotCollector.isComplete(result));
     if (hasError && allArticles.isNotEmpty) {
       AppFeedback.error('同步未完成', '部分未读数据拉取失败，请稍后重试');
     }
 
-    final feedsOk = feedsResult is Success<List<ArticleModel>>;
-    final socialOk = socialResult is Success<List<ArticleModel>>;
-    final inboxOk = inboxResult is Success<List<ArticleModel>>;
+    final feedsOk = EntrySnapshotCollector.isComplete(feedsResult);
+    final socialOk = EntrySnapshotCollector.isComplete(socialResult);
+    final inboxOk = EntrySnapshotCollector.isComplete(inboxResult);
 
     _applyUnreadSnapshot(
       unreadData,
       feedsOk: feedsOk,
       socialOk: socialOk,
       inboxOk: inboxOk,
+      snapshotSequences: {
+        'feeds': EntrySnapshotCollector.sequenceOf(feedsResult),
+        'social': EntrySnapshotCollector.sequenceOf(socialResult),
+        'inbox': EntrySnapshotCollector.sequenceOf(inboxResult),
+      },
     );
     _loadFromLocalDatabase(resetReason: 'loadData.unreadSnapshot');
 
@@ -272,6 +281,7 @@ class TimelineController extends GetxController {
     bool feedsOk = true,
     bool socialOk = true,
     bool inboxOk = true,
+    Map<String, int?> snapshotSequences = const {},
   }) {
     final unreadIds = unreadData.map((a) => a.entryId).toSet();
     final localArticles = LocalArticleDbService.readAllArticles();
@@ -306,6 +316,12 @@ class TimelineController extends GetxController {
         local.entryId,
         true,
         source: ReadStateChangeSource.syncInference,
+        snapshotSequence:
+            snapshotSequences[local.category == 'inbox'
+                ? 'inbox'
+                : local.category == 'social'
+                ? 'social'
+                : 'feeds'],
       );
     }
 

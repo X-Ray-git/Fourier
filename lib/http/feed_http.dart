@@ -4,6 +4,9 @@ import '../common/constants/constants.dart';
 import '../models/article.dart';
 import '../models/feed.dart';
 import '../services/analysis_event_ledger.dart';
+import '../services/account_session_guard.dart';
+import '../services/remote_read_request_coordinator.dart';
+import '../services/entry_snapshot_collector.dart';
 import 'init.dart';
 import 'folo_api_contract.dart';
 
@@ -148,7 +151,10 @@ class FeedHttp {
       final bodyMap = _responseMap(response);
       if (response.statusCode == 200 && bodyMap != null) {
         if (_isSuccess(bodyMap)) {
-          final data = bodyMap['data'] as List<dynamic>? ?? [];
+          final data = bodyMap['data'];
+          if (data is! List || data.any((item) => item is! Map)) {
+            return const LoadError('服务器未返回完整的条目列表', code: 200);
+          }
           final articles = data.whereType<Map>().map((item) {
             final json = Map<String, dynamic>.from(item);
             final feedId =
@@ -164,6 +170,9 @@ class FeedHttp {
               feedView: f?.view,
             );
           }).toList();
+          if (articles.any((article) => article.entryId.isEmpty)) {
+            return const LoadError('条目缺少有效 ID', code: 200);
+          }
           return Success(articles);
         }
         return LoadError(_messageOf(bodyMap, fallback: '请求失败'));
@@ -184,58 +193,42 @@ class FeedHttp {
     Map<String, FeedModel>? feedMap,
     int? maxPages,
   }) async {
-    final items = <ArticleModel>[];
-    final seenIds = <String>{};
-    var cursor = publishedAfter;
-    var pages = 0;
-
-    while (true) {
-      if (maxPages != null && pages >= maxPages) break;
-      pages++;
-
-      final result = await getEntries(
+    return EntrySnapshotCollector.collect(
+      source: view == 1 ? 'social' : 'feeds',
+      read: read,
+      limit: limit,
+      initialCursor: publishedAfter,
+      maxPages: maxPages,
+      loadPage: (cursor) => getEntries(
         view: view,
         limit: limit,
         read: read,
         withContent: withContent,
         publishedAfter: cursor,
         feedMap: feedMap,
-      );
-      if (result is LoadError<List<ArticleModel>>) {
-        return LoadError(result.errMsg ?? '请求失败');
-      }
-      if (result is! Success<List<ArticleModel>>) {
-        return const LoadError('请求失败');
-      }
-
-      final batch = result.response;
-      if (batch.isEmpty) break;
-
-      var newItems = 0;
-      for (final item in batch) {
-        if (item.entryId.isEmpty) continue;
-        if (seenIds.add(item.entryId)) {
-          items.add(item);
-          newItems++;
-        }
-      }
-      if (newItems == 0) break;
-
-      if (batch.length < limit) break;
-      final nextCursor = batch.last.publishedAt;
-      if (nextCursor.isEmpty || nextCursor == cursor) break;
-      cursor = nextCursor;
-    }
-
-    return Success(items);
+      ),
+    );
   }
 
   /// 收集所有 inbox 的未读条目。
   static Future<LoadingState<List<ArticleModel>>> collectAllInboxEntries({
     int limit = AppConstants.defaultPageSize,
   }) async {
+    final accountRevision = AccountSessionGuard.revision;
     final inboxesResult = await getInboxes();
+    if (!AccountSessionGuard.isCurrent(accountRevision)) {
+      return const LoadError('账号已变化');
+    }
     if (inboxesResult is LoadError<List<Map<String, dynamic>>>) {
+      EntrySnapshotCollector.result(
+        [],
+        source: 'inbox',
+        read: false,
+        complete: false,
+        stopReason: 'inbox_list_failed',
+        limit: limit,
+        pages: [],
+      );
       return LoadError(inboxesResult.errMsg ?? '获取收件箱列表失败');
     }
     if (inboxesResult is! Success<List<Map<String, dynamic>>>) {
@@ -244,11 +237,25 @@ class FeedHttp {
 
     final inboxes = inboxesResult.response;
     final items = <ArticleModel>[];
+    var complete = true;
+    final sequences = <int>[];
 
     for (final inbox in inboxes) {
-      final source = FeedModel.fromInboxJson(inbox);
+      if (!AccountSessionGuard.isCurrent(accountRevision)) {
+        return const LoadError('账号已变化');
+      }
+      final FeedModel source;
+      try {
+        source = FeedModel.fromInboxJson(inbox);
+      } catch (_) {
+        complete = false;
+        continue;
+      }
       final inboxId = source.feedId;
-      if (inboxId.isEmpty) continue;
+      if (inboxId.isEmpty) {
+        complete = false;
+        continue;
+      }
 
       final result = await collectInboxEntries(
         inboxId: inboxId,
@@ -258,6 +265,12 @@ class FeedHttp {
         inboxCategory: source.category,
       );
 
+      if (!AccountSessionGuard.isCurrent(accountRevision)) {
+        return const LoadError('账号已变化');
+      }
+      complete = complete && EntrySnapshotCollector.isComplete(result);
+      final sequence = EntrySnapshotCollector.sequenceOf(result);
+      if (sequence != null) sequences.add(sequence);
       if (result is Success<List<ArticleModel>>) {
         items.addAll(result.response);
       }
@@ -268,7 +281,16 @@ class FeedHttp {
       if (item.entryId.isEmpty) continue;
       deduped[item.entryId] = item;
     }
-    return Success(deduped.values.toList());
+    return EntrySnapshotCollector.result(
+      deduped.values.toList(),
+      source: 'inbox',
+      read: false,
+      complete: complete,
+      stopReason: complete ? 'all_inboxes_complete' : 'partial_inboxes',
+      limit: limit,
+      pages: [],
+      childSequences: sequences,
+    );
   }
 
   // ─── 收件箱 ──────────────────────────────────
@@ -280,7 +302,10 @@ class FeedHttp {
       final body = _responseMap(response);
       if (response.statusCode == 200 && body != null) {
         if (_isSuccess(body)) {
-          final data = body['data'] as List<dynamic>? ?? [];
+          final data = body['data'];
+          if (data is! List || data.any((item) => item is! Map)) {
+            return const LoadError('服务器未返回完整的收件箱列表', code: 200);
+          }
           final inboxes = data
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))
@@ -321,7 +346,10 @@ class FeedHttp {
       final bodyMap = _responseMap(response);
       if (response.statusCode == 200 && bodyMap != null) {
         if (_isSuccess(bodyMap)) {
-          final data = bodyMap['data'] as List<dynamic>? ?? [];
+          final data = bodyMap['data'];
+          if (data is! List || data.any((item) => item is! Map)) {
+            return const LoadError('服务器未返回完整的条目列表', code: 200);
+          }
           final articles = data
               .whereType<Map>()
               .map(
@@ -333,6 +361,9 @@ class FeedHttp {
                 ),
               )
               .toList();
+          if (articles.any((article) => article.entryId.isEmpty)) {
+            return const LoadError('条目缺少有效 ID', code: 200);
+          }
           return Success(articles);
         }
         return LoadError(_messageOf(bodyMap, fallback: '请求失败'));
@@ -354,15 +385,13 @@ class FeedHttp {
     String? inboxCategory,
     int? maxPages,
   }) async {
-    final items = <ArticleModel>[];
-    final seenIds = <String>{};
-    var cursor = publishedAfter;
-    var pages = 0;
-
-    while (true) {
-      if (maxPages != null && pages >= maxPages) break;
-      pages++;
-      final result = await getInboxEntries(
+    return EntrySnapshotCollector.collect(
+      source: 'inbox:$inboxId',
+      read: read,
+      limit: limit,
+      initialCursor: publishedAfter,
+      maxPages: maxPages,
+      loadPage: (cursor) => getInboxEntries(
         inboxId: inboxId,
         limit: limit,
         read: read,
@@ -370,30 +399,8 @@ class FeedHttp {
         inboxTitle: inboxTitle,
         inboxImage: inboxImage,
         inboxCategory: inboxCategory,
-      );
-      if (result is LoadError<List<ArticleModel>>) {
-        return LoadError(result.errMsg ?? '请求失败');
-      }
-      if (result is! Success<List<ArticleModel>>) {
-        return const LoadError('请求失败');
-      }
-
-      final batch = result.response;
-      if (batch.isEmpty) break;
-      var newItems = 0;
-      for (final item in batch) {
-        if (item.entryId.isNotEmpty && seenIds.add(item.entryId)) {
-          items.add(item);
-          newItems++;
-        }
-      }
-      if (newItems == 0 || batch.length < limit) break;
-      final nextCursor = batch.last.publishedAt;
-      if (nextCursor.isEmpty || nextCursor == cursor) break;
-      cursor = nextCursor;
-    }
-
-    return Success(items);
+      ),
+    );
   }
 
   /// 获取指定 inbox 条目的详情（含正文）
@@ -429,7 +436,48 @@ class FeedHttp {
     bool isInbox = false,
     required RemoteReadRequestSource auditSource,
     Map<String, int>? queuedAtByEntryId,
+    List<String> Function()? currentEntryIds,
+    bool Function()? shouldSend,
+  }) {
+    final revision = AccountSessionGuard.revision;
+    return RemoteReadRequestCoordinator.run(entryIds, () {
+      final allowed = currentEntryIds?.call().toSet();
+      final ids = entryIds
+          .where((id) => allowed == null || allowed.contains(id))
+          .toList();
+      if (!AccountSessionGuard.isCurrent(revision)) {
+        return Future.value(const LoadError<void>('账号已变化'));
+      }
+      if ((shouldSend != null && !shouldSend()) || ids.isEmpty) {
+        AnalysisEventLedger.recordReadRequestSuppressed(
+          entryIds: entryIds,
+          source: auditSource,
+          targetIsRead: true,
+        );
+        return Future.value(const LoadError<void>('已读操作已取消或被更新'));
+      }
+      return _markReadNow(
+        entryIds: ids,
+        isInbox: isInbox,
+        auditSource: auditSource,
+        queuedAtByEntryId: queuedAtByEntryId == null
+            ? null
+            : {
+                for (final id in ids)
+                  if (queuedAtByEntryId.containsKey(id))
+                    id: queuedAtByEntryId[id]!,
+              },
+      );
+    });
+  }
+
+  static Future<LoadingState<void>> _markReadNow({
+    required List<String> entryIds,
+    required bool isInbox,
+    required RemoteReadRequestSource auditSource,
+    Map<String, int>? queuedAtByEntryId,
   }) async {
+    final accountRevision = AccountSessionGuard.revision;
     final stopwatch = Stopwatch()..start();
     final attemptSequence = AnalysisEventLedger.recordRemoteMarkReadAttempt(
       entryIds: entryIds,
@@ -444,6 +492,7 @@ class FeedHttp {
       String? failureKind,
     }) {
       stopwatch.stop();
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return result;
       AnalysisEventLedger.recordRemoteMarkReadResult(
         attemptSequence: attemptSequence,
         entryIds: entryIds,
@@ -487,15 +536,7 @@ class FeedHttp {
         failureKind: e.type.name,
       );
     } catch (_) {
-      stopwatch.stop();
-      AnalysisEventLedger.recordRemoteMarkReadResult(
-        attemptSequence: attemptSequence,
-        entryIds: entryIds,
-        source: auditSource,
-        success: false,
-        durationMs: stopwatch.elapsedMilliseconds,
-        failureKind: 'unexpected_exception',
-      );
+      finish(const LoadError('已读同步异常'), failureKind: 'unexpected_exception');
       rethrow;
     }
   }
@@ -504,7 +545,63 @@ class FeedHttp {
   static Future<LoadingState<void>> markUnread({
     required String entryId,
     bool isInbox = false,
+    required RemoteReadRequestSource auditSource,
+    bool Function()? shouldSend,
+  }) {
+    final revision = AccountSessionGuard.revision;
+    return RemoteReadRequestCoordinator.run([entryId], () {
+      if (!AccountSessionGuard.isCurrent(revision)) {
+        return Future.value(const LoadError<void>('账号已变化'));
+      }
+      if (shouldSend != null && !shouldSend()) {
+        AnalysisEventLedger.recordReadRequestSuppressed(
+          entryIds: [entryId],
+          source: auditSource,
+          targetIsRead: false,
+        );
+        return Future.value(const LoadError<void>('未读操作已取消或被更新'));
+      }
+      return _markUnreadNow(
+        entryId: entryId,
+        isInbox: isInbox,
+        auditSource: auditSource,
+      );
+    });
+  }
+
+  static Future<LoadingState<void>> _markUnreadNow({
+    required String entryId,
+    required bool isInbox,
+    required RemoteReadRequestSource auditSource,
   }) async {
+    final accountRevision = AccountSessionGuard.revision;
+    final stopwatch = Stopwatch()..start();
+    final sequence = AnalysisEventLedger.recordRemoteMarkReadAttempt(
+      entryIds: [entryId],
+      isInbox: isInbox,
+      source: auditSource,
+      targetIsRead: false,
+    );
+    LoadingState<void> finish(
+      LoadingState<void> result, {
+      int? statusCode,
+      String? failureKind,
+    }) {
+      stopwatch.stop();
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return result;
+      AnalysisEventLedger.recordRemoteMarkReadResult(
+        attemptSequence: sequence,
+        entryIds: [entryId],
+        source: auditSource,
+        targetIsRead: false,
+        success: result is Success<void>,
+        durationMs: stopwatch.elapsedMilliseconds,
+        statusCode: statusCode,
+        failureKind: failureKind,
+      );
+      return result;
+    }
+
     try {
       final response = await Request().delete(
         ApiConstants.reads,
@@ -516,13 +613,28 @@ class FeedHttp {
       final body = _responseMap(response);
       if (response.statusCode == 200 && body != null) {
         if (_isSuccess(body)) {
-          return const Success(null);
+          return finish(const Success(null), statusCode: response.statusCode);
         }
-        return LoadError(_messageOf(body, fallback: '标未读失败'));
+        return finish(
+          LoadError(_messageOf(body, fallback: '标未读失败')),
+          statusCode: response.statusCode,
+          failureKind: 'api_rejected',
+        );
       }
-      return LoadError('请求失败: ${response.statusCode}');
+      return finish(
+        LoadError('请求失败: ${response.statusCode}'),
+        statusCode: response.statusCode,
+        failureKind: 'http_status',
+      );
     } on DioException catch (e) {
-      return LoadError('网络错误: ${e.message}');
+      return finish(
+        LoadError('网络错误: ${e.message}'),
+        statusCode: e.response?.statusCode,
+        failureKind: e.type.name,
+      );
+    } catch (_) {
+      finish(const LoadError('未读同步异常'), failureKind: 'unexpected_exception');
+      rethrow;
     }
   }
 

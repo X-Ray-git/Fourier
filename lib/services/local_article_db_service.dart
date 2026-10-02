@@ -7,6 +7,7 @@ import '../models/article.dart';
 import '../utils/storage.dart';
 import 'analysis_event_ledger.dart';
 import 'article_image_cache_service.dart';
+import 'read_sync_service.dart';
 
 /// 本地文章库（已读/未读统一持久化）
 abstract final class LocalArticleDbService {
@@ -226,7 +227,11 @@ abstract final class LocalArticleDbService {
     bool isRead, {
     bool recordHistory = false,
     ReadStateChangeSource source = ReadStateChangeSource.user,
+    int? snapshotSequence,
   }) {
+    if (!isRead && source == ReadStateChangeSource.user) {
+      ReadSyncService.removeMany([entryId]);
+    }
     if (isRead) {
       if (recordHistory) recordReadHistory(entryId);
     } else {
@@ -244,6 +249,7 @@ abstract final class LocalArticleDbService {
       isRead: isRead,
       before: old,
       source: source,
+      snapshotSequence: snapshotSequence,
     );
     final updated = old.copyWith(isRead: isRead);
     GStorage.articleDb.put(entryId, updated.toJson());

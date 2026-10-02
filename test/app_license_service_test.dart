@@ -22,6 +22,8 @@ void main() {
         'interactiveviewer_gallery',
         'liquid_glass_widgets',
         'liquid_glass_renderer',
+        'weibo-emoji (EqualMa)',
+        'weibo-face (itorr)',
       }),
     );
   });

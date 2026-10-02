@@ -44,6 +44,7 @@ import '../../services/translation_service.dart';
 import '../../services/summary_service.dart';
 import '../../services/article_state_notifier.dart';
 import '../../utils/article_content_utils.dart';
+import '../../utils/article_content_compatibility.dart';
 import '../../utils/html_chunk_parser.dart';
 import '../../utils/storage.dart';
 import '../../services/undo_service.dart';
@@ -179,8 +180,12 @@ class ArticleController extends GetxController {
           feedId: feedId,
           category: category,
         );
-        final urls = ArticleContentUtils.extractImageUrls(normalized);
-        final parsedChunks = HtmlChunkParser.parseSync(normalized);
+        final displayHtml = ArticleContentCompatibility.forDisplay(
+          normalized,
+          sourceUrl: sourceUrl,
+        );
+        final urls = ArticleContentUtils.extractImageUrls(displayHtml);
+        final parsedChunks = HtmlChunkParser.parseSync(displayHtml);
 
         var normalizedTranslation = '';
         List<HtmlChunk> tParsedChunks = const [];
@@ -191,7 +196,10 @@ class ArticleController extends GetxController {
             feedId: feedId,
             category: category,
           );
-          tParsedChunks = HtmlChunkParser.parseSync(normalizedTranslation);
+          tParsedChunks = HtmlChunkParser.parseSync(
+            normalizedTranslation,
+            sourceUrl: sourceUrl,
+          );
         }
 
         return (
@@ -270,7 +278,7 @@ class ArticleController extends GetxController {
       );
       return (
         normalized: normalized,
-        chunks: HtmlChunkParser.parseSync(normalized),
+        chunks: HtmlChunkParser.parseSync(normalized, sourceUrl: sourceUrl),
       );
     });
     if (!_isUiCurrent(lifecycleGeneration, accountRevision)) return;
@@ -543,7 +551,10 @@ class ArticleController extends GetxController {
         translationContent.value = normalizedTranslation;
         isTranslated.value = true;
         // 同步解析译文的块
-        final tChunks = HtmlChunkParser.parseSync(normalizedTranslation);
+        final tChunks = HtmlChunkParser.parseSync(
+          normalizedTranslation,
+          sourceUrl: article.url,
+        );
         translatedChunks.value = tChunks;
         showTranslation.value = true;
         AppFeedback.success('翻译完成', '已生成文章译文');

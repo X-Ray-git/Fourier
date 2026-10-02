@@ -4,6 +4,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../services/article_image_service.dart';
+import 'article_content_compatibility.dart';
 
 // Cached normalized HTML may still contain the pre-Fourier internal tags.
 const _authorListTags = {'fourier-author-list', 'auto-folo-author-list'};
@@ -235,16 +236,22 @@ abstract final class HtmlChunkParser {
     }
   }
 
-  static Future<List<HtmlChunk>> parse(String rawHtml) async {
+  static Future<List<HtmlChunk>> parse(
+    String rawHtml, {
+    String? sourceUrl,
+  }) async {
     if (rawHtml.trim().isEmpty) return const [];
 
     if (rawHtml.length > _isolateThresholdBytes) {
-      return await Isolate.run(() => _parseSync(rawHtml));
+      return await Isolate.run(() => parseSync(rawHtml, sourceUrl: sourceUrl));
     }
-    return _parseSync(rawHtml);
+    return parseSync(rawHtml, sourceUrl: sourceUrl);
   }
 
-  static List<HtmlChunk> parseSync(String rawHtml) => _parseSync(rawHtml);
+  static List<HtmlChunk> parseSync(String rawHtml, {String? sourceUrl}) =>
+      _parseSync(
+        ArticleContentCompatibility.forDisplay(rawHtml, sourceUrl: sourceUrl),
+      );
 
   static List<HtmlChunk> _parseSync(String rawHtml) {
     final fragment = html_parser.parseFragment(rawHtml);

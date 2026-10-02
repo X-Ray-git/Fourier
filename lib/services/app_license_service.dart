@@ -30,6 +30,11 @@ class AppLicenseService {
       <String>['liquid_glass_renderer'],
       'third_party/licenses/MIT-liquid_glass_renderer.txt',
     ),
+    (
+      <String>['weibo-emoji (EqualMa)'],
+      'third_party/licenses/MIT-weibo-emoji.txt',
+    ),
+    (<String>['weibo-face (itorr)'], 'third_party/licenses/MIT-weibo-face.txt'),
   ];
 
   static void register() {

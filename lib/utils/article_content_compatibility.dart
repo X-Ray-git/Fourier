@@ -1,10 +1,19 @@
 import 'package:html/dom.dart' as dom;
 
 import 'inbox_email_compatibility.dart';
+import 'source_rules/weibo_emoticons.dart';
 
 /// Narrow compatibility fixes for source HTML that depends on site CSS which
 /// is not available in the article reader.
 abstract final class ArticleContentCompatibility {
+  /// Display-only rules are separate from [apply], which also serves AI input.
+  static String forDisplay(String html, {String? sourceUrl}) {
+    if (WeiboEmoticons.appliesTo(sourceUrl)) {
+      return WeiboEmoticons.forDisplay(html);
+    }
+    return html;
+  }
+
   static const String authorListTag = 'fourier-author-list';
   static const String authorTag = 'fourier-author';
   static const Set<String> _emptyWrapperTags = {'a', 'span', 'li', 'ul', 'ol'};

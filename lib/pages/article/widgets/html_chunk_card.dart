@@ -31,6 +31,7 @@ import '../../../services/external_link_service.dart';
 import 'bilibili_embed_player.dart';
 import 'image_loading_placeholder.dart';
 import 'article_svg_image.dart';
+import 'article_inline_icon.dart';
 import 'inline_video_player.dart';
 import 'youtube_embed_player.dart';
 import 'macos_managed_animated_image.dart';
@@ -409,7 +410,10 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
         ),
         'a': Style(color: cs.primary, textDecoration: TextDecoration.none),
       },
-      extensions: ext != null ? [ext] : const [],
+      extensions: [
+        ArticleInlineIconExtension(articleId: widget.articleId),
+        ?ext,
+      ],
     );
   }
 
@@ -455,6 +459,7 @@ class _HtmlChunkCardState extends State<HtmlChunkCard>
     ColorScheme cs,
   ) {
     final exts = <HtmlExtension>[
+      ArticleInlineIconExtension(articleId: widget.articleId),
       _imageExtension(context),
       TableHtmlExtension(),
       InlineCodeExtension(colorScheme: cs),

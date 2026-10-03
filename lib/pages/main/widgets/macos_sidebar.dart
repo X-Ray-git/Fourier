@@ -1131,10 +1131,10 @@ class _CategoryItem extends StatelessWidget {
             ? cs.primaryContainer.withValues(alpha: 0.62)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: InkWell(
+        child: _SidebarNavigationInkWell(
+          isSelected: isSelected,
           onTap: onTap,
           onSecondaryTapDown: onSecondaryTapDown,
-          borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.only(left: 2),
             child: Row(
@@ -1233,10 +1233,10 @@ class _SidebarItem extends StatelessWidget {
             ? cs.primaryContainer.withValues(alpha: 0.62)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: InkWell(
+        child: _SidebarNavigationInkWell(
+          isSelected: isSelected,
           onTap: onTap,
           onSecondaryTapDown: onSecondaryTapDown,
-          borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
@@ -1280,6 +1280,63 @@ class _SidebarItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Keeps keyboard focus with the navigation item activated by the pointer.
+/// Selection changes from shortcuts also release focus from the old item,
+/// while Tab can still focus an unselected item before activating it.
+class _SidebarNavigationInkWell extends StatefulWidget {
+  const _SidebarNavigationInkWell({
+    required this.isSelected,
+    required this.onTap,
+    this.onSecondaryTapDown,
+    required this.child,
+  });
+
+  final bool isSelected;
+  final VoidCallback onTap;
+  final void Function(TapDownDetails details)? onSecondaryTapDown;
+  final Widget child;
+
+  @override
+  State<_SidebarNavigationInkWell> createState() =>
+      _SidebarNavigationInkWellState();
+}
+
+class _SidebarNavigationInkWellState extends State<_SidebarNavigationInkWell> {
+  final _focusNode = FocusNode(debugLabel: 'Sidebar navigation');
+
+  @override
+  void didUpdateWidget(covariant _SidebarNavigationInkWell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isSelected && !widget.isSelected && _focusNode.hasFocus) {
+      // A pointer activation may already have requested the next item's focus.
+      // Check after the frame so clearing the old item cannot undo that move.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !widget.isSelected && _focusNode.hasFocus) {
+          _focusNode.unfocus();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    focusNode: _focusNode,
+    onTap: () {
+      _focusNode.requestFocus();
+      widget.onTap();
+    },
+    onSecondaryTapDown: widget.onSecondaryTapDown,
+    borderRadius: BorderRadius.circular(8),
+    child: widget.child,
+  );
 }
 
 class _UnreadBadge extends StatelessWidget {

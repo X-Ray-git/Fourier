@@ -61,11 +61,11 @@ abstract final class LocalArticleDbService {
     return null;
   }
 
-  /// Returns the queued article with the most complete persisted body.
+  /// Returns the article with a clearly more complete persisted body.
   ///
   /// Refresh responses can still carry an RSS excerpt after readability has
-  /// already stored the full article. Queue snapshots must not send that stale
-  /// excerpt to downstream AI workers.
+  /// already stored the full article. Readers and downstream AI workers share
+  /// this preference so a stale list/queue snapshot cannot hide that content.
   static ArticleModel preferPersistedContent(ArticleModel article) {
     final raw = GStorage.articleDb.get(article.entryId);
     if (raw is! Map) return article;

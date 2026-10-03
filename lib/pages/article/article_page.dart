@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:hive/hive.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:html/parser.dart' as html_parser;
 
@@ -80,6 +81,8 @@ class ArticleController extends GetxController {
   final isFetchingContent = false.obs;
   final isParsingContent = false.obs;
   Worker? _translationRecordWorker;
+  StreamSubscription<BoxEvent>? _persistedContentSubscription;
+  String _sourceContent = '';
   String _translationSourceContent = '';
   int _lifecycleGeneration = 0;
   int _contentGeneration = 0;
@@ -127,11 +130,12 @@ class ArticleController extends GetxController {
     );
     isRead.value =
         LocalArticleDbService.readOverrideOf(article.entryId) ?? article.isRead;
-    if (article.category == 'inbox' &&
-        (article.content == null || article.content!.trim().isEmpty)) {
+    final initialContent =
+        LocalArticleDbService.preferPersistedContent(article).content ?? '';
+    if (article.category == 'inbox' && initialContent.trim().isEmpty) {
       isFetchingContent.value = true;
       _fetchInboxContent();
-    } else if (article.content != null && article.content!.isNotEmpty) {
+    } else if (initialContent.trim().isNotEmpty) {
       _initContent();
     } else {
       _initContent();
@@ -140,6 +144,28 @@ class ArticleController extends GetxController {
         fetchReadabilityContent();
       }
     }
+
+    final lifecycleGeneration = _lifecycleGeneration;
+    final accountRevision = AccountSessionGuard.revision;
+    _persistedContentSubscription = GStorage.articleDb
+        .watch(key: article.entryId)
+        .listen((event) {
+          if (event.deleted) return;
+          if (!_isUiCurrent(lifecycleGeneration, accountRevision)) return;
+          final content =
+              LocalArticleDbService.preferPersistedContent(
+                article.copyWith(content: _sourceContent),
+              ).content ??
+              '';
+          // Read/filter updates must not restart parsing or disturb selection.
+          if (content == _sourceContent) return;
+          unawaited(
+            _initContent(
+              overrideContent: content,
+              preserveDisplayChoices: true,
+            ),
+          );
+        });
   }
 
   @override
@@ -147,6 +173,7 @@ class ArticleController extends GetxController {
     _lifecycleGeneration++;
     _contentGeneration++;
     _translationRecordWorker?.dispose();
+    unawaited(_persistedContentSubscription?.cancel());
     super.onClose();
   }
 
@@ -156,13 +183,20 @@ class ArticleController extends GetxController {
         AccountSessionGuard.isCurrent(accountRevision);
   }
 
-  Future<void> _initContent({String? overrideContent}) async {
+  Future<void> _initContent({
+    String? overrideContent,
+    bool preserveDisplayChoices = false,
+  }) async {
     final lifecycleGeneration = _lifecycleGeneration;
     final contentGeneration = ++_contentGeneration;
     final accountRevision = AccountSessionGuard.revision;
     isParsingContent.value = true;
 
-    final rawHtml = overrideContent ?? article.content ?? '';
+    final rawHtml =
+        overrideContent ??
+        LocalArticleDbService.preferPersistedContent(article).content ??
+        '';
+    _sourceContent = rawHtml;
     final entryId = article.entryId;
     final hasTranslation = TranslationService.hasTranslation(entryId);
     final tContent = hasTranslation
@@ -227,13 +261,13 @@ class ArticleController extends GetxController {
         if (result.translatedChunks.isNotEmpty) {
           translatedChunks.value = result.translatedChunks;
         }
-        showTranslation.value = true;
+        if (!preserveDisplayChoices) showTranslation.value = true;
       }
 
       if (SummaryService.hasSummary(entryId)) {
         isSummarized.value = true;
         summaryText.value = SummaryService.summaryFor(entryId) ?? '';
-        showSummary.value = true;
+        if (!preserveDisplayChoices) showSummary.value = true;
       }
     } finally {
       if (_isUiCurrent(lifecycleGeneration, accountRevision) &&

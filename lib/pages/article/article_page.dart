@@ -43,6 +43,7 @@ import '../../services/external_link_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/translation_service.dart';
 import '../../services/summary_service.dart';
+import '../../services/subscription_catalog_service.dart';
 import '../../services/article_state_notifier.dart';
 import '../../utils/article_content_utils.dart';
 import '../../utils/article_content_compatibility.dart';
@@ -204,6 +205,7 @@ class ArticleController extends GetxController {
         : '';
     final sourceUrl = article.url;
     final feedId = article.feedId;
+    final feedUrl = SubscriptionCatalogService.feedUrlFor(feedId);
     final category = article.category;
 
     try {
@@ -212,6 +214,7 @@ class ArticleController extends GetxController {
           rawHtml,
           sourceUrl: sourceUrl,
           feedId: feedId,
+          feedUrl: feedUrl,
           category: category,
         );
         final displayHtml = ArticleContentCompatibility.forDisplay(
@@ -228,6 +231,7 @@ class ArticleController extends GetxController {
             tContent,
             sourceUrl: sourceUrl,
             feedId: feedId,
+            feedUrl: feedUrl,
             category: category,
           );
           tParsedChunks = HtmlChunkParser.parseSync(
@@ -302,12 +306,14 @@ class ArticleController extends GetxController {
     final shouldReveal = !isTranslated.value;
     final sourceUrl = article.url;
     final feedId = article.feedId;
+    final feedUrl = SubscriptionCatalogService.feedUrlFor(feedId);
     final category = article.category;
     final result = await Isolate.run(() {
       final normalized = ArticleContentUtils.normalizeHtml(
         sourceContent,
         sourceUrl: sourceUrl,
         feedId: feedId,
+        feedUrl: feedUrl,
         category: category,
       );
       return (
@@ -604,6 +610,7 @@ class ArticleController extends GetxController {
           record.translatedContent!,
           sourceUrl: article.url,
           feedId: article.feedId,
+          feedUrl: SubscriptionCatalogService.feedUrlFor(article.feedId),
           category: article.category,
         );
         translationContent.value = normalizedTranslation;

@@ -8,6 +8,7 @@ import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/html_entity_utils.dart';
 import '../utils/storage.dart';
+import 'subscription_catalog_service.dart';
 import 'llm_config.dart';
 import 'llm_failure_policy.dart';
 import 'llm_usage_ledger.dart';
@@ -312,6 +313,7 @@ abstract final class TranslationService {
       overrideContent ?? article.content ?? '',
       sourceUrl: article.url,
       feedId: article.feedId,
+      feedUrl: SubscriptionCatalogService.feedUrlFor(article.feedId),
       category: article.category,
     );
     // 正文过大时分块翻译，避免 LLM 输出畸形 JSON

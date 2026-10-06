@@ -1,10 +1,10 @@
 import 'package:html/dom.dart' as dom;
 
 import 'inbox_email_compatibility.dart';
+import 'source_rules/appinn_content.dart';
 import 'source_rules/weibo_emoticons.dart';
 
-/// Narrow compatibility fixes for source HTML that depends on site CSS which
-/// is not available in the article reader.
+/// Narrow publisher/feed fixes kept separate from generic HTML cleanup.
 abstract final class ArticleContentCompatibility {
   /// Display-only rules are separate from [apply], which also serves AI input.
   static String forDisplay(String html, {String? sourceUrl}) {
@@ -50,6 +50,7 @@ abstract final class ArticleContentCompatibility {
     dom.DocumentFragment fragment, {
     String? sourceUrl,
     String? feedId,
+    String? feedUrl,
     String? category,
   }) {
     if (InboxEmailCompatibility.appliesTo(category: category)) {
@@ -58,68 +59,13 @@ abstract final class ArticleContentCompatibility {
     _normalizeHuggingFaceAuthorBylines(fragment);
     _removeHuggingFaceAvatars(fragment);
 
-    final host = Uri.tryParse(sourceUrl?.trim() ?? '')?.host.toLowerCase();
-    if (host == 'appinn.com' || host == 'www.appinn.com') {
-      _removeAppinnAiSummaryDisclaimer(fragment);
+    if (AppinnContent.appliesTo(feedUrl)) {
+      AppinnContent.apply(fragment);
     }
+    final host = Uri.tryParse(sourceUrl?.trim() ?? '')?.host.toLowerCase();
     if (host == 'marktechpost.com' || host == 'www.marktechpost.com') {
       _removeMarkTechPostCodeControls(fragment);
       _replaceBrokenMarkTechPostExplainers(fragment, sourceUrl!);
-    }
-  }
-
-  static void _removeAppinnAiSummaryDisclaimer(dom.DocumentFragment fragment) {
-    const prefix =
-        '你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，'
-        '可能与原文真实意图存在偏差。不代表小众软件观点和立场。请';
-    const suffix = '细致比对和校验。';
-    final signature = RegExp(
-      r'^(?:请务必在总结开头增加这段话[:：]\s*)?' +
-          RegExp.escape(prefix) +
-          r'(?:点击链接阅读原文|<a\b[^<>]*>点击链接阅读原文</a>)' +
-          RegExp.escape(suffix) +
-          r'$',
-    );
-    bool matches(String text) =>
-        signature.hasMatch(text.replaceAll(RegExp(r'\s+'), ' ').trim());
-
-    final candidates = fragment
-        .querySelectorAll('p, div, section, aside, blockquote')
-        .toList()
-        .reversed;
-    for (final candidate in candidates) {
-      if (matches(candidate.text)) {
-        candidate.remove();
-      }
-    }
-
-    // Feed HTML can put the instruction, link and suffix directly between
-    // blocks, without a wrapping paragraph. Match only complete sibling runs;
-    // never remove their parent, which can also contain the real article.
-    for (final parent in <dom.Node>[
-      fragment,
-      ...fragment.querySelectorAll('div, section, article, aside'),
-    ]) {
-      final run = <dom.Node>[];
-      void flush() {
-        if (matches(run.map((node) => node.text ?? '').join())) {
-          for (final node in run) {
-            node.remove();
-          }
-        }
-        run.clear();
-      }
-
-      for (final node in parent.nodes.toList()) {
-        if (node is dom.Text ||
-            (node is dom.Element &&
-                (node.localName == 'a' || node.localName == 'br'))) {
-          run.add(node);
-        } else {
-          flush();
-        }
-      }
-      flush();
     }
   }
 

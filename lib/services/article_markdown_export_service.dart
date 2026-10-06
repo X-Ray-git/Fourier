@@ -7,6 +7,7 @@ import 'package:html/parser.dart' as html_parser;
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/html_chunk_parser.dart';
+import 'subscription_catalog_service.dart';
 
 abstract final class ArticleMarkdownExportService {
   static String buildArticle({
@@ -28,10 +29,18 @@ abstract final class ArticleMarkdownExportService {
   }
 
   static Future<String> buildBatch(List<ArticleModel> articles) {
-    final snapshot = articles.toList(growable: false);
+    final snapshot = articles
+        .map(
+          (article) => (
+            article: article,
+            feedUrl: SubscriptionCatalogService.feedUrlFor(article.feedId),
+          ),
+        )
+        .toList(growable: false);
     return Isolate.run(() {
       return snapshot
-          .map((article) {
+          .map((source) {
+            final article = source.article;
             final rawHtml = article.content?.trim() ?? '';
             final chunks = rawHtml.isEmpty
                 ? const <HtmlChunk>[]
@@ -40,6 +49,7 @@ abstract final class ArticleMarkdownExportService {
                       rawHtml,
                       sourceUrl: article.url,
                       feedId: article.feedId,
+                      feedUrl: source.feedUrl,
                       category: article.category,
                     ),
                   );

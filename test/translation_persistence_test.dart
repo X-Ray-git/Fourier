@@ -5,8 +5,10 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
+import 'package:fourier/models/feed.dart';
 import 'package:fourier/services/llm_failure_policy.dart';
 import 'package:fourier/services/translation_service.dart';
+import 'package:fourier/services/subscription_catalog_service.dart';
 import 'package:fourier/utils/storage.dart';
 
 import 'support/hive_test_helper.dart';
@@ -43,6 +45,7 @@ ArticleModel _article({String content = '<p>原文内容</p>'}) {
 void main() {
   setUp(() async {
     await HiveTestHelper.setUp();
+    SubscriptionCatalogService.reset();
     // 不重试，避免失败路径的 1s 退避拖慢测试。
     await GStorage.setting.put('auto_retry_max_count', 0);
     TranslationService.setApiKey('test-key');
@@ -50,6 +53,7 @@ void main() {
     HttpOverrides.global = _FakeHttpOverrides();
     _FakeResponseSpec.queued.clear();
     _FakeResponseSpec.requestCount = 0;
+    _FakeResponseSpec.requestBodies.clear();
     _FakeResponseSpec.current = const _FakeResponseSpec(
       statusCode: 200,
       body: _successBody,
@@ -62,7 +66,29 @@ void main() {
     _FakeResponseSpec.queued.clear();
     TranslationService.debugRetryDelayOverride = null;
     TranslationService.resetForAccountChange();
+    SubscriptionCatalogService.reset();
     await HiveTestHelper.tearDown();
+  });
+
+  test('translation input cleans feed instructions independently of article URL or display name', () async {
+    SubscriptionCatalogService.upsertLocal(
+      FeedModel(
+        feedId: 'feed-1',
+        title: 'Renamed source',
+        url: 'http://feeds-origin.appinn.com/appinns',
+      ),
+    );
+    const content =
+        '<p>原文内容</p><p>你看到的内容可能由第三方 AI 基于小众软件文章提炼总结而成，可能与原文真实意图存在偏差。不代表小众软件观点和立场。请<a href="https://example.com/original">点击链接阅读原文</a>细致比对和校验。</p>';
+    final record = await TranslationService.translateArticle(
+      _article(content: content),
+    );
+    expect(record.isTranslated, isTrue);
+    expect(_FakeResponseSpec.requestBodies, hasLength(1));
+    final request = _FakeResponseSpec.requestBodies.single;
+    expect(request, contains('原文内容'));
+    expect(request, isNot(contains('第三方 AI')));
+    expect(request, isNot(contains('点击链接阅读原文')));
   });
 
   test('普通翻译：完成后立即重启，译文不丢失', () async {
@@ -242,6 +268,7 @@ class _FakeResponseSpec {
   static _FakeResponseSpec? current;
   static final List<_FakeResponseSpec> queued = [];
   static int requestCount = 0;
+  static final List<String> requestBodies = [];
 }
 
 class _FakeHttpOverrides extends HttpOverrides {
@@ -331,6 +358,7 @@ class _FakeRequest implements HttpClientRequest {
   @override
   Future<HttpClientResponse> close() async {
     _FakeResponseSpec.requestCount++;
+    _FakeResponseSpec.requestBodies.add(utf8.decode(_body.toBytes()));
     final spec = _FakeResponseSpec.queued.isNotEmpty
         ? _FakeResponseSpec.queued.removeAt(0)
         : _FakeResponseSpec.current ??

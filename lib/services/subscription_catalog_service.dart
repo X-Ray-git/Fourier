@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:hive/hive.dart';
 
 import '../http/feed_http.dart';
 import '../http/init.dart';
@@ -33,6 +34,16 @@ abstract final class SubscriptionCatalogService {
   static int _localMutationRevision = 0;
 
   static List<FeedModel> get feeds => List.unmodifiable(_feeds);
+
+  /// Resolve RSS provenance on the main isolate, before parsing article HTML.
+  /// Missing subscriptions stay unknown; article URLs/titles are not fallbacks.
+  static String? feedUrlFor(String feedId) {
+    if (feedId.isEmpty || !Hive.isBoxOpen('localCache')) return null;
+    for (final feed in _feeds) {
+      if (feed.feedId == feedId) return feed.isInbox ? null : feed.url;
+    }
+    return null;
+  }
 
   static void reset() {
     _feeds = const [];

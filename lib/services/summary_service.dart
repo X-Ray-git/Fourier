@@ -7,6 +7,7 @@ import 'package:get/get.dart' hide Response;
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
+import 'subscription_catalog_service.dart';
 import 'llm_config.dart';
 import 'llm_failure_policy.dart';
 import 'llm_usage_ledger.dart';
@@ -277,6 +278,7 @@ abstract final class SummaryService {
       overrideContent ?? article.content ?? '',
       sourceUrl: article.url,
       feedId: article.feedId,
+      feedUrl: SubscriptionCatalogService.feedUrlFor(article.feedId),
       category: article.category,
     );
     if (htmlContent.isEmpty) {

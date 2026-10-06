@@ -1,4 +1,5 @@
 import '../models/article.dart';
+import '../services/subscription_catalog_service.dart';
 import 'article_content_utils.dart';
 import 'html_chunk_parser.dart';
 
@@ -11,9 +12,11 @@ abstract final class ArticleLengthEstimator {
   /// the same estimate across platforms and window sizes.
   static double estimateReadingHeight(ArticleModel article) {
     final rawContent = article.content ?? '';
+    final feedUrl = SubscriptionCatalogService.feedUrlFor(article.feedId);
     final signature =
         '${article.entryId}:${article.title.hashCode}:'
-        '${rawContent.length}:${rawContent.hashCode}';
+        '${rawContent.length}:${rawContent.hashCode}:'
+        '${article.url}:${article.feedId}:${article.category}:$feedUrl';
     final cached = _cache[article.entryId];
     if (cached != null && cached.signature == signature) {
       return cached.height;
@@ -30,6 +33,7 @@ abstract final class ArticleLengthEstimator {
       rawContent,
       sourceUrl: article.url,
       feedId: article.feedId,
+      feedUrl: feedUrl,
       category: article.category,
     );
     final chunks = HtmlChunkParser.parseSync(normalized);

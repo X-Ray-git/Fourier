@@ -11,6 +11,7 @@ import '../utils/storage.dart';
 import 'article_image_retry_scheduler.dart';
 import 'article_image_service.dart';
 import 'image_network_cache.dart';
+import 'subscription_catalog_service.dart';
 
 @immutable
 class ArticleImageRetryState {
@@ -293,16 +294,16 @@ abstract final class ArticleImageCacheService {
     if (content.trim().isEmpty) return;
 
     final generation = _prefetchGeneration;
+    final source = <String, String>{
+      'articleId': article.entryId,
+      'content': content,
+      'sourceUrl': article.url,
+      'feedId': article.feedId,
+      'feedUrl': SubscriptionCatalogService.feedUrlFor(article.feedId) ?? '',
+      'category': article.category,
+    };
     final plan = await Isolate.run(
-      () => buildPrefetchPlan([
-        {
-          'articleId': article.entryId,
-          'content': content,
-          'sourceUrl': article.url,
-          'feedId': article.feedId,
-          'category': article.category,
-        },
-      ], maxImages: _profile.imagesPerArticle),
+      () => buildPrefetchPlan([source], maxImages: _profile.imagesPerArticle),
     );
     for (final item in plan) {
       _enqueue(
@@ -335,6 +336,8 @@ abstract final class ArticleImageCacheService {
             'content': article.content!,
             'sourceUrl': article.url,
             'feedId': article.feedId,
+            'feedUrl':
+                SubscriptionCatalogService.feedUrlFor(article.feedId) ?? '',
             'category': article.category,
           },
         );
@@ -381,6 +384,7 @@ abstract final class ArticleImageCacheService {
         content,
         sourceUrl: sourceUrl,
         feedId: article['feedId'],
+        feedUrl: article['feedUrl'],
         category: article['category'],
       );
       final urls = ArticleContentUtils.extractImageUrls(normalized)

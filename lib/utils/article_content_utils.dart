@@ -18,18 +18,21 @@ abstract final class ArticleContentUtils {
   static final LinkedHashMap<String, _NormalizedHtmlCacheEntry> _cache =
       LinkedHashMap();
 
-  /// 带缓存的 HTML 规范化，避免同一篇被翻译/摘要各解析一次
+  /// 带缓存的 HTML 规范化，避免同一篇被翻译/摘要各解析一次。
+  /// [feedUrl] 是主线程解析的原始 RSS 地址，不是文章原文链接。
   static String normalizeHtmlForEntry(
     String entryId,
     String rawHtml, {
     String? sourceUrl,
     String? feedId,
+    String? feedUrl,
     String? category,
   }) {
     final cached = _cache[entryId];
     final sourceDigest = sha256.convert(
       utf8.encode(
-        '${sourceUrl ?? ''}\u0000${feedId ?? ''}\u0000${category ?? ''}'
+        '${sourceUrl ?? ''}\u0000${feedId ?? ''}\u0000${feedUrl ?? ''}'
+        '\u0000${category ?? ''}'
         '\u0000$rawHtml',
       ),
     );
@@ -44,6 +47,7 @@ abstract final class ArticleContentUtils {
       rawHtml,
       sourceUrl: sourceUrl,
       feedId: feedId,
+      feedUrl: feedUrl,
       category: category,
     );
     _cache[entryId] = _NormalizedHtmlCacheEntry(sourceDigest, normalized);
@@ -92,6 +96,7 @@ abstract final class ArticleContentUtils {
     String rawHtml, {
     String? sourceUrl,
     String? feedId,
+    String? feedUrl,
     String? category,
   }) {
     final normalized = rawHtml.trim();
@@ -105,6 +110,7 @@ abstract final class ArticleContentUtils {
       fragment,
       sourceUrl: sourceUrl,
       feedId: feedId,
+      feedUrl: feedUrl,
       category: category,
     );
     _normalizeImages(fragment, sourceUrl: sourceUrl);

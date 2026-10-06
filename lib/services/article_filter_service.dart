@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/article.dart';
 import '../utils/article_content_utils.dart';
 import '../utils/storage.dart';
+import 'subscription_catalog_service.dart';
 import 'article_visual_context_service.dart';
 import 'llm_config.dart';
 import 'llm_failure_policy.dart';
@@ -84,6 +85,7 @@ abstract final class ArticleFilterService {
       article.content ?? '',
       sourceUrl: article.url,
       feedId: article.feedId,
+      feedUrl: SubscriptionCatalogService.feedUrlFor(article.feedId),
       category: article.category,
     );
     final textContent = htmlContent

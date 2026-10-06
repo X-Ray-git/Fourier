@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 import 'app_glass.dart';
+import 'diagnostic_overlay_marker.dart';
 
 enum FeedbackTone { info, success, warning, error }
 
@@ -53,8 +55,10 @@ abstract final class AppFeedback {
           child: FadeTransition(opacity: controller, child: child),
         );
       },
-      builder: (context) =>
-          _FeedbackToast(title: title, message: message, tone: tone),
+      builder: (context) => DiagnosticOverlayMarker(
+        kind: 'feedbackToast',
+        child: _FeedbackToast(title: title, message: message, tone: tone),
+      ),
     );
   }
 }

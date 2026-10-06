@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show ErrorWidget;
 import 'package:path_provider/path_provider.dart';
 
 /// Local, bounded diagnostics. Never records article text, URLs or exception
@@ -18,7 +19,15 @@ abstract final class UiDiagnosticService {
     _installed = true;
     final previousFlutter = FlutterError.onError;
     FlutterError.onError = (details) {
-      recordError('flutter', details.exception, details.stack);
+      _writer?.record(
+        uiErrorDiagnosticFields(
+          'flutter',
+          details.exception,
+          details.stack,
+          library: details.library,
+          context: details.context,
+        ),
+      );
       previousFlutter?.call(details);
     };
     final previousPlatform = PlatformDispatcher.instance.onError;
@@ -26,6 +35,19 @@ abstract final class UiDiagnosticService {
       recordError('platform', error, stack);
       // Preserve whether the existing handler considers the error handled.
       return previousPlatform?.call(error, stack) ?? false;
+    };
+    final previousErrorWidget = ErrorWidget.builder;
+    ErrorWidget.builder = (details) {
+      final fields = uiErrorDiagnosticFields(
+        'flutter',
+        details.exception,
+        details.stack,
+        library: details.library,
+        context: details.context,
+      );
+      fields.remove('stack');
+      _writer?.record({...fields, 'event': 'error_widget'});
+      return previousErrorWidget(details);
     };
     try {
       final support = await getApplicationSupportDirectory();
@@ -50,23 +72,60 @@ abstract final class UiDiagnosticService {
   }
 
   static void recordError(String source, Object error, StackTrace? stack) {
-    _writer?.record({
-      'event': 'error',
-      'source': source,
-      'type': error.runtimeType.toString(),
-      // Keep only Dart stack frames; omit absolute paths and arbitrary lines.
-      'stack': (stack ?? StackTrace.current)
-          .toString()
-          .split('\n')
-          .where(
-            (line) =>
-                line.startsWith('#') &&
-                (line.contains('package:') || line.contains('dart:')),
-          )
-          .take(40)
-          .toList(),
-    });
+    _writer?.record(uiErrorDiagnosticFields(source, error, stack));
   }
+
+  @visibleForTesting
+  static Future<void> flushForTesting() async => _writer?.flush();
+}
+
+/// Keep only framework phase/type identifiers, never the context description.
+/// Flutter's description can include Text contents, keys, URLs or credentials.
+@visibleForTesting
+Map<String, Object?> uiErrorDiagnosticFields(
+  String source,
+  Object error,
+  StackTrace? stack, {
+  String? library,
+  DiagnosticsNode? context,
+}) {
+  const libraries = {
+    'widgets library',
+    'rendering library',
+    'scheduler library',
+    'gestures library',
+    'painting library',
+    'services library',
+    'animation library',
+    'image resource service',
+  };
+  String? widgetType;
+  try {
+    if (library == 'widgets library') {
+      widgetType = RegExp(
+        r'^building ([A-Za-z_][A-Za-z0-9_]*)(?=[#(\[<\-\s]|$)',
+      ).firstMatch(context?.toDescription() ?? '')?.group(1);
+    }
+  } catch (_) {
+    // An invalid diagnostic node must not prevent the original error handler.
+  }
+  return {
+    'event': 'error',
+    'source': source,
+    'type': error.runtimeType.toString(),
+    if (libraries.contains(library)) 'library': library,
+    'widgetType': ?widgetType,
+    'stack': (stack ?? StackTrace.current)
+        .toString()
+        .split('\n')
+        .where(
+          (line) =>
+              line.startsWith('#') &&
+              (line.contains('package:') || line.contains('dart:')),
+        )
+        .take(40)
+        .toList(),
+  };
 }
 
 /// Serial writes and bounded pending work prevent error storms from creating

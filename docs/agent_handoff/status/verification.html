@@ -49,6 +49,22 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-06 Appinn 订阅源身份清理
+
+初始私有 Snow Shot 正文 **1/1** 复现旧文章域名遗漏：相同内容在主站删除、论坛保留。中间补论坛方案的 43 项正式与 1 项私有验证曾通过，但未提交发布，随后被用户批准的订阅源方案替代；不把中间结果当作最终实现。
+
+最终 **111/111 正式定向回归**通过：`article_content_utils`、`article_source_pipeline`、过滤服务、摘要多模态、翻译持久化、阅读正文/控制器生命周期、Markdown 导出、图片缓存、长度估算、订阅目录、legacy Readability 与微博显示规则共 13 个文件。本轮追加 7 项正式测试，覆盖 RSS 已确认时任意文章地址（含空地址）、未知/其他 RSS 时 Appinn 地址不能兜底、RSS 伪装域名/路径/协议反例、规范化缓存来源变化、名称和 feed ID 变化/移除/Inbox、实际阅读控制器 isolate 原文及已存译文、模拟过滤/摘要/翻译 HTTP 请求正文、批量导出主线程来源快照与长度缓存失效。原有完整/不完整声明、容器/裸节点、转义链接、正常 AI/OCR 和图片/链接、幂等性等测试继续通过。
+
+另有 **1/1 私有真实文章验证**：同源论坛文章删除完整注入，任意文章 URL 控制结果相同；缺少或错误 RSS 上下文时保留声明，证明旧文章域名条件已撤掉；原始 3 张图片全部保留。真实内容只位于忽略目录 scratch/appinn-snowshot-20261006，最新订阅资料从只读副本核对后删除副本，未调用真实 LLM、回写正式 Hive、清历史摘要/译文或关系。
+
+`dart analyze lib test` 无 error/warning，59 项既有 info；文档索引、59 页文档校验和 `git diff --check` 通过。日志位于 `/tmp/fourier-appinn-feed-tests.log`、`/tmp/fourier-appinn-feed-private-test.log`、`/tmp/fourier-appinn-feed-analyze.log`，不提交这些运行输出。用户确认看到的是摘要，10-05 22:23:01 已保存摘要需在含最终修复的新构建中手动重新生成；已安装 v2.5.1 尚无改动。来源代码独立提交为 `258a127`，配套文档与推送见 2026-10-06 批次；未构建安装或发布，应用内最终效果待新构建验收，详见[文章渲染](../features/article-rendering.html)。
+
+## 2026-10-05 白屏诊断补强验证
+
+新增 5 项正式回归，连同既有 UiDiagnosticWriter 共 **8/8**：组件类型提取排除正文/Key/URL/异常消息与泛型实参、未知 library/context 不落日志、Flutter/platform 原处理器继续调用且返回值保留、ErrorWidget 原 builder 外观保留、实际浮层挂载/重建/类型变化/卸载成对记录且无私有子文本。另有真实 AppFeedback + 嵌套 Navigator 60 次交错私有探针 **1/1** 未报错，结论是未复现而非修复白屏。静态无 error/warning、59 项既有 info，未重新全量测试、构建安装包或修改现场数据。
+
+现场证据：v2.5.1+42 在 macOS27.0.1 发生 Element.updateChildren `_TypeError`，同一次恢复未读成功后约 7.8ms；早前 173 次 Overlay/Offstage 命中失败。线程采样未示卡死，Cmd+1 从入口1切0而白屏不恢复；没有组件 context/默认错误 Widget 生成记录，无法精确定位。新埋点不回补旧日志，也不将 toast 的时间关联称为根因。详见[macOS 平台](../platforms/macos.html)。诊断代码独立提交为 `b119c2c`，配套文档和推送纳入 2026-10-06 批次；未发布，新构建现场验证待后续。
+
 ## 2026-10-03 macOS 侧栏焦点修复验证
 
 修改前独立真实 MacOSSidebar 探针 **1/1** 复现：静默组业务选中、全部文章取消业务选中，但后者仍持有传统模式键盘焦点，默认 focusColor 为灰色 `1f000000`。运行中正式实例 v2.5.1+42 没有焦点诊断接口/日志；不把这项受控复现写成读取到了用户现场，也未使用 computer use。

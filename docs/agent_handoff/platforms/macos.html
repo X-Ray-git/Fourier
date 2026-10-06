@@ -49,6 +49,27 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-05 v2.5.1 白屏再现：已捕获组件树更新异常
+
+用户保留“刚刚白屏”现场，要求共同排查；沿用不使用 computer use 的限制。核实 `/Applications/Fourier.app` 为 **2.5.1+42**，PID **14766** 自 10-03 22:33:40 运行；系统 **macOS 27.0.1 / 26A434**。此实例不含 10-03 尚未推送的持久正文/侧栏焦点修复。已保存 ui.jsonl/.previous、energy.jsonl/.previous、键盘测试后副本、5 秒线程 sample 与系统日志；分析账本仅打开复制文件，随后删除 Hive 副本。私有证据在忽略目录 `scratch/white-screen-20261005/`，不提交原始日志、真实文章或响应。
+
+用户明确本次红绿灯正常，浅色层后面直接透出其他软件；对上次背景的回忆不确定。不能套用旧记录“底下是仍正常操作的 Fourier”，也不能只凭外观断定是某个 tooltip 遮罩。Esc 一次无变化；Cmd+1 一次也无视觉恢复，但能耗日志从 11:48:13 的 sectionIndex=1 到 11:48:28 的 sectionIndex=0，证明切到全部文章的命令实际执行。线程 sample 中主线程及 raster/IO 线程等待事件；未发现该次进程退出、系统 Fault 或卡死证据。
+
+### 已保存的异常与时间关联（北京时间）
+
+- 两份 UI 日志中保留该 PID 的 175 条 error：173 条 `_TypeError` 为 11:35:53.154～11:35:55.476 的 `RenderBox.hitTest → RenderOffstage → Overlay` 命中测试异常；另有一条无栈网络资源异常。
+- **11:42:24.871761** 的 `_TypeError` 为 `Element.widget → Element.updateChildren → MultiChildRenderObjectElement.update → StatefulElement.performRebuild`。固定 Flutter 3.47.0 framework 源码中对应访问旧 child 的 `_widget!`；说明更新时存在已失效的 Element，尚不能辨认责任组件或最初何时损坏。framework 文件本机没有额外 diff；更广泛本机 SDK 历史改动不作为正式云端安装包的原因。
+- 账本显示 11:42:21.704 从审核移除一篇，21.906 打开后继，23.349 重新打开被移除篇；23.815 发出 `singleAction` 未读请求，24.864 成功，约 **7.8ms** 后出现上述构建异常。当前代码该来源的单篇未读请求来自 `UndoService._undoLastAction` 无详情控制器分支；可确认走了恢复/撤销链路，但不是物理按键记录，用户也记不清是否使用 Cmd+Z 或菜单。
+- 撤销成功随后调用 AppFeedback.success，时间与异常紧邻，因此全局提示更新是优先候选；不能将关联写成根因证明。现存日志没有该 PID 的 tooltip/selection 打开关闭事件，也不能由此排除未埋点的 toast、Navigator 或内置选择浮层。
+
+SDK 的组件重建错误路径会生成 ErrorWidget，正式模式默认 RenderErrorBox 浅灰、可阻挡命中，现象与此相符；**当前日志未记录 ErrorWidget 创建和上下文，具体失效组件仍未确诊**。系统日志没有补回该 Dart 上下文，进程 stdout/stderr 为 /dev/null。60 次嵌套 Navigator 替换与真实 AppFeedback 排队交错、鼠标命中探针未复现；本机测试也不替代干净发布 SDK/Release 环境复现。
+
+### 本轮诊断补强及边界
+
+UiDiagnosticService 增加经过白名单处理的 library 与构建 widgetType，只抽取框架组件类型，不保存原 context 描述（其中可能有正文、Key、URL 或凭据）；另外记录 `error_widget` 创建事件，并委托原 ErrorWidget.builder，保留外观及原 Flutter/platform 处理器的 handled 语义。共享 DiagnosticOverlayMarker 为真正挂载的全局 feedbackToast 记录成对打开/销毁 ID，排队而未挂载的不误记为已显示，重建不重复开项，强制卸载也能闭项。
+
+新增 5 项正式回归，连同既有诊断测试共 8 项通过；另有 1 项私有提示/导航探针通过（验证未复现，不是修复验证），静态无 error/warning，59 项既有 info。未修改默认错误外观、吞掉业务异常、自动重建根页面、安装新包或重启正式实例；白屏根因仍开放。现场数据已保存，无需用户长期保持白屏，可以本人正常 Cmd+Q 重启。新字段须运行含补强的新构建才生效；用户后续授权提交和推送，诊断代码独立提交为 `b119c2c`，配套文档纳入 2026-10-06 批次；未构建安装或发布，Git 状态见[当前状态](../status/current.html)。
+
 ## 2026-09-27 关系历史丢失：旧版误执行向下迁移
 
 用户明确从未手动清理关系/缓存，仅安装更新。只读批次记录显示 9/26 10:09、10:51 已使用 schema5；11:23:19.263 系统启动 /Applications/Fourier.app（PID8153），进程 Mach-O UUID 为 920E05F0-DC05-3CB2-B44D-F1527771D12A。从 GitHub 正式 v2.4.1 附件提取可执行文件，dwarfdump UUID 完全一致，故此次启动版本已确认为 v2.4.1，而非仅依据文件时间猜测。关系激活边界为 11:23:20.606，启动后约 1.4 秒；首条能耗记录 11:23:20.906 显示窗口尚不可见。v2.5.0 正式 Release 11:31:19 才发布，当前安装包 13:07:41～44 替换/启动，晚于数据重置。

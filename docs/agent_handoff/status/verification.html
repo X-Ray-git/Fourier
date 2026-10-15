@@ -49,6 +49,19 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-15 关系尾批调度回归
+
+先在旧生产代码运行新增“满批运行中收到一次空闲通知后处理完全部 500 篇”用例，按预期失败：只处理三个 128 篇批次，尾批未完成而超时。修复后 `article_relation_worker_test.dart`、`article_relation_service_test.dart`、`auto_ai_workers_test.dart`、`summary_multimodal_service_test.dart` 共 **47/47 通过**，其中新增 5 项正式调度回归：
+
+- 一次空闲通知覆盖 500 篇的 `[128,128,128,116]`，以及整倍数 384 篇的三个请求；完成后不产生额外请求。
+- 没有空闲通知时仍只处理满批，保留 116 篇尾批，不改变触发策略。
+- 空闲通知在实际取出尾批后消耗；尾批运行期间新增摘要不被旧通知继续冲刷，收到新通知后才处理。
+- 连续满批中的请求三次失败后停止、保留 pending 和成功历史，普通空闲通知不自动重试；明确手动重试后继续处理到尾批。
+
+测试用临时 Hive、合成摘要和 `debugRequestOverride`，不访问正式数据或真实 API；已有冷启动尾批保留、冷启动失败恢复等测试继续通过。`dart analyze lib test` 无 error/warning、59 项既有 info；Wiki 索引、59 页校验和 `git diff --check` 通过。运行输出在 `/tmp/fourier-relation-tail-red-20261015.log`、`/tmp/fourier-relation-tail-green-20261015.log`、`/tmp/fourier-relation-tail-analyze-20261015.log`，不提交。
+
+现场只读元数据支持同一调度缺口，详见[后台任务](../features/background-tasks.html)；未安装或操作新构建，也未处理正式库中的 116 篇。本轮未做平台构建或重复全量测试。后续正常摘要空闲后的真实尾批收敛按[待办](pending.html)观察，不能以单次冷启动作为自动排空验收。源码与测试独立提交为 `cd52b2e`，用户后续授权文档另批提交并一并推送，执行见[当前状态](current.html)；本次未发布。
+
 ## 2026-10-06 Appinn 订阅源身份清理
 
 初始私有 Snow Shot 正文 **1/1** 复现旧文章域名遗漏：相同内容在主站删除、论坛保留。中间补论坛方案的 43 项正式与 1 项私有验证曾通过，但未提交发布，随后被用户批准的订阅源方案替代；不把中间结果当作最终实现。

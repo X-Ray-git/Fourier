@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -375,6 +376,151 @@ void main() {
     expect(ArticleRelationService.historyCount, 1);
   });
 
+  for (final count in [500, 384]) {
+    test('满批运行中收到一次空闲通知后处理完全部 $count 篇', () async {
+      await _seedPending(count);
+      final started = Completer<void>();
+      final finishFirst = Completer<void>();
+      final sizes = <int>[];
+      ArticleRelationWorker.debugRequestOverride = (input) async {
+        sizes.add(input.newNodes.length);
+        if (sizes.length == 1) {
+          started.complete();
+          await finishFirst.future;
+        }
+        return const ArticleRelationApiResult(groups: []);
+      };
+      await ArticleRelationWorker.initialize();
+      await started.future;
+      ArticleRelationService.notifySummaryQueueIdle();
+      finishFirst.complete();
+      await _waitUntil(
+        () =>
+            ArticleRelationService.pendingCount == 0 &&
+            ArticleRelationWorker.processingCount.value == 0,
+      );
+      final expectedSizes = [128, 128, 128, if (count == 500) 116];
+      expect(sizes, expectedSizes);
+      expect(ArticleRelationService.historyCount, count);
+      expect(
+        ArticleRelationWorker.completedThisSession.value,
+        expectedSizes.length,
+      );
+      await _waitForMicrotasks();
+      expect(sizes, expectedSizes);
+    });
+  }
+
+  test('没有空闲通知时只处理满批，继续保留尾批', () async {
+    await _seedPending(500);
+    final sizes = <int>[];
+    ArticleRelationWorker.debugRequestOverride = (input) async {
+      sizes.add(input.newNodes.length);
+      return const ArticleRelationApiResult(groups: []);
+    };
+    await ArticleRelationWorker.initialize();
+    await _waitUntil(
+      () =>
+          ArticleRelationWorker.completedThisSession.value == 3 &&
+          ArticleRelationWorker.processingCount.value == 0,
+    );
+    expect(sizes, [128, 128, 128]);
+    expect(ArticleRelationService.pendingCount, 116);
+  });
+
+  test('空闲请求处理到尾批后结束，不冲刷尾批运行期间新增的摘要', () async {
+    await _seedPending(129);
+    final firstStarted = Completer<void>();
+    final finishFirst = Completer<void>();
+    final tailStarted = Completer<void>();
+    final finishTail = Completer<void>();
+    final sizes = <int>[];
+    ArticleRelationWorker.debugRequestOverride = (input) async {
+      sizes.add(input.newNodes.length);
+      if (sizes.length == 1) {
+        firstStarted.complete();
+        await finishFirst.future;
+      } else if (sizes.length == 2) {
+        tailStarted.complete();
+        await finishTail.future;
+      }
+      return const ArticleRelationApiResult(groups: []);
+    };
+    await ArticleRelationWorker.initialize();
+    await firstStarted.future;
+    ArticleRelationService.notifySummaryQueueIdle();
+    finishFirst.complete();
+    await tailStarted.future;
+    await ArticleRelationService.onSummaryCompleted(
+      _article('arrived-later'),
+      const SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '新摘要',
+        updatedAt: 2000,
+      ),
+    );
+    finishTail.complete();
+    await _waitUntil(
+      () =>
+          ArticleRelationWorker.completedThisSession.value == 2 &&
+          ArticleRelationWorker.processingCount.value == 0,
+    );
+    expect(sizes, [128, 1]);
+    expect(ArticleRelationService.pendingArticleIds, ['arrived-later']);
+    ArticleRelationService.notifySummaryQueueIdle();
+    await _waitUntil(
+      () =>
+          ArticleRelationService.pendingCount == 0 &&
+          ArticleRelationWorker.processingCount.value == 0,
+    );
+    expect(sizes, [128, 1, 1]);
+  });
+
+  test('连续满批失败后停止，空闲通知不重试，手动重试仍处理尾批', () async {
+    await _seedPending(500);
+    final started = Completer<void>();
+    final finishFirst = Completer<void>();
+    final sizes = <int>[];
+    var fail = true;
+    ArticleRelationWorker.debugRequestOverride = (input) async {
+      sizes.add(input.newNodes.length);
+      if (sizes.length == 1) {
+        started.complete();
+        await finishFirst.future;
+      } else if (fail) {
+        throw StateError('模拟关系请求失败');
+      }
+      return const ArticleRelationApiResult(groups: []);
+    };
+    await ArticleRelationWorker.initialize();
+    await started.future;
+    ArticleRelationService.notifySummaryQueueIdle();
+    finishFirst.complete();
+    await _waitUntil(
+      () =>
+          ArticleRelationWorker.failedThisSession.value == 1 &&
+          ArticleRelationWorker.processingCount.value == 0,
+      timeout: const Duration(seconds: 5),
+    );
+    expect(sizes, [128, 128, 128, 128]);
+    expect(ArticleRelationService.pendingCount, 372);
+    expect(ArticleRelationService.historyCount, 128);
+    ArticleRelationService.notifySummaryQueueIdle();
+    await _waitForMicrotasks();
+    expect(sizes, hasLength(4));
+    expect(ArticleRelationWorker.lastError.value, '模拟关系请求失败');
+    fail = false;
+    ArticleRelationWorker.retryPending();
+    await _waitUntil(
+      () =>
+          ArticleRelationService.pendingCount == 0 &&
+          ArticleRelationWorker.processingCount.value == 0,
+    );
+    expect(sizes, [128, 128, 128, 128, 128, 128, 116]);
+    expect(ArticleRelationService.historyCount, 500);
+    expect(ArticleRelationWorker.lastError.value, isNull);
+  });
+
   test('冷启动恢复失败状态后，空闲通知不能绕过手动重试', () async {
     await ArticleRelationService.resetForTest(activatedAt: 1);
     await ArticleRelationService.onSummaryCompleted(
@@ -433,13 +579,30 @@ ArticleModel _article(String id) {
 Future<void> _waitForMicrotasks() =>
     Future<void>.delayed(const Duration(milliseconds: 20));
 
-Future<void> _waitUntil(bool Function() condition) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 2));
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 2),
+}) async {
+  final deadline = DateTime.now().add(timeout);
   while (!condition()) {
     if (DateTime.now().isAfter(deadline)) {
       fail('等待关系 worker 完成超时');
     }
     await _waitForMicrotasks();
+  }
+}
+
+Future<void> _seedPending(int count) async {
+  await ArticleRelationService.resetForTest(activatedAt: 1);
+  for (var i = 0; i < count; i++) {
+    await ArticleRelationService.onSummaryCompleted(
+      _article('queued-$i'),
+      SummaryRecord(
+        status: SummaryStatus.done,
+        summaryText: '摘要 $i',
+        updatedAt: 1000 + i,
+      ),
+    );
   }
 }
 

@@ -152,22 +152,27 @@ abstract final class ArticleRelationWorker {
     if (_running) return;
     _running = true;
     final generation = _generation;
+    var flushPartial = false;
     try {
       while (generation == _generation && ArticleRelationService.isEnabled) {
-        final flushPartial = _flushPartialRequested;
+        flushPartial = flushPartial || _flushPartialRequested;
         _flushPartialRequested = false;
         final input = await ArticleRelationService.prepareNextBatch(
           flushPartial: flushPartial,
         );
         if (input == null) break;
+        // 空闲通知跨满批保留，直到真正取出尾批；不延伸到尾批运行期间新增的摘要。
+        flushPartial =
+            flushPartial &&
+            input.newNodes.length == ArticleRelationService.batchSize;
         final ok = await _runBatch(input, generation);
         if (!ok) break;
-        // 完整批次完成后立即消费下一批；不足 32 的尾批只在明确空闲时发车。
+        // 满批连续处理；不足一批时需要本轮保留的空闲通知或新通知。
         if (ArticleRelationService.pendingCount >=
             ArticleRelationService.batchSize) {
           continue;
         }
-        if (_flushPartialRequested) continue;
+        if (flushPartial || _flushPartialRequested) continue;
         break;
       }
     } finally {

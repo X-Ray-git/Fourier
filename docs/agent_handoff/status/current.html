@@ -49,6 +49,16 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-18 发布候选 v2.5.2
+
+用户明确授权维护文档、分批提交推送并发布 **v2.5.2**。对比 v2.5.1，本次包含持久正文显示/后台更新（`2ba76df`）、macOS 侧栏焦点（`a495bd8`）、Appinn 按订阅源清理（`258a127`）、关系尾批调度（`cd52b2e`）四项修复，以及白屏诊断补强（`b119c2c`）。10-18 再现证据与版本核验独立提交为 `18e5c03`，发布说明、验证边界及验收清单另批提交；真实日志、Hive 副本和临时脚本不进入仓库。
+
+本次按 Patch 发布，预计版本 `2.5.2+43`，由云端预检成功后更新 pubspec、历史和 annotated tag，不手工提前修改。代码与锁文件未新增变更，沿用已完成的各项定向回归及无 error/warning 的静态检查，文档重新生成索引并校验；完整云端预检仍执行全量测试、Android 冒烟与 macOS arm64 Release 编译。
+
+从干净 main 使用 `scripts/release.sh 2.5.2 --notes-file … --push` 启动[Publish Release 完整流程](https://github.com/X-Ray-git/Fourier/actions/workflows/publish-release.yml)，包括预检、版本/tag、Android/macOS 正式构建、Release 与 APK/arm64 ZIP/appcast 核验。确认 run 启动后返回链接，不持续等待；流程受理不代表已发布成功，最终以云端核验为准，不在预检期间继续推进 main。
+
+升级不清空文章/摘要/译文/关系，不修改 Prompt 或配置；已保存的小众软件污染摘要需升级后手动重新生成。白屏仅增强诊断，根因仍开放，不能宣传为已修复；正常摘要空闲后的尾批收敛、侧栏焦点和阅读页实际显示继续按[待办](pending.html)观察。当前正式实例不会由提交或 workflow 启动自动升级。
+
 ## 2026-10-18 白屏再现：运行版本与撤销时序确认
 
 当前正式进程仍为 v2.5.1+42、PID65883，10-15 启动；运行文件与 App.framework 字符串确认未含 10-06 已推送但未发布的诊断补强。GitHub Releases API 确认最新正式版也仍为 v2.5.1，用户没有漏装已发布的新版本。用户确认透出背后应用、看不到 Fourier 页面，并记得撤销。21:43:33 再次在恢复未读成功后 **7.666ms** 出现与 10-05 相同的组件树更新异常，撤销完成后的 UI/提示更值得优先检查，但 231 条命中测试异常早于撤销，具体责任组件仍未知。另有三条 Metal compiler XPC 连接异常，仅作线索，不认定 GPU 根因。

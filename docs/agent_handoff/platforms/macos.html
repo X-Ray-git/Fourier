@@ -49,6 +49,26 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-18 白屏再次出现：仍是未含补强诊断的 v2.5.1
+
+用户再次保留现场，并不确定是否安装了新构建。全程没有 computer use，也没有操作窗口、发送按键或重启应用。进程采样确认 `/Applications/Fourier.app` 正在运行 **2.5.1+42**、PID **65883**，启动于 10-15 13:07:51；系统仍为 **macOS 27.0.1 / 26A434**。运行中主二进制 UUID 与当前安装文件一致，为 `63E1F5BC-1F84-3967-B1EE-7CE03A76CBDD`；App.framework 中不存在 `error_widget`、`feedbackToast`、`widgetType` 三个新增诊断字符串。不能只凭版本号猜测是否包含本地同版本改动，本次二进制和日志共同确认尚无 `b119c2c` 补强。
+
+**10-06 诊断补强及 10-15 尾批修复均仅提交推送、没有发布。** 本轮通过 GitHub Releases API 核实最新正式版仍为 [v2.5.1](https://github.com/X-Ray-git/Fourier/releases/tag/v2.5.1)，发布时间为 10-03 02:11:29（北京时间）；用户没有漏装已发布的诊断新版。因此不是“安装了诊断新版仍拿不到字段”，也不能要求用户重装当前正式 v2.5.1 来获得这些字段。白屏诊断从未被宣称为根因修复。
+
+### 本次现场与时序（北京时间）
+
+用户确认红绿灯正常，窗口其余区域透出背后软件，看不到 Fourier 页面；记得白屏前执行过撤销。保存两份 UI/能耗日志、5 秒线程 sample、系统错误与 Metal 时段上下文，以及 analysisEvents 的只读副本元数据。四份诊断日志和账本复制前后 size/mtime 一致；只打开账本副本，不读凭据，不操作正式 Hive，导出仅保留事件类型/时间/来源/ID 等元数据，随后删除 Hive 副本及其锁文件。私有证据在忽略目录 `scratch/white-screen-20261018/`，不提交原始日志和真实文章资料。
+
+- 本进程的 248 条 UI 记录包含 233 条 error：231 条命中测试 `_TypeError`、1 条构建 `_TypeError`、1 条此前 18:32 的无栈图片 HTTP 错误；tooltip/selection 打开关闭均已配对。没有新诊断的责任组件类型或 `error_widget` 记录。
+- **21:42:39.897699～21:42:42.092481**，231 条 `RenderBox.hitTest → RenderOffstage → Overlay → MouseTracker`；首条之前 21:42:39.517 有文章打开。该异常簇早于下面撤销，不能把撤销说成唯一原始触发点。
+- **21:43:30.235** 标已读，30.496 记录审核 `m`，30.700 打开后继，31.616 已读请求成功；**32.238** 从 `singleAction` 发恢复未读，32.257 重新打开被移除文章，**33.551** 未读请求成功。
+- **21:43:33.558666** 发生 `Element.widget → Element.updateChildren:4201 → MultiChildRenderObjectElement.update → StatefulElement.performRebuild`，与 10-05 同一堆栈。距离撤销未读请求成功 **7.666ms**，上次为约 7.8ms；用户记忆与账本一致，使撤销完成后 UI 更新/成功提示成为更强候选，仍不能确认具体 Widget 或把 `AppFeedback` 定为根因。
+- **21:43:03.332** 另有三条 Metal compiler 的 `XPC_ERROR_CONNECTION_INVALID`，报告连接尝试 1/10 失败。它们早于构建异常约 30 秒；没有足够证据证明编译最终失败、GPU 故障或其导致白屏，保留为独立线索。
+
+进程仍存活，线程采样主线程主要等待事件，不支持进程整体卡死的判断。没有重复要求用户 Esc/Cmd+1：上次已验证命令可执行但不能恢复白屏，本次不靠重复操作补缺失的 Widget 上下文。取证完成后已告知可正常 Cmd+Q 重启，不必长期保持白屏。
+
+调查阶段仅取证和维护文档，没有新业务代码或 SDK 修改，也没有构建、安装或发布。下一步需要运行含 `b119c2c` 的构建，才可在再现时结合 `library/widgetType/error_widget` 与真实 feedbackToast 生命周期缩小责任组件；这些字段有助于定位，不保证必然一次确诊。用户随后明确授权维护文档、分批提交推送并发布 v2.5.2，执行状态见[当前状态](../status/current.html)；授权来自后续明确请求，而非本次最初的“看一下”。
+
 ## 2026-10-05 v2.5.1 白屏再现：已捕获组件树更新异常
 
 用户保留“刚刚白屏”现场，要求共同排查；沿用不使用 computer use 的限制。核实 `/Applications/Fourier.app` 为 **2.5.1+42**，PID **14766** 自 10-03 22:33:40 运行；系统 **macOS 27.0.1 / 26A434**。此实例不含 10-03 尚未推送的持久正文/侧栏焦点修复。已保存 ui.jsonl/.previous、energy.jsonl/.previous、键盘测试后副本、5 秒线程 sample 与系统日志；分析账本仅打开复制文件，随后删除 Hive 副本。私有证据在忽略目录 `scratch/white-screen-20261005/`，不提交原始日志、真实文章或响应。

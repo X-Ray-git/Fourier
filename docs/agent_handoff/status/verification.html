@@ -49,6 +49,12 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-18 白屏运行现场核验
+
+通过进程 sample、版本与运行/安装二进制 UUID、App.framework 字符串确认 v2.5.1+42 未包含 `b119c2c`；新诊断三字段均不存在，不能用本次现场评估补强效果。只读副本中本进程有 231 条 RenderBox/Overlay 命中异常与 1 条 Element.updateChildren 构建异常；账本恢复未读成功与构建异常相距 **7.666ms**。这与 10-05 的 7.8ms 构成重复时序证据，不构成成功复现具体 Widget 或修复证明。另保存三条 Metal compiler XPC 连接错误及上下文，未据此归因。
+
+无 computer use，无按键/窗口/正式数据操作，无 Folo/LLM 业务 API 请求或应用凭据读取；账本只打开副本，复制前后元数据稳定，提取后副本已删。另只读 GitHub Releases API 核实最新正式版仍为 v2.5.1、发布时间 10-03 02:11:29（北京时间），与安装版本一致。现场资料在忽略目录 `scratch/white-screen-20261018/`；本轮未改业务源码或 SDK、未跑新的 Flutter 测试或构建。文档索引及 59 页校验、diff 检查通过。具体证据和下一步边界见[macOS 平台](../platforms/macos.html)与[待办](pending.html)。
+
 ## 2026-10-15 关系尾批调度回归
 
 先在旧生产代码运行新增“满批运行中收到一次空闲通知后处理完全部 500 篇”用例，按预期失败：只处理三个 128 篇批次，尾批未完成而超时。修复后 `article_relation_worker_test.dart`、`article_relation_service_test.dart`、`auto_ai_workers_test.dart`、`summary_multimodal_service_test.dart` 共 **47/47 通过**，其中新增 5 项正式调度回归：

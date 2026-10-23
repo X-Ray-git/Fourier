@@ -48,6 +48,24 @@
   <nav id="wiki-toc" class="wiki-toc" aria-label="本页目录"></nav>
 </div>
 <script type="text/markdown" id="wiki-content">
+
+## 2026-10-22 阅读页横滑启动延迟
+
+用户使用顺序为打开文章、阅读、点击右下角已读、右向左横滑下一篇，报告动画开始前有不到一秒的迟滞，开始后流畅；未严格对照是否与已读有关。无连接的 Android 真机，本次未声称定位手机上的唯一根因，也未使用 computer use。
+
+代码及简化测试确认两个风险：原 `PageView.builder(allowImplicitScrolling: true)` 在 A→B 刚出现位移时即创建 C；全文清理/分块在 isolate，但 `Column` 的全部内容块构建、布局仍在主线程。已读更新还会经全局通知重复进入时间线筛选、排序和统计。网络同步不阻止翻页；简化测试中 SelectionArea 开关没有改变拖动响应。原有移动端 350ms 正文构建延迟不等于翻页固定等待。
+
+实现：
+
+- `SettledArticlePager` 保留原生 PageView 手势/physics。静止时准备当前及相邻页；横滑中，超出上次静止范围的缓存页只放占位，不创建 ArticlePageView/controller。真正可见页始终可以创建，兼容快速连续翻页。
+- 以顶层 `ScrollEndNotification` 为准，等末帧绘制后的 post-frame 才开放新邻页；不把中途 `onPageChanged` 当结束。新一轮滚动或 dispose 会使旧回调失效。震动反馈也改到停稳后，打开/阅读历史仍按实际 pageChanged 记录，预构建不记录阅读。
+- 已创建页保持自己的正文、选择、滚动状态；首次正文渲染若碰上横滑，等停稳再排版，已显示正文不隐藏。极速连续滑到尚未准备的正文时可能短暂显示已有排版占位。这是避免拖动中首次全文排版的取舍，并不保证所有文章毫秒级就绪。
+- 共用时间线同步先比较持久字段；状态与内存一致时不重复分配列表、排序/统计。全局通知保留供摘要/关系/其他页面使用，真正正文、过滤、已读变更仍同步。macOS 分栏不使用此 pager，原卡片退出延后更新和撤销机制保留。
+- 没有改为正文虚拟列表，没有调整模型/API、正式数据、手势阈值或翻页动画曲线。全文首次布局开销仍存在，实际收益需要真机验证。
+
+诊断构建可加 `--dart-define=FOURIER_READER_PERF=true`，复用有界 `diagnostics/ui.jsonl` 写 `reader_timing`，不含文章 ID/正文/URL。`pointer_to_scroll` 是触点到首次滚动通知（包含手势阈值及用户移动时间，并非纯阻塞耗时），`first_scroll_to_frame_end` 是首次位移通知至帧尾，`first_body_to_frame_end` 是首次正文构建入口至帧尾（不是单块或纯布局耗时），`read_local_update` 是本地时间线可视状态更新阶段；默认关闭，不将无日志误解为无延迟。
+
+
 # Android 说明
 
 Android 正在按现有 macOS 设计语言做类比迁移，但不是照搬 AppKit 实现。

@@ -49,6 +49,39 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-24 v2.5.3 发布前应用构建核验
+
+在既有 34 项定向回归与静态检查通过的基础上，针对隔离探针的 AOT 疑点额外执行 `flutter build macos --release --no-pub`：**通过**，Fourier.app 35.2MB，`lipo -archs` 确认为 arm64。本次构建使用工作区最终源码，版本元数据尚为同步前版本；正式 `2.5.3+44` 由云端准备后重新编译。没有安装、启动或替换用户运行实例。
+
+构建输出仍有 CoreSimulator 版本不一致提示和依赖弃用警告，但未阻挡 macOS 编译。本次没有修改环境或把它们当成白屏根因。较大隔离压力探针仍未编译/运行成功；正式应用通过只能排除“该失败必然阻挡本次应用构建”，不能将压力复现写为通过。日志保存在忽略目录 `scratch/white-screen-20261024/diagnostic-verification/v253-app-release-build.log`。
+
+发布继续由完整云端流程执行静态、全量测试、Android 冒烟及 macOS Release 预检；本地通过不预先等同于云端成功。文档重新生成索引并检查，运行体验待办不因提交/发布而关闭。
+
+
+## 2026-10-24 新诊断的 release 验证
+
+`ui_incident_trace_test`、`ui_diagnostic_service_test`、`diagnostic_overlay_marker_test`、`feedback_toast_lifecycle_test`、`main_controller_test`、`undo_action_test`、`article_detail_navigation_test`、`mac_article_shortcut_service_test`、`timeline_read_update_test`、`settled_article_pager_test` 合计 **34 项通过**；静态检查无 error/warning，59 项既有 info。覆盖事件容量/去重/首份快照保持、原处理器语义、隐私排除、真实提示排队/提前关闭及页面重建，未复现生产白屏。
+
+独立 macOS AOT release 小程序实际运行并自动退出，确认 kReleaseMode=true、请求关联、runtimeType 与 Overlay 祖先实例身份、elementType=StatelessElement，以及异常前奏和私有文字排除。其异常为主动构造，仅验证诊断。更大的 release 复现探针在 AOT snapshotter 以 _Rect illegal cid 失败；最小无业务代码应用及纯诊断应用成功，因此不能把全部 release 验证写成通过或把失败归因为这次诊断代码。未升级/修补全局环境。原始验证输出保存在 scratch/white-screen-20261024/diagnostic-verification/。
+
+
+
+## 2026-10-24 白屏现场核验
+
+只读核实进程和安装版本均为 v2.5.2+43、App.framework UUID 相同、新诊断字符串及实际日志均存在。UI 日志 170 条（133 error、4 error_widget），结合能耗、5 秒线程采样和只读账本副本对齐时间。四份日志及两次账本复制 size/mtime 稳定，所有 Hive 副本已删除；不含凭据读取、业务 API、computer use 或现场按键操作。
+
+新增证据为 `_OverlayEntryWidgetState.initState:392` 空值异常及实际 ErrorWidget 创建；对照固定 Flutter revision 源码确认行义，而非仅依赖可能含本地修改的 SDK 工作区。widgetType=Instance 暴露 release 格式盲点，不能称所有诊断已满足目标。没有本轮业务源码改动，因此未重新运行 Flutter 测试/构建；文档索引与校验另行完成。具体时序和证据边界见 [macOS 说明](../platforms/macos.html)。
+
+
+
+## 2026-10-22 Android 阅读横滑优化验证
+
+新增分页 widget 测试覆盖正向、反向、取消、快速跨页、吸附完成后预构建、拖动中退出及准备 scope 的启闭；新增时间线测试确认一次已读只更新一次列表，重复通知不重建，真实正文/过滤变更及未读恢复继续传播。与持久正文、撤销、静默范围及 UI 诊断回归合计 28 项通过。静态检查无 error/warning，59 项既有 info。
+
+测试使用合成页面和临时 Hive，不读取真实凭据、不调用业务 API。没有 Android 设备连接；测试证明调度和状态一致性，不代表真实设备的耗时改进或动画观感已经验收。原简化诊断脚本保留在忽略目录 `scratch/android-pager-20261022/`。
+
+
+
 ## 2026-10-18 v2.5.2 发布候选验证边界
 
 应用代码自最后一次关系尾批修复验证后未再变化，本轮只整理现场与发布文档。沿用各项已有定向证据：持久正文 22 项、侧栏焦点及范围/快捷键 11 项、Appinn 来源链路 111 项、白屏诊断 8 项、关系与摘要队列 47 项；这些用例集合有重叠，不相加冒充本轮全量测试。既有静态检查无 error/warning、59 项 info。白屏探针未复现，不写成修复通过；实际升级验收仍待运行新构建。

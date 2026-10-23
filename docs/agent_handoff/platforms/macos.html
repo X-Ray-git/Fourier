@@ -49,6 +49,49 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-24 后续诊断补强与隔离验证（未发布）
+
+用户在确认白屏尚未定位后授权继续推进。此次修正的是诊断盲点，不宣称修复白屏，不修改撤销、提示动画、框架错误外观或吞掉异常。
+
+- `uiErrorDiagnosticFields` 不再把 release 的 `building Instance of 'StatelessElement/StatefulElement'` 误标为 Widget 名称。保留可确定的 `elementType`，缺少具体责任 Widget 时省略 widgetType；不能从不存在的信息推断真实组件。
+- `DiagnosticOverlayMarker` 在实际挂载时直接记录 `child.runtimeType`、请求编号，以及最多 12 层祖先的组件类型与进程内 `identityHashCode(element)`。这些是**挂载时**的结构化身份，不依赖 debug toString，也不保存 Key、文章 ID、提示文字、URL。它们为活动提示组件提供上下文，不等于错误处理器已经获得最早失败组件的引用。
+- AppFeedback 为每次调用建立 requestId，最多记录三个应用代码调用栈位置作为来源；`feedback_request → builder → overlay_open/close → dismissCallback/completed` 用同一个 requestId 串联。请求可能排队或被库抑制，builder 不等于已挂载，completed/onDismiss 不等于 OverlayEntry 已销毁；实际 marker 的 close 才表示该组件卸载。没有侵入 SmartDialog 私有实现，不能把外部生命周期当作内部 Entry.remove/dispose 的直接探针。
+- `UiIncidentTrace` 在内存保留最近 64 个固定动作/浮层事件及最多 32 个活动浮层；加入刷新开始/结束、撤销/重做请求、主分区切换、文章视图挂载/卸载。收到框架/平台异常或 ErrorWidget 时保存事件前奏及活动浮层到独立 `diagnostics/ui-incidents.jsonl`。同一错误签名每分钟最多一份，最多保留 16 个签名；新阶段可以立即另存，避免把后续初始化/构建错误与首次命中错误混为一谈。文件采用现有串行写入和有界排队，256KiB 轮转并保留 previous；旧 ui.jsonl 的 512KiB 轮转保持。
+- 原 Flutter/platform 错误处理器、handled 返回值与 ErrorWidget.builder 仍被调用；不自动重建根界面、不隐藏错误、不改变提示展示时长和样式。所有新增日志默认生效，无需开启 Android 的可选性能开关。
+
+验证：新增/扩展诊断、快照边界、隐私、实际 AppFeedback 排队与提前关闭、页面重建测试；连同导航、撤销及前轮 Android 状态回归共 **34 项通过**，静态无 error/warning、59 项既有 info。实际 AppFeedback 的 widget 隔离测试未复现白屏，不能当作根因已修复。
+
+为避免重复“只在 debug 下验证”的问题，建立独立标识 `dev.fourier.diagnostics` 的临时 macOS 工程，仅合成内容、独立 `/tmp` 日志、不调用正式 main/Hive/API、不安装到 Applications。**实际 AOT release 诊断小程序运行成功并自动退出**：`kReleaseMode=true`，取得结构化 `ValueListenableBuilder<bool>` 与 `_OverlayEntryWidget`/`_Theater` 祖先实例编号，故意触发的异常记录 `elementType=StatelessElement` 且没有伪 widgetType=Instance；异常前奏/活动浮层齐全，PRIVATE 测试文字和 URL 不进入日志。故意触发的局部异常只是验证记录链路，不是生产白屏复现。
+
+验证局限：更大的 SmartDialog/页面重建 release 压力程序在本机 AOT snapshotter 阶段报 `Unexpected object (Class with illegal cid, full-aot): ... _window_macos.dart ... _Rect`，未运行。无 Fourier 代码的最小 MaterialApp 和纯诊断程序可以构建；临时工程换用从固定 revision `4cf2416` 导出的干净 Flutter framework 后，大探针仍失败，因此未将其归因为本机 SDK 修改，也未据此声称正式 Fourier 编译失败。Xcode 同时输出 CoreSimulator 版本提示，但没有阻止成功的 macOS 小程序构建。未修改全局 SDK/Xcode/依赖版本，正式应用全量 Release 仍由后续发布预检确认。
+
+证据：`scratch/white-screen-20261024/diagnostic-verification/`（测试、静态、编译日志、实际 release result.json 与合成错误日志），临时源程序在同目录上级 `release_probe/`；均忽略，不提交。当前没有可验证的白屏根因修复，后续结合新版本现场继续定位，优先使用请求来源和浮层实例关系区分起因与连锁后果。
+
+
+
+## 2026-10-24 v2.5.2 白屏现场：新增诊断生效，但组件名称存在发布模式盲点
+
+用户保留现场并确认红绿灯正常、其他区域透出背后软件，不记得是否撤销。只读检查确认运行 `/Applications/Fourier.app` **2.5.2+43**，PID **73672** 自 **10-20 12:20:00** 启动，系统 **macOS 27.0.1 / 26A434**。进程 sample 的 App.framework UUID 与安装文件均为 `C89BCB22-8746-D1AB-E7CA-C84DCC5EE371`；二进制含 `error_widget`、`feedbackToast`、`widgetType`，本进程日志也实际出现这些字段。此次确实在运行诊断新版；不要再归因为漏装新版本。
+
+保存 UI/能耗日志各两份、5 秒 sample、限定时间的系统错误日志、分析账本副本元数据。只打开复制的 `analysisEvents`，分别提取近场及扩展窗口，随后删除所有 Hive 副本；日志及两次账本复制的 size/mtime 前后一致。证据在忽略目录 `scratch/white-screen-20261024/`，含 `incident-summary.json` 与去正文的 `recent-article-events.json`。未使用 computer use，没有发送按键、改变窗口、读取凭据、调用业务 API、打开正式 Hive 或重启应用。
+
+时间均为北京时间：
+
+- 本进程保留的 UI 记录 170 条：133 条 error、4 条 error_widget、16 对浮层打开/关闭以及 session_start。
+- **10-23 23:56:13.100–23:56:15.508**：126 条 `RenderBox.hitTest → RenderOffstage → Overlay/MouseTracker` 错误；与 feedbackToast **#14** 的挂载 **23:56:13.096951** 至销毁 **23:56:15.507795** 基本重合。此前 #13 也已正常销毁。说明提示层是重点调查对象，但日志重合不证明提示组件是起因。
+- **10-24 00:10:19.938**：feeds 快照完成。**00:10:20.490860**：`Element.widget → Element.updateChildren:4201 → MultiChildRenderObjectElement.update` 抛 `_TypeError`，紧随 `error_widget`。这与 10-05/10-18 的首个构建栈一致。
+- **00:10:22.566840**：新增 `_OverlayEntryWidgetState.initState:392` 空值异常；按发布使用的 Flutter revision `4cf2416` 核对，此行为 `widget.entry._overlayEntryStateNotifier!.value = this`。它指向已经被销毁/失效的 OverlayEntry 再次初始化，但晚于首个构建错误约 2 秒，可能是连锁后果，不能反推为最早起因。
+- 随后有 3 条 SelectionContainer 坐标转换异常、2 条 `_OverlayEntryWidgetState.build` 的 LateError。feedbackToast **#16** 实际挂载 **00:10:22.686289**、销毁 **00:10:24.763168**；销毁后仍有 ErrorWidget，用户仍见白屏。不是已证明某条 Toast 永久未关闭。
+- 扩展账本 **23:55–00:12** 没有恢复未读/撤销对应的事件；靠近首个构建错误的是刷新结束，不是之前两次的撤销同步成功。不能将撤销视为必要条件，也不能仅凭刷新先后认定刷新为根因。能耗日志 sectionIndex=1，符合垃圾审查页面；采样主线程等待事件，CPU 在异常期后回落。限定窗口系统 error/fault 查询无记录，不等于排除所有图形故障。
+
+白屏外观的较强解释：Flutter 发布模式 RenderErrorBox 默认颜色为 `0xF0C0C0C0`（浅灰且略透明），结合本次实际 error_widget 和仍存活的事件循环，与用户现象一致；没有屏幕/渲染树直接取证，仍标为推断，不称已证明具体哪层覆盖。
+
+**诊断缺口已确认**：四条构建记录的 `widgetType` 均为 `Instance`。现有提取正则基于 `ErrorDescription('building $this')` 的 debug 格式；release 的 Element 字符串退化为 `Instance of ...`，正则截到了无意义的 Instance。堆栈、library、error_widget 及浮层生命周期有效，责任 Widget 类型仍缺失。后续不能只改正则就宣称能恢复 Widget 名称（release context 本身不含该信息），需要发布模式可用的结构化上下文/局部生命周期证据，并以 release/profile 验证；既有仅 debug 的字符串单测不覆盖此限制。
+
+本轮只调查和记录，无新增源码/SDK 修改，没有再次盲测 Esc/Cmd+1，也没有发布。已告知现场保存后可自行 Cmd+Q 重启；后续优先围绕提示层/OverlayEntry 的挂载销毁和界面树更新做隔离复现，区分首错与恢复失败，不直接删除动画、修改撤销或把诊断当修复。此前 Android 优化的未提交代码保留不动，且不在本机运行的 v2.5.2 内。
+
+
+
 ## 2026-10-18 白屏再次出现：仍是未含补强诊断的 v2.5.1
 
 用户再次保留现场，并不确定是否安装了新构建。全程没有 computer use，也没有操作窗口、发送按键或重启应用。进程采样确认 `/Applications/Fourier.app` 正在运行 **2.5.1+42**、PID **65883**，启动于 10-15 13:07:51；系统仍为 **macOS 27.0.1 / 26A434**。运行中主二进制 UUID 与当前安装文件一致，为 `63E1F5BC-1F84-3967-B1EE-7CE03A76CBDD`；App.framework 中不存在 `error_widget`、`feedbackToast`、`widgetType` 三个新增诊断字符串。不能只凭版本号猜测是否包含本地同版本改动，本次二进制和日志共同确认尚无 `b119c2c` 补强。

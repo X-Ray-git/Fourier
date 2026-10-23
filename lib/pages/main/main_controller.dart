@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 
 import '../timeline/timeline_controller.dart';
+import '../../services/ui_diagnostic_service.dart';
 
 class MainController extends GetxController {
   final currentIndex = 0.obs;
@@ -32,6 +33,10 @@ class MainController extends GetxController {
     if (currentIndex.value == 0) {
       _timelineSourceReturn = null;
     }
+    UiDiagnosticService.action(
+      UiDiagnosticAction.sectionChanged,
+      section: index,
+    );
     currentIndex.value = index;
     _lastTimelineNavTapAt = index == 0 ? now : null;
   }
@@ -44,6 +49,10 @@ class MainController extends GetxController {
         Get.find<TimelineController>().silentBatchProcessing.value) {
       return;
     }
+    UiDiagnosticService.action(
+      UiDiagnosticAction.sectionChanged,
+      section: index,
+    );
     currentIndex.value = index;
     _lastTimelineNavTapAt = null;
   }

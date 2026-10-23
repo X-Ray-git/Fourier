@@ -150,6 +150,7 @@ class TimelineController extends GetxController {
 
     final accountRevision = AccountSessionGuard.revision;
     isSyncing.value = true;
+    UiDiagnosticService.action(UiDiagnosticAction.refreshStart);
     try {
       final catalogResult = await SubscriptionCatalogService.sync();
       if (!AccountSessionGuard.isCurrent(accountRevision)) return;
@@ -170,6 +171,7 @@ class TimelineController extends GetxController {
         AppFeedback.success('已刷新', '$count 篇未读');
       }
     } finally {
+      UiDiagnosticService.action(UiDiagnosticAction.refreshEnd);
       isSyncing.value = false;
       if (_reloadAfterAccountChange) {
         _reloadAfterAccountChange = false;

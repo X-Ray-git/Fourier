@@ -6,20 +6,35 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show ErrorWidget;
 import 'package:path_provider/path_provider.dart';
 
+import 'ui_incident_trace.dart';
+
+enum UiDiagnosticAction {
+  refreshStart,
+  refreshEnd,
+  undoRequested,
+  redoRequested,
+  sectionChanged,
+  articleMounted,
+  articleDisposed,
+}
+
 /// Local, bounded diagnostics. Never records article text, URLs or exception
 /// messages: stack locations and overlay identities are sufficient to locate
 /// failing builders without copying user content into the log.
 abstract final class UiDiagnosticService {
   static UiDiagnosticWriter? _writer;
+  static UiDiagnosticWriter? _incidentWriter;
+  static final _trace = UiIncidentTrace();
   static bool _installed = false;
   static int _nextOverlay = 0;
+  static int _nextRequest = 0;
 
   static Future<void> initialize() async {
     if (_installed) return;
     _installed = true;
     final previousFlutter = FlutterError.onError;
     FlutterError.onError = (details) {
-      _writer?.record(
+      _recordError(
         uiErrorDiagnosticFields(
           'flutter',
           details.exception,
@@ -46,13 +61,17 @@ abstract final class UiDiagnosticService {
         context: details.context,
       );
       fields.remove('stack');
-      _writer?.record({...fields, 'event': 'error_widget'});
+      _recordError({...fields, 'event': 'error_widget'});
       return previousErrorWidget(details);
     };
     try {
       final support = await getApplicationSupportDirectory();
       _writer = UiDiagnosticWriter(
         File('${support.path}/diagnostics/ui.jsonl'),
+      );
+      _incidentWriter = UiDiagnosticWriter(
+        File('${support.path}/diagnostics/ui-incidents.jsonl'),
+        maxBytes: 256 * 1024,
       );
       _writer!.record({'event': 'session_start'});
     } catch (_) {
@@ -71,23 +90,88 @@ abstract final class UiDiagnosticService {
     });
   }
 
-  static int overlayOpened(String kind) {
+  static void action(UiDiagnosticAction action, {int? section}) {
+    _trace.record({
+      'event': 'action',
+      'action': action.name,
+      'section': ?section,
+    });
+  }
+
+  static int feedbackRequested() {
+    final id = ++_nextRequest;
+    final caller = StackTrace.current
+        .toString()
+        .split('\n')
+        .where(
+          (line) =>
+              line.contains('package:fourier/') &&
+              !line.contains('/ui_diagnostic_service.dart:') &&
+              !line.contains('/feedback_toast.dart:'),
+        )
+        .take(3)
+        .toList();
+    _event({'event': 'feedback_request', 'requestId': id, 'caller': caller});
+    return id;
+  }
+
+  static void feedbackPhase(int requestId, String phase) {
+    _event({'event': 'feedback_phase', 'requestId': requestId, 'phase': phase});
+  }
+
+  static void _event(Map<String, Object?> fields) {
+    _trace.record(fields);
+    _writer?.record(fields);
+  }
+
+  static int overlayOpened(
+    String kind, {
+    int? requestId,
+    String? component,
+    List<Map<String, Object?>>? ancestors,
+  }) {
     final id = ++_nextOverlay;
-    _writer?.record({'event': 'overlay_open', 'kind': kind, 'id': id});
+    final fields = {
+      'kind': kind,
+      'requestId': ?requestId,
+      'component': ?component,
+      'ancestors': ?ancestors,
+    };
+    _trace.opened(id, fields);
+    _event({'event': 'overlay_open', ...fields, 'id': id});
     return id;
   }
 
   static void overlayClosed(String kind, int? id) {
     if (id == null) return;
-    _writer?.record({'event': 'overlay_close', 'kind': kind, 'id': id});
+    _trace.closed(id);
+    _event({'event': 'overlay_close', 'kind': kind, 'id': id});
   }
 
   static void recordError(String source, Object error, StackTrace? stack) {
-    _writer?.record(uiErrorDiagnosticFields(source, error, stack));
+    _recordError(uiErrorDiagnosticFields(source, error, stack));
+  }
+
+  static void _recordError(Map<String, Object?> fields) {
+    final stack = fields['stack'] as List<String>?;
+    final signature =
+        '${fields['event']}/${fields['library']}/${fields['type']}/${stack?.firstOrNull}';
+    final prelude = _trace.incident(signature);
+    if (prelude != null) {
+      _incidentWriter?.record({
+        'event': 'ui_incident',
+        'error': fields,
+        ...prelude,
+      });
+    }
+    _writer?.record(fields);
   }
 
   @visibleForTesting
-  static Future<void> flushForTesting() async => _writer?.flush();
+  static Future<void> flushForTesting() async {
+    await _writer?.flush();
+    await _incidentWriter?.flush();
+  }
 }
 
 /// Keep only framework phase/type identifiers, never the context description.
@@ -111,11 +195,17 @@ Map<String, Object?> uiErrorDiagnosticFields(
     'image resource service',
   };
   String? widgetType;
+  String? elementType;
   try {
     if (library == 'widgets library') {
+      final description = context?.toDescription() ?? '';
+      elementType = RegExp(
+        r"^building Instance of '([A-Za-z_][A-Za-z0-9_]*Element)'$",
+      ).firstMatch(description)?.group(1);
       widgetType = RegExp(
         r'^building ([A-Za-z_][A-Za-z0-9_]*)(?=[#(\[<\-\s]|$)',
-      ).firstMatch(context?.toDescription() ?? '')?.group(1);
+      ).firstMatch(description)?.group(1);
+      if (widgetType == 'Instance') widgetType = null;
     }
   } catch (_) {
     // An invalid diagnostic node must not prevent the original error handler.
@@ -126,6 +216,7 @@ Map<String, Object?> uiErrorDiagnosticFields(
     'type': error.runtimeType.toString(),
     if (libraries.contains(library)) 'library': library,
     'widgetType': ?widgetType,
+    'elementType': ?elementType,
     'stack': (stack ?? StackTrace.current)
         .toString()
         .split('\n')

@@ -18,6 +18,7 @@ import 'bounded_history.dart';
 import 'local_article_db_service.dart';
 import 'read_sync_service.dart';
 import 'account_session_guard.dart';
+import 'ui_diagnostic_service.dart';
 
 enum UndoActionType {
   read,
@@ -589,6 +590,7 @@ class UndoService {
   }
 
   static Future<ArticleModel?> undoLastAction() {
+    UiDiagnosticService.action(UiDiagnosticAction.undoRequested);
     return _enqueueOperation(_undoLastAction);
   }
 
@@ -727,6 +729,7 @@ class UndoService {
   }
 
   static Future<ArticleModel?> redoLastAction() {
+    UiDiagnosticService.action(UiDiagnosticAction.redoRequested);
     return _enqueueOperation(_redoLastAction);
   }
 

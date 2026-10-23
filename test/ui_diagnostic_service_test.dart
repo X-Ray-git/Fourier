@@ -107,6 +107,18 @@ void main() {
     }
   });
 
+  test('release Element description is not mislabelled as a widget', () {
+    final fields = uiErrorDiagnosticFields(
+      'flutter',
+      StateError('PRIVATE'),
+      null,
+      library: 'widgets library',
+      context: ErrorDescription("building Instance of 'StatefulElement'"),
+    );
+    expect(fields.containsKey('widgetType'), false);
+    expect(fields['elementType'], 'StatefulElement');
+  });
+
   test('unknown libraries and non-build descriptions are not recorded', () {
     final fields = uiErrorDiagnosticFields(
       'flutter',
@@ -144,6 +156,14 @@ void main() {
       };
       try {
         await UiDiagnosticService.initialize();
+        final requestId = UiDiagnosticService.feedbackRequested();
+        UiDiagnosticService.feedbackPhase(requestId, 'builder');
+        final overlayId = UiDiagnosticService.overlayOpened(
+          'feedbackToast',
+          requestId: requestId,
+          component: 'FeedbackToast',
+        );
+        UiDiagnosticService.action(UiDiagnosticAction.refreshEnd);
         final details = FlutterErrorDetails(
           exception: StateError('PRIVATE_MESSAGE'),
           library: 'widgets library',
@@ -185,6 +205,18 @@ void main() {
         );
         expect(rows.where((row) => row['event'] == 'error').length, 3);
         expect(text, isNot(contains('PRIVATE_MESSAGE')));
+        final incidentText = await File(
+          '${directory.path}/diagnostics/ui-incidents.jsonl',
+        ).readAsString();
+        final incident = jsonDecode(incidentText.split('\n').first) as Map;
+        expect(
+          (incident['activeOverlays'] as List).single['requestId'],
+          requestId,
+        );
+        expect((incident['recent'] as List).last['action'], 'refreshEnd');
+        expect(incidentText, isNot(contains('PRIVATE_MESSAGE')));
+        UiDiagnosticService.overlayClosed('feedbackToast', overlayId);
+        await UiDiagnosticService.flushForTesting();
       } finally {
         FlutterError.onError = previousFlutter;
         PlatformDispatcher.instance.onError = previousPlatform;

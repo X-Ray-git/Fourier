@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 import 'app_glass.dart';
 import 'diagnostic_overlay_marker.dart';
+import '../../services/ui_diagnostic_service.dart';
 
 enum FeedbackTone { info, success, warning, error }
 
@@ -31,13 +33,16 @@ abstract final class AppFeedback {
     required String message,
     required FeedbackTone tone,
   }) {
-    SmartDialog.showToast(
+    final requestId = UiDiagnosticService.feedbackRequested();
+    final completion = SmartDialog.showToast(
       '',
       displayTime: const Duration(milliseconds: 2000),
       alignment: Alignment.topCenter,
       clickMaskDismiss: false,
       usePenetrate: true,
       consumeEvent: false,
+      onDismiss: () =>
+          UiDiagnosticService.feedbackPhase(requestId, 'dismissCallback'),
       // 增加顺畅的位移与淡入淡出（Slide & Fade）组合动画
       animationBuilder: (controller, child, animationParam) {
         return SlideTransition(
@@ -55,10 +60,21 @@ abstract final class AppFeedback {
           child: FadeTransition(opacity: controller, child: child),
         );
       },
-      builder: (context) => DiagnosticOverlayMarker(
-        kind: 'feedbackToast',
-        child: _FeedbackToast(title: title, message: message, tone: tone),
-      ),
+      builder: (context) {
+        UiDiagnosticService.feedbackPhase(requestId, 'builder');
+        return DiagnosticOverlayMarker(
+          kind: 'feedbackToast',
+          requestId: requestId,
+          child: _FeedbackToast(title: title, message: message, tone: tone),
+        );
+      },
+    );
+    // A completed request is not proof that its OverlayEntry was disposed.
+    // Actual mount/unmount is recorded separately by DiagnosticOverlayMarker.
+    unawaited(
+      completion.then((_) {
+        UiDiagnosticService.feedbackPhase(requestId, 'completed');
+      }),
     );
   }
 }

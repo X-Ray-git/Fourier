@@ -23,6 +23,7 @@ void main() {
         await tester.runAsync(UiDiagnosticService.initialize);
         Widget marker(String kind, String label) => DiagnosticOverlayMarker(
           kind: kind,
+          requestId: 17,
           child: Text(label, textDirection: TextDirection.ltr),
         );
         await tester.pumpWidget(
@@ -61,6 +62,9 @@ void main() {
           'overlay_close',
         ]);
         expect(rows[0]['kind'], 'feedbackToast');
+        expect(rows[0]['requestId'], 17);
+        expect(rows[0]['component'], 'Text');
+        expect(rows[0]['ancestors'], isA<List>());
         expect(rows[1]['id'], rows[0]['id']);
         expect(rows[2]['kind'], 'otherOverlay');
         expect(rows[3]['id'], rows[2]['id']);

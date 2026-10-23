@@ -1042,6 +1042,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   @override
   void initState() {
     super.initState();
+    UiDiagnosticService.action(UiDiagnosticAction.articleMounted);
     controller = ArticleController.retainForView(widget.article);
     if (Platform.isMacOS) {
       _registerMacOSMenuTarget();
@@ -1122,6 +1123,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
 
   @override
   void dispose() {
+    UiDiagnosticService.action(UiDiagnosticAction.articleDisposed);
     // 先关闭 hover 写入守卫再销毁 notifier：切换文章、YouTube 回退或
     // 快速移动鼠标时，旧 span 的 onExit 回调不会写入已销毁的 notifier。
     _hoverUrlWritable = false;

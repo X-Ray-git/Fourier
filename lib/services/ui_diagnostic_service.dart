@@ -60,6 +60,17 @@ abstract final class UiDiagnosticService {
     }
   }
 
+  /// Opt-in timings contain no article identifiers or content. Enable in profile
+  /// or release builds with --dart-define=FOURIER_READER_PERF=true.
+  static void recordReaderTiming(String phase, int microseconds) {
+    if (!const bool.fromEnvironment('FOURIER_READER_PERF')) return;
+    _writer?.record({
+      'event': 'reader_timing',
+      'phase': phase,
+      'us': microseconds,
+    });
+  }
+
   static int overlayOpened(String kind) {
     final id = ++_nextOverlay;
     _writer?.record({'event': 'overlay_open', 'kind': kind, 'id': id});

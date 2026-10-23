@@ -37,6 +37,7 @@ import '../../services/local_article_db_service.dart';
 import '../../services/macos_app_menu_service.dart';
 import '../../services/analysis_event_ledger.dart';
 import '../../services/android_haptics_service.dart';
+import '../../services/ui_diagnostic_service.dart';
 import '../../services/account_session_guard.dart';
 import '../../services/auto_ai_queue_coordinator.dart';
 import '../../services/external_link_service.dart';
@@ -54,6 +55,7 @@ import '../timeline/timeline_controller.dart';
 import 'article_navigation.dart';
 import 'article_detail_navigation.dart';
 import 'widgets/html_chunk_card.dart';
+import 'widgets/settled_article_pager.dart';
 import 'widgets/article_info_card.dart';
 
 import 'widgets/image_gallery_page.dart';
@@ -809,14 +811,12 @@ class _ArticlePagerPage extends StatefulWidget {
 }
 
 class _ArticlePagerPageState extends State<_ArticlePagerPage> {
-  late final PageController _pageController;
   late int _currentIndex;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.request.index;
-    _pageController = PageController(initialPage: _currentIndex);
     // 打开事件只记录实际进入的文章（含分页器初始页），相邻预构建页不记录。
     AnalysisEventLedger.recordArticleOpen(
       widget.request.sequence![_currentIndex],
@@ -827,24 +827,16 @@ class _ArticlePagerPageState extends State<_ArticlePagerPage> {
   }
 
   @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final articles = widget.request.sequence!;
-    return PageView.builder(
-      controller: _pageController,
-      allowImplicitScrolling: true,
+    return SettledArticlePager(
+      initialPage: _currentIndex,
+      onSettled: AndroidHapticsService.selectionClick,
       itemCount: articles.length,
       onPageChanged: (index) {
         _currentIndex = index;
         AnalysisEventLedger.recordArticleOpen(articles[index]);
         LocalArticleDbService.recordReadHistory(articles[index].entryId);
-        // 翻页稳定完成后提供轻微反馈。
-        AndroidHapticsService.selectionClick();
       },
       itemBuilder: (context, index) => ArticlePageView(
         key: ValueKey(articles[index].entryId),
@@ -1034,6 +1026,7 @@ class _ArticlePageViewState extends State<ArticlePageView> {
   double _articleTitleHeight = 30.0;
   bool _articleTitleMeasurementScheduled = false;
   bool _allowBodyBuild = Platform.isMacOS;
+  bool _hasBuiltBody = false;
   bool _isTocOpen = false;
   bool _isCopyingMarkdown = false;
   bool _activeTocUpdateScheduled = false;
@@ -1942,58 +1935,22 @@ class _ArticlePageViewState extends State<ArticlePageView> {
               // ─── 正文区域：逐块渲染 ──────────────
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 11),
-                sliver: Obx(() {
-                  if (controller.isParsingContent.value || !_allowBodyBuild) {
-                    return SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 64),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: DiagnosticActivityMarker(
-                                  kind:
-                                      AnimationActivityKind.articleBodyLoading,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: colorScheme.primary.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                '正在排版内容…',
-                                style: TextStyle(
-                                  color: colorScheme.onSurfaceVariant,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                sliver: Builder(
+                  builder: (context) {
+                    final canPrepareBody = ReaderPreparationScope.allowed(
+                      context,
                     );
-                  }
-
-                  final activeChunks =
-                      controller.showTranslation.value &&
-                          controller.translatedChunks.isNotEmpty
-                      ? controller.translatedChunks
-                      : controller.chunks;
-
-                  if (activeChunks.isEmpty) {
-                    return SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: controller.isFetchingContent.value
-                            ? Column(
+                    return Obx(() {
+                      if (controller.isParsingContent.value ||
+                          !_allowBodyBuild ||
+                          (!_hasBuiltBody && !canPrepareBody)) {
+                        return SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 64),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const SizedBox(height: 32),
                                   SizedBox(
                                     width: 24,
                                     height: 24,
@@ -2010,85 +1967,142 @@ class _ArticlePageViewState extends State<ArticlePageView> {
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    '正在加载正文…',
+                                    '正在排版内容…',
                                     style: TextStyle(
                                       color: colorScheme.onSurfaceVariant,
                                       fontSize: 14,
                                     ),
                                   ),
                                 ],
-                              )
-                            : Column(
-                                children: [
-                                  Icon(
-                                    Icons.article_outlined,
-                                    size: 48,
-                                    color: colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    '暂无正文内容',
-                                    style: TextStyle(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  if (controller.article.url.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      icon: const Icon(
-                                        Icons.open_in_browser,
-                                        size: 18,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      final activeChunks =
+                          controller.showTranslation.value &&
+                              controller.translatedChunks.isNotEmpty
+                          ? controller.translatedChunks
+                          : controller.chunks;
+
+                      if (activeChunks.isEmpty) {
+                        return SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: controller.isFetchingContent.value
+                                ? Column(
+                                    children: [
+                                      const SizedBox(height: 32),
+                                      SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: DiagnosticActivityMarker(
+                                          kind: AnimationActivityKind
+                                              .articleBodyLoading,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: colorScheme.primary
+                                                .withValues(alpha: 0.6),
+                                          ),
+                                        ),
                                       ),
-                                      label: const Text('在浏览器中查看原文'),
-                                      onPressed: () =>
-                                          controller.openInBrowser(),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                      ),
-                    );
-                  }
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        '正在加载正文…',
+                                        style: TextStyle(
+                                          color: colorScheme.onSurfaceVariant,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    children: [
+                                      Icon(
+                                        Icons.article_outlined,
+                                        size: 48,
+                                        color: colorScheme.onSurfaceVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        '暂无正文内容',
+                                        style: TextStyle(
+                                          color: colorScheme.onSurfaceVariant,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      if (controller
+                                          .article
+                                          .url
+                                          .isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        TextButton.icon(
+                                          icon: const Icon(
+                                            Icons.open_in_browser,
+                                            size: 18,
+                                          ),
+                                          label: const Text('在浏览器中查看原文'),
+                                          onPressed: () =>
+                                              controller.openInBrowser(),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                          ),
+                        );
+                      }
 
-                  final totalChunks = activeChunks.length;
-                  final showTrans = controller.showTranslation.value;
+                      if (!_hasBuiltBody) {
+                        _hasBuiltBody = true;
+                        final timing = Stopwatch()..start();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          UiDiagnosticService.recordReaderTiming(
+                            'first_body_to_frame_end',
+                            timing.elapsedMicroseconds,
+                          );
+                        });
+                      }
+                      final totalChunks = activeChunks.length;
+                      final showTrans = controller.showTranslation.value;
 
-                  return SliverToBoxAdapter(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: maxWidth),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: List.generate(totalChunks, (idx) {
-                            final chunk = activeChunks[idx];
-                            final card = HtmlChunkCard(
-                              key: ValueKey(
-                                '${showTrans ? "trans" : "orig"}_$idx',
-                              ),
-                              chunk: chunk,
-                              articleId: controller.article.entryId,
-                              articleUrl: controller.article.url,
-                              maxWidth: maxWidth,
-                              onLinkHover: _handleLinkHover,
-                              contentAnchorKey:
-                                  chunk.type == HtmlChunkType.heading
-                                  ? _headingKeyFor(showTrans, idx)
-                                  : null,
-                              onImageTap: (url) =>
-                                  controller.openImagePreview(url, context),
-                              onEmbeddedPointerScroll:
-                                  _handleEmbeddedPointerScroll,
-                            );
-                            return card;
-                          }),
+                      return SliverToBoxAdapter(
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: maxWidth),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: List.generate(totalChunks, (idx) {
+                                final chunk = activeChunks[idx];
+                                final card = HtmlChunkCard(
+                                  key: ValueKey(
+                                    '${showTrans ? "trans" : "orig"}_$idx',
+                                  ),
+                                  chunk: chunk,
+                                  articleId: controller.article.entryId,
+                                  articleUrl: controller.article.url,
+                                  maxWidth: maxWidth,
+                                  onLinkHover: _handleLinkHover,
+                                  contentAnchorKey:
+                                      chunk.type == HtmlChunkType.heading
+                                      ? _headingKeyFor(showTrans, idx)
+                                      : null,
+                                  onImageTap: (url) =>
+                                      controller.openImagePreview(url, context),
+                                  onEmbeddedPointerScroll:
+                                      _handleEmbeddedPointerScroll,
+                                );
+                                return card;
+                              }),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                }),
+                      );
+                    });
+                  },
+                ),
               ),
 
               // 移动端按实际操作按钮数量避让，避免正文被悬浮控件遮挡。

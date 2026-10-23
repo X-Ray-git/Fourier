@@ -24,6 +24,7 @@ import '../../services/feed_silent_settings_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/ui_diagnostic_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/subscription_catalog_service.dart';
 import '../../utils/storage.dart';
@@ -70,6 +71,7 @@ class TimelineController extends GetxController {
   Future<void> Function()? _scrollToTopHandler;
   Worker? _accountWorker;
   Worker? _silentSettingsWorker;
+  Worker? _articleStateWorker;
 
   @override
   void onInit() {
@@ -102,7 +104,7 @@ class TimelineController extends GetxController {
     });
 
     // 监听全局文章状态变更，精准更新内存数据，保持 UI 同步（如 AI 过滤拦截数）
-    ever(ArticleStateNotifier.version, (_) {
+    _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
       final entryId = ArticleStateNotifier.lastEntryId;
       if (entryId != null) {
         _syncSingleArticleFromDb(entryId);
@@ -470,6 +472,7 @@ class TimelineController extends GetxController {
     }
 
     void updateVisualState() {
+      final timing = Stopwatch()..start();
       final stopwatch = _animationProbeRequested
           ? (Stopwatch()..start())
           : null;
@@ -478,6 +481,10 @@ class TimelineController extends GetxController {
         true,
         updateSelectedArticle: !deferArticleStateNotification,
         useIncrementalUnreadRemoval: deferArticleStateNotification,
+      );
+      UiDiagnosticService.recordReaderTiming(
+        'read_local_update',
+        timing.elapsedMicroseconds,
       );
       if (stopwatch != null) {
         _logReadStateProbe(
@@ -610,6 +617,7 @@ class TimelineController extends GetxController {
   void onClose() {
     _accountWorker?.dispose();
     _silentSettingsWorker?.dispose();
+    _articleStateWorker?.dispose();
     for (final timer in _deferredArticleStateNotificationFallbacks.values) {
       timer.cancel();
     }
@@ -861,10 +869,6 @@ class TimelineController extends GetxController {
     final idx = allArticles.indexWhere((a) => a.entryId == entryId);
     if (idx < 0) return;
 
-    final previousTimelineOrder = articles
-        .map((article) => article.entryId)
-        .toList(growable: false);
-
     final raw = GStorage.articleDb.get(entryId);
     if (raw is! Map) return;
 
@@ -877,6 +881,12 @@ class TimelineController extends GetxController {
     final mergedRead = localOverride == true ? true : updatedFromDb.isRead;
 
     final finalUpdated = updatedFromDb.copyWith(isRead: mergedRead);
+    // Local read updates already changed the timeline. Keep global notifications
+    // for other consumers, but do not sort/count the same state again.
+    if (mapEquals(allArticles[idx].toJson(), finalUpdated.toJson())) return;
+    final previousTimelineOrder = articles
+        .map((article) => article.entryId)
+        .toList(growable: false);
 
     allArticles[idx] = finalUpdated;
     _applyFilter();

@@ -49,6 +49,13 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-24 侧栏窗口焦点恢复回归
+
+既有 6 项侧栏测试在原代码仍通过；启用 macOS 平台及生命周期监听后，私有测试复现 inactive 时切换页面、resumed 后旧垃圾拦截项 hasFocus=true。正式回归用 TargetPlatformVariant.only(macOS)，先确认未改变选中项的正常窗口切换会恢复焦点，再验证失焦期间改选设置不会恢复旧入口，最后验证 Tab/Enter 仍可主动进入垃圾拦截。
+
+`macos_sidebar_focus_test`、`main_controller_test`、`timeline_silent_scope_test` 合计 **11 项通过**；两处修改文件定向 dart analyze 无问题。仅使用独立测试进程、临时 Hive 与合成来源，不操作真实窗口或文章；不宣称真实运行现场已恢复或此次根因已完全还原。变更未安装、未发布。
+
+
 ## 2026-10-24 v2.5.3 发布前应用构建核验
 
 在既有 34 项定向回归与静态检查通过的基础上，针对隔离探针的 AOT 疑点额外执行 `flutter build macos --release --no-pub`：**通过**，Fourier.app 35.2MB，`lipo -archs` 确认为 arm64。本次构建使用工作区最终源码，版本元数据尚为同步前版本；正式 `2.5.3+44` 由云端准备后重新编译。没有安装、启动或替换用户运行实例。

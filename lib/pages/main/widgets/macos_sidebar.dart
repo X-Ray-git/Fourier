@@ -1304,19 +1304,19 @@ class _SidebarNavigationInkWell extends StatefulWidget {
 }
 
 class _SidebarNavigationInkWellState extends State<_SidebarNavigationInkWell> {
-  final _focusNode = FocusNode(debugLabel: 'Sidebar navigation');
+  var _focusNode = FocusNode(debugLabel: 'Sidebar navigation');
 
   @override
   void didUpdateWidget(covariant _SidebarNavigationInkWell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isSelected && !widget.isSelected && _focusNode.hasFocus) {
-      // A pointer activation may already have requested the next item's focus.
-      // Check after the frame so clearing the old item cannot undo that move.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !widget.isSelected && _focusNode.hasFocus) {
-          _focusNode.unfocus();
-        }
-      });
+    if (oldWidget.isSelected && !widget.isSelected) {
+      // macOS temporarily suspends focus while the window is inactive. Such a
+      // node reports hasFocus=false and unfocus() cannot clear its restoration.
+      // Retire only this entry's old identity, including suspended/history focus;
+      // a fresh node remains available for deliberate Tab navigation.
+      final previous = _focusNode;
+      _focusNode = FocusNode(debugLabel: 'Sidebar navigation');
+      previous.dispose();
     }
   }
 

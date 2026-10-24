@@ -265,4 +265,44 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'inactive window cannot restore focus to a deselected sidebar destination',
+    (tester) async {
+      FocusManager.instance.listenToApplicationLifecycleChangesIfSupported();
+      final harness = await _pumpSidebar(tester);
+      await tester.tap(find.text('垃圾拦截'));
+      await tester.pumpAndSettle();
+      expect(_focus(tester, '垃圾拦截').hasPrimaryFocus, true);
+
+      // Normal window switching preserves focus if selection did not change.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(_focus(tester, '垃圾拦截').hasPrimaryFocus, true);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
+      expect(_focus(tester, '垃圾拦截').hasFocus, false);
+      harness.page.value = 3;
+      await tester.pumpAndSettle();
+      expect(_selected(tester, '设置'), true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(_focus(tester, '垃圾拦截').hasFocus, false);
+      expect(_selected(tester, '垃圾拦截'), false);
+
+      // The retired entry is still keyboard-accessible when requested afresh.
+      await _focusLabel(tester, '全部文章');
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(_focus(tester, '垃圾拦截').hasPrimaryFocus, true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(harness.page.value, 1);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+  );
 }

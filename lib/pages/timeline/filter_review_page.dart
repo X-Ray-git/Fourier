@@ -162,7 +162,6 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   final FocusNode _emptyDetailFocusNode = FocusNode(
     debugLabel: 'filter-review-empty-detail',
   );
-  final Set<String> _seenIds = {};
   final Set<String> _trackpadDismissedIds = {};
   final Set<String> _pendingReviewActionIds = {};
   final Map<String, UndoRestoreEvent> _deferredTrackpadRestores = {};
@@ -227,15 +226,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     );
     AutoFilterWorker.onRejected = (entryId, title, reason) {
       if (!mounted) return;
-      if (_seenIds.contains(entryId)) return;
-      _seenIds.add(entryId);
-      final raw = GStorage.articleDb.get(entryId);
-      if (raw is Map) {
-        final article = ArticleModel.fromCache(Map<String, dynamic>.from(raw));
-        if (article.isRejectedByAi && !article.isRead) {
-          _articles.add(article);
-        }
-      }
+      _syncArticleFromDb(entryId);
     };
   }
 
@@ -311,14 +302,7 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
               !_trackpadDismissedIds.contains(a.entryId),
         )
         .toList();
-    all.sort((a, b) {
-      final tA = a.filteredAt ?? 0;
-      final tB = b.filteredAt ?? 0;
-      return tA.compareTo(tB);
-    });
-    for (final a in all) {
-      _seenIds.add(a.entryId);
-    }
+    all.sort(_compareReviewArticles);
     _articles.value = all;
     _pruneInvalidSelection();
   }
@@ -358,15 +342,28 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
     if (index < 0 && _trackpadDismissedIds.contains(entryId)) return;
 
-    _seenIds.add(entryId);
-    if (index >= 0) {
+    if (index >= 0 && _articles[index].filteredAt == article.filteredAt) {
       _articles[index] = article;
     } else {
-      _articles.add(article);
+      // Restores and new rejections use the same order as a full reload, rather
+      // than relying on a filter-count notification to sort an appended item.
+      final next = _articles.toList();
+      if (index >= 0) next.removeAt(index);
+      final insertion = next.indexWhere(
+        (candidate) => _compareReviewArticles(article, candidate) < 0,
+      );
+      next.insert(insertion < 0 ? next.length : insertion, article);
+      _articles.assignAll(next);
     }
     if (_selectedArticle.value?.entryId == entryId) {
       _selectedArticle.value = article;
     }
+  }
+
+  static int _compareReviewArticles(ArticleModel a, ArticleModel b) {
+    final time = (a.filteredAt ?? 0).compareTo(b.filteredAt ?? 0);
+    // Equal/missing timestamps must not change order after remove/undo/reload.
+    return time != 0 ? time : a.entryId.compareTo(b.entryId);
   }
 
   void _pruneInvalidSelection() {

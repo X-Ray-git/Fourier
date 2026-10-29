@@ -873,13 +873,7 @@ class UndoService {
 
   static void _replaceTimelineArticle(ArticleModel article) {
     if (!Get.isRegistered<TimelineController>()) return;
-    final controller = Get.find<TimelineController>();
-    final index = controller.allArticles.indexWhere(
-      (candidate) => candidate.entryId == article.entryId,
-    );
-    if (index < 0) return;
-    controller.allArticles[index] = article;
-    controller.allArticles.refresh();
+    Get.find<TimelineController>().replaceArticleSnapshot(article);
   }
 
   static void _restoreAppliedFilterAction(UndoAction action) {

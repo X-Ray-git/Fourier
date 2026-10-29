@@ -883,14 +883,23 @@ class TimelineController extends GetxController {
     final mergedRead = localOverride == true ? true : updatedFromDb.isRead;
 
     final finalUpdated = updatedFromDb.copyWith(isRead: mergedRead);
+    replaceArticleSnapshot(finalUpdated);
+  }
+
+  /// Apply an authoritative snapshot together with its derived list/count state.
+  /// Undo must use this instead of writing allArticles directly: otherwise the
+  /// next identical DB notification would skip the still-stale derived state.
+  void replaceArticleSnapshot(ArticleModel article) {
+    final idx = allArticles.indexWhere((a) => a.entryId == article.entryId);
+    if (idx < 0) return;
     // Local read updates already changed the timeline. Keep global notifications
     // for other consumers, but do not sort/count the same state again.
-    if (mapEquals(allArticles[idx].toJson(), finalUpdated.toJson())) return;
+    if (mapEquals(allArticles[idx].toJson(), article.toJson())) return;
     final previousTimelineOrder = articles
         .map((article) => article.entryId)
         .toList(growable: false);
 
-    allArticles[idx] = finalUpdated;
+    allArticles[idx] = article;
     _applyFilter();
     final currentTimelineOrder = articles
         .map((article) => article.entryId)

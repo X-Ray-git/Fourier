@@ -49,6 +49,15 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-10-29 拦截中心恢复排序回归
+
+隔离探针调用实际 M 对应服务与撤销服务，检查实际审核列表数据：当前代码 A/B/C → A/C → A/C/B，计数 3 → 2 → 2；临时禁用重复状态早退后，同一测试 A/B/C → A/C → A/B/C，计数 3 → 2 → 3。对照源码已原样恢复；该对照只是定位证据，正式方案没有取消去重。
+
+修复后 `filter_review_restore_test`、`timeline_read_update_test`、`undo_action_test`、`mac_split_article_list_coordinator_test`、`implicitly_animated_list_test`、`read_sync_service_test` 共 **38 项通过**。新增 4 个用例覆盖 M/K/N 两轮撤销夹一次重做的顺序/计数/原状态，以及无计数刷新情况下同时间/缺失时间、重复回调、时间戳更新与全量重载的一致性。测试使用临时 Hive 和模拟 HTTP，禁用图片后台缓存，不读凭据或访问生产 API。原有重复状态通知不重建列表的测试继续通过。
+
+静态检查无 error/warning，59 项既有 info；文档索引及 59 页检查通过。测试中的审核页保持非活动导航，避免挂载真实详情，因而未验收实际 M/Cmd+Z 按键、选中回滚和过渡动画观感；待新构建按待办复核，不扩大结论为全部 UI 问题已修复。原始结果保存于 scratch/review-undo-20261029/。
+
+
 ## 2026-10-24 侧栏窗口焦点恢复回归
 
 既有 6 项侧栏测试在原代码仍通过；启用 macOS 平台及生命周期监听后，私有测试复现 inactive 时切换页面、resumed 后旧垃圾拦截项 hasFocus=true。正式回归用 TargetPlatformVariant.only(macOS)，先确认未改变选中项的正常窗口切换会恢复焦点，再验证失焦期间改选设置不会恢复旧入口，最后验证 Tab/Enter 仍可主动进入垃圾拦截。

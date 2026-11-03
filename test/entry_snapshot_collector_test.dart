@@ -12,6 +12,8 @@ import 'package:fourier/http/feed_http.dart';
 import 'package:fourier/http/init.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/pages/timeline/timeline_controller.dart';
+import 'package:fourier/pages/subscriptions/subscriptions_controller.dart';
+import 'package:fourier/services/feed_silent_settings_service.dart';
 import 'package:fourier/services/account_service.dart';
 import 'package:fourier/services/account_session_guard.dart';
 import 'package:fourier/services/article_image_cache_service.dart';
@@ -21,6 +23,12 @@ import 'package:fourier/services/local_article_db_service.dart';
 import 'package:fourier/utils/storage.dart';
 
 import 'support/hive_test_helper.dart';
+
+class _CountSubscriptions extends SubscriptionsController {
+  @override
+  // ignore: must_call_super
+  void onInit() {} // Test drives local refresh; no subscription API startup.
+}
 
 class _Adapter implements HttpClientAdapter {
   _Adapter(this.handle);
@@ -256,6 +264,72 @@ void main() {
       );
       expect(result, isA<LoadError<List<ArticleModel>>>());
       expect(GStorage.analysisEvents.length, before);
+    },
+  );
+  testWidgets(
+    'recent-read backfill refreshes silent badge with the unread list',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: FlutterSmartDialog.init(),
+          navigatorObservers: [FlutterSmartDialog.observer],
+          home: const Scaffold(),
+        ),
+      );
+      await tester.runAsync(() async {
+        final account = Get.put(AccountService());
+        account.isLoggedIn.value = true;
+        final group = await FeedSilentSettingsService.createGroup('Daily');
+        await FeedSilentSettingsService.setSilent(
+          'feed',
+          true,
+          groupId: group.id,
+        );
+        final now = DateTime.now().toUtc().toIso8601String();
+        LocalArticleDbService.upsertOne(_article('backfill', date: now));
+        final subs = Get.put<SubscriptionsController>(_CountSubscriptions());
+        subs.refreshUnreadCounts();
+        expect(subs.unreadForSilentGroup(group.id), 1);
+        Request.dio.httpClientAdapter = _Adapter((options) {
+          if (options.path == ApiConstants.inboxesList) return _reply([]);
+          final body = options.data as Map;
+          if (body['view'] == 1) return _reply([]);
+          // The later read-window response observes an article read after the
+          // unread snapshot. No single-article notification follows that backfill.
+          return _reply([
+            {
+              'entries': {
+                'id': 'backfill',
+                'title': 'Synthetic',
+                'url': '',
+                'publishedAt': now,
+              },
+              'feeds': {'id': 'feed'},
+            },
+          ]);
+        });
+        final timeline = TimelineController();
+        timeline.setTimelineScope(silent: true, silentGroupId: group.id);
+        final backfilled = Completer<void>();
+        final worker = ever(timeline.articles, (_) {
+          if (LocalArticleDbService.readArticle('backfill')?.isRead == true &&
+              !backfilled.isCompleted) {
+            backfilled.complete();
+          }
+        });
+        try {
+          await timeline.loadData();
+          await backfilled.future.timeout(const Duration(seconds: 3));
+          expect(timeline.articles, isEmpty);
+          expect(subs.unreadForSilentGroup(group.id), 0);
+        } finally {
+          worker.dispose();
+          await Get.delete<SubscriptionsController>(force: true);
+          await SmartDialog.dismiss(status: SmartStatus.allToast);
+        }
+      });
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
     },
   );
 }

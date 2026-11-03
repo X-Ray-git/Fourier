@@ -651,10 +651,7 @@ class _SilentFeedsGroup extends StatelessWidget {
                 isSilentSelected &&
                 timelineController.selectedFeedId.value == null &&
                 timelineController.selectedSilentGroupId.value == scopeId;
-            final unread = node.feeds.fold<int>(
-              0,
-              (sum, feed) => sum + subController.rawUnreadFor(feed.feedId),
-            );
+            final unread = subController.unreadForSilentGroup(scopeId);
             return Column(
               key: ValueKey(key),
               crossAxisAlignment: CrossAxisAlignment.stretch,

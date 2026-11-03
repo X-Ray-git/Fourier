@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:fourier/http/init.dart';
 import 'package:fourier/models/feed.dart';
+import 'package:fourier/models/article.dart';
+import 'package:fourier/services/local_article_db_service.dart';
 import 'package:fourier/pages/main/widgets/macos_sidebar.dart';
 import 'package:fourier/pages/subscriptions/subscriptions_controller.dart';
 import 'package:fourier/pages/timeline/timeline_controller.dart';
@@ -305,4 +307,40 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.macOS),
   );
+  testWidgets('silent group badge reacts to retained-feed unread changes', (
+    tester,
+  ) async {
+    final harness = await _pumpSidebar(tester);
+    final article = ArticleModel(
+      entryId: 'retired-entry',
+      feedId: 'retired-feed',
+      feedTitle: 'Synthetic',
+      title: 'Synthetic',
+      url: '',
+    );
+    await tester.runAsync(() async {
+      await FeedSilentSettingsService.setSilent(
+        'retired-feed',
+        true,
+        groupId: harness.group.id,
+      );
+      LocalArticleDbService.upsertOne(article, forceReplace: true);
+    });
+    harness.subscriptions.refreshUnreadCounts();
+    await tester.pumpAndSettle();
+    final row = find
+        .ancestor(of: find.text('Silent category'), matching: find.byType(Row))
+        .first;
+    expect(find.descendant(of: row, matching: find.text('1')), findsOneWidget);
+    expect(
+      harness.subscriptions.silentGroups.single.feeds.map((f) => f.feedId),
+      ['silent-feed'],
+    );
+    await tester.runAsync(() async {
+      LocalArticleDbService.setReadState(article.entryId, true);
+    });
+    harness.subscriptions.refreshUnreadCounts(article.entryId);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: row, matching: find.text('1')), findsNothing);
+  });
 }

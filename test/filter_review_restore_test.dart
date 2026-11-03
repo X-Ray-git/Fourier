@@ -13,6 +13,8 @@ import 'package:fourier/models/article.dart';
 import 'package:fourier/pages/main/main_controller.dart';
 import 'package:fourier/pages/timeline/filter_review_page.dart';
 import 'package:fourier/pages/timeline/timeline_controller.dart';
+import 'package:fourier/pages/subscriptions/subscriptions_controller.dart';
+import 'package:fourier/services/feed_silent_settings_service.dart';
 import 'package:fourier/pages/widgets/article_card.dart';
 import 'package:fourier/services/account_service.dart';
 import 'package:fourier/services/article_image_cache_service.dart';
@@ -25,6 +27,11 @@ import 'package:fourier/services/undo_service.dart';
 import 'package:fourier/utils/storage.dart';
 
 import 'support/hive_test_helper.dart';
+
+class _LocalSubscriptions extends SubscriptionsController {
+  @override
+  Future<void> loadData() async => refreshUnreadCounts();
+}
 
 class _Timeline extends TimelineController {
   @override
@@ -144,6 +151,16 @@ void main() {
       });
       timeline.allArticles.assignAll(articles);
       timeline.filterCount.value = 3;
+      final group = (await tester.runAsync(() async {
+        final group = await FeedSilentSettingsService.createGroup('Daily');
+        await FeedSilentSettingsService.setSilent(
+          'synthetic-feed',
+          true,
+          groupId: group.id,
+        );
+        return group;
+      }))!;
+      final subs = Get.put<SubscriptionsController>(_LocalSubscriptions());
       await _pumpReview(tester);
       expect(_order(tester), ['a', 'b', 'c']);
       await tester.runAsync(() async {
@@ -160,6 +177,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(_order(tester), ['a', 'c']);
       expect(timeline.filterCount.value, 2);
+      expect(subs.unreadForSilentGroup(group.id), action == 'K' ? 3 : 2);
 
       for (var cycle = 0; cycle < 2; cycle++) {
         await tester.runAsync(() async {
@@ -168,6 +186,7 @@ void main() {
         await _drainFeedback(tester);
         expect(_order(tester), ['a', 'b', 'c']);
         expect(timeline.filterCount.value, 3);
+        expect(subs.unreadForSilentGroup(group.id), 3);
         final restored = LocalArticleDbService.readArticle('b')!;
         expect(restored.isRead, false);
         expect(restored.isRejectedByAi, true);
@@ -183,8 +202,15 @@ void main() {
             await ReadSyncService.syncPendingReads();
           });
           await _drainFeedback(tester);
+          // Redo defers the read notification until the exit transition, with
+          // a one-second fallback. Let that existing fan-out finish as well.
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 1100)),
+          );
+          await tester.pumpAndSettle();
           expect(_order(tester), ['a', 'c']);
           expect(timeline.filterCount.value, 2);
+          expect(subs.unreadForSilentGroup(group.id), action == 'K' ? 3 : 2);
         }
       }
       await tester.pumpWidget(const SizedBox.shrink());

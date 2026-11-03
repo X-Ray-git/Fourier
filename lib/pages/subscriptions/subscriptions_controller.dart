@@ -142,8 +142,12 @@ class SubscriptionsController extends GetxController {
         if (feedId != null && feedId.isNotEmpty) {
           int count = 0;
           for (final item in GStorage.articleDb.values) {
-            if (item is Map) {
-              if (item['feedId'] == feedId && item['isRead'] != true) {
+            if (item is Map && item['feedId'] == feedId) {
+              final entryId = item['entryId'];
+              final override = entryId is String
+                  ? LocalArticleDbService.readOverrideOf(entryId)
+                  : null;
+              if (!(override ?? (item['isRead'] == true))) {
                 count++;
               }
             }
@@ -151,11 +155,15 @@ class SubscriptionsController extends GetxController {
           _unreadCounts[feedId] = count;
           _unreadCounts.refresh();
         }
+        return;
       }
-      return;
+      // A deleted article no longer identifies its feed. Recount all feeds so
+      // its previous unread contribution cannot remain in a sidebar badge.
     }
     // 全量（首屏）
-    final all = LocalArticleDbService.readAllArticles();
+    final all = LocalArticleDbService.mergeReadOverrides(
+      LocalArticleDbService.readAllArticles(),
+    );
     final counts = <String, int>{};
     for (final a in all) {
       if (a.isRead || a.feedId.isEmpty) continue;
@@ -171,6 +179,23 @@ class SubscriptionsController extends GetxController {
   }
 
   int rawUnreadFor(String feedId) => _unreadCounts[feedId] ?? 0;
+
+  /// Match the silent timeline's local article scope, including retained
+  /// articles whose feeds have left the live subscription catalog.
+  int unreadForSilentGroup(String? groupId) {
+    FeedSilentSettingsService.version.value;
+    final normalized = groupId == FeedSilentSettingsService.ungroupedId
+        ? null
+        : groupId;
+    var count = 0;
+    for (final entry in _unreadCounts.entries) {
+      if (FeedSilentSettingsService.isSilent(entry.key) &&
+          FeedSilentSettingsService.groupIdFor(entry.key) == normalized) {
+        count += entry.value;
+      }
+    }
+    return count;
+  }
 
   int unreadForCategory(String categoryName, List<FeedModel> feeds) {
     int total = 0;
@@ -219,8 +244,11 @@ class SubscriptionsController extends GetxController {
         SilentFeedGroupNode(group: group, feeds: byGroup[group.id] ?? const []),
     ];
     final ungrouped = byGroup[null];
-    if (ungrouped != null && ungrouped.isNotEmpty) {
-      result.add(SilentFeedGroupNode(group: null, feeds: ungrouped));
+    if ((ungrouped != null && ungrouped.isNotEmpty) ||
+        unreadForSilentGroup(null) > 0) {
+      result.add(
+        SilentFeedGroupNode(group: null, feeds: ungrouped ?? const []),
+      );
     }
     return result;
   }

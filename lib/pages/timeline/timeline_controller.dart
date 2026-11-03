@@ -249,10 +249,6 @@ class TimelineController extends GetxController {
     unawaited(
       _refreshArticleImageCache(LocalArticleDbService.readAllArticles()),
     );
-    // 全量同步完成后，强制通知订阅列表做全量重新计数
-    if (Get.isRegistered<SubscriptionsController>()) {
-      Get.find<SubscriptionsController>().refreshUnreadCounts();
-    }
     unawaited(_refreshRecentReadWindow());
   }
 
@@ -768,6 +764,11 @@ class TimelineController extends GetxController {
     resetTimelineListAnimation(reason: resetReason);
     _applyFilter();
     _updateFilterCount();
+    // Every local snapshot replacement (including the later recent-read
+    // backfill) must update sidebar counts along with the visible timeline.
+    if (Get.isRegistered<SubscriptionsController>()) {
+      Get.find<SubscriptionsController>().refreshUnreadCounts();
+    }
     if (allArticles.isNotEmpty ||
         selectedMode.value != TimelineViewMode.unread) {
       loadingState.value = Success(articles.toList());

@@ -384,6 +384,24 @@ Cloud release; candidate `253bb9cf181976d4b7fe97d6ec7b0b612c250cc4`, build `44`.
 - Android 实际响应改善仍需真机使用确认；连续快速翻到未准备页面时可能短暂显示排版占位。
 
 **完整变更**：[v2.5.2…v2.5.3](https://github.com/X-Ray-git/Fourier/compare/v2.5.2...v2.5.3)
+
+## v2.5.4
+
+Cloud release; candidate `15863bc9bc0b61c06218f5d44757312f2cc49ac2`, build `45`.
+
+## 本版重点
+
+优化多篇文章同时完成垃圾分类时的列表更新，修复撤销拦截操作后的卡片排序与计数，并改善 macOS 侧栏焦点和链接预览的交互。
+
+## 修复与改进
+
+- 多个分类结果集中到达时一起更新列表，避免为每篇文章重复筛选、排序和重算来源未读数。请求期间已标读或审核的文章不会被迟到的结果重新拦截。
+- 拦截中心撤销操作后，卡片回到原有排序位置，拦截数同步恢复。
+- 静默分组未读气泡和对应未读列表使用一致的本地统计范围。
+- macOS 侧栏切换栏目时清除旧的焦点提示；键盘导航仍有独立描边。
+- macOS 正文底部的网址预览条不会遮住下方链接或挡住触控板滚动。
+
+**完整变更**：[v2.5.3 → v2.5.4](https://github.com/X-Ray-git/Fourier/compare/v2.5.3...v2.5.4)
 </script>
 <script src="../assets/wiki-common.js"></script>
 <script src="../assets/vendor/markdown-it.min.js"></script>

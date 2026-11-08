@@ -98,6 +98,11 @@ abstract final class UiDiagnosticService {
     });
   }
 
+  /// Bounded link-cursor probes, with no content or URL payloads.
+  static void recordCursorDiagnostic(Map<String, Object?> fields) {
+    _writer?.record(fields);
+  }
+
   static int feedbackRequested() {
     final id = ++_nextRequest;
     final caller = StackTrace.current

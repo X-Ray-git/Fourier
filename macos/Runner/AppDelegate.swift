@@ -121,8 +121,10 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
     }
 
     let cursorChannel = FlutterMethodChannel(name: "io.github.xraygit.fourier/cursor", binaryMessenger: controller.engine.binaryMessenger)
-    cursorChannel.setMethodCallHandler { (call, result) in
-      if call.method == "activateZoomInCursor" {
+    cursorChannel.setMethodCallHandler { [weak self] (call, result) in
+      if call.method == "getCursorDiagnostics" {
+        result(FourierCursorDiagnostics.snapshot(window: self?.mainFlutterWindow))
+      } else if call.method == "activateZoomInCursor" {
         FourierCursorFactory.zoomInCursor.set()
         result(nil)
       } else {
@@ -313,5 +315,50 @@ private enum FourierCursorFactory {
     plus.stroke()
 
     return NSCursor(image: image, hotSpot: NSPoint(x: 10.5, y: 10.5))
+  }
+}
+
+// Read-only, on-demand observations; never sets a cursor or captures the screen.
+private enum FourierCursorDiagnostics {
+  static func snapshot(window: NSWindow?) -> [String: Any] {
+    var hit: NSView?
+    var inside = false
+    if let window, let content = window.contentView {
+      let point = window.mouseLocationOutsideOfEventStream
+      inside = content.bounds.contains(content.convert(point, from: nil))
+      // NSView.hitTest accepts a point in its superview's coordinates.
+      let parentPoint = content.superview?.convert(point, from: nil) ?? point
+      hit = content.hitTest(parentPoint)
+    }
+    var ancestors: [String] = []
+    var view = hit
+    while let current = view, ancestors.count < 8 {
+      ancestors.append(NSStringFromClass(type(of: current)))
+      view = current.superview
+    }
+    return [
+      "appActive": NSApp.isActive,
+      "windowKey": window?.isKeyWindow ?? false,
+      "windowVisible": window?.isVisible ?? false,
+      "mouseInside": inside,
+      "current": describe(NSCursor.current),
+      // Best effort AppKit value, not proof of the hardware-rendered cursor.
+      "system": describe(NSCursor.currentSystem),
+      "hitView": hit.map { NSStringFromClass(type(of: $0)) } ?? "none",
+      "hitAncestors": ancestors,
+      "firstResponder": window?.firstResponder.map {
+        NSStringFromClass(type(of: $0))
+      } ?? "none",
+    ]
+  }
+
+  private static func describe(_ cursor: NSCursor?) -> String {
+    guard let cursor else { return "unavailable" }
+    let known: [(String, NSCursor)] = [
+      ("arrow", .arrow), ("pointingHand", .pointingHand), ("iBeam", .iBeam),
+      ("openHand", .openHand), ("closedHand", .closedHand),
+      ("zoomIn", FourierCursorFactory.zoomInCursor),
+    ]
+    return known.first { cursor.isEqual($0.1) }?.0 ?? "other"
   }
 }

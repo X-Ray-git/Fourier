@@ -24,6 +24,7 @@ import '../../../utils/youtube_embed_utils.dart';
 import '../../../utils/html_contrast_utils.dart';
 import '../../../utils/image_clipboard.dart';
 import '../../../utils/macos_zoom_in_cursor.dart';
+import '../../../utils/macos_link_cursor.dart';
 import '../../../utils/selectable_html_compatibility.dart';
 import '../../../services/article_image_service.dart';
 import '../../../services/article_image_cache_service.dart';
@@ -1888,7 +1889,9 @@ class _InteractiveLinkExtension extends HtmlExtension {
             context.styledElement?.style.generateTextStyle() ?? childSpan.style,
         semanticsLabel: childSpan.semanticsLabel,
         locale: childSpan.locale,
-        mouseCursor: SystemMouseCursors.click,
+        mouseCursor: Platform.isMacOS
+            ? MacOSLinkCursor.instance
+            : SystemMouseCursors.click,
         onEnter: handleEnter,
         onExit: handleExit,
         spellOut: childSpan.spellOut,
@@ -1903,7 +1906,9 @@ class _InteractiveLinkExtension extends HtmlExtension {
         alignment: alignment,
         baseline: TextBaseline.alphabetic,
         child: MouseRegion(
-          cursor: SystemMouseCursors.click,
+          cursor: Platform.isMacOS
+              ? MacOSLinkCursor.instance
+              : SystemMouseCursors.click,
           onEnter: handleEnter,
           onExit: handleExit,
           child: GestureDetector(

@@ -24,6 +24,7 @@ import '../../services/feed_silent_settings_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/classification_updates.dart';
 import '../../services/ui_diagnostic_service.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/subscription_catalog_service.dart';
@@ -50,6 +51,7 @@ class TimelineController extends GetxController {
   final selectedArticle = Rxn<ArticleModel>();
   final selectedFeedId = RxnString();
   final selectedCategory = RxnString();
+  final localSnapshotRevision = 0.obs;
   final filterCount = 0.obs;
   final isSyncing = false.obs;
   final isSilentSelected = false.obs;
@@ -69,6 +71,7 @@ class TimelineController extends GetxController {
 
   final Map<String, FeedModel> _feedMap = {};
   Future<void> Function()? _scrollToTopHandler;
+  StreamSubscription<ClassificationBatch>? _classificationSubscription;
   Worker? _accountWorker;
   Worker? _silentSettingsWorker;
   Worker? _articleStateWorker;
@@ -111,6 +114,11 @@ class TimelineController extends GetxController {
       }
     });
 
+    _classificationSubscription = ClassificationUpdates.batches.listen((batch) {
+      if (!batch.patch(allArticles)) return;
+      batch.patch(articles);
+      _updateFilterCount();
+    });
     loadFeedsThenArticles(showToast: false);
   }
 
@@ -124,6 +132,7 @@ class TimelineController extends GetxController {
     isSilentSelected.value = false;
     selectedSilentGroupId.value = null;
     filterCount.value = 0;
+    localSnapshotRevision.value++;
     if (!AccountService.instance.isLoggedIn.value) {
       loadingState.value = const LoadError('请先在“设置”页登录 Folo');
       return;
@@ -613,6 +622,7 @@ class TimelineController extends GetxController {
 
   @override
   void onClose() {
+    _classificationSubscription?.cancel();
     _accountWorker?.dispose();
     _silentSettingsWorker?.dispose();
     _articleStateWorker?.dispose();
@@ -764,6 +774,7 @@ class TimelineController extends GetxController {
     resetTimelineListAnimation(reason: resetReason);
     _applyFilter();
     _updateFilterCount();
+    localSnapshotRevision.value++;
     // Every local snapshot replacement (including the later recent-read
     // backfill) must update sidebar counts along with the visible timeline.
     if (Get.isRegistered<SubscriptionsController>()) {

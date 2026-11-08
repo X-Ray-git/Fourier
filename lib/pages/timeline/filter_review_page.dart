@@ -15,6 +15,7 @@ import '../../services/auto_filter_worker.dart';
 import '../../services/article_relation_service.dart';
 import '../../services/article_relation_worker.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/classification_updates.dart';
 import '../../services/android_haptics_service.dart';
 import '../../services/external_link_service.dart';
 import '../../services/local_article_db_service.dart';
@@ -43,6 +44,7 @@ import '../../common/widgets/mobile_viewport_insets.dart';
 import '../../utils/scroll_utils.dart';
 import '../widgets/article_actions_menu.dart';
 import 'widgets/filter_review_pipeline_status.dart';
+import 'widgets/review_restore_probe.dart';
 
 class _ReviewAnimProbe {
   static const bool _requested = bool.fromEnvironment(
@@ -170,8 +172,10 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   bool _isViewingRelatedArticle = false;
   late final MacSplitArticleListCoordinator _listCoordinator;
   Worker? _articleStateWorker;
-  Worker? _filterCountWorker;
+  Worker? _snapshotWorker;
   Worker? _undoRestoreWorker;
+  Worker? _probeWorker;
+  final _restoreProbe = ReviewRestoreProbe();
 
   @override
   void initState() {
@@ -215,34 +219,63 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
       }
     });
     if (Get.isRegistered<TimelineController>()) {
-      _filterCountWorker = ever(
-        Get.find<TimelineController>().filterCount,
+      _snapshotWorker = ever(
+        Get.find<TimelineController>().localSnapshotRevision,
         (_) => _loadArticles(),
       );
+    }
+    if (ReviewRestoreProbe.enabled) {
+      _probeWorker = ever(UndoService.preparingRestoreAction, (event) {
+        if (event != null && _isActiveMacReviewPage) {
+          _restoreProbe.begin(event.article.entryId, event.sequence);
+        }
+      });
     }
     _undoRestoreWorker = ever(
       UndoService.restoredAction,
       _handleUndoRestoreEvent,
     );
-    AutoFilterWorker.onRejected = (entryId, title, reason) {
-      if (!mounted) return;
-      _syncArticleFromDb(entryId);
-    };
+    _classificationSubscription = ClassificationUpdates.batches.listen(
+      _applyClassifications,
+    );
   }
 
-  @override
-  void deactivate() {
-    AutoFilterWorker.onRejected = null;
-    super.deactivate();
+  late final StreamSubscription<ClassificationBatch>
+  _classificationSubscription;
+
+  void _applyClassifications(ClassificationBatch batch) {
+    final changed = Map.of(batch.rows)
+      ..removeWhere(
+        (id, _) =>
+            _pendingReviewActionIds.contains(id) ||
+            _trackpadDismissedIds.contains(id),
+      );
+    if (!changed.values.any((a) => a.isRejectedByAi && !a.isRead) &&
+        !_articles.any((a) => changed.containsKey(a.entryId))) {
+      return;
+    }
+    final next =
+        _articles.where((a) => !changed.containsKey(a.entryId)).toList()
+          ..addAll(changed.values.where((a) => a.isRejectedByAi && !a.isRead))
+          ..sort(_compareReviewArticles);
+    _articles.value = next;
+    final selected = changed[_selectedArticle.value?.entryId];
+    if (selected != null && selected.isRejectedByAi && !selected.isRead) {
+      _selectedArticle.value = selected;
+    } else {
+      _pruneInvalidSelection();
+    }
   }
 
   @override
   void dispose() {
-    AutoFilterWorker.onRejected = null;
+    _classificationSubscription.cancel();
     _listCoordinator.dispose();
     _articleStateWorker?.dispose();
-    _filterCountWorker?.dispose();
+    _snapshotWorker?.dispose();
     _undoRestoreWorker?.dispose();
+    _probeWorker?.dispose();
+    _restoreProbe.dispose();
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     if (Platform.isMacOS) {
       MacArticleShortcutService.instance.unregister(this);
@@ -484,6 +517,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
   void _scrollToArticleWhenReady(String entryId, {int attempt = 0}) {
     if (!mounted) return;
 
+    if (ReviewRestoreProbe.enabled) {
+      _restoreProbe.mark(entryId, 'scroll attempt=$attempt');
+    }
     if (attempt == 0) {
       Future.delayed(const Duration(milliseconds: 220), () {
         _scrollToArticleWhenReady(entryId, attempt: 1);
@@ -493,6 +529,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
     final key = _listCoordinator.itemKeys[entryId];
     if (key != null && key.currentContext != null) {
+      if (ReviewRestoreProbe.enabled) {
+        _restoreProbe.mark(entryId, 'ensureVisible.request');
+      }
       ScrollUtils.ensureVisible(key.currentContext!);
       return;
     }
@@ -511,6 +550,9 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
 
   void _handleUndoRestoreEvent(UndoRestoreEvent? event) {
     if (!mounted || event == null || !_isActiveMacReviewPage) return;
+    if (ReviewRestoreProbe.enabled) {
+      _restoreProbe.mark(event.article.entryId, 'localRestored');
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_isActiveMacReviewPage) return;
 
@@ -903,6 +945,16 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
                               context,
                             ),
                             separatorBuilder: (_, _) => const SizedBox.shrink(),
+                            onInsert: ReviewRestoreProbe.enabled
+                                ? (
+                                    article,
+                                    index,
+                                    duration,
+                                  ) => _restoreProbe.mark(
+                                    article.entryId,
+                                    'insert index=$index durationMs=${duration.inMilliseconds}',
+                                  )
+                                : null,
                             itemBuilder: _buildAnimatedReviewRow,
                             removedItemBuilder: _buildRemovedReviewRow,
                             onRemoveStart: _handleReviewRemoveStart,
@@ -1034,6 +1086,14 @@ class _FilterReviewPageState extends State<FilterReviewPage> {
     int index,
     Animation<double> animation,
   ) {
+    if (ReviewRestoreProbe.enabled) {
+      _restoreProbe.built(
+        article.entryId,
+        index,
+        animation,
+        () => _listCoordinator.itemKeys[article.entryId]?.currentContext,
+      );
+    }
     return SizeTransition(
       sizeFactor: animation,
       alignment: Alignment.bottomCenter,

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 
 import '../../http/init.dart';
 import '../../models/article.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/classification_updates.dart';
 import '../../services/local_article_db_service.dart';
 import '../../utils/storage.dart';
 
@@ -11,6 +14,7 @@ class RecentReadController extends GetxController {
   final loadingState = Rx<LoadingState<List<ArticleModel>>>(const Loading());
   final articles = <ArticleModel>[].obs;
   final allArticles = <ArticleModel>[].obs;
+  late final StreamSubscription<ClassificationBatch> _classificationSubscription;
   late final Worker _articleStateWorker;
 
   @override
@@ -18,6 +22,12 @@ class RecentReadController extends GetxController {
     super.onInit();
 
     // 监听全局文章状态变更（例如在 Timeline 中将某篇文章标记为已读或未读）
+    _classificationSubscription = ClassificationUpdates.batches.listen((batch) {
+      if (batch.patch(allArticles)) {
+        articles.value = allArticles.toList();
+        loadingState.value = Success(articles.toList());
+      }
+    });
     _articleStateWorker = ever(ArticleStateNotifier.version, (_) {
       _loadData();
     });
@@ -27,6 +37,7 @@ class RecentReadController extends GetxController {
 
   @override
   void onClose() {
+    _classificationSubscription.cancel();
     _articleStateWorker.dispose();
     super.onClose();
   }

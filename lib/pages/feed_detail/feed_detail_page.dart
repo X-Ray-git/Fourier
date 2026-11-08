@@ -37,6 +37,7 @@ import '../../services/content_cache_service.dart';
 import '../../services/local_article_db_service.dart';
 import '../../services/auto_readability_worker.dart';
 import '../../services/article_state_notifier.dart';
+import '../../services/classification_updates.dart';
 import '../../services/read_sync_service.dart';
 import '../../services/feed_silent_settings_service.dart';
 import '../../services/feed_translation_settings_service.dart';
@@ -80,6 +81,7 @@ class FeedDetailController extends GetxController {
   bool _feedsLoaded = false;
   bool _isRefreshingRecentRead = false;
   int _loadGeneration = 0;
+  late final StreamSubscription<ClassificationBatch> _classificationSubscription;
   late final Worker _articleStateWorker;
 
   final articles = <ArticleModel>[].obs;
@@ -112,6 +114,9 @@ class FeedDetailController extends GetxController {
     refreshAutoTranslateStatus();
     refreshAutoReadabilityStatus();
     refreshSilentStatus();
+    _classificationSubscription = ClassificationUpdates.batches.listen((batch) {
+      if (batch.patch(allArticles, includeMissing: _matchesScope)) _applyFilter();
+    });
     _articleStateWorker = ever(
       ArticleStateNotifier.version,
       (_) => _refreshFromLocal(),
@@ -122,6 +127,7 @@ class FeedDetailController extends GetxController {
   @override
   void onClose() {
     _loadGeneration++;
+    _classificationSubscription.cancel();
     _articleStateWorker.dispose();
     super.onClose();
   }

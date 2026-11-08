@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fourier/models/article.dart';
 import 'package:fourier/services/article_filter_service.dart';
+import 'package:fourier/services/auto_filter_worker.dart';
+import 'package:fourier/services/classification_updates.dart';
+import 'package:fourier/services/article_state_notifier.dart';
 import 'package:fourier/services/article_visual_context_service.dart';
 import 'package:fourier/services/llm_config.dart';
 import 'package:fourier/services/llm_usage_ledger.dart';
@@ -77,6 +80,75 @@ void main() {
     await HiveTestHelper.tearDown();
     await VisualImageTestHelper.tearDown();
   });
+
+  for (final reject in [true, false]) {
+    test(
+      'worker persists only classification fields and publishes the stored result: $reject',
+      () async {
+        final a = _article();
+        await GStorage.articleDb.put(a.entryId, a.toJson());
+        ArticleFilterService.debugPostOverride = (_, {data, options}) async {
+          await GStorage.articleDb.put(
+            a.entryId,
+            a.copyWith(content: 'newer body').toJson(),
+          );
+          return _successResponse(
+            '{"should_reject":$reject,"reason":"reason"}',
+          );
+        };
+        final global = ArticleStateNotifier.version.value;
+        final observer = ArticleStateNotifier.versionFor(a.entryId);
+        final old = observer.value;
+        final delivered = ClassificationUpdates.batches.first;
+        addTearDown(AutoFilterWorker.cancelProcessing);
+        AutoFilterWorker.enqueue(a);
+        final batch = await delivered.timeout(const Duration(seconds: 3));
+        final row = batch.rows[a.entryId]!;
+        expect(row.content, 'newer body');
+        expect(row.isRejectedByAi, reject);
+        expect(row.filterReviewed, !reject);
+        // Both notifications are emitted in one delivery callback. A synchronous
+        // batch listener can resume before the per-entry notification.
+        await Future<void>.delayed(Duration.zero);
+        expect(observer.value, old + 1);
+        expect(ArticleStateNotifier.version.value, global);
+        expect(
+          GStorage.analysisEvents.values.whereType<Map>().where(
+            (e) => e['type'] == 'ai_classified' && e['articleId'] == a.entryId,
+          ),
+          hasLength(1),
+        );
+      },
+    );
+  }
+
+  test(
+    'late rejection cannot undo a manual read while the request is running',
+    () async {
+      final a = _article();
+      await GStorage.articleDb.put(a.entryId, a.toJson());
+      final completed = AutoFilterWorker.processingCount.stream.firstWhere(
+        (n) => n == 0,
+      );
+      ArticleFilterService.debugPostOverride = (_, {data, options}) async {
+        await GStorage.readStatus.put(a.entryId, true);
+        return _successResponse('{"should_reject":true,"reason":"late"}');
+      };
+      addTearDown(AutoFilterWorker.cancelProcessing);
+      AutoFilterWorker.enqueue(a);
+      await completed.timeout(const Duration(seconds: 3));
+      expect(
+        (GStorage.articleDb.get(a.entryId) as Map)['isRejectedByAi'],
+        false,
+      );
+      expect(
+        GStorage.analysisEvents.values.whereType<Map>().where(
+          (e) => e['type'] == 'ai_classified',
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   test('retries transient failures and records every attempt', () async {
     var attempts = 0;

@@ -22,6 +22,7 @@ class ImplicitlyAnimatedList<T> extends StatefulWidget {
   final Duration removeDuration;
   final Curve insertCurve;
   final Curve removeCurve;
+  final void Function(T item, int index, Duration duration)? onInsert;
   final AnimatedItemLifecycle<T>? onRemoveStart;
   final AnimatedItemLifecycle<T>? onRemoveEnd;
   final int batchUpdateVersion;
@@ -41,6 +42,7 @@ class ImplicitlyAnimatedList<T> extends StatefulWidget {
     this.removeDuration = const Duration(milliseconds: 180),
     this.insertCurve = Curves.easeOutCubic,
     this.removeCurve = Curves.easeInCubic,
+    this.onInsert,
     this.onRemoveStart,
     this.onRemoveEnd,
     this.batchUpdateVersion = 0,
@@ -127,6 +129,7 @@ class _ImplicitlyAnimatedListState<T> extends State<ImplicitlyAnimatedList<T>> {
 
       _items.insert(index, nextItem);
       listState.insertItem(index, duration: insertDuration);
+      widget.onInsert?.call(nextItem, index, insertDuration);
     }
   }
 

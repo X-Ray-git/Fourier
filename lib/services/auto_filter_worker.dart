@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../models/article.dart';
 import '../utils/storage.dart';
 import 'account_session_guard.dart';
+import 'classification_updates.dart';
 import 'analysis_event_ledger.dart';
 import 'article_filter_service.dart';
 import 'article_state_notifier.dart';
@@ -34,9 +35,6 @@ abstract final class AutoFilterWorker {
 
   /// 正在处理中
   static final processingCount = 0.obs;
-
-  /// 增量回调：审核页在前台时直接推送被拒文章
-  static void Function(String entryId, String title, String reason)? onRejected;
 
   /// 测试注入点：替换实际过滤调用，避免测试触发真实网络请求。
   @visibleForTesting
@@ -140,44 +138,33 @@ abstract final class AutoFilterWorker {
         automatic: true,
       );
       if (!AccountSessionGuard.isCurrent(accountRevision)) return;
-      if (article.isRead) return; // 处理中可能被标已读
-
-      if (result.shouldReject) {
-        final updated = article.copyWith(
-          isRejectedByAi: true,
-          filterReason: result.reason,
-          filteredAt: DateTime.now().millisecondsSinceEpoch,
-        );
-        LocalArticleDbService.upsertOne(updated);
-        ArticleStateNotifier.tick(article.entryId);
-        AnalysisEventLedger.recordAiClassification(
-          article: updated,
-          shouldReject: true,
-          reason: result.reason,
-          after: AnalysisEventLedger.stateSnapshotOf(updated),
-        );
-        // 增量推送：审核页在前台时直接追加
-        onRejected?.call(article.entryId, article.title, result.reason);
-      } else {
-        // AI 判定保留 → 标记已审核，避免重复入队
-        if (article.filterReviewed) return;
-        final raw = GStorage.articleDb.get(article.entryId);
-        if (raw is Map) {
-          raw['filterReviewed'] = true;
-          raw['isRejectedByAi'] = false;
-          await GStorage.articleDb.put(article.entryId, raw);
-          LocalArticleDbService.invalidateCache();
-          ArticleStateNotifier.tick(article.entryId);
-          AnalysisEventLedger.recordAiClassification(
-            article: article,
-            shouldReject: false,
-            after: AnalysisEventLedger.stateSnapshotOf(
-              ArticleModel.fromCache(Map<String, dynamic>.from(raw)),
-            ),
-          );
-          // Kept
-        }
+      // The request may outlive a read/review action or a full-text fetch.
+      // Change only classification fields on the latest local record.
+      final raw = GStorage.articleDb.get(article.entryId);
+      if (raw is! Map ||
+          _isStale(article) ||
+          LocalArticleDbService.readOverrideOf(article.entryId) == true) {
+        return;
       }
+      final updated = Map<String, dynamic>.from(raw);
+      updated['isRejectedByAi'] = result.shouldReject;
+      if (result.shouldReject) {
+        updated['filterReason'] = result.reason;
+        updated['filteredAt'] = DateTime.now().millisecondsSinceEpoch;
+      } else {
+        updated['filterReviewed'] = true;
+      }
+      await GStorage.articleDb.put(article.entryId, updated);
+      if (!AccountSessionGuard.isCurrent(accountRevision)) return;
+      LocalArticleDbService.invalidateCache();
+      ClassificationUpdates.enqueue(article.entryId);
+      final snapshot = ArticleModel.fromCache(updated);
+      AnalysisEventLedger.recordAiClassification(
+        article: snapshot,
+        shouldReject: result.shouldReject,
+        reason: result.shouldReject ? result.reason : null,
+        after: AnalysisEventLedger.stateSnapshotOf(snapshot),
+      );
     } catch (e) {
       // Failed silently
     }
@@ -195,6 +182,7 @@ abstract final class AutoFilterWorker {
   static int get runningCount => _running.length;
 
   static void cancelProcessing() {
+    ClassificationUpdates.clear();
     _generation++;
     _processingTimer?.cancel();
     _processingTimer = null;

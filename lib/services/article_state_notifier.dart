@@ -19,6 +19,12 @@ abstract final class ArticleStateNotifier {
     return _articleVersions.putIfAbsent(entryId, () => 0.obs);
   }
 
+  /// A classification update does not change unread counts or feed membership.
+  static void notifyArticleObserver(String entryId) {
+    final observer = _articleVersions[entryId];
+    if (observer != null) observer.value++;
+  }
+
   static void tick(String entryId) {
     _lastEntryId = entryId;
     version.value++;

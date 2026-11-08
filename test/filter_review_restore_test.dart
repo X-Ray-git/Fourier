@@ -19,7 +19,7 @@ import 'package:fourier/pages/widgets/article_card.dart';
 import 'package:fourier/services/account_service.dart';
 import 'package:fourier/services/article_image_cache_service.dart';
 import 'package:fourier/services/article_state_notifier.dart';
-import 'package:fourier/services/auto_filter_worker.dart';
+import 'package:fourier/services/classification_updates.dart';
 import 'package:fourier/services/folo_request_metadata.dart';
 import 'package:fourier/services/local_article_db_service.dart';
 import 'package:fourier/services/read_sync_service.dart';
@@ -29,6 +29,13 @@ import 'package:fourier/utils/storage.dart';
 import 'support/hive_test_helper.dart';
 
 class _LocalSubscriptions extends SubscriptionsController {
+  int singleFeedRecounts = 0;
+  @override
+  void refreshUnreadCounts([String? eid]) {
+    if (eid != null) singleFeedRecounts++;
+    super.refreshUnreadCounts(eid);
+  }
+
   @override
   Future<void> loadData() async => refreshUnreadCounts();
 }
@@ -133,6 +140,62 @@ void main() {
     await HiveTestHelper.tearDown();
   });
 
+  testWidgets(
+    'one classification burst uses latest state, retains order and does not recount unread feeds',
+    (tester) async {
+      Get.put(AccountService());
+      final timeline = Get.put<TimelineController>(_Timeline());
+      final initial = [
+        for (final id in ['a', 'b', 'c', 'd'])
+          _article(id, 0).copyWith(isRejectedByAi: false),
+      ];
+      await tester.runAsync(
+        () => GStorage.articleDb.putAll({
+          for (final a in initial) a.entryId: a.toJson(),
+        }),
+      );
+      timeline.allArticles.assignAll(initial);
+      timeline.articles.assignAll(initial.reversed);
+      final subs = Get.put<SubscriptionsController>(_LocalSubscriptions());
+      await _pumpReview(tester);
+      final delivered = <ClassificationBatch>[];
+      final sub = ClassificationUpdates.batches.listen(delivered.add);
+      addTearDown(sub.cancel);
+      await tester.runAsync(
+        () => GStorage.articleDb.putAll({
+          for (final a in initial)
+            a.entryId: a
+                .copyWith(
+                  isRejectedByAi: true,
+                  filteredAt: a.entryId == 'd' ? 1 : 2,
+                )
+                .toJson(),
+        }),
+      );
+      for (final id in ['b', 'd', 'a', 'c', 'd']) {
+        ClassificationUpdates.enqueue(id);
+      }
+      // A manual decision lands after enqueue and before UI delivery.
+      await tester.runAsync(
+        () => GStorage.articleDb.put(
+          'c',
+          initial[2].copyWith(filterReviewed: true).toJson(),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pumpAndSettle();
+      expect(delivered, hasLength(1));
+      expect(timeline.articles.map((a) => a.entryId), ['d', 'c', 'b', 'a']);
+      expect(timeline.filterCount.value, 3);
+      expect(_order(tester), ['d', 'a', 'b']);
+      expect(timeline.articles[1].filterReviewed, true);
+      expect(subs.rawUnreadFor('synthetic-feed'), 4);
+      expect((subs as _LocalSubscriptions).singleFeedRecounts, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
   for (final action in ['M', 'K', 'N']) {
     testWidgets('$action undo/redo restores review order, state and count', (
       tester,
@@ -219,7 +282,7 @@ void main() {
   }
 
   testWidgets(
-    'incremental restores and rejection callbacks keep full-load order without a count reload',
+    'incremental restores and classification batches keep full-load order without a count reload',
     (tester) async {
       // Deliberately omit TimelineController: ordering cannot rely on its count.
       final articles = [
@@ -257,8 +320,9 @@ void main() {
       await tester.runAsync(
         () => GStorage.articleDb.put(inserted.entryId, inserted.toJson()),
       );
-      AutoFilterWorker.onRejected!(inserted.entryId, '', '');
-      AutoFilterWorker.onRejected!(inserted.entryId, '', '');
+      ClassificationUpdates.enqueue(inserted.entryId);
+      ClassificationUpdates.enqueue(inserted.entryId);
+      await tester.pump(const Duration(milliseconds: 16));
       await tester.pumpAndSettle();
       expect(_order(tester), ['a', 'b', 'middle', 'c', 'd']);
       await tester.runAsync(

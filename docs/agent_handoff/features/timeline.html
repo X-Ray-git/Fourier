@@ -49,6 +49,24 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-11-03 侧栏选中与键盘焦点的视觉分离
+
+用户再次报告灰色标记与橙色选中位置不同，并提出阻止灰色标记。只读确认运行进程来自 /Applications/Fourier.app，版本 2.5.3+44；Git 的 986c17b 焦点退役补修位于正式版本提交 d902600 之后且未发布，因此不能用当前旧版本现象证明该补修失败。现有 8 项侧栏回归通过，代码确认橙色由 isSelected 驱动、灰色由 InkWell 默认 focusColor 驱动、hover 又是独立状态。仍没有直接读取用户窗口内的 FocusNode，不能声称完全还原本次触发过程。
+
+用户已同意统一视觉方案，当前 `_SidebarItem` 与 `_CategoryItem` 共用 `_SidebarNavigationInkWell`：
+
+- 实际选中继续使用原橙色 Material 底色，筛选和导航条件不变。
+- 仅将 focusColor 设为透明，不把 overlayColor 全部透明化；hover、按下和水波纹保持原默认行为。
+- Tab / Shift+Tab 导航时，仅具有 primary focus 的导航项绘制 1px 的 colorScheme.outline 细边框，圆角沿用 8。Enter 激活后仍保留键盘描边。
+- 鼠标点击使描边隐藏，单纯悬停不隐藏；键盘焦点可以暂时与当前页面不同，但不再画第二块看似选中的底色。焦点语义、Tab/Enter 操作仍保留。
+
+macOS 的 FocusHighlightMode.traditional 同时覆盖鼠标与键盘，不能只用此标志区分两者。因此侧栏范围安装一对输入观察器：早期键盘观察普通 Tab（允许 Shift，排除 Ctrl/Alt/Meta），始终返回 ignored；指针观察 PointerDown。共享 InheritedNotifier 分发显示模式，不为每个订阅项各装全局监听，不更改应用的焦点策略。侧栏销毁时解绑全部观察器。绘制使用 foreground DecoratedBox，不增减 padding 或改变行尺寸；分类展开箭头仍是独立按钮，不把其焦点误画为整行描边。
+
+保留 986c17b 的焦点清理：某项被取消选中时退役旧节点，正常窗口恢复及外部输入框行为保留；新增节点继续监听焦点变化，窗口 inactive 时描边消失，resumed 后符合条件的键盘描边可恢复。此次是用户明确认可的视觉规则调整，取代下方历史记录中“保留默认灰色焦点背景”的选择，不是删掉 FocusNode 或用全局 unfocus 掩盖状态问题。
+
+14 项侧栏/主导航/静默范围回归通过，静态无 error/warning（59 项既有 info）。实际新构建的描边观感仍待用户检查；未使用 computer use、未安装、提交、推送或发布。此改动与当前工作区的光标诊断/底部预览修复并存，后续提交时区分两项变更。
+
+
 ## 2026-10-24 macOS 失焦后恢复旧侧栏焦点
 
 用户报告已安装 2.5.3：设置显示黄色选中，垃圾拦截同时有更明显的灰色背景；窗口失焦灰色消失，重新激活出现。用户进一步区分鼠标移到最近阅读会产生独立的第三层 hover，因此不把旧灰色解释成正常悬停。只读核对安装版本为 2.5.3，未使用 computer use 或操作用户窗口。现有日志没有侧栏 FocusNode 状态，不能直接证明该运行现场的完整触发顺序。

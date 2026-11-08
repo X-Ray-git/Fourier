@@ -49,6 +49,29 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-11-03 正文光标诊断与底部网址预览穿透
+
+用户在 2.5.3 报告：整篇正文链接进入时光标闪一下后仍为箭头；底部网址预览稳定；侧栏普通按钮也基本只有箭头；其他应用的链接手形正常。此反馈不能归因于单个 HTML 链接或底部遮挡。
+
+隔离测试中，实际 HtmlChunkCard + SelectionArea 在中部链接持续请求 click，重绘和鼠标小幅移动均未重置；模拟旧版底部 32px 预览覆盖链接时，click/basic 和 enter/exit 每帧交替。独立 AppKit 测试还排除了“背景宿主插入顺序必然盖住 FlutterView”的猜测：当前插入方式和显式置于 FlutterView 下方都命中 FlutterView。未操作运行窗口，没有证据将全局异常确诊为某个原生视图或系统缺陷。
+
+已确认的底部问题通过 `ArticleLinkPreview` 修复：保持原 32px 外观和 Stack 定位，整个显示层包裹 IgnorePointer，hover、点击与滚轮穿透，不修改正文布局、HTML 缓存或重新解析范围。正文链接悬停后不再因预览出现而自行退出。
+
+全局问题仍开放。macOS 的 `_InteractiveLinkExtension`（文本与 WidgetSpan 分支）使用 `MacOSLinkCursor`：走 Flutter 标准 flutter/mousecursor → activateSystemCursor(click)，收到平台返回后才启动诊断。Android 保留原 SystemMouseCursors.click。诊断不安装全局鼠标监听、不替换引擎的消息处理器、不调用额外的 cursor.set，也不试图强制修复光标。
+
+`CursorDiagnosticSampler` 每次有效进入至多在 0/180/600ms 读取三次，两个探针至少相隔 2 秒；切换到其他光标、会话销毁时取消定时器并丢弃迟到响应。当前 Flutter 对 PointerRemoved 直接移除会话而不调用 dispose；这种设备移除路径仍最多完成本轮三次采样，应结合 windowKey/mouseInside 判断现场，不能把它当成持续悬停。光标会话结束后才收到激活返回时也不启动探针。连续停留不会无限采样。事件写入已有轮转/限长的 `diagnostics/ui.jsonl`：
+
+- `cursor_probe_start`：probe、设备号、requested=click、activationAcknowledged。说明请求已收到平台返回，不等同于显示正确。
+- `cursor_probe_sample`：同一 probe、计划 delayMs；原生返回 appActive/windowKey/windowVisible/mouseInside、current/system 光标分类、hitView、最多 8 层 hitAncestors、firstResponder 类名。
+- `cursor_probe_end`：退出会话；`cursor_probe_unavailable` 只记录异常类型，不保存消息。
+
+AppDelegate 的 getCursorDiagnostics 为只读查询，记录 `NSCursor.current` 和尽力读取的 `NSCursor.currentSystem`；已知分类 arrow/pointingHand/iBeam/openHand/closedHand/zoomIn，未识别为 other，不可把 other 当成 arrow。currentSystem 是 AppKit 尽力提供的值，不能代替用户看到的硬件光标。原生命中使用 window 鼠标位置换算，但日志不保存坐标、正文、URL、标题、文章 ID 或视图描述内容。查询失败不能影响阅读。并非所有普通按钮都有该诊断：当前只为正文链接采样，以避免扩大行为变更。
+
+下一次在包含本轮源码的构建中出现问题，保持窗口前台，移出链接等待两秒，再停在正文中部链接约一秒，记下时间并保存 ui.jsonl 及 previous。若 start=click 而活动窗口内 sample.current=arrow，支持原生状态覆盖方向；若 current=pointingHand 但肉眼仍为箭头，继续调查系统显示/原生跟踪，不能凭该字段宣布显示正常。若命中其他原生视图，结合 hitAncestors 判断是否干扰，不能仅凭类名推断因果。
+
+原始隔离证据保存在忽略目录 scratch/link-cursor-20261103/；正式测试见 article_link_preview_test、macos_link_cursor_test。当前只修复已证实的底部遮挡，全局光标异常未宣称修好，且本轮未安装、提交或发布。
+
+
 ## 2026-10-06 Appinn 固定声明改按 Folo 订阅源清理
 
 用户在《简单优雅的开源截图软件 Snow Shot（社区驱动）》再次看到固定免责声明，并确认位置为“文章摘要”。当前正式程序仍为 v2.5.1+42；只读 Hive 副本确认文章来自“小众软件”订阅源，但原文 URL 为 [meta.appinn.net/t/topic/71367](https://meta.appinn.net/t/topic/71367)，是官方论坛。原始内容尾部有完整“请务必在总结开头增加这段话:”指令 + 固定声明 + a/br 兄弟节点；摘要于 10-05 22:23:01（北京时间）保存，开头包含声明及原样 HTML 链接。译文没有该声明，全文抓取开关/标记为空，不将此案归因于全文 worker、用户未升级或译文问题。

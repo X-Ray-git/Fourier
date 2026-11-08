@@ -49,6 +49,28 @@
 </div>
 <script type="text/markdown" id="wiki-content">
 
+## 2026-11-04 v2.5.3 白屏：刷新提示构建前失败
+
+用户遇到白屏后保留现场，要求获取信息后自行重启。沿用不使用 computer use 的约束，只复制诊断日志、读取进程/版本、做 5 秒 sample 和限定时间的系统错误查询；不发送按键、改窗口、打开 Hive 或重启应用。取证完成即告知可以正常 Cmd+Q 重启，不要求反复 Esc/Cmd+1。
+
+运行 /Applications/Fourier.app **2.5.3+44**，PID **26047**，启动 **11-03 23:53:14**；系统 macOS **27.0.1 / 26A434**。sample 与安装 App.framework UUID 均为 **AE96C2F5-70C1-215E-5073-0B67427CE7EC**，新 ui-incidents 的调用来源/动作前奏已实际生效。此运行实例不包含 11-03 尚未提交/发布的光标诊断和侧栏视觉修改。
+
+全部时间为北京时间：
+
+- **13:37:43.174** 切到分区 0，**13:37:45.258** 切到分区 1（垃圾拦截）；**13:37:47.860** refreshStart。
+- **13:37:53.723733** feedback_request **#4**，caller 精确到正式版 TimelineController.loadFeedsThenArticles:171；对照 d902600 源码为“已刷新”成功提示，随后 refreshEnd。
+- **13:37:53.767397**，约 **44ms** 后，首次 `_TypeError`：Element.widget:3666 → Element.updateChildren:4201 → MultiChildRenderObjectElement.update，紧随 ErrorWidget。对照 Flutter 4cf2416，出错访问 `_widget!`，即更新子树时读到了失效 Element。没有把具体责任组件判定为侧栏或正文。
+- **#4 没有 builder/overlay_open**，13:37:55.836 仍触发 dismissCallback/completed。说明失败发生在提示内容成功构建之前，完成回调不能证明曾成功挂载。
+- **13:37:57.034911** 请求 **#5**，caller 为 _refreshRecentReadWindow:425（“已同步已读”成功提示）；约 9ms 后出现 `_OverlayEntryWidgetState.initState:392`，对应 `widget.entry._overlayEntryStateNotifier!.value = this`。这支持失效/已销毁 OverlayEntry 被再次初始化，但晚于首错，可能是连锁后果。#5 同样无 builder/overlay_open，约两秒后完成回调。
+- 三条本次 incident 的 activeOverlays 都为空。这里只表示受 DiagnosticOverlayMarker 记录的浮层为空，不能推断 SmartDialog 内部或其他未埋点 OverlayEntry 不存在。当天 12:10 同样两类刷新提示 #2/#3 曾正常 builder、挂载、关闭，支持间歇性生命周期/界面树状态问题，不是每次刷新必现。
+
+本次异常前奏近场没有 undoRequested；与上一轮刷新时出现的证据相符，不能再把撤销作为必要条件。新诊断将时间邻近关系明确到“刷新成功提示请求 → 构建异常 → 后续提示的 OverlayEntry 初始化异常”，重点继续是提示浮层生命周期与刷新重建的交互；仍未确定最初由谁使 Element 失效，不能仅凭相邻 44ms 宣称 SmartDialog 是根因或直接删除动画。
+
+采样主线程等待事件，进程未退出；能耗记录异常后仍有帧，分区仍为 1。限定 13:36:30–13:39:30、PID 26047 的系统 error/fault 查询 count=0，不等于排除所有图形问题。首次框架构建异常和 ErrorWidget 是比原生崩溃更直接的证据，白屏外观未做屏幕取证。
+
+私有证据在 `scratch/white-screen-20261104/`：ui/incident/energy 及 previous、复制前后 size/mtime（5 份均稳定）、sample、进程/系统版本、UUID、系统查询、incident-summary.json。只保存私有取证，不提交原始日志。本轮只维护调查记录，不新增源码修复、提交或发布；前两项未提交修改保持原样。
+
+
 ## 2026-10-24 后续诊断补强与隔离验证（未发布）
 
 用户在确认白屏尚未定位后授权继续推进。此次修正的是诊断盲点，不宣称修复白屏，不修改撤销、提示动画、框架错误外观或吞掉异常。

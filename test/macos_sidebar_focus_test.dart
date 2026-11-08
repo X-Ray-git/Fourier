@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
@@ -109,6 +110,18 @@ bool _selected(WidgetTester tester, String label) =>
         )
         .color !=
     Colors.transparent;
+
+InkWell _navigationInk(WidgetTester tester, String label) =>
+    tester.widget<InkWell>(
+      find.ancestor(of: find.text(label), matching: find.byType(InkWell)).first,
+    );
+
+bool _hasFocusRing(WidgetTester tester, String label) {
+  final decoration =
+      (_navigationInk(tester, label).child! as DecoratedBox).decoration
+          as BoxDecoration;
+  return decoration.border != null;
+}
 
 Future<void> _focusLabel(WidgetTester tester, String label) async {
   _focus(tester, label).requestFocus();
@@ -229,13 +242,91 @@ void main() {
       expect(
         ink.focusColor ??
             Theme.of(tester.element(find.text('垃圾拦截'))).focusColor,
-        isNot(Colors.transparent),
+        Colors.transparent,
       );
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
+      expect(_hasFocusRing(tester, '全部文章'), false);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(harness.page.value, 1);
       expect(_selected(tester, '垃圾拦截'), true);
       expect(_focus(tester, '垃圾拦截').hasPrimaryFocus, true);
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
+    },
+  );
+
+  testWidgets(
+    'pointer selection has no focus fill or ring; hover does not cancel keyboard ring',
+    (tester) async {
+      await _pumpSidebar(tester);
+      await tester.tap(find.text('全部文章'));
+      await tester.pumpAndSettle();
+      expect(_focus(tester, '全部文章').hasPrimaryFocus, true);
+      expect(_hasFocusRing(tester, '全部文章'), false);
+      expect(_navigationInk(tester, '全部文章').focusColor, Colors.transparent);
+      expect(_navigationInk(tester, '全部文章').overlayColor, isNull);
+      expect(_navigationInk(tester, '全部文章').hoverColor, isNull);
+      expect(_navigationInk(tester, '全部文章').highlightColor, isNull);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(find.text('设置')));
+      await tester.pumpAndSettle();
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
+      expect(_hasFocusRing(tester, '设置'), false);
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      expect(_selected(tester, '设置'), true);
+      expect(_hasFocusRing(tester, '设置'), false);
+      expect(_hasFocusRing(tester, '垃圾拦截'), false);
+      await mouse.removePointer();
+    },
+  );
+
+  testWidgets(
+    'Tab from outside and Shift Tab show one ring; disposal removes observers',
+    (tester) async {
+      final inputFocus = FocusNode();
+      addTearDown(inputFocus.dispose);
+      await _pumpSidebar(tester, inputFocus: inputFocus);
+      inputFocus.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      // Reading-order traversal enters the row nearest the external field,
+      // which need not be the first navigation entry.
+      final focused = [
+        for (final label in [
+          '全部文章',
+          '垃圾拦截',
+          '最近阅读',
+          '设置',
+          'Normal category',
+          'Normal feed',
+          'Silent category',
+          'Silent feed',
+        ])
+          if (_focus(tester, label).hasPrimaryFocus) label,
+      ];
+      expect(focused, hasLength(1));
+      expect(_hasFocusRing(tester, focused.single), true);
+      await _focusLabel(tester, '全部文章');
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      expect(_hasFocusRing(tester, '全部文章'), true);
+      expect(_hasFocusRing(tester, '垃圾拦截'), false);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.expand()));
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -300,6 +391,13 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pumpAndSettle();
       expect(_focus(tester, '垃圾拦截').hasPrimaryFocus, true);
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
+      expect(_hasFocusRing(tester, '垃圾拦截'), false);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(_hasFocusRing(tester, '垃圾拦截'), true);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(harness.page.value, 1);

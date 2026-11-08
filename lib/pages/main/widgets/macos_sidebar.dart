@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../../common/constants/macos_layout_metrics.dart';
@@ -45,7 +47,7 @@ class MacOSSidebar extends StatelessWidget {
     final timelineController = Get.find<TimelineController>();
     final subController = Get.find<SubscriptionsController>();
 
-    return Obx(
+    final sidebar = Obx(
       () => AbsorbPointer(
         absorbing: timelineController.silentBatchProcessing.value,
         child: _MacOSSidebarSlot(
@@ -312,6 +314,7 @@ class MacOSSidebar extends StatelessWidget {
         ),
       ),
     );
+    return _SidebarFocusScope(child: sidebar);
   }
 
   List<String> _categories(SubscriptionsController controller) {
@@ -1279,6 +1282,69 @@ class _SidebarItem extends StatelessWidget {
   }
 }
 
+/// macOS treats both mouse and keyboard as traditional focus highlighting.
+/// Track Tab explicitly so pointer focus does not look like another selection.
+/// One observer pair belongs to the sidebar, never one per subscription row.
+class _SidebarFocusScope extends StatefulWidget {
+  const _SidebarFocusScope({required this.child});
+  final Widget child;
+
+  @override
+  State<_SidebarFocusScope> createState() => _SidebarFocusScopeState();
+}
+
+class _SidebarFocusScopeState extends State<_SidebarFocusScope> {
+  final _keyboardNavigation = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addEarlyKeyEventHandler(_onKey);
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+        event.logicalKey == LogicalKeyboardKey.tab &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) {
+      _keyboardNavigation.value = true;
+    }
+    return KeyEventResult.ignored; // Observe; never consume navigation keys.
+  }
+
+  void _onPointer(PointerEvent event) {
+    if (event is PointerDownEvent) _keyboardNavigation.value = false;
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(_onPointer);
+    _keyboardNavigation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _SidebarFocusPresentation(
+    notifier: _keyboardNavigation,
+    child: widget.child,
+  );
+}
+
+class _SidebarFocusPresentation extends InheritedNotifier<ValueNotifier<bool>> {
+  const _SidebarFocusPresentation({
+    required super.notifier,
+    required super.child,
+  });
+
+  static bool keyboardNavigationOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_SidebarFocusPresentation>()!
+      .notifier!
+      .value;
+}
+
 /// Keeps keyboard focus with the navigation item activated by the pointer.
 /// Selection changes from shortcuts also release focus from the old item,
 /// while Tab can still focus an unselected item before activating it.
@@ -1304,6 +1370,16 @@ class _SidebarNavigationInkWellState extends State<_SidebarNavigationInkWell> {
   var _focusNode = FocusNode(debugLabel: 'Sidebar navigation');
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_focusChanged);
+  }
+
+  void _focusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void didUpdateWidget(covariant _SidebarNavigationInkWell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isSelected && !widget.isSelected) {
@@ -1312,7 +1388,8 @@ class _SidebarNavigationInkWellState extends State<_SidebarNavigationInkWell> {
       // Retire only this entry's old identity, including suspended/history focus;
       // a fresh node remains available for deliberate Tab navigation.
       final previous = _focusNode;
-      _focusNode = FocusNode(debugLabel: 'Sidebar navigation');
+      _focusNode = FocusNode(debugLabel: 'Sidebar navigation')
+        ..addListener(_focusChanged);
       previous.dispose();
     }
   }
@@ -1324,16 +1401,31 @@ class _SidebarNavigationInkWellState extends State<_SidebarNavigationInkWell> {
   }
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    focusNode: _focusNode,
-    onTap: () {
-      _focusNode.requestFocus();
-      widget.onTap();
-    },
-    onSecondaryTapDown: widget.onSecondaryTapDown,
-    borderRadius: BorderRadius.circular(8),
-    child: widget.child,
-  );
+  Widget build(BuildContext context) {
+    final showRing =
+        _SidebarFocusPresentation.keyboardNavigationOf(context) &&
+        _focusNode.hasPrimaryFocus;
+    return InkWell(
+      focusNode: _focusNode,
+      focusColor: Colors.transparent,
+      onTap: () {
+        _focusNode.requestFocus();
+        widget.onTap();
+      },
+      onSecondaryTapDown: widget.onSecondaryTapDown,
+      borderRadius: BorderRadius.circular(8),
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: showRing
+              ? Border.all(color: Theme.of(context).colorScheme.outline)
+              : null,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 class _UnreadBadge extends StatelessWidget {
